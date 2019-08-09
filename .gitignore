@@ -1,0 +1,10 @@
+*.log
+*.bak
+*.mypy_cache
+__pycache__/
+tests/sample/*
+build/*
+dist/* 
+*.egg-info/*
+dist.ps1
+

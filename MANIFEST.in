@@ -1,0 +1,6 @@
+include LICENSE
+exclude README.rst
+exclude requirements.txt
+exclude test-requirements.txt
+exclude dist.ps1
+exclude MANIFEST.in
