@@ -9,18 +9,22 @@ from machaon.processor import Processor, BadCommand
 from machaon.app import ExitApp
  
 #
+hidden_command = 2
+auxiliary_command = 1
+
+#
 #
 #
 class LauncherEntry():
-    def __init__(self, commandclass, keywords=None, desc=None, hidden=False):
+    def __init__(self, commandclass, keywords=None, desc=None, commandtype=0):
         self.command = commandclass
-        def callattr(obj, name, default):
-            getter = getattr(obj, name, None)
+        def classattr(name, default):
+            getter = getattr(commandclass, name, None)
             if getter: return getter()
             return default
-        self.keywords = keywords or callattr(commandclass, "get_default_keywords", tuple())
-        self.desc = desc or callattr(commandclass, "get_desc", "")
-        self.hidden = hidden
+        self.keywords = keywords or classattr("get_default_keywords", tuple())
+        self.desc = desc or classattr("get_desc", "")
+        self.commandtype = commandtype
     
     def match(self, kwd):
         return kwd in self.keywords
@@ -70,19 +74,23 @@ class CommandFunction:
 # コマンドを処理する
 #
 class CommandLauncher:
-    class ExitLauncher:
-        pass
-
     def __init__(self, app):
         self.app = app
         self.lastcmdstr = ""
         self.nextcmdstr = None
         self.entries = []
         
-    def command(self, proc, keywords=None, desc=None, hidden=False):
+    def command(self, proc, keywords=None, desc=None, hidden=False, auxiliary=False):
         if not isinstance(proc, type):
             proc = CommandFunction(proc, desc)
-        entry = LauncherEntry(proc, keywords, desc, hidden)
+        typecode = 0
+        if auxiliary: typecode = auxiliary_command
+        if hidden: typecode = hidden_command        
+        entry = LauncherEntry(proc, keywords, desc, typecode)
+        # キーワードの重複を確認
+        for curentry in self.entries:
+            if any(curentry.match(x) for x in keywords):
+                raise ValueError("キーワード:{}は既に'{}'によって使用されています".format(",".join(keywords), curentry.get_first_keyword()))
         self.entries.append(entry)
         return entry
     
@@ -102,7 +110,6 @@ class CommandLauncher:
                 c = LauncherCommand(entry, argstr)
                 return c
         else:
-            self.app.error("'{}'は不明なコマンドです".format(cmdstr))
             return None
     
     # self.app.launcher.redirect_command("")
@@ -115,21 +122,27 @@ class CommandLauncher:
             nextcmd = self.nextcmdstr
             self.nextcmdstr = None
         return nextcmd
-        
+
+    #
+    def list_commands_for_display(self):
+        entries = [x for x in self.entries if x.commandtype != hidden_command]
+        entries = sorted(entries, key=lambda x: x.commandtype)
+        return entries
+
     #
     def command_interrupt(self):    
         if not self.app.is_process_running():
+            self.app.message("実行中のプロセスはありません")
             return
+        self.app.message("プロセスを中断します")
         self.app.interrupt()
         
     def command_help(self):
-        descs = []
-        descs.extend([(", ".join(e.keywords), e.desc) for e in self.entries if not e.hidden])
-        leftmax = max(len(kwds) for kwds, _ in descs)
-        
+        rows = [(", ".join(x.keywords), x.desc) for x in self.list_commands_for_display()]
+        leftmax = max(len(kwds) for kwds, _ in rows)        
         self.app.message("<< コマンド一覧 >>")
         self.app.message("---------------------------")
-        for kwds, desc in descs:
+        for kwds, desc in rows:
             row = "  {}    {}".format(kwds.ljust(leftmax), desc)
             self.app.message(row)
         self.app.message("---------------------------")
@@ -150,17 +163,18 @@ class CommandLauncher:
         self.app.message("現在の作業ディレクトリ：" + self.app.get_current_dir())
 
     # 備え付けのコマンドを登録する
-    def syscommand_interrupt(self):
-        return self.command(self.command_interrupt, ("interrupt", "it"), "現在のタスクを中断します。")
-    
-    def syscommand_help(self):
-        return self.command(self.command_help, ("help", "h"), "ヘルプを表示します。")
-    
-    def syscommand_exit(self):
-        return self.command(self.command_exit, ("exit",), "終了します。")
-    
-    def syscommand_cls(self):
-        return self.command(self.command_cls, ("cls",), "画面をクリアします。")
-    
-    def syscommand_cd(self):
-        return self.command(self.command_cd, ('cd',), "作業ディレクトリを変更します。")
+    def syscommands(self, names=("interrupt", "cls", "cd", "help", "exit")):
+        _cmds = {
+            "interrupt" : (("interrupt", "it"), "現在実行中のプロセスを中断します。"),
+            "exit" : (("exit",), "終了します。"),
+            "help" : (("help", "h"), "ヘルプを表示します。"),
+            "cls" : (("cls",), "画面をクリアします。"),
+            "cd" : (('cd',), "作業ディレクトリを変更します。"),
+        }
+        for name in names:
+            cmd = getattr(self, "command_{}".format(name), None)
+            entry = _cmds.get(name)
+            if cmd is None or entry is None:
+                continue
+            self.command(cmd, *entry, auxiliary=True)
+

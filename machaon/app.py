@@ -17,51 +17,28 @@ from machaon.cui import reencode, test_yesno
 # ###################################################################
 #  すべてのmachaonアプリで継承されるアプリクラス
 #   プロセッサーを走らせる、UIの管理を行う
-#   プロセッサーにも渡され、メッセージ表示・設定項目へのアクセスを提供する
+#   プロセッサーに渡され、メッセージ表示・設定項目へのアクセスを提供する
 # ###################################################################
 #
 class App:
-    def __init__(self, title, ui, launcher):
+    def __init__(self, title, ui):
         self.title = title
         self.ui = ui
         self.settings = {}
         self.thr = None 
         self.lastresult = None # is_runnning中は外からアクセスしないのでセーフ？
         self.stopflag = False # boolの代入・読みだしはスレッドセーフ
-        self.launcher = launcher
         
         desktop = os.path.join(os.path.expanduser("~"), "Desktop")
         self.curdir = desktop # 基本ディレクトリ
         
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
+    
+    @property
+    def launcher(self):
+        return self.ui.get_launcher()
         
-    # アプリケーション全体の設定を読み込む
-    def init_setting(self, settingpath):
-        self.settings = configparser.ConfigParser()
-
-        # デフォルトの値
-        #self.settings["PATH"] = {}
-        #self.ms_word_path = "C:\\Program Files\\Microsoft Office 15\\root\\office15\\WINWORD.EXE"
-        #self.tools_dir = os.path.join(settingpath, "tools\\")
-
-        # ファイルから読み込む
-        if settingpath and os.path.isfile(settingpath):
-            self.settings.read(settingpath, encoding="utf-8")
-        else:
-            self.message('デフォルトの設定を使います') # デフォルト設定を適用
-
-    # 設定ファイルの項目
-    def _setting_value(path1, path2):
-        def getter(self):
-            return self.settings[path1][path2]
-        def setter(self, val):
-            self.settings[path1][path2] = val
-        return property(fget=getter, fset=setter)
-
-    ms_word_path = _setting_value("PATH","ms-word-path")
-    tools_dir = _setting_value("PATH", "tools-dir")
-
     #
     #
     #
@@ -75,9 +52,10 @@ class App:
 
     def exit(self):
         self.on_exit()
-        self.ui.destroy()
+        self.ui.on_exit()
     
     def mainloop(self):
+        self.ui.reset_screen()
         self.ui.run_mainloop()
     
     #
@@ -114,10 +92,7 @@ class App:
     
     # メッセージを流す
     def print_message(self, msg):
-        if self.is_process_running(): # 別スレッドからメッセージを投函
-            self.ui.queue_message(msg)
-        else:
-            self.ui.message_handler(msg)
+        self.ui.post_message(msg)
     
     def print_target(self, target):
         self.message_em('対象 --> [{}]'.format(target))
@@ -131,8 +106,7 @@ class App:
         return test_yesno(answer)
     
     def reset_screen(self):
-        self.ui.clear_screen()
-        self.print_title()
+        self.ui.reset_screen()
 
     def scroll_screen(self, index):
         self.ui.scroll_screen(index)
@@ -164,7 +138,12 @@ class App:
     def command_process(self, cmdstr, *, threading=False):
         cmd = self.launcher.translate_command(cmdstr)
         if cmd is None:
+            self.error("'{}'は不明なコマンドです".format(cmdstr))
             cmd = self.launcher.translate_command("help")
+            if cmd is not None:
+                self.message("'help'でコマンド一覧を表示")
+            self.on_exit_command(None)
+            return None
 
         ret = None
         if threading:
@@ -204,12 +183,12 @@ class App:
         return result
         
     # コマンド（プロセス/CommandFunction）実行終了時に呼び出されるハンドラ
-    def on_exit_command(self, procclass=None):
-        pass
+    def on_exit_command(self, procclass):
+        self.ui.on_exit_command(procclass)
     
     # アプリケーション終了時に呼び出されるハンドラ
     def on_exit(self):
-        pass
+        self.ui.on_exit()
     
     #
     # 非同期処理
@@ -251,7 +230,7 @@ class App:
 #
 #
 class AppMessage():
-    def __init__(self, text, tag, **kwargs):
+    def __init__(self, text, tag="message", **kwargs):
         self.text = str(text)
         self.tag = tag
         self.kwargs = kwargs
@@ -259,6 +238,8 @@ class AppMessage():
     def argument(self, name, default=None):
         return self.kwargs.get(name, default)
 
+    def set_argument(self, name, value):
+        self.kwargs[name] = value
         
 #
 class AppMessageIO():
@@ -283,6 +264,9 @@ class BasicCUI:
     def __init__(self):
         self.msgqueue = queue.Queue()
     
+    def get_launcher(self):
+        return self
+    
     # キューにためたメッセージを処理
     def handle_queued_message(self):
         try:
@@ -298,10 +282,34 @@ class BasicCUI:
     def queue_message(self, msg):
         self.msgqueue.put(msg)
     
+    def post_message(self, msg):
+        if msg.argument("fromAnotherThread", False):
+            self.queue_message(msg)
+        else:
+            self.message_handler(msg)
+
     def message_handler(self, msg):
         raise NotImplementedError()
+                
+    #
+    def get_input(self, desc):
+        pass
+
+    def reset_screen(self):
+        pass
         
-    def destroy(self):
+    def scroll_screen(self, index):
+        pass
+
+    # UIのメインループ
+    def run_mainloop(self):
         raise NotImplementedError()
 
+    # コマンド（プロセス/CommandFunction）実行終了時に呼び出されるハンドラ
+    def on_exit_command(self, procclass=None):
+        pass
     
+    # アプリケーション終了時に呼び出されるハンドラ
+    def on_exit(self):
+        pass
+

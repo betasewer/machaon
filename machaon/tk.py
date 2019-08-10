@@ -2,10 +2,6 @@
 # coding: utf-8
 
 import os
-import subprocess
-import glob
-import copy
-import queue
 import datetime
 from threading import Event
 from typing import Tuple, Sequence, List
@@ -15,59 +11,122 @@ import tkinter.filedialog
 import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
-from machaon.app import App, AppMessage, BasicCUI
+from machaon.app import AppMessage, BasicCUI
 from machaon.command_launcher import CommandLauncher
 
-import codecs
-
 #
 #
 #
-class tkApp(App):
-    def __init__(self, title):
-        super().__init__(title, tkScreen(), CommandLauncher(self))
-        self.launcher.syscommand_help()
-        self.launcher.syscommand_cls()
-        self.launcher.syscommand_cd()
-        self.reset_screen()
+class tkLauncherUI(BasicCUI):
+    def __init__(self):
+        self.launcher = None
+        self.screen = None
         
-    def print_message(self, msg):
-        # メッセージはすべてキュー
-        self.ui.queue_message(msg)
+        self._cmdhistory = []
+        self._curhistory = 0
+        
+    def init_with_app(self, app):
+        self.app = app
+        self.launcher = CommandLauncher(app)
+        self.screen = tkLauncherScreen()
+        self.screen.init_screen(app, self)
     
+    def get_launcher(self):
+        return self.launcher
+
+    # メッセージはすべてキュー
+    def post_message(self, msg):
+        self.queue_message(msg)
+    
+    # ログウィンドウにメッセージを出力
+    def message_handler(self, msg):
+        self.screen.insert_log(msg)
+    
+    # スクリーンを初期化
     def reset_screen(self):
-        self.ui.reset_log() # 全て削除
-        self.print_title()
-        self.ui.update_log()
+        self.screen.reset_log(self)
+        self.app.print_title()
+        self.screen.update_log(self)
     
+    # 入力を取得
     def get_input(self, instr):
         instr += " >>> "
-        self.message(instr, nobreak=True)
-        inputtext = self.ui.wait_input()
-        self.print_message(AppMessage(inputtext, "input"))
+        self.app.message(instr, nobreak=True)
+        inputtext = self.screen.wait_input()
+        self.app.print_message(AppMessage(inputtext, "input"))
         return inputtext
     
+    # コマンドを実行する
     def invoke_command(self, cmdstr):
         tim = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
-        self.message_em("[{}] >>> ".format(tim), nobreak=True)
-        self.print_message(AppMessage(cmdstr, "input"))
-        self.command_process(cmdstr, threading=True)
+        self.app.message_em("[{}] >>> ".format(tim), nobreak=True)
+        self.post_message(AppMessage(cmdstr, "input"))
+        self.app.command_process(cmdstr, threading=True)
     
+    # コマンド欄を実行する
+    def execute_command_input(self):
+        text = self.screen.pop_input_text()
+        if self.screen.inputwaiting:
+            self.screen.finish_input(text)
+        else:
+            self.add_command_history(text)
+            self.invoke_command(text)
+        
+    # コマンド履歴への追加
+    def add_command_history(self, command):
+        self._cmdhistory.append(command)
+        self._curhistory = len(self._cmdhistory)
+    
+    def rollback_command_history(self, d):
+        if len(self._cmdhistory)==0:
+            return
+        index = self._curhistory - d
+        if index<0 or len(self._cmdhistory)<=index:
+            return
+        cmd = self._cmdhistory[index]
+        self._curhistory = index
+        self.screen.replace_input_text(cmd)
+    
+    def show_command_history(self):
+        self.app.message("<< 履歴 >>")
+        for i, his in enumerate(self._cmdhistory):
+            row = "{} | {}".format(i, his)
+            self.app.message(row)
+        
+    # ダイアログからファイルパスを入力
+    def input_filepath(self, *filters:Tuple[str, str]):
+        filepath = tkinter.filedialog.askopenfilename(filetypes = filters, initialdir = self.app.get_current_dir())
+        self.screen.insert_input_text("{}".format(filepath))
+    
+    # カレントディレクトリの変更
+    def change_cd_dialog(self):
+        path = tkinter.filedialog.askdirectory(initialdir = self.app.get_current_dir())
+        self.invoke_command("cd {}".format(path))
+        
+    # ハイパーリンクのURLを列挙する
+    def show_hyperlink_database(self):
+        for l in self.screen.hyperlinks.loglines():
+            self.app.message(l)
+
+    # ハンドラ
+    def run_mainloop(self):
+        self.screen.run()
+
     def on_exit_command(self, procclass):
-        self.message_em("実行終了\n")
+        self.app.message_em("実行終了\n")
     
     def on_exit(self):
-        self.ui.finish_input("") # 入力待ち状態を解消する
+        self.screen.finish_input("") # 入力待ち状態を解消する
+        self.screen.destroy()
         
         
+        
 #
 #
 #
-class tkScreen(BasicCUI):
+class tkLauncherScreen():
     def __init__(self):
         super().__init__()
-        self.app = None
-        
         # コンソールの色指定
         self.colors = {
             "background" : "#000000",
@@ -84,10 +143,7 @@ class tkScreen(BasicCUI):
         self.root = tkinter.Tk()
         self.commandline = None
         self.log = None
-        
-        self._cmdhistory = []
-        self._curhistory = 0
-        
+
         # 入力終了イベント＆終了時のテキスト
         self.inputwaiting = False
         self.event_inputend = Event()
@@ -95,10 +151,8 @@ class tkScreen(BasicCUI):
         
         self.hyperlinks = HyperlinkDatabase()
     
-    #
-    def init_with_app(self, app):
-        self.app = app
-        
+    # UIの配置と初期化
+    def init_screen(self, app, launcher):
         self.root.title(app.title)
         self.root.geometry("900x200")
         self.root.protocol("WM_DELETE_WINDOW", app.exit)
@@ -110,16 +164,16 @@ class tkScreen(BasicCUI):
         )
         self.commandline.grid(column=0, row=0, sticky="ew", padx=5)
         self.commandline.focus_set()
-        self.commandline.bind('<Return>', lambda event:self.execute_input())
-        self.commandline.bind('<Up>', lambda event:self.input_from_history(1))
-        self.commandline.bind('<Down>', lambda event:self.input_from_history(-1))
+        self.commandline.bind('<Return>', lambda e:launcher.execute_command_input())
+        self.commandline.bind('<Up>', lambda e:launcher.rollback_command_history(1))
+        self.commandline.bind('<Down>', lambda e:launcher.rollback_command_history(-1))
         
         # ボタンパネル
         btnpanel = tk.Frame(self.root)
         btnpanel.grid(column=1, row=0, rowspan=2, sticky="new", padx=5)
-        b = tk.Button(btnpanel, text=u"ファイル入力...", command=self.input_filepath, relief="groove")
+        b = tk.Button(btnpanel, text=u"ファイル入力...", command=launcher.input_filepath, relief="groove")
         b.pack(side=tk.TOP, fill=tk.X, pady=2)
-        b = tk.Button(btnpanel, text=u"作業ディレクトリ...", command=self.change_cd_dialog, relief="groove")
+        b = tk.Button(btnpanel, text=u"作業ディレクトリ...", command=launcher.change_cd_dialog, relief="groove")
         b.pack(side=tk.TOP, fill=tk.X, pady=2)
         b = tk.Button(btnpanel, text=u"画面クリア", command=app.reset_screen, relief="groove")
         b.pack(side=tk.TOP, fill=tk.X, pady=2)
@@ -141,9 +195,9 @@ class tkScreen(BasicCUI):
         self.log.tag_configure("error", foreground=self.colors["error"])
         self.log.tag_configure("input", foreground=self.colors["userinput"])
         self.log.tag_configure("hyper", foreground=self.colors["hyperlink"], underline=1)
-        self.log.tag_bind("hyper", "<Enter>", self._hyper_enter)
-        self.log.tag_bind("hyper", "<Leave>", self._hyper_leave)
-        self.log.tag_bind("hyper", "<Double-Button-1>", self._hyper_click)
+        self.log.tag_bind("hyper", "<Enter>", lambda e: self.hyper_enter(e))
+        self.log.tag_bind("hyper", "<Leave>", lambda e: self.hyper_leave(e))
+        self.log.tag_bind("hyper", "<Double-Button-1>", lambda e: self.hyper_click(e, app))
         
         tk.Grid.columnconfigure(self.root, 0, weight=1)
         tk.Grid.rowconfigure(self.root, 1, weight=1)
@@ -151,10 +205,6 @@ class tkScreen(BasicCUI):
         # フレームを除去       
         #self.root.overrideredirect(True)
     
-    # ログウィンドウにメッセージを出力
-    def message_handler(self, msg):
-        self.insert_log(msg)
-
     # ログの操作
     def insert_log(self, msg):        
         if msg.tag == "hyper":
@@ -172,24 +222,24 @@ class tkScreen(BasicCUI):
         self.log.configure(state='disabled')
         self.log.yview_moveto(1)
         
-    def update_log(self):
-        self.handle_queued_message()
-        self.log.after(100, self.update_log)
+    def update_log(self, ui):
+        ui.handle_queued_message()
+        self.log.after(100, self.update_log, ui)
 
-    def reset_log(self):
-        self.discard_queued_message()
+    def reset_log(self, ui):
+        ui.discard_queued_message()
         self.log.configure(state='normal')
         self.log.delete(1.0, tk.END)
         self.log.configure(state='disabled')
         
     # ハイパーリンク
-    def _hyper_enter(self, event):
+    def hyper_enter(self, event):
         self.log.config(cursor="hand2")
 
-    def _hyper_leave(self, event):
+    def hyper_leave(self, event):
         self.log.config(cursor="")
 
-    def _hyper_click(self, event):
+    def hyper_click(self, event, app):
         tags = self.log.tag_names(tk.CURRENT)
         for tag in tags:
             if tag.startswith("hyperlink"):
@@ -199,11 +249,7 @@ class tkScreen(BasicCUI):
         key = int(tag[len("hyperlink"):])
         link = self.hyperlinks.resolve(key)
         if link is not None:
-            self.app.open_hyperlink(link)
-
-    def show_hyperlink_database(self):
-        for l in self.hyperlinks.loglines():
-            self.app.message(l)
+            app.open_hyperlink(link)
 
     #
     # 入力欄
@@ -215,7 +261,7 @@ class tkScreen(BasicCUI):
         """
         self.event_inputend.clear()
         self.inputwaiting = True
-        self.event_inputend.wait()
+        self.event_inputend.wait() # 待機...
         self.inputwaiting = False
         # テキストボックスの最新の中身を取得する
         text = self.lastinput
@@ -227,58 +273,26 @@ class tkScreen(BasicCUI):
         self.lastinput = text
         self.event_inputend.set()
     
-    def execute_input(self):
-        """ コマンド欄の文字列を処理する """
-        text = self.commandline.get()
-        self.commandline.delete(0, "end") # クリア
-        if self.inputwaiting:
-            self.finish_input(text)
-        else:
-            # コマンド履歴への追加
-            self._cmdhistory.append(text)
-            self._curhistory = len(self._cmdhistory)
-            # コマンドとして実行
-            self.app.invoke_command(text)
-    
-    # ダイアログからファイルパスを入力
-    def input_filepath(self, *filters:Tuple[str, str]):
-        filepath = tkinter.filedialog.askopenfilename(filetypes = filters, initialdir = self.app.get_current_dir())
-        self.commandline.insert("insert", "{}".format(filepath))
-        
-    def input_dirpath(self):
-        path = tkinter.filedialog.askdirectory(initialdir = self.app.get_current_dir())
-        self.commandline.insert("insert", "{}".format(path))
-        
-    def input_from_history(self, d):
-        if len(self._cmdhistory)==0:
-            return
-        index = self._curhistory - d
-        if index<0 or len(self._cmdhistory)<=index:
-            return
-        cmd = self._cmdhistory[index]
+    def replace_input_text(self, text): 
+        """ 入力文字列を代入する """
         self.commandline.delete(0, "end")
-        self.commandline.insert(0, cmd)
-        self._curhistory = index
-    
-    def show_history(self):
-        self.app.message("<< 履歴 >>")
-        for i, his in enumerate(self._cmdhistory):
-            row = "{} | {}".format(i, his)
-            self.app.message(row)
+        self.commandline.insert(0, text)
         
-    def set_inputlogging(self, b=True):
-        self.inputlogging = b
+    def insert_input_text(self, text):
+        """ 入力文字列をカーソル位置に挿入する """
+        self.commandline.insert("insert", text)
     
-    def change_cd_dialog(self):
-        path = tkinter.filedialog.askdirectory(initialdir = self.app.get_current_dir())
-        self.app.invoke_command("cd {}".format(path))
+    def pop_input_text(self):
+        """ 入力文字列を取り出しクリアする """
+        text = self.commandline.get()
+        self.commandline.delete(0, "end")
+        return text
     
-    def run_mainloop(self):
+    def run(self):
         self.root.mainloop()
     
     def destroy(self):
         self.root.destroy()
-    
 #
 #
 #

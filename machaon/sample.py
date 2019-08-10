@@ -63,11 +63,16 @@ class ColorProcess(Processor):
   
 
 #
-def char_detail_line(char):
-    code = ord(char)
-    name = unicodedata.name(char, None)
-    cat = unicodedata.category(char)
-    if cat.startswith("C") or cat.startswith("Z"):
+def char_detail_line(code, char=None):
+    if char is None and code < 0x110000:
+        char = chr(code)
+    if char is not None:
+        name = unicodedata.name(char, None)
+        cat = unicodedata.category(char)
+
+    if char is None:
+        disp = "[not a character]"
+    elif cat.startswith("C") or cat.startswith("Z"):
         if cat == "Cn":
             name = "[not a character]"
         else:
@@ -80,7 +85,7 @@ def char_detail_line(char):
 def encode_unicodes(text=""):
     app.message("input:")
     for char in text:
-        line = char_detail_line(char)
+        line = char_detail_line(ord(char), char)
         app.print_message(AppMessage(line, "input"))
         
 def decode_unicodes(codebits=""):
@@ -90,8 +95,7 @@ def decode_unicodes(codebits=""):
             code = int(codebit, 16)
         except ValueError:
             continue
-        char = chr(code)
-        line = char_detail_line(char)
+        line = char_detail_line(code)
         app.print_message(AppMessage(line, "input"))
 
 #
@@ -100,6 +104,8 @@ def decode_unicodes(codebits=""):
 if __name__ == "__main__":
     import sys
     import argparse
+    from machaon.app import App
+
     desc = 'machaon sample application'
     p = argparse.ArgumentParser(description=desc)
     p.add_argument("--cui", action="store_const", const="cui", dest="apptype")
@@ -109,22 +115,23 @@ if __name__ == "__main__":
     title = "sample app"
     apptype = args.apptype
     if apptype is None or apptype == "cui":
-        from machaon.shell import BasicShellApp, WinShellUI
-        app = BasicShellApp(title, WinShellUI)
+        from machaon.shell import WinShellUI
+        app = App(title, WinShellUI())
     elif apptype == "tk":
-        from machaon.tk import tkApp
-        app = tkApp(title)
+        from machaon.tk import tkLauncherUI
+        app = App(title, tkLauncherUI())
     else:
         p.print_help()
         sys.exit()
     
     # コマンドの設定
-    #app.launcher.command(app.ui.show_history, ("history",), desc="入力履歴を表示します。")
+    app.launcher.syscommands()
     app.launcher.command(TestProcess, ("spam",))
     app.launcher.command(encode_unicodes, ("unienc",), desc="文字を入力 -> コードにする")
     app.launcher.command(decode_unicodes, ("unidec",), desc="コードを入力 -> 文字にする")
     app.launcher.command(ColorProcess, ("texts",))
     app.launcher.command(LinkProcess, ("link",))
+    #app.launcher.command(app.ui.show_history, ("history",), desc="入力履歴を表示します。")
     #app.launcher.command(app.ui.show_hyperlink_database, ("hyperlinks",), hidden=True, desc="内部のハイパーリンクデータベースを表示します。")
     app.run()
     

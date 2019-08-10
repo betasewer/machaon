@@ -34,7 +34,7 @@ def collapse_text(text, width):
     return "\n".join(results)
         
 #
-# 指定の長さで改行を入れる
+# 指定の数値で改行、字下げを入れる
 #
 def composit_text(s, max_width, indent, first_indent=None):
     if first_indent is None:
@@ -54,7 +54,7 @@ def composit_text(s, max_width, indent, first_indent=None):
             text += " " * first_indent
             line_width = 0
         
-    return txt
+    return text
 
 #
 def complete_break(text):
