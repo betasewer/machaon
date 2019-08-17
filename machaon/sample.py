@@ -81,27 +81,9 @@ def char_detail_line(code, char=None):
     else:
         disp = char + "  " + name
     return " {:04X} {}".format(code, disp)
-    
-def encode_unicodes(text=""):
-    app.message("input:")
-    for char in text:
-        line = char_detail_line(ord(char), char)
-        app.print_message(AppMessage(line, "input"))
-        
-def decode_unicodes(codebits=""):
-    app.message("input:")
-    for codebit in codebits.split():
-        try:        
-            code = int(codebit, 16)
-        except ValueError:
-            continue
-        line = char_detail_line(code)
-        app.print_message(AppMessage(line, "input"))
 
 #
-#
-#
-if __name__ == "__main__":
+def launch_sample_app(default_choice=None):
     import sys
     import argparse
     from machaon.app import App
@@ -113,19 +95,36 @@ if __name__ == "__main__":
     args = p.parse_args()
     
     title = "sample app"
-    apptype = args.apptype
+    apptype = args.apptype or default_choice
     if apptype is None or apptype == "cui":
         from machaon.shell import WinShellUI
         app = App(title, WinShellUI())
+        app.launcher.syscommands(("interrupt", "cls", "cd", "help", "exit"))
     elif apptype == "tk":
         from machaon.tk import tkLauncherUI
         app = App(title, tkLauncherUI())
+        app.launcher.syscommands(("interrupt", "cd", "help", "exit"))
     else:
         p.print_help()
         sys.exit()
-    
+
+    def encode_unicodes(text=""):
+        app.message("input:")
+        for char in text:
+            line = char_detail_line(ord(char), char)
+            app.print_message(AppMessage(line, "input"))
+            
+    def decode_unicodes(codebits=""):
+        app.message("input:")
+        for codebit in codebits.split():
+            try:        
+                code = int(codebit, 16)
+            except ValueError:
+                continue
+            line = char_detail_line(code)
+            app.print_message(AppMessage(line, "input"))
+
     # コマンドの設定
-    app.launcher.syscommands()
     app.launcher.command(TestProcess, ("spam",))
     app.launcher.command(encode_unicodes, ("unienc",), desc="文字を入力 -> コードにする")
     app.launcher.command(decode_unicodes, ("unidec",), desc="コードを入力 -> 文字にする")
@@ -134,4 +133,10 @@ if __name__ == "__main__":
     #app.launcher.command(app.ui.show_history, ("history",), desc="入力履歴を表示します。")
     #app.launcher.command(app.ui.show_hyperlink_database, ("hyperlinks",), hidden=True, desc="内部のハイパーリンクデータベースを表示します。")
     app.run()
-    
+
+
+#
+#
+#
+if __name__ == "__main__":
+    launch_sample_app()

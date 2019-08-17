@@ -52,7 +52,6 @@ class App:
 
     def exit(self):
         self.on_exit()
-        self.ui.on_exit()
     
     def mainloop(self):
         self.ui.reset_screen()
