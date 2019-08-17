@@ -58,12 +58,16 @@ class LauncherCommand():
 
 #
 class CommandFunction:
-    def __init__(self, fn, desc):
+    def __init__(self, fn, desc, *args):
         self.fn = fn
         self.desc = desc
+        self.bindargs = args
         
     def invoke(self, argstr):
-        args = [argstr] if argstr else []
+        args = []
+        args.extend(self.bindargs)
+        if argstr:
+            args.append(argstr)
         return self.fn(*args)
 
     def help(self, app):
@@ -80,12 +84,15 @@ class CommandLauncher:
         self.nextcmdstr = None
         self.entries = []
         
-    def command(self, proc, keywords=None, desc=None, hidden=False, auxiliary=False):
+    def command(self, proc, keywords=None, desc=None, hidden=False, auxiliary=False, bindapp=False):
         if not isinstance(proc, type):
-            proc = CommandFunction(proc, desc)
+            bindargs = []
+            if bindapp:
+                bindargs.append(self.app)
+            proc = CommandFunction(proc, desc, *bindargs)
         typecode = 0
         if auxiliary: typecode = auxiliary_command
-        if hidden: typecode = hidden_command        
+        if hidden: typecode = hidden_command
         entry = LauncherEntry(proc, keywords, desc, typecode)
         # キーワードの重複を確認
         for curentry in self.entries:
@@ -135,7 +142,7 @@ class CommandLauncher:
             self.app.message("実行中のプロセスはありません")
             return
         self.app.message("プロセスを中断します")
-        self.app.interrupt()
+        self.app.interrupt_process()
         
     def command_help(self):
         rows = [(", ".join(x.keywords), x.desc) for x in self.list_commands_for_display()]

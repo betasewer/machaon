@@ -75,17 +75,19 @@ class Processor:
         #
         # 先頭引数の処理
         #
-        targetargs = argmap[TargetArg]
-        if len(targetargs)==0:
-            yield ProcessStarter(proc)
+        posittargets = argmap[PositTargetArg]
+        if len(posittargets)==0:
+            withtarget = False
+            target = None
         else:
-            target = targetargs[0]
-            args = targetargs[1:]
-            if isinstance(target, list):
-                for tg in target:
-                    yield ProcessStarter(proc, tg, *args)
-            else:
-                yield ProcessStarter(proc, target, *args)
+            withtarget = True
+            target = posittargets[0] 
+        targetargs = argmap[TargetArg]
+        if isinstance(target, list):
+            for tg in target:
+                yield ProcessStarter(proc, tg, targetargs, withtarget)
+        else:
+            yield ProcessStarter(proc, target, targetargs, withtarget)
                 
         #
         proc.exit_process(*argmap[ExitArg])
@@ -106,18 +108,22 @@ class Processor:
 #
 #
 class ProcessStarter:
-    def __init__(self, proc, target=None, *args):
+    def __init__(self, proc, target, args, withtarget):
         self.proc = proc
         self.target = target
         self.args = args
+        self.withtarget = withtarget
         
     def start(self):
-        targs = []
-        if self.target is not None:
-            targs.append(self.target)
-        result = self.proc.process_target(*targs, *self.args)
+        target = []
+        if self.withtarget:
+            target.append(self.target)
+        result = self.proc.process_target(*target, *self.args)
         self.proc.lastresult = result
         return result
+    
+    def has_target(self):
+        return self.withtarget
     
     def get_target(self):
         return self.target
@@ -128,6 +134,7 @@ class ProcessStarter:
 InitArg = 0
 TargetArg = 1
 ExitArg = 2
+PositTargetArg = 3
 FilepathArg = 0x10
     
 #
@@ -173,21 +180,22 @@ class CommandParser:
         kwargs["parentparser"] = self
         self.argp = ArgumentParser(**kwargs)
         self.argnames = []
-        self._dispargs = False
         self._parsermsgs = []
+        self._dispargs = False
        
     # argparse.add_argumentの引数に加え、以下を指定可能：
     #  files = True/False ファイルパス/globパターンを受け入れ、ファイルパスのリストに展開する
-    def add_arg(self, methodtype, *args, **kwargs):
+    def add_arg(self, methodtype, *names, **kwargs):
         isfile = kwargs.pop("files", False)
         if isfile:
             kwargs["nargs"] = "+"
             methodtype |= FilepathArg
 
-        act = self.argp.add_argument(*args, **kwargs)
-        if any(x for (_,x) in self.argnames if x == act.dest):
-            return
-        self.argnames.append((methodtype, act.dest))
+        act = self.argp.add_argument(*names, **kwargs)
+        if (methodtype&TargetArg)>0 and len(names)>0 and not names[0].startswith("-"):
+            self.argnames.append((PositTargetArg, act.dest))
+        elif not any(x for (_,x) in self.argnames if x == act.dest):
+            self.argnames.append((methodtype, act.dest))
         
     def init_arg(self, *args, **kwargs):
         self.add_arg(InitArg, *args, **kwargs)

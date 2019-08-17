@@ -21,7 +21,7 @@ from machaon.cui import reencode, test_yesno
 # ###################################################################
 #
 class App:
-    def __init__(self, title, ui):
+    def __init__(self, title, ui=None):
         self.title = title
         self.ui = ui
         self.settings = {}
@@ -32,21 +32,27 @@ class App:
         desktop = os.path.join(os.path.expanduser("~"), "Desktop")
         self.curdir = desktop # 基本ディレクトリ
         
-        if hasattr(self.ui, "init_with_app"):
-            self.ui.init_with_app(self)
+        if self.ui is not None:
+            self.init_ui()
     
     @property
     def launcher(self):
         return self.ui.get_launcher()
+    
+    def init_ui(self, ui=None):
+        if ui is not None:
+            self.ui = ui
+        if hasattr(self.ui, "init_with_app"):
+            self.ui.init_with_app(self)
         
     #
     #
     #
     def run(self):
         if self.ui is None:
-            raise ValueError()
+            raise ValueError("App UI must be initialized")
         if self.launcher is None:
-            raise ValueError()
+            raise ValueError("App launcher must be initialized")
         self.mainloop()
         self.join_process_running()
 
