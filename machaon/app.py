@@ -232,6 +232,26 @@ class App:
     #
     def message_io(self, **kwargs):
         return AppMessageIO(self, **kwargs)
+    
+    # コマンド登録
+    def add_command(self, *args, **kwargs):
+        return self.launcher.command(*args, **kwargs)
+
+    def add_syscommands(self, commands):
+        def search(obj, name):
+            cmd = getattr(obj, "command_{}".format(name), None)
+            syscmds = getattr(obj, "syscommands", None)
+            entry = syscmds.get(name, None) if syscmds else None
+            return cmd, entry
+
+        for cmdname in commands:
+            for obj in (self.launcher, self.ui):
+                cmd, entry = search(obj, cmdname)
+                if cmd is not None:
+                    break
+            else:
+                continue
+            self.launcher.command(cmd, *entry, auxiliary=True)
         
 #
 #

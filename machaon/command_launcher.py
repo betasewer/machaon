@@ -169,19 +169,12 @@ class CommandLauncher:
             self.app.change_current_dir(path)
         self.app.message("現在の作業ディレクトリ：" + self.app.get_current_dir())
 
-    # 備え付けのコマンドを登録する
-    def syscommands(self, names=("interrupt", "cls", "cd", "help", "exit")):
-        _cmds = {
-            "interrupt" : (("interrupt", "it"), "現在実行中のプロセスを中断します。"),
-            "exit" : (("exit",), "終了します。"),
-            "help" : (("help", "h"), "ヘルプを表示します。"),
-            "cls" : (("cls",), "画面をクリアします。"),
-            "cd" : (('cd',), "作業ディレクトリを変更します。"),
-        }
-        for name in names:
-            cmd = getattr(self, "command_{}".format(name), None)
-            entry = _cmds.get(name)
-            if cmd is None or entry is None:
-                continue
-            self.command(cmd, *entry, auxiliary=True)
+    # プリセットコマンドの定義
+    syscommands = {
+        "interrupt" : (("interrupt", "it"), "現在実行中のプロセスを中断します。"),
+        "exit" : (("exit",), "終了します。"),
+        "help" : (("help", "h"), "ヘルプを表示します。"),
+        "cls" : (("cls",), "画面をクリアします。"),
+        "cd" : (('cd',), "作業ディレクトリを変更します。"),
+    }
 
