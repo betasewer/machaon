@@ -148,36 +148,66 @@ class tkLauncherUI(BasicCUI):
         self.screen.finish_input("") # 入力待ち状態を解消する
         self.screen.destroy()
 
+    # プリセットコマンドの定義
+    syscommands = {
+        "theme" : (("theme", ), "アプリのテーマを変更します。[classic|darkblue|greygreen]"),
+    }
+
+    def command_theme(self, arg=None):
+        themes = {
+            "classic" : DarkClassicTheme(),
+            "darkblue" : DarkBlueTheme(),
+            "greygreen" : GreyGreenTheme(),
+        }
+        theme = themes.get(arg, None)
+        if theme is None:
+            self.app.error("'{}'という名のテーマはありません".format(arg if arg else ""))
+            return
+        self.screen.apply_theme(theme)
+
+
+
 #
 # 色の設定
 #
-class GreenShellTheme():
+class ShellTheme():    
     def __init__(self):
-        self.colors =  {
-            "background" : "#000000",
-            "insertmarker" : "#FFFFFF",
-            "message" : "#FFFFFF",
-            "message_em" : "#00FF00",
-            "warning" : "#FF8800",
-            "error" : "#FF4444",
-            "hyperlink" : "#0088FF",
-            "userinput" : "#FFFF00",
-            "label" : "#FFFFFF",
-            "highlight" : "#005416",
-        }
+        self.colors =  {}
+        self.ttktheme = "clam"
 
     def getcol(self, key, fallback=None):
         c = self.colors.get(key)
         if c is None and fallback is not None:
             c = fallback
         if c is None:
-            c = default_theme.colors[key]
+            c = DarkClassicTheme().colors[key]
         return c
 
+    def apply(self, ui):
+        raise NotImplementedError()
+
+#
+class DarkClassicTheme(ShellTheme):
+    def __init__(self):
+        super().__init__()
+        customcols = {
+            "message" : "#CCCCCC",
+            "background" : "#000000",
+            "insertmarker" : "#CCCCCC",
+            "message_em" : "#FFFFFF",
+            "warning" : "#FF00FF",
+            "error" : "#FF0000",
+            "hyperlink" : "#00FFFF",
+            "userinput" : "#00FF00",
+            "label" : "#FFFFFF",
+            "highlight" : "#000080"
+        }
+        self.colors.update(customcols)
+        
     # 色を設定する
     def apply(self, ui):
         style = ttk.Style()
-        style.theme_use("clam")
+        style.theme_use(self.ttktheme)
 
         bg = self.getcol("background")
         msg = self.getcol("message")
@@ -199,34 +229,52 @@ class GreenShellTheme():
         )
         style.configure("TFrame", background=bg)
 
+        ui.rootframe.configure(style="TFrame")
+        for button in ui.buttons:
+            button.configure(style="TButton")
+        for frame in ui.frames + [ui.frame]:
+            frame.configure(style="TFrame")
+
         ui.commandline.configure(background=bg, foreground=msg, insertbackground=insmark)
-        ui.log.configure(background=bg)
+        ui.log.configure(background=bg, selectbackground=highlight)
         ui.log.tag_configure("message", foreground=msg)
         ui.log.tag_configure("message_em", foreground=msg_em)
         ui.log.tag_configure("warn", foreground=msg_wan)
         ui.log.tag_configure("error", foreground=msg_err)
         ui.log.tag_configure("input", foreground=msg_inp)
         ui.log.tag_configure("hyper", foreground=msg_hyp)
-        for button in ui.buttons:
-            button.configure(style="TButton")
-        for frame in ui.frames + [ui.frame]:
-            frame.configure(style="TFrame")
 
 #
-class BlueShellTheme(GreenShellTheme):
+class DarkBlueTheme(DarkClassicTheme):
     def __init__(self):
         super().__init__()
         customcols = {
             "message_em" : "#00FFFF",
             "warning" : "#D9FF00",
-            "error" : "#FF4400",
+            "error" : "#FF0080",
+            "hyperlink" : "#00FFFF",
             "userinput" : "#00A0FF",
-            "highlight" : "#0038A1",            
+            "highlight" : "#0038A1", 
         }
         self.colors.update(customcols)
 
-        
-default_theme = GreenShellTheme()
+#
+class GreyGreenTheme(DarkClassicTheme):
+    def __init__(self):
+        super().__init__()
+        customcols = {
+            "background" : "#EFEFEF",
+            "insertmarker" : "#000000",
+            "message" : "#000000",
+            "message_em" : "#008000",
+            "warning" : "#FF8000",
+            "error" : "#FF0000",
+            "hyperlink" : "#0000FF",
+            "userinput" : "#00B070",
+            "label" : "#000000",
+            "highlight" : "#FFD0D0",
+        }
+        self.colors.update(customcols)
 
 #
 #
@@ -253,13 +301,17 @@ class tkLauncherScreen():
         self.root.geometry("900x400")
         self.root.protocol("WM_DELETE_WINDOW", app.exit)
 
-        self.frame = ttk.Frame(self.root)
-        self.frame.pack(fill=tk.BOTH, expand=1)
+        padx, pady = 3, 3
+        self.rootframe = ttk.Frame(self.root)
+        self.rootframe.pack(fill=tk.BOTH, expand=1)
+
+        self.frame = ttk.Frame(self.rootframe)
+        self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
     
         # コマンド入力欄
         commandfont = ('Verdana', 10)
         self.commandline = tk.Text(self.frame, relief="solid", font=commandfont, height=4)
-        self.commandline.grid(column=0, row=0, sticky="ew", padx=5)
+        self.commandline.grid(column=0, row=0, sticky="ew", padx=padx, pady=pady)
         self.commandline.focus_set()
         
         def on_commandline_return(e):
@@ -293,26 +345,26 @@ class tkLauncherScreen():
             return f
 
         btnpanel = addframe(self.frame)
-        btnpanel.grid(column=1, row=0, rowspan=2, sticky="new", padx=5)
+        btnpanel.grid(column=1, row=0, rowspan=2, sticky="new", padx=padx)
         btnunredo = addframe(btnpanel)
-        btnunredo.pack(side=tk.TOP, fill=tk.X, pady=2)
+        btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
         b = addbutton(btnunredo, text=u"◀", command=lambda:on_commandline_up(None), width=4)
-        b.pack(side=tk.LEFT, fill=tk.X, padx=1)
+        b.pack(side=tk.LEFT, fill=tk.X, padx=padx)
         b = addbutton(btnunredo, text=u"▶", command=lambda:on_commandline_down(None), width=4)
-        b.pack(side=tk.RIGHT, fill=tk.Y, padx=1)
+        b.pack(side=tk.RIGHT, fill=tk.Y, padx=padx)
         b = addbutton(btnpanel, text=u"ファイル入力...", command=launcher.input_filepath)
-        b.pack(side=tk.TOP, fill=tk.X, pady=2)
+        b.pack(side=tk.TOP, fill=tk.X, pady=pady)
         b = addbutton(btnpanel, text=u"作業ディレクトリ...", command=launcher.change_cd_dialog)
-        b.pack(side=tk.TOP, fill=tk.X, pady=2)
+        b.pack(side=tk.TOP, fill=tk.X, pady=pady)
         #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
         #b.pack(side=tk.TOP, fill=tk.X, pady=2)
         b = addbutton(btnpanel, text=u"終了", command=app.exit)
-        b.pack(side=tk.TOP, fill=tk.X, pady=2)
+        b.pack(side=tk.TOP, fill=tk.X, pady=pady)
         
         # ログウィンドウ
         #self.log = tk.scrolledtext.ScrolledText(self.frame, wrap="word", font="TkFixedFont")
         self.log = tk.Text(self.frame, wrap="word", font="TkFixedFont", relief="solid")
-        self.log.grid(column=0, row=1, sticky="news", padx=5) #  columnspan=2, 
+        self.log.grid(column=0, row=1, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyper", underline=1)
@@ -325,8 +377,7 @@ class tkLauncherScreen():
     
         # フレームを除去       
         #self.root.overrideredirect(True)
-        theme = BlueShellTheme()
-        theme.apply(self)
+        self.apply_theme(DarkClassicTheme())
     
     # ログの操作
     def insert_log(self, msg):        
@@ -431,6 +482,9 @@ class tkLauncherScreen():
         if not nopop:
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
+    
+    def apply_theme(self, theme):
+        theme.apply(self)
     
     def run(self):
         self.root.mainloop()

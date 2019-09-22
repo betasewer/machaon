@@ -51,11 +51,11 @@ class ColorProcess(Processor):
     __desc__ = "文字色のサンプルを表示します。"
     def process_target(self, text):
         self.app.message(text)
-        self.app.message_em(text)
-        self.app.print_message(AppMessage(text, "input"))
-        self.app.print_message(AppMessage(text, "hyper"))
-        self.app.warn(text)
-        self.app.error(text)
+        self.app.message_em("【強調】" + text)
+        self.app.print_message(AppMessage("【入力】" + text, "input"))
+        self.app.print_message(AppMessage("【リンク】" + text, "hyper"))
+        self.app.warn("【注意】" + text)
+        self.app.error("【エラー発生】" + text)
     
     @classmethod
     def init_argparser(cls, cmd):
@@ -99,11 +99,11 @@ def launch_sample_app(default_choice=None):
     if apptype is None or apptype == "cui":
         from machaon.shell import WinShellUI
         app = App(title, WinShellUI())
-        app.launcher.syscommands(("interrupt", "cls", "cd", "help", "exit"))
+        app.add_syscommands(("interrupt", "cls", "cd", "help", "exit"))
     elif apptype == "tk":
         from machaon.tk import tkLauncherUI
         app = App(title, tkLauncherUI())
-        app.launcher.syscommands(("interrupt", "cd", "help"))
+        app.add_syscommands(("interrupt", "cd", "theme", "help"))
     else:
         p.print_help()
         sys.exit()
