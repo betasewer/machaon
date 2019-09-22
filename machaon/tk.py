@@ -106,6 +106,20 @@ class tkLauncherUI(BasicCUI):
         for i, his in enumerate(self._cmdhistory):
             row = "{} | {}".format(i, his["command"])
             self.app.message(row)
+    
+    def rollback_current_command(self):
+        if len(self._cmdhistory)==0:
+            return False
+        if self.app.is_process_running():
+            return False
+        curline = self.screen.pop_input_text(nopop=True)
+        history = self._cmdhistory[self._curhistory]
+        hisline = history["command"]
+        if curline == hisline:
+            return False
+        self.screen.replace_input_text(hisline)
+        #self.app.message("現在のコマンドを復元：'{}' -> '{}'".format(curline, hisline))
+        return True
         
     # ダイアログからファイルパスを入力
     def input_filepath(self, *filters:Tuple[str, str]):
@@ -253,14 +267,15 @@ class tkLauncherScreen():
             self.commandline.mark_set("INSERT", 0.0)
             return "break"
         def on_commandline_up(e):
-            launcher.rollback_command_history(1)
+            if not launcher.rollback_current_command():
+                launcher.rollback_command_history(1)
             self.commandline.mark_set("INSERT", 0.0)
             return "break"
         def on_commandline_down(e):
             launcher.rollback_command_history(-1)
             self.commandline.mark_set("INSERT", 0.0)
             return "break"
-        self.commandline.bind('<Return>', on_commandline_return)  
+        self.commandline.bind('<Return>', on_commandline_return)
         self.commandline.bind('<Up>', on_commandline_up)
         self.commandline.bind('<Down>', on_commandline_down)
         
@@ -281,9 +296,9 @@ class tkLauncherScreen():
         btnpanel.grid(column=1, row=0, rowspan=2, sticky="new", padx=5)
         btnunredo = addframe(btnpanel)
         btnunredo.pack(side=tk.TOP, fill=tk.X, pady=2)
-        b = addbutton(btnunredo, text=u"◀", command=lambda:launcher.rollback_command_history(1), width=4)
+        b = addbutton(btnunredo, text=u"◀", command=lambda:on_commandline_up(None), width=4)
         b.pack(side=tk.LEFT, fill=tk.X, padx=1)
-        b = addbutton(btnunredo, text=u"▶", command=lambda:launcher.rollback_command_history(-1), width=4)
+        b = addbutton(btnunredo, text=u"▶", command=lambda:on_commandline_down(None), width=4)
         b.pack(side=tk.RIGHT, fill=tk.Y, padx=1)
         b = addbutton(btnpanel, text=u"ファイル入力...", command=launcher.input_filepath)
         b.pack(side=tk.TOP, fill=tk.X, pady=2)
@@ -358,6 +373,7 @@ class tkLauncherScreen():
             msg.set_argument("norecord", True)
             self.insert_log(msg)
         self.log.configure(state='disabled')
+        self.log.yview_moveto(0) # ログ上端へスクロール
         
     # ハイパーリンク
     def hyper_enter(self, event):
@@ -409,10 +425,11 @@ class tkLauncherScreen():
         """ 入力文字列をカーソル位置に挿入する """
         self.commandline.insert("insert", text)
     
-    def pop_input_text(self):
+    def pop_input_text(self, nopop=False):
         """ 入力文字列を取り出しクリアする """
         text = self.commandline.get(1.0, tk.END)
-        self.commandline.delete(1.0, tk.END)
+        if not nopop:
+            self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
     
     def run(self):

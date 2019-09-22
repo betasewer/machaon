@@ -103,7 +103,7 @@ def launch_sample_app(default_choice=None):
     elif apptype == "tk":
         from machaon.tk import tkLauncherUI
         app = App(title, tkLauncherUI())
-        app.launcher.syscommands(("interrupt", "cd", "help", "exit"))
+        app.launcher.syscommands(("interrupt", "cd", "help"))
     else:
         p.print_help()
         sys.exit()
