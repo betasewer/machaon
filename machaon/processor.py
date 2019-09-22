@@ -134,7 +134,7 @@ class ProcessStarter:
 InitArg = 0
 TargetArg = 1
 ExitArg = 2
-PositTargetArg = 3
+PositTargetArg = 5 # 1+4
 FilepathArg = 0x10
     
 #
@@ -193,7 +193,7 @@ class CommandParser:
 
         act = self.argp.add_argument(*names, **kwargs)
         if (methodtype&TargetArg)>0 and len(names)>0 and not names[0].startswith("-"):
-            self.argnames.append((PositTargetArg, act.dest))
+            self.argnames.append((methodtype|PositTargetArg, act.dest))
         elif not any(x for (_,x) in self.argnames if x == act.dest):
             self.argnames.append((methodtype, act.dest))
         
