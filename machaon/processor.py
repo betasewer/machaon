@@ -82,7 +82,7 @@ class Processor:
         else:
             withtarget = True
             target = posittargets[0] 
-        targetargs = argmap[TargetArg]
+        targetargs = posittargets[1:] + argmap[TargetArg]
         if isinstance(target, list):
             for tg in target:
                 yield ProcessStarter(proc, tg, targetargs, withtarget)
