@@ -206,7 +206,7 @@ class BlueShellTheme(GreenShellTheme):
             "message_em" : "#00FFFF",
             "warning" : "#D9FF00",
             "error" : "#FF4400",
-            "userinput" : "#0060FF",
+            "userinput" : "#00A0FF",
             "highlight" : "#0038A1",            
         }
         self.colors.update(customcols)
@@ -310,7 +310,7 @@ class tkLauncherScreen():
     
         # フレームを除去       
         #self.root.overrideredirect(True)
-        theme = GreenShellTheme()
+        theme = BlueShellTheme()
         theme.apply(self)
     
     # ログの操作
@@ -447,7 +447,6 @@ class HyperlinkDatabase:
         ds = []
         ds.extend(["{:03}|{}".format(key, link) for (key, link) in self.links.items()])
         return ds
-  
 
 #
 #
@@ -455,7 +454,3 @@ class HyperlinkDatabase:
 if __name__ == "__main__":
     from machaon.sample import launch_sample_app
     launch_sample_app("tk")
-    
-    
-        
-    

@@ -23,7 +23,7 @@ from machaon.cui import reencode, test_yesno
 class App:
     def __init__(self, title, ui=None):
         self.title = title
-        self.ui = ui
+        self.ui = None
         self.settings = {}
         self.thr = None 
         self.lastresult = None # is_runnning中は外からアクセスしないのでセーフ？
@@ -32,8 +32,10 @@ class App:
         desktop = os.path.join(os.path.expanduser("~"), "Desktop")
         self.curdir = desktop # 基本ディレクトリ
         
-        if self.ui is not None:
-            self.init_ui()
+        if ui is None:
+            from machaon.shell import WinShellUI
+            ui = WinShellUI() # デフォルトはとりあえずWindows決め打ち
+        self.init_ui(ui)
     
     @property
     def launcher(self):

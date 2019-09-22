@@ -112,7 +112,7 @@ def launch_sample_app(default_choice=None):
         app.message("input:")
         for char in text:
             line = char_detail_line(ord(char), char)
-            app.print_message(AppMessage(line, "input"))
+            app.message(line)
             
     def decode_unicodes(codebits=""):
         app.message("input:")
@@ -122,7 +122,7 @@ def launch_sample_app(default_choice=None):
             except ValueError:
                 continue
             line = char_detail_line(code)
-            app.print_message(AppMessage(line, "input"))
+            app.message(line)
 
     # コマンドの設定
     app.launcher.command(TestProcess, ("spam",))
