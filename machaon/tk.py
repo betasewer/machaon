@@ -92,7 +92,10 @@ class tkLauncherUI(BasicCUI):
         if self.app.is_process_running():
             return
         index = self._curhistory - d
-        if index<0 or len(self._cmdhistory)<=index:
+        if index<0:
+            return
+        if len(self._cmdhistory)<=index:
+            self.screen.replace_input_text("") # 空にする
             return
         history = self._cmdhistory[index]
         self._curhistory = index
