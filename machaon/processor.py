@@ -6,10 +6,42 @@ import glob
 from collections import defaultdict  
          
 #
+#
+#
+class ArgumentDescriber():
+    def __init__(self):
+        self.curargcommand = ""
+        self.args = []
+    
+    def __getitem__(self, command):
+        self.curargcommand = command
+        return self.argadder
+    
+    def argadder(self, **kwargs):
+        if len(self.curargcommand)==0:
+            raise ValueError("First specify arg command")
+        cmds = self.curargcommand.split()
+        self.args.append((cmds, kwargs))
+        return self
+    
+    def setup_argparser(self, argp):
+        for a, kwa in self.args:
+            if a[0] == "target":
+                argp.target_arg(*a[1:], **kwa)
+            elif a[0] == "init":
+                argp.init_arg(*a[1:], **kwa)
+            elif a[0] == "exit":
+                argp.exit_arg(*a[1:], **kwa)
+            else:
+                raise ValueError("Undefined command type '{}'".format(a[0]))
+            
+
+#
 # 各アプリはこれを継承する
 #
 class Processor:
     _command_interface = None
+    _command_arg_describer = None
 
     def __init__(self, app):
         self.app = app
@@ -44,15 +76,24 @@ class Processor:
                 args["prog"] = cls.__name__
             cmdparser = CommandParser(**args)
             cls._command_interface = cmdparser
+            if cls._command_arg_describer is not None:
+                cls._command_arg_describer.setup_argparser(cls._command_interface)
             cls.init_argparser(cls._command_interface)
         else:
             cmdparser = custom_parser()
             cls._command_interface = cmdparser
+
         return cmdparser is not None
         
     @classmethod
     def get_argparser(cls):
         return cls._command_interface
+    
+    @classmethod
+    def describe_command(cls) -> ArgumentDescriber:
+        desc = ArgumentDescriber()
+        cls._command_arg_describer = desc
+        return desc
     
     # 
     @classmethod
@@ -96,7 +137,7 @@ class Processor:
     @classmethod
     def help(cls, app):
         if cls._command_interface is None:
-            raise Exception()
+            raise Exception("No command interface is provided")
         cls._command_interface.help(app.message_io())
     
     @classmethod
@@ -190,6 +231,11 @@ class CommandParser:
         if isfile:
             kwargs["nargs"] = "+"
             methodtype |= FilepathArg
+        
+        cstopt = kwargs.pop("const_option", None)
+        if cstopt:
+            kwargs["action"] = "store_const"
+            kwargs["const"] = cstopt
 
         act = self.argp.add_argument(*names, **kwargs)
         if (methodtype&TargetArg)>0 and len(names)>0 and not names[0].startswith("-"):
@@ -314,3 +360,7 @@ class ParserMessageQueue():
                 io.write(l+"\n")
             else:
                 print(l)
+
+
+
+
