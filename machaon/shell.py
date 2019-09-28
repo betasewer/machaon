@@ -86,7 +86,7 @@ class ShellUI(BasicCUI):
                 else:
                     continue
 
-            ret = self.app.command_process(nextcmd, threading=False)
+            ret = self.app.exec_command(nextcmd, threading=False)
             if ret is ExitApp:
                 break
 

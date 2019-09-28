@@ -86,7 +86,7 @@ class App:
 
     # リンクを貼る
     def hyperlink(self, msg, link=None, tag=None, **options):
-        self.print_message(AppMessage(msg, "hyper", link=(link or msg), linktag=tag, **options))
+        self.print_message(AppMessage(msg, "hyperlink", link=link, linktag=tag, **options))
     
     # リンクを開くハンドラ
     def open_hyperlink(self, link):
@@ -97,9 +97,13 @@ class App:
             import webbrowser
             webbrowser.open_new_tab(link)
     
+    def msg(self, msg, tag, **options):
+        return AppMessage(msg, tag, **options)
+    
     # メッセージを流す
     def print_message(self, msg):
-        self.ui.post_message(msg)
+        for m in msg.expand():
+            self.ui.post_message(m)
     
     def print_target(self, target):
         self.message_em('対象 --> [{}]'.format(target))
@@ -142,7 +146,7 @@ class App:
     # コマンド処理の流れ
     #
     # コマンド文字列からで呼び出す
-    def command_process(self, cmdstr, *, threading=False):
+    def exec_command(self, cmdstr, *, threading=False):
         cmd = self.launcher.translate_command(cmdstr)
         if cmd is None:
             self.error("'{}'は不明なコマンドです".format(cmdstr))
@@ -257,9 +261,10 @@ class App:
 #
 #
 class AppMessage():
-    def __init__(self, text, tag="message", **kwargs):
+    def __init__(self, text, tag="message", embed=None, **kwargs):
         self.text = str(text)
         self.tag = tag
+        self.embed = embed
         self.kwargs = kwargs
         
     def argument(self, name, default=None):
@@ -267,7 +272,51 @@ class AppMessage():
 
     def set_argument(self, name, value):
         self.kwargs[name] = value
-        
+    
+    def get_hyperlink_link(self):
+        l = self.kwargs.get("link")
+        if l is not None:
+            return l
+        return self.text
+
+    def expand(self):
+        if self.embed is None:
+            return [self]
+
+        def partmsg(msg=None, text=None, withbreak=False):
+            if text is not None:
+                msg = AppMessage(text, self.tag, None, **self.kwargs)
+            if not withbreak:
+                msg.set_argument("nobreak", True)
+            return msg
+            
+        expanded = []
+        state = 0
+        lastkey = ""
+        lasttext = ""
+        for ch in self.text:
+            if ch == "%":
+                if state == 0:
+                    state = 1
+                elif state == 1:
+                    lasttext += "%"
+                    state = 0
+                elif state == 2:
+                    emsg = self.embed[int(lastkey)-1]
+                    if emsg is not None:
+                        expanded.append(partmsg(text=lasttext))
+                        expanded.append(partmsg(emsg))
+                        lasttext = ""
+                    state = 0
+            elif state == 1 or state == 2:
+                lastkey += ch
+                state = 2
+            else:
+                lasttext += ch
+            
+        expanded.append(partmsg(text=lasttext, withbreak=True))
+        return expanded
+
 #
 class AppMessageIO():
     def __init__(self, app, **kwargs):

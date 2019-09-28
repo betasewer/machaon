@@ -19,6 +19,7 @@ from machaon.command_launcher import CommandLauncher
 #
 class tkLauncherUI(BasicCUI):
     def __init__(self):
+        super().__init__()
         self.app = None
         self.launcher = None
         self.screen = None
@@ -65,7 +66,7 @@ class tkLauncherUI(BasicCUI):
         self.app.message_em("{:02}[{}] >>> ".format(index+1, tim), nobreak=True)
         self.post_message(AppMessage(command, "input"))
         # 実行
-        self.app.command_process(command, threading=True)
+        self.app.exec_command(command, threading=True)
 
     # コマンド欄を実行する
     def execute_command_input(self):
@@ -245,7 +246,7 @@ class DarkClassicTheme(ShellTheme):
         ui.log.tag_configure("warn", foreground=msg_wan)
         ui.log.tag_configure("error", foreground=msg_err)
         ui.log.tag_configure("input", foreground=msg_inp)
-        ui.log.tag_configure("hyper", foreground=msg_hyp)
+        ui.log.tag_configure("hyperlink", foreground=msg_hyp)
 
 #
 class DarkBlueTheme(DarkClassicTheme):
@@ -370,10 +371,10 @@ class tkLauncherScreen():
         self.log.grid(column=0, row=1, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
-        self.log.tag_configure("hyper", underline=1)
-        self.log.tag_bind("hyper", "<Enter>", lambda e: self.hyper_enter(e))
-        self.log.tag_bind("hyper", "<Leave>", lambda e: self.hyper_leave(e))
-        self.log.tag_bind("hyper", "<Double-Button-1>", lambda e: self.hyper_click(e, app))
+        self.log.tag_configure("hyperlink", underline=1)
+        self.log.tag_bind("hyperlink", "<Enter>", lambda e: self.hyper_enter(e))
+        self.log.tag_bind("hyperlink", "<Leave>", lambda e: self.hyper_leave(e))
+        self.log.tag_bind("hyperlink", "<Double-Button-1>", lambda e: self.hyper_click(e, app))
         
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
         tk.Grid.rowconfigure(self.frame, 1, weight=1)
@@ -383,10 +384,10 @@ class tkLauncherScreen():
         self.apply_theme(DarkClassicTheme())
     
     # ログの操作
-    def insert_log(self, msg):        
-        if msg.tag == "hyper":
-            dbtag = self.hyperlinks.add(msg.argument("link"))
-            tags = (msg.argument("linktag") or "hyper", "hyperlink{}".format(dbtag))
+    def insert_log(self, msg):
+        if msg.tag == "hyperlink":
+            dbtag = self.hyperlinks.add(msg.get_hyperlink_link())
+            tags = (msg.argument("linktag") or "hyperlink", "hlink-{}".format(dbtag))
         else:
             tags = (msg.tag or "message",)
         
@@ -439,11 +440,11 @@ class tkLauncherScreen():
     def hyper_click(self, event, app):
         tags = self.log.tag_names(tk.CURRENT)
         for tag in tags:
-            if tag.startswith("hyperlink"):
+            if tag.startswith("hlink-"):
                 break
         else:
             return
-        key = int(tag[len("hyperlink"):])
+        key = int(tag[len("hlink-"):])
         link = self.hyperlinks.resolve(key)
         if link is not None:
             app.open_hyperlink(link)
