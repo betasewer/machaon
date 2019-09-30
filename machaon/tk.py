@@ -12,6 +12,7 @@ import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
 from machaon.app import AppMessage, BasicCUI
+from machaon.command import describe_command
 from machaon.command_launcher import CommandLauncher
 
 #
@@ -78,6 +79,7 @@ class tkLauncherUI(BasicCUI):
     
     # コマンド履歴への追加
     def add_command_history(self, command):
+        command = command.strip()
         self._cmdhistory.append({"command": command, "logs": None})
         self._curhistory = len(self._cmdhistory)-1
         return self._curhistory
@@ -153,9 +155,15 @@ class tkLauncherUI(BasicCUI):
         self.screen.destroy()
 
     # プリセットコマンドの定義
-    syscommands = {
-        "theme" : (("theme", ), "アプリのテーマを変更します。[classic|darkblue|greygreen]"),
-    }
+    syscommands = [
+        ("command_theme", ("theme", ), 
+            describe_command(
+                description="アプリのテーマを変更します。"
+            )["target theme-name"](
+                help="テーマ名：[classic|darkblue|greygreen]"
+            )
+        ),
+    ]
 
     def command_theme(self, arg=None):
         themes = {
@@ -372,9 +380,10 @@ class tkLauncherScreen():
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
-        self.log.tag_bind("hyperlink", "<Enter>", lambda e: self.hyper_enter(e))
-        self.log.tag_bind("hyperlink", "<Leave>", lambda e: self.hyper_leave(e))
-        self.log.tag_bind("hyperlink", "<Double-Button-1>", lambda e: self.hyper_click(e, app))
+        self.log.tag_bind("hlink", "<Enter>", lambda e: self.hyper_enter(e))
+        self.log.tag_bind("hlink", "<Leave>", lambda e: self.hyper_leave(e))
+        self.log.tag_bind("hlink", "<Double-Button-1>", lambda e: self.hyper_click(e, app))
+        self.log.tag_bind("hlink", "<Control-Button-1>", lambda e: self.hyper_as_input_text(app))
         
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
         tk.Grid.rowconfigure(self.frame, 1, weight=1)
@@ -387,7 +396,7 @@ class tkLauncherScreen():
     def insert_log(self, msg):
         if msg.tag == "hyperlink":
             dbtag = self.hyperlinks.add(msg.get_hyperlink_link())
-            tags = (msg.argument("linktag") or "hyperlink", "hlink-{}".format(dbtag))
+            tags = (msg.argument("linktag") or "hyperlink", "hlink", "hlink-{}".format(dbtag))
         else:
             tags = (msg.tag or "message",)
         
@@ -398,7 +407,7 @@ class tkLauncherScreen():
             self.log.insert("end", "\n")
             
         self.log.configure(state='disabled')
-        self.log.yview_moveto(1)
+        self.log.yview_moveto(0)
         
         # 復元用に記録する
         if not msg.argument("norecord", False):
@@ -431,13 +440,13 @@ class tkLauncherScreen():
         self.log.yview_moveto(0) # ログ上端へスクロール
         
     # ハイパーリンク
-    def hyper_enter(self, event):
+    def hyper_enter(self, _event):
         self.log.config(cursor="hand2")
 
-    def hyper_leave(self, event):
+    def hyper_leave(self, _event):
         self.log.config(cursor="")
-
-    def hyper_click(self, event, app):
+    
+    def hyper_clicked_link(self):
         tags = self.log.tag_names(tk.CURRENT)
         for tag in tags:
             if tag.startswith("hlink-"):
@@ -446,6 +455,10 @@ class tkLauncherScreen():
             return
         key = int(tag[len("hlink-"):])
         link = self.hyperlinks.resolve(key)
+        return link
+
+    def hyper_click(self, _event, app):
+        link = self.hyper_clicked_link()
         if link is not None:
             app.open_hyperlink(link)
 
@@ -486,7 +499,15 @@ class tkLauncherScreen():
         if not nopop:
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
-    
+
+    def hyper_as_input_text(self, app):
+        """ クリックされたハイパーリンクを入力欄に追加する """
+        link = self.hyper_clicked_link()
+        if os.path.exists(link):
+            link = os.path.relpath(link, app.get_current_dir()) # 存在するパスであれば相対パスに直す
+        self.insert_input_text(link)
+
+    # 
     def apply_theme(self, theme):
         theme.apply(self)
     

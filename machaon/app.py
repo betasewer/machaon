@@ -10,7 +10,7 @@ import configparser
 import subprocess
 from collections import OrderedDict
 
-from machaon.processor import Processor, BadCommand
+from machaon.command import ProcessClass, ProcessFunction, BadCommand, describe_command
 from machaon.cui import reencode, test_yesno
 
 #
@@ -129,6 +129,8 @@ class App:
     def change_current_dir(self, path):
         if os.path.isdir(path):
             self.curdir = path
+        else:
+            self.error("'{}'は有効なパスではありません".format(path))
     
     def get_current_dir(self):
         return self.curdir
@@ -162,25 +164,22 @@ class App:
         else:
             ret = self.exec_process(cmd.get_command(), cmd.get_argument())
         return ret
-
+    
+    # プロセスを即時実行する
+    def exec(self, process, commandstr="", describer=None, bindapp=None, bindargs=None, prog=None):        
+        proc = self.wrapped_process(process, describer=describer, bindapp=bindapp, bindargs=bindargs, prog=prog)
+        return self.exec_process(proc, commandstr)
+    
     # コマンドクラスと引数文字列を渡して実行する
-    def exec_process(self, proc, commandstr=""):
+    def exec_process(self, proc, commandstr):
         result = None
         try:
-            if isinstance(proc, type):
-                # Processor派生クラス
-                procs = proc.generates(self, commandstr)
-                for proc in procs:
-                    if self.is_process_interrupted():
-                        self.message("中断しました")
-                        break
-                    result = proc.start() 
-            else:
-                # 簡易実装のコマンドインスタンス（CommandFunction）
-                if commandstr.strip() in ("-h", "--help"):
-                    proc.help(self)
-                else:
-                    result = proc.invoke(commandstr)
+            procs = proc.generate_instances(self, commandstr)
+            for proc in procs:
+                if self.is_process_interrupted():
+                    self.message_em("中断しました")
+                    break
+                result = proc.start()
         except BadCommand as b:
             self.error("コマンド引数が間違っています:")
             proc.help(self)
@@ -200,16 +199,124 @@ class App:
     # アプリケーション終了時に呼び出されるハンドラ
     def on_exit(self):
         self.ui.on_exit()
+
+    #
+    #
+    #
+    def wrapped_process(self, process, *, prog, describer=None, bindapp=False, bindargs=None):
+        if isinstance(process, type):
+            proc = ProcessClass(process, prog=prog)
+        else:
+            args = []
+            if bindapp:
+                args.append(self)
+            if bindargs:
+                args.extend(bindargs)
+            proc = ProcessFunction(process, describer, *args, prog=prog)
+        return proc
+    
+    # コマンド登録
+    def add_command(self, process, keywords, describer=None, hidden=False, auxiliary=False, bindapp=False, bindargs=None, prog=None): 
+        if len(keywords)<1:
+            raise ValueError("keywords must be defined 1 or more")
+        if prog is None:
+            prog=keywords[0]
+        proc = self.wrapped_process(process, prog=prog, describer=describer, bindapp=bindapp, bindargs=bindargs)
+        return self.launcher.define_command(proc, keywords=keywords, hidden=hidden, auxiliary=auxiliary)
+
+    def add_syscommands(self, *, exclude=(), shell=True):
+        entries = []
+
+        modules = []
+        if shell:
+            from machaon.shell_command import definitions as shell_definitions
+            modules.append(shell_definitions)
+
+        for defs in modules:
+            for entry in defs:
+                entries.append(entry)
+        
+        for obj in (self.ui, self.launcher, self):
+            for entry in getattr(obj, "syscommands", ()):
+                fnname = entry[0]
+                cmd = getattr(obj, fnname, None)
+                if cmd is None:
+                    continue
+                entries.append((cmd, *entry[1:]))
+        
+        for entry in entries:
+            cmd = entry[0]
+            keywords = entry[1]
+            describer = entry[2]
+            bindapp = entry[3] if len(entry)>3 else False
+            bindargs = entry[4] if len(entry)>4 else None
+            if len(keywords)==0 or keywords[0] in exclude:
+                continue
+            self.add_command(cmd, keywords=keywords, describer=describer, auxiliary=True, bindapp=bindapp, bindargs=bindargs)
+
+    #
+    # システムコマンド
+    #
+    def command_interrupt(self):    
+        if not self.is_process_running():
+            self.message("実行中のプロセスはありません")
+            return
+        self.message("プロセスを中断します")
+        self.interrupt_process()
+        
+    def command_exit(self, ask=False):
+        if ask:
+            if not self.ask_yesno("終了しますか？ (Y/N)"):
+                return
+        return ExitApp
+        
+    def command_cls(self):
+        self.reset_screen()
+
+    def command_cd(self, path=None):
+        if path is not None:
+            path = self.abspath(path)
+            self.change_current_dir(path)
+        self.message("現在の作業ディレクトリ：" + self.get_current_dir())
+
+    syscommands = [
+        ("command_interrupt", ("interrupt", "it"), 
+            describe_command(
+                description="現在実行中のプロセスを中断します。"
+            )
+        ),
+        ("command_cls", ("cls",), 
+            describe_command(
+                description="画面をクリアします。"
+            )
+        ),
+        ("command_cd", ('cd',), 
+            describe_command(
+                description="作業ディレクトリを変更します。", 
+            )["target directory-path"](
+                nargs="?",
+                help="移動先のパス"
+            )
+        ),
+        ("command_exit", ("exit",),
+            describe_command(
+                description="終了します。"
+            )["target --ask -a"](
+                const_option=True,            
+                help="確認してから終了する"
+            )
+        ),
+    ]
     
     #
     # 非同期処理
     #
-    def run_process(self, procclass, commandstr=None):
+    def run_process(self, proc, commandstr=None):
         if self.is_process_running():
             return
         self.stopflag = False
         self.lastresult = None
-        self.thr = threading.Thread(target=self.exec_process, args=(procclass, commandstr))
+        self.thr = threading.Thread(target=self.exec_process, args=(proc, commandstr))
         self.thr.start()
 
     def is_process_running(self):
@@ -236,27 +343,9 @@ class App:
     #
     def message_io(self, **kwargs):
         return AppMessageIO(self, **kwargs)
-    
-    # コマンド登録
-    def add_command(self, *args, **kwargs):
-        return self.launcher.command(*args, **kwargs)
-
-    def add_syscommands(self, commands):
-        def search(obj, name):
-            cmd = getattr(obj, "command_{}".format(name), None)
-            syscmds = getattr(obj, "syscommands", None)
-            entry = syscmds.get(name, None) if syscmds else None
-            return cmd, entry
-
-        for cmdname in commands:
-            for obj in (self.launcher, self.ui):
-                cmd, entry = search(obj, cmdname)
-                if cmd is not None:
-                    break
-            else:
-                continue
-            self.launcher.command(cmd, *entry, auxiliary=True)
         
+    
+
 #
 #
 #

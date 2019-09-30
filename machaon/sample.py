@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import unicodedata
-from machaon.processor import Processor
 from machaon.app import AppMessage
 
 #
 # Sample Processors
 #
-class TestProcess(Processor):
-    __desc__ = "文字列を倍増します。"
+class TestProcess():
+    def __init__(self, app):
+        self.app = app
     
     def init_process(self):
         self.app.message("文字列を倍増するプロセスを開始.")
@@ -25,12 +25,15 @@ class TestProcess(Processor):
         self.app.message("文字列を倍増するプロセスを終了.")
     
     @classmethod
-    def init_argparser(cls, cmd):
-        pass
+    def describe(cls, cmd):
+        cmd.describe(
+            description = "文字列を倍増します。"
+        )
 
 #
-class LinkProcess(Processor):
-    __desc__ = "リンクを貼ります。"
+class LinkProcess():
+    def __init__(self, app):
+        self.app = app
     
     def init_process(self):
         self.app.message("リンク作成を開始.")
@@ -42,25 +45,41 @@ class LinkProcess(Processor):
         self.app.message("リンク作成を終了.")
         
     @classmethod
-    def init_argparser(cls, cmd):
-        cmd.target_arg("target")
-        cmd.target_arg("url")
+    def describe(cls, cmd):
+        cmd.describe(
+            description = "リンクを貼ります。"
+        )["target target"](
+            help = "リンクの文字列"
+        )["target url"](
+            help = "リンク先URL"
+        )
     
 #
-class ColorProcess(Processor):
-    __desc__ = "文字色のサンプルを表示します。"
+class ColorProcess():
+    def __init__(self, app):
+        self.app = app
+    
+    def init_process(self):
+        pass
+
     def process_target(self, text):
         self.app.message(text)
         self.app.message_em("【強調】" + text)
         self.app.print_message(AppMessage("【入力】" + text, "input"))
-        self.app.print_message(AppMessage("【リンク】" + text, "hyper"))
+        self.app.print_message(AppMessage("【リンク】" + text, "hyperlink"))
         self.app.warn("【注意】" + text)
         self.app.error("【エラー発生】" + text)
     
+    def exit_process(self):
+        pass
+    
     @classmethod
-    def init_argparser(cls, cmd):
-        cmd.target_arg("--text", default="文字色のサンプルです。")
-  
+    def describe(cls, cmd):
+        cmd.describe(
+            description = "文字色のサンプルを表示します。"
+        )["target --text"](
+            default="文字色のサンプルです。"
+        )
 
 #
 def char_detail_line(code, char=None):
@@ -87,6 +106,7 @@ def launch_sample_app(default_choice=None):
     import sys
     import argparse
     from machaon.app import App
+    from machaon.command import describe_command
 
     desc = 'machaon sample application'
     p = argparse.ArgumentParser(description=desc)
@@ -99,11 +119,11 @@ def launch_sample_app(default_choice=None):
     if apptype is None or apptype == "cui":
         from machaon.shell import WinShellUI
         app = App(title, WinShellUI())
-        app.add_syscommands(("interrupt", "cls", "cd", "help", "exit"))
+        app.add_syscommands(exclude=("interrupt",))
     elif apptype == "tk":
         from machaon.tk import tkLauncherUI
         app = App(title, tkLauncherUI())
-        app.add_syscommands(("interrupt", "cd", "theme", "help"))
+        app.add_syscommands(exclude=("interrupt", "cls", "exit"))
     else:
         p.print_help()
         sys.exit()
@@ -125,11 +145,25 @@ def launch_sample_app(default_choice=None):
             app.message(line)
 
     # コマンドの設定
-    app.launcher.command(TestProcess, ("spam",))
-    app.launcher.command(encode_unicodes, ("unienc",), desc="文字を入力 -> コードにする")
-    app.launcher.command(decode_unicodes, ("unidec",), desc="コードを入力 -> 文字にする")
-    app.launcher.command(ColorProcess, ("texts",))
-    app.launcher.command(LinkProcess, ("link",))
+    app.add_command(TestProcess, ("spam",))
+    app.add_command(ColorProcess, ("texts",))
+    app.add_command(LinkProcess, ("link",))
+
+    app.add_command(encode_unicodes, ("unienc",), 
+        describe_command(
+            description="文字を入力 -> コードにする"
+        )["target characters"](
+            help="コードにしたい文字列"
+        )
+    )
+    app.add_command(decode_unicodes, ("unidec",),
+        describe_command(
+            description="コードを入力 -> 文字にする"
+        )["target characters"](
+            help="文字列にしたいコード"
+        )
+    )
+
     #app.launcher.command(app.ui.show_history, ("history",), desc="入力履歴を表示します。")
     #app.launcher.command(app.ui.show_hyperlink_database, ("hyperlinks",), hidden=True, desc="内部のハイパーリンクデータベースを表示します。")
     app.run()

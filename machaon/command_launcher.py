@@ -5,7 +5,8 @@ import sys
 import os
 import traceback
 import shutil
-from machaon.processor import Processor, BadCommand
+
+from machaon.command import describe_command, BadCommand
 from machaon.app import ExitApp
  
 #
@@ -18,12 +19,12 @@ auxiliary_command = 1
 class LauncherEntry():
     def __init__(self, commandclass, keywords=None, desc=None, commandtype=0):
         self.command = commandclass
-        def classattr(name, default):
-            getter = getattr(commandclass, name, None)
+        def invokeattr(klass, name, default):
+            getter = getattr(klass, name, None)
             if getter: return getter()
             return default
-        self.keywords = keywords or classattr("get_default_keywords", tuple())
-        self.desc = desc or classattr("get_desc", "")
+        self.keywords = keywords or invokeattr(commandclass, "get_default_keywords", tuple())
+        self.desc = desc or invokeattr(commandclass, "get_desc", "")
         self.commandtype = commandtype
     
     def match(self, kwd):
@@ -55,24 +56,6 @@ class LauncherCommand():
     
     def get_argument(self):
         return self.argstr
-
-#
-class CommandFunction:
-    def __init__(self, fn, desc, *args):
-        self.fn = fn
-        self.desc = desc
-        self.bindargs = args
-        
-    def invoke(self, argstr):
-        args = []
-        args.extend(self.bindargs)
-        if argstr:
-            args.append(argstr)
-        return self.fn(*args)
-
-    def help(self, app):
-        app.message(self.desc)
-
     
 #
 # コマンドを処理する
@@ -84,21 +67,19 @@ class CommandLauncher:
         self.nextcmdstr = None
         self.entries = []
         
-    def command(self, proc, keywords=None, desc=None, hidden=False, auxiliary=False, bindapp=False):
-        if not isinstance(proc, type):
-            bindargs = []
-            if bindapp:
-                bindargs.append(self.app)
-            proc = CommandFunction(proc, desc, *bindargs)
+    def define_command(self, proc, keywords=None, hidden=False, auxiliary=False):
+        desc = proc.get_description()
         typecode = 0
         if auxiliary: typecode = auxiliary_command
         if hidden: typecode = hidden_command
         entry = LauncherEntry(proc, keywords, desc, typecode)
+
         # キーワードの重複を確認
         for curentry in self.entries:
             if any(curentry.match(x) for x in keywords):
                 raise ValueError("キーワード:{}は既に'{}'によって使用されています".format(",".join(keywords), curentry.get_first_keyword()))
         self.entries.append(entry)
+
         return entry
     
     # コマンドを処理
@@ -137,14 +118,7 @@ class CommandLauncher:
         return entries
 
     #
-    def command_interrupt(self):    
-        if not self.app.is_process_running():
-            self.app.message("実行中のプロセスはありません")
-            return
-        self.app.message("プロセスを中断します")
-        self.app.interrupt_process()
-        
-    def command_help(self):
+    def command_help(self, commandname=None):
         rows = [(", ".join(x.keywords), x.desc) for x in self.list_commands_for_display()]
         leftmax = max(len(kwds) for kwds, _ in rows)        
         self.app.message("<< コマンド一覧 >>")
@@ -154,27 +128,18 @@ class CommandLauncher:
             self.app.message(row)
         self.app.message("---------------------------")
         self.app.message("詳細は各コマンドのhelpを参照")
-        
-    def command_exit(self, arg=None): 
-        if arg in ("--ask", "-a"):
-            if not self.app.ask_yesno("終了しますか？ (Y/N)"):
-                return
-        return ExitApp
     
-    def command_cls(self):
-        self.app.reset_screen()
-    
-    def command_cd(self, path=None):
-        if path is not None:
-            self.app.change_current_dir(path)
-        self.app.message("現在の作業ディレクトリ：" + self.app.get_current_dir())
-
+    #
     # プリセットコマンドの定義
-    syscommands = {
-        "interrupt" : (("interrupt", "it"), "現在実行中のプロセスを中断します。"),
-        "exit" : (("exit",), "終了します。"),
-        "help" : (("help", "h"), "ヘルプを表示します。"),
-        "cls" : (("cls",), "画面をクリアします。"),
-        "cd" : (('cd',), "作業ディレクトリを変更します。"),
-    }
+    #
+    syscommands = [
+        ("command_help", ("help", "h"), 
+            describe_command(
+                description="ヘルプを表示します。"
+            )["target command-name"](
+                nargs="?",
+                help="ヘルプを見るコマンド"
+            )
+        ),
+    ]
 

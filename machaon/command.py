@@ -5,111 +5,102 @@ import argparse
 import glob
 from collections import defaultdict  
          
-#
-#
-#
-class ArgumentDescriber():
-    def __init__(self):
-        self.curargcommand = ""
-        self.args = []
-    
-    def __getitem__(self, command):
-        self.curargcommand = command
-        return self.argadder
-    
-    def argadder(self, **kwargs):
-        if len(self.curargcommand)==0:
-            raise ValueError("First specify arg command")
-        cmds = self.curargcommand.split()
-        self.args.append((cmds, kwargs))
-        return self
-    
-    def setup_argparser(self, argp):
-        for a, kwa in self.args:
-            if a[0] == "target":
-                argp.target_arg(*a[1:], **kwa)
-            elif a[0] == "init":
-                argp.init_arg(*a[1:], **kwa)
-            elif a[0] == "exit":
-                argp.exit_arg(*a[1:], **kwa)
-            else:
-                raise ValueError("Undefined command type '{}'".format(a[0]))
-            
 
 #
-# 各アプリはこれを継承する
+# 各アプリクラスを格納する
 #
-class Processor:
-    _command_interface = None
-    _command_arg_describer = None
+"""
+def __init__(self, app):
+    self.app = app
 
-    def __init__(self, app):
-        self.app = app
-        self.lastresult = None # 
+def init_process(self):
+    pass
 
-    # 処理の本体：任意の引数
-    def init_process(self):
-        pass
+def process_target(self, target) -> bool: # True/None 成功 / False 中断・失敗
+    raise NotImplementedError()
+
+def exit_process(self):
+    pass
+"""
+#
+#
+#
+class ProcessCommandInterface():
+    def __init__(self, prog):
+        self.cmd_interface = None
+        self.prog = prog
     
-    def process_target(self, target) -> bool: # True/None 成功 / False 中断・失敗
-        raise NotImplementedError()
-    
-    def exit_process(self):
-        pass
-    
-    # 処理が最後まで終わらなかったか？
-    def failed(self):
-        return self.lastresult is False
-        
     #
-    # クラス定義後に実行
-    #
-    @classmethod
-    def init_argparser(cls, pser):
-        pass
-        
-    @classmethod
-    def setup_argparser(cls, custom_parser=None, args=None):
-        if custom_parser is None:
-            args = args or {}
-            if "prog" not in args:
-                args["prog"] = cls.__name__
-            cmdparser = CommandParser(**args)
-            cls._command_interface = cmdparser
-            if cls._command_arg_describer is not None:
-                cls._command_arg_describer.setup_argparser(cls._command_interface)
-            cls.init_argparser(cls._command_interface)
+    def setup_argparser(self, *, describer=None, describe=None, command_parser=None, defargs=None) -> bool:
+        defargs = defargs or {}
+        if describe is not None:
+            describer = ProcessCommandDescriber()
+            describe(describer)
+            self.cmd_interface = describer.setup_argparser(CommandParser, defargs)
+        elif describer is not None:
+            self.cmd_interface = describer.setup_argparser(CommandParser, defargs)
+        elif command_parser is not None:
+            self.cmd_interface = command_parser()
         else:
-            cmdparser = custom_parser()
-            cls._command_interface = cmdparser
+            self.cmd_interface = CommandParser(**defargs)
 
-        return cmdparser is not None
-        
-    @classmethod
-    def get_argparser(cls):
-        return cls._command_interface
+        return self.cmd_interface is not None
     
-    @classmethod
-    def describe_command(cls) -> ArgumentDescriber:
-        desc = ArgumentDescriber()
-        cls._command_arg_describer = desc
-        return desc
+    def init_argparser(self):
+        raise NotImplementedError()
+        
+    def get_argparser(self):
+        return self.cmd_interface
+    
+    def run_argparser(self, app, commandstr):
+        return self.cmd_interface.parse_args(commandstr, app)
+    
+    def help(self, app):
+        if self.cmd_interface is None:
+            raise Exception("No command interface is provided")
+        self.cmd_interface.help(app.message_io())
+    
+    def get_description(self):
+        if self.cmd_interface is None:
+            self.init_argparser()
+        return self.cmd_interface.get_description()
+
+#
+#
+#
+class ProcessClass(ProcessCommandInterface):
+    def __init__(self, klass, *, prog):
+        super().__init__(prog)
+        self.klass = klass
+    
+    def init_argparser(self):
+        # パーサを構築
+        defargs = {
+            "prog" : self.prog
+        }
+        if hasattr(self.klass, "describer"):
+            self.setup_argparser(describer=self.klass.describer, defargs=defargs)
+        elif hasattr(self.klass, "describe"):
+            self.setup_argparser(describe=self.klass.describe, defargs=defargs)
+        elif hasattr(self.klass, "describe_command_parser"):
+            self.setup_argparser(command_parser=self.klass.describe_command_parser)
+        else: 
+            raise ValueError("Failed to setup argparser")
     
     # 
-    @classmethod
-    def generates(cls, app, commandstr=None):
-        if cls._command_interface is None:
-            if not cls.setup_argparser(): # 初回生成時に存在しなければデフォルト引数でパーサを構築
-                raise Exception("Failed to setup argparser")
-            
-        argmap = cls._command_interface.parse_args(commandstr, app)
+    def generate_instances(self, app, commandstr=None):
+        if self.cmd_interface is None:
+            self.init_argparser()
+        
+        # コマンド文字列を解析
+        argmap = self.run_argparser(app, commandstr)
         if argmap is None:
             return 
         
         #
         # プロセスを生成。
         #
-        proc = cls(app)
+        proc = self.klass(app)
         if False is proc.init_process(*argmap[InitArg]):
             return
         
@@ -124,43 +115,107 @@ class Processor:
             withtarget = True
             target = posittargets[0] 
         targetargs = posittargets[1:] + argmap[TargetArg]
+
         if isinstance(target, list):
             for tg in target:
-                yield ProcessStarter(proc, tg, targetargs, withtarget)
+                yield ProcessInstance(proc.process_target, tg, targetargs, withtarget)
         else:
-            yield ProcessStarter(proc, target, targetargs, withtarget)
+            yield ProcessInstance(proc.process_target, target, targetargs, withtarget)
                 
         #
+        # 後処理
+        #
         proc.exit_process(*argmap[ExitArg])
-        
 
-    @classmethod
-    def help(cls, app):
-        if cls._command_interface is None:
-            raise Exception("No command interface is provided")
-        cls._command_interface.help(app.message_io())
+#
+#
+#
+class ProcessFunction(ProcessCommandInterface):
+    def __init__(self, fn, describer, *args, prog):
+        super().__init__(prog)
+        self.fn = fn
+        self.describer = describer
+        self.bindargs = args
+        self.cmd_interface = None
     
-    @classmethod
-    def get_desc(cls):
-        return getattr(cls, "__desc__", cls.__name__)
-    
+    def init_argparser(self):
+        self.setup_argparser(describer=self.describer, defargs={
+            "prog" : self.prog
+        })
+
+    def generate_instances(self, app, commandstr):
+        if self.cmd_interface is None:
+            self.init_argparser()
+            
+        # コマンド文字列を解析
+        argmap = self.cmd_interface.parse_args(commandstr, app)
+        if argmap is None:
+            return 
+
+        args = []
+        args.extend(self.bindargs)
+        args.extend(argmap[PositTargetArg]+argmap[TargetArg])
+        yield ProcessInstance(self.fn, None, args, withtarget=False)
         
 #
 #
 #
-class ProcessStarter:
+class ProcessCommandDescriber():
+    def __init__(self):
+        self.cmdargs = {}
+        self.curargcommand = ""
+        self.args = []
+    
+    def describe(self, **kwargs):
+        self.cmdargs = kwargs
+        return self
+    
+    def __getitem__(self, command):
+        self.curargcommand = command
+        return self._argadder
+    
+    def _argadder(self, **kwargs):
+        if len(self.curargcommand)==0:
+            raise ValueError("First specify arg command by []")
+        cmds = self.curargcommand.split()
+        self.args.append((cmds, kwargs))
+        return self
+    
+    def setup_argparser(self, cmdklass, cmdargs):
+        cmdargs.update(self.cmdargs)
+        argp = cmdklass(**cmdargs)
+        for a, kwa in self.args:
+            if a[0] == "target":
+                argp.target_arg(*a[1:], **kwa)
+            elif a[0] == "init":
+                argp.init_arg(*a[1:], **kwa)
+            elif a[0] == "exit":
+                argp.exit_arg(*a[1:], **kwa)
+            else:
+                raise ValueError("Undefined command type '{}'".format(a[0]))
+        return argp
+
+#
+def describe_command(**kwargs):
+    return ProcessCommandDescriber().describe(**kwargs)
+
+#
+#
+#
+class ProcessInstance():
     def __init__(self, proc, target, args, withtarget):
         self.proc = proc
         self.target = target
         self.args = args
         self.withtarget = withtarget
+        self.last_invoked_result = None 
         
     def start(self):
         target = []
         if self.withtarget:
             target.append(self.target)
-        result = self.proc.process_target(*target, *self.args)
-        self.proc.lastresult = result
+        result = self.proc(*target, *self.args)
+        self.last_invoked_result = result
         return result
     
     def has_target(self):
@@ -168,8 +223,11 @@ class ProcessStarter:
     
     def get_target(self):
         return self.target
-
-
+        
+    # 処理が最後まで終わらなかったか？
+    def failed(self):
+        return self.last_invoked_result is False
+        
     
 #
 InitArg = 0
@@ -213,7 +271,8 @@ class BadCommand(Exception):
 #
 # argparseをラップする
 #
-class CommandParser:
+class CommandParser():
+    __debugdisp__ = False
     #
     # __init__(["targets"], ("--template","-t"), ...)
     #
@@ -222,7 +281,6 @@ class CommandParser:
         self.argp = ArgumentParser(**kwargs)
         self.argnames = []
         self._parsermsgs = []
-        self._dispargs = False
        
     # argparse.add_argumentの引数に加え、以下を指定可能：
     #  files = True/False ファイルパス/globパターンを受け入れ、ファイルパスのリストに展開する
@@ -304,12 +362,16 @@ class CommandParser:
                 value = paths
             argmap[typ&0xF].append(value)
         
-        if self._dispargs:
+        if CommandParser.__debugdisp__:
             for funcname, args in self._handler_previews(argmap):
                 print("{}({})".format(funcname, ", ".join([str(x) for x in args])))
             print("")
                 
         return argmap
+    
+    # 
+    def get_description(self):
+        return self.argp.description
 
     # メッセージ
     def help(self, io):
@@ -333,9 +395,6 @@ class CommandParser:
         for funcname, args, in self._handler_previews(d):
             print("{}({})".format(funcname, ", ".join(args)))
             
-    def disp_args(self):
-        self._dispargs = True
-        
     def _handler_previews(self, argmap):
         funcnames = {
             InitArg : "init_process",
