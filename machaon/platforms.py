@@ -15,7 +15,7 @@ class _Windows:
 #
 class _Macintosh:
     preferred_fontname = "Menlo"
-    preferred_fontsize = 12
+    preferred_fontsize = 16
 
     @classmethod
     def openfile(cls, path):

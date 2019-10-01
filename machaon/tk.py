@@ -276,7 +276,6 @@ def dark_classic_theme():
         "color.label" : "#FFFFFF",
         "color.highlight" : "#000080",
         "ttktheme" : "clam",
-        "commandfontsize" : "12",
     })
     
 def dark_blue_theme():
