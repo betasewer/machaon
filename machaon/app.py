@@ -12,6 +12,7 @@ from collections import OrderedDict
 
 from machaon.command import ProcessClass, ProcessFunction, BadCommand, describe_command
 from machaon.cui import reencode, test_yesno
+import machaon.platforms
 
 #
 # ###################################################################
@@ -91,8 +92,7 @@ class App:
     # リンクを開くハンドラ
     def open_hyperlink(self, link):
         if os.path.isfile(link):
-            cmds = ["start", link]
-            subprocess.Popen(cmds, shell=True)
+            machaon.platforms.current.openfile(link)
         else:
             import webbrowser
             webbrowser.open_new_tab(link)

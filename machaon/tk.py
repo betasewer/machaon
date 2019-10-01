@@ -5,6 +5,7 @@ import os
 import datetime
 from threading import Event
 from typing import Tuple, Sequence, List
+import argparse
 
 import tkinter as tk
 import tkinter.filedialog
@@ -14,6 +15,7 @@ import tkinter.ttk as ttk
 from machaon.app import AppMessage, BasicCUI
 from machaon.command import describe_command
 from machaon.command_launcher import CommandLauncher
+import machaon.platforms
 
 #
 #
@@ -161,21 +163,29 @@ class tkLauncherUI(BasicCUI):
                 description="アプリのテーマを変更します。"
             )["target theme-name"](
                 help="テーマ名：[classic|darkblue|greygreen]"
+            )["target --alt"](
+                help="設定項目を上書きする [config-name]=[config-value]",
+                nargs=argparse.REMAINDER,
+                default=()
             )
         ),
     ]
 
-    def command_theme(self, arg=None):
+    def command_theme(self, themename, alters=()):
         themes = {
-            "classic" : DarkClassicTheme(),
-            "darkblue" : DarkBlueTheme(),
-            "greygreen" : GreyGreenTheme(),
+            "classic" : dark_classic_theme,
+            "darkblue" : dark_blue_theme,
+            "greygreen" : grey_green_theme,
         }
-        theme = themes.get(arg, None)
+        theme = themes.get(themename, None)
         if theme is None:
-            self.app.error("'{}'という名のテーマはありません".format(arg if arg else ""))
+            self.app.error("'{}'という名のテーマはありません".format(themename))
             return
-        self.screen.apply_theme(theme)
+        th = theme()
+        for alt in alters:
+            cfgname, cfgval = alt.split("=")
+            th.setval(cfgname, cfgval)
+        self.screen.apply_theme(th)
 
 
 
@@ -183,54 +193,47 @@ class tkLauncherUI(BasicCUI):
 # 色の設定
 #
 class ShellTheme():    
-    def __init__(self):
-        self.colors =  {}
-        self.ttktheme = "clam"
+    def __init__(self, config={}):
+        self.config=config
+    
+    def extend(self, config):
+        self.config.update(config)
+        return self
+    
+    def setval(self, key, value):
+        self.config[key] = value
 
-    def getcol(self, key, fallback=None):
-        c = self.colors.get(key)
+    def getval(self, key, fallback=None):
+        c = self.config.get(key)
         if c is None and fallback is not None:
             c = fallback
         if c is None:
-            c = DarkClassicTheme().colors[key]
+            c = dark_classic_theme().config[key]
         return c
+    
+    def getfont(self, key):
+        fontname = self.getval("font", machaon.platforms.current.preferred_fontname)
+        fontsize = self.getval(key+"size", machaon.platforms.current.preferred_fontsize)
+        if isinstance(fontsize, str) and not fontsize.isdigit():
+            return None
+        return (fontname, int(fontsize))
 
-    def apply(self, ui):
-        raise NotImplementedError()
-
-#
-class DarkClassicTheme(ShellTheme):
-    def __init__(self):
-        super().__init__()
-        customcols = {
-            "message" : "#CCCCCC",
-            "background" : "#000000",
-            "insertmarker" : "#CCCCCC",
-            "message_em" : "#FFFFFF",
-            "warning" : "#FF00FF",
-            "error" : "#FF0000",
-            "hyperlink" : "#00FFFF",
-            "userinput" : "#00FF00",
-            "label" : "#FFFFFF",
-            "highlight" : "#000080"
-        }
-        self.colors.update(customcols)
-        
     # 色を設定する
     def apply(self, ui):
+        ttktheme = self.getval("ttktheme", "clam")
         style = ttk.Style()
-        style.theme_use(self.ttktheme)
+        style.theme_use(ttktheme)
 
-        bg = self.getcol("background")
-        msg = self.getcol("message")
-        msg_em = self.getcol("message_em", msg)
-        msg_wan = self.getcol("warning", msg_em)
-        msg_err = self.getcol("error", msg)
-        msg_inp = self.getcol("userinput", msg_em)
-        msg_hyp = self.getcol("hyperlink", msg)
-        insmark = self.getcol("insertmarker", msg)
-        label = self.getcol("label", msg_em)
-        highlight = self.getcol("highlight", msg_em)
+        bg = self.getval("color.background")
+        msg = self.getval("color.message")
+        msg_em = self.getval("color.message_em", msg)
+        msg_wan = self.getval("color.warning", msg_em)
+        msg_err = self.getval("color.error", msg)
+        msg_inp = self.getval("color.userinput", msg_em)
+        msg_hyp = self.getval("color.hyperlink", msg)
+        insmark = self.getval("color.insertmarker", msg)
+        label = self.getval("color.label", msg_em)
+        highlight = self.getval("color.highlight", msg_em)
 
         style.configure("TButton", relief="flat", background=bg, foreground=msg)
         style.map("TButton", 
@@ -246,9 +249,12 @@ class DarkClassicTheme(ShellTheme):
             button.configure(style="TButton")
         for frame in ui.frames + [ui.frame]:
             frame.configure(style="TFrame")
+        
+        commandfont = self.getfont("commandfont")
+        logfont = self.getfont("logfont")
 
-        ui.commandline.configure(background=bg, foreground=msg, insertbackground=insmark)
-        ui.log.configure(background=bg, selectbackground=highlight)
+        ui.commandline.configure(background=bg, foreground=msg, insertbackground=insmark, font=commandfont)
+        ui.log.configure(background=bg, selectbackground=highlight, font=logfont)
         ui.log.tag_configure("message", foreground=msg)
         ui.log.tag_configure("message_em", foreground=msg_em)
         ui.log.tag_configure("warn", foreground=msg_wan)
@@ -257,36 +263,45 @@ class DarkClassicTheme(ShellTheme):
         ui.log.tag_configure("hyperlink", foreground=msg_hyp)
 
 #
-class DarkBlueTheme(DarkClassicTheme):
-    def __init__(self):
-        super().__init__()
-        customcols = {
-            "message_em" : "#00FFFF",
-            "warning" : "#D9FF00",
-            "error" : "#FF0080",
-            "hyperlink" : "#00FFFF",
-            "userinput" : "#00A0FF",
-            "highlight" : "#0038A1", 
-        }
-        self.colors.update(customcols)
+def dark_classic_theme():
+    return ShellTheme({
+        "color.message" : "#CCCCCC",
+        "color.background" : "#000000",
+        "color.insertmarker" : "#CCCCCC",
+        "color.message_em" : "#FFFFFF",
+        "color.warning" : "#FF00FF",
+        "color.error" : "#FF0000",
+        "color.hyperlink" : "#00FFFF",
+        "color.userinput" : "#00FF00",
+        "color.label" : "#FFFFFF",
+        "color.highlight" : "#000080",
+        "ttktheme" : "clam",
+        "commandfontsize" : "12",
+    })
+    
+def dark_blue_theme():
+    return dark_classic_theme().extend({
+        "color.message_em" : "#00FFFF",
+        "color.warning" : "#D9FF00",
+        "color.error" : "#FF0080",
+        "color.hyperlink" : "#00FFFF",
+        "color.userinput" : "#00A0FF",
+        "color.highlight" : "#0038A1", 
+    })
 
-#
-class GreyGreenTheme(DarkClassicTheme):
-    def __init__(self):
-        super().__init__()
-        customcols = {
-            "background" : "#EFEFEF",
-            "insertmarker" : "#000000",
-            "message" : "#000000",
-            "message_em" : "#008000",
-            "warning" : "#FF8000",
-            "error" : "#FF0000",
-            "hyperlink" : "#0000FF",
-            "userinput" : "#00B070",
-            "label" : "#000000",
-            "highlight" : "#FFD0D0",
-        }
-        self.colors.update(customcols)
+def grey_green_theme():
+    return dark_classic_theme().extend({
+        "color.background" : "#EFEFEF",
+        "color.insertmarker" : "#000000",
+        "color.message" : "#000000",
+        "color.message_em" : "#008000",
+        "color.warning" : "#FF8000",
+        "color.error" : "#FF0000",
+        "color.hyperlink" : "#0000FF",
+        "color.userinput" : "#00B070",
+        "color.label" : "#000000",
+        "color.highlight" : "#FFD0D0",
+    })
 
 #
 #
@@ -321,8 +336,7 @@ class tkLauncherScreen():
         self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
     
         # コマンド入力欄
-        commandfont = ('Verdana', 10)
-        self.commandline = tk.Text(self.frame, relief="solid", font=commandfont, height=4)
+        self.commandline = tk.Text(self.frame, relief="solid", height=4)
         self.commandline.grid(column=0, row=0, sticky="ew", padx=padx, pady=pady)
         self.commandline.focus_set()
         
@@ -382,15 +396,15 @@ class tkLauncherScreen():
         self.log.tag_configure("hyperlink", underline=1)
         self.log.tag_bind("hlink", "<Enter>", lambda e: self.hyper_enter(e))
         self.log.tag_bind("hlink", "<Leave>", lambda e: self.hyper_leave(e))
-        self.log.tag_bind("hlink", "<Double-Button-1>", lambda e: self.hyper_click(e, app))
-        self.log.tag_bind("hlink", "<Control-Button-1>", lambda e: self.hyper_as_input_text(app))
+        self.log.tag_bind("hlink", "<Control-Button-1>", lambda e: self.hyper_click(e, app))
+        self.log.tag_bind("hlink", "<Double-Button-1>", lambda e: self.hyper_as_input_text(app))
         
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
         tk.Grid.rowconfigure(self.frame, 1, weight=1)
     
         # フレームを除去       
         #self.root.overrideredirect(True)
-        self.apply_theme(DarkClassicTheme())
+        self.apply_theme(dark_classic_theme())
     
     # ログの操作
     def insert_log(self, msg):
