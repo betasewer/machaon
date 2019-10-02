@@ -162,30 +162,46 @@ class tkLauncherUI(BasicCUI):
             describe_command(
                 description="アプリのテーマを変更します。"
             )["target theme-name"](
-                help="テーマ名：[classic|darkblue|greygreen]"
+                help="テーマ名",
+                nargs="?"
             )["target --alt"](
                 help="設定項目を上書きする [config-name]=[config-value]",
                 nargs=argparse.REMAINDER,
                 default=()
+            )["target --show"](
+                help="設定項目を表示する",
+                const_option=True
+            )["target --themes"](
+                help="選択可能なテーマ名の一覧",
+                const_option=True
             )
         ),
     ]
 
-    def command_theme(self, themename, alters=()):
-        themes = {
-            "classic" : dark_classic_theme,
-            "darkblue" : dark_blue_theme,
-            "greygreen" : grey_green_theme,
-        }
-        theme = themes.get(themename, None)
-        if theme is None:
-            self.app.error("'{}'という名のテーマはありません".format(themename))
+    def command_theme(self, themename=None, alters=(), show=False, showthemes=False):
+        if showthemes:
+            for name in themebook.keys():
+                self.app.hyperlink(name)
             return
-        th = theme()
+
+        if themename is not None:
+            themenew = themebook.get(themename, None)
+            if themenew is None:
+                self.app.error("'{}'という名のテーマはありません".format(themename))
+                return
+            theme = themenew()
+        else:
+            theme = self.screen.theme
+        
         for alt in alters:
             cfgname, cfgval = alt.split("=")
-            th.setval(cfgname, cfgval)
-        self.screen.apply_theme(th)
+            theme.setval(cfgname, cfgval)
+        
+        if show:
+            for k, v in theme.config.items():
+                self.app.message("{}={}".format(k,v))
+        else:
+            self.screen.apply_theme(theme)
 
 
 
@@ -253,8 +269,8 @@ class ShellTheme():
         commandfont = self.getfont("commandfont")
         logfont = self.getfont("logfont")
 
-        ui.commandline.configure(background=bg, foreground=msg, insertbackground=insmark, font=commandfont)
-        ui.log.configure(background=bg, selectbackground=highlight, font=logfont)
+        ui.commandline.configure(background=bg, foreground=msg, insertbackground=insmark, font=commandfont, borderwidth=0)
+        ui.log.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
         ui.log.tag_configure("message", foreground=msg)
         ui.log.tag_configure("message_em", foreground=msg_em)
         ui.log.tag_configure("warn", foreground=msg_wan)
@@ -301,6 +317,21 @@ def grey_green_theme():
         "color.label" : "#000000",
         "color.highlight" : "#FFD0D0",
     })
+
+def papilio_machaon_theme():
+    return grey_green_theme().extend({
+        "color.background" : "#88FF88",
+        "color.message_em" : "#FFA500",
+        "color.message" : "#000000",
+        "color.highlight" : "#FFA500",
+    })
+
+themebook = {
+    "classic" : dark_classic_theme,
+    "darkblue" : dark_blue_theme,
+    "greygreen" : grey_green_theme,
+    "papilio.machaon" : papilio_machaon_theme
+}
 
 #
 #
@@ -522,7 +553,8 @@ class tkLauncherScreen():
 
     # 
     def apply_theme(self, theme):
-        theme.apply(self)
+        self.theme = theme
+        self.theme.apply(self)
     
     def run(self):
         self.root.mainloop()
