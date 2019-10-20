@@ -36,6 +36,10 @@ def collapse_text(text, width):
 #
 # 指定の数値で改行、字下げを入れる
 #
+#  max_width 全体の幅
+#  indent 全体の字下げ
+#  *first_indent 一行目の字下げ（絶対）
+#
 def composit_text(s, max_width, indent, first_indent=None):
     if first_indent is None:
         first_indent = indent

@@ -3,13 +3,13 @@ import shutil
 import re
 import time
 
-from machaon.command import describe_command
+from machaon.command import describe_command, describe_command_package
 from machaon.shell import reencode
 
 #
 #
 #
-def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None):
+def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1):
     if howsort == "t":
         def sorter(path):
             d = 1 if os.path.isdir(path) else 2
@@ -19,27 +19,33 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None):
         def sorter(path):
             return 1 if os.path.isdir(path) else 2
 
-    dirpath = app.get_current_dir()
-    app.message_em("ディレクトリ：%1%", embed=[
-        app.msg(dirpath, "hyperlink")
-    ])
+    if presetpattern is not None: 
+        pattern = presetpattern
+    
+    paths = []
+    def walk(dirpath, level):
+        items = sorted([(x,os.path.join(dirpath,x)) for x in os.listdir(dirpath)], key=lambda x: sorter(x[1]))
+        for fname, fpath in items:
+            if pattern is None or re.search(pattern, fname):
+                paths.append(fpath)
+            if recurse>level and os.path.isdir(fpath):
+                walk(fpath, level+1)
 
-    app.message("")
+    cd = app.get_current_dir()
+    walk(cd, 1)
+
+    app.message_em("ディレクトリ：%1%\n", embed=[
+        app.hyperlink.msg(cd)
+    ])
     if long:
         app.message("種類  変更日時                    サイズ ファイル名")
         app.message("-------------------------------------------------------")
 
-    if presetpattern is not None: pattern = presetpattern
-    paths = []
-    for fname in os.listdir(dirpath):
-        if pattern is None or re.search(pattern, fname):
-            paths.append(os.path.join(dirpath, fname))
-
-    for fpath in sorted(paths, key=sorter):
-        _, ftext = os.path.split(fpath)
+    for fpath in paths:
+        ftext = os.path.normpath(os.path.relpath(fpath, cd))
         isdir = os.path.isdir(fpath)
-        if isdir and not ftext.endswith("/"):
-            ftext += "/"
+        if isdir and not ftext.endswith(os.path.sep):
+            ftext += os.path.sep
 
         if long:
             if isdir:
@@ -61,7 +67,7 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None):
                 fsize = os.path.getsize(fpath)
 
             app.message("{:<5} {}  {:>8} %1%".format(fext, ftime, fsize), embed=[
-                app.msg(ftext, "hyperlink", link=fpath)
+                app.hyperlink.msg(ftext, link=fpath)
             ])
         else:
             app.hyperlink(ftext, link=fpath)
@@ -71,36 +77,45 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None):
 #
 #
 #
-def get_content(app, target, encoding="utf-8", binary=False):
+def get_text_content(app, target, encoding="utf-8"):
     app.message_em("ファイル名：[%1%]", embed=[
-        app.msg(target, "hyperlink")
+        app.hyperlink.msg(target)
     ])
     app.message_em("--------------------")
-    if binary:
-        readsize = 128
-        with open(app.abspath(target), "rb") as fi:
-            bits = fi.read(readsize)
-        j = 0
-        app.message_em("        |" + " ".join(["{:0>2X}".format(x) for x in range(16)]))
-        for i, bit in enumerate(bits):
-            if i % 16 == 0:
-                app.message_em("00000{:02X}0|".format(j), nobreak=True)
-            app.message("{:02X} ".format(bit), nobreak=True)
-            if i % 16 == 15:
-                app.message("")
-                j += 1
-    elif encoding:
-        with open(app.abspath(target), "r", encoding=encoding) as fi:
-            for line in fi:
-                app.message(line, nobreak=True)
+    with open(app.abspath(target), "r", encoding=encoding) as fi:
+        for line in fi:
+            app.message(line, nobreak=True)
+    app.message_em("--------------------")
+
+#
+#
+#
+def get_binary_content(app, target, readsize=128, width=16):
+    app.message_em("ファイル名：[%1%]", embed=[
+        app.hyperlink.msg(target)
+    ])
+    app.message_em("--------------------")
+    with open(app.abspath(target), "rb") as fi:
+        bits = fi.read(readsize)
+    j = 0
+    app.message_em("        |" + " ".join(["{:0>2X}".format(x) for x in range(width)]))
+    for i, bit in enumerate(bits):
+        if i % width == 0:
+            app.message_em("00000{:02X}0|".format(j), nobreak=True)
+        app.message("{:02X} ".format(bit), nobreak=True)
+        if i % width == width-1:
+            app.message("")
+            j += 1
     app.message_em("--------------------")
 
 #
 # プリセットコマンドの定義
 #
-definitions = [
-    (filelist, ('dir', 'ls'), 
+commands = describe_command_package(
+        description="PC内のファイルを操作するコマンドです。"
+    )["dir ls"](
         describe_command(
+            process=filelist,
             description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
         )["target pattern"](
             help="表示するフォルダ・ファイルを絞り込む正規表現パターン（部分一致）",
@@ -115,21 +130,36 @@ definitions = [
             const_option=r"\.(docx|doc|xlsx|xls|pptx|ppt)$",
             help="OPCパッケージのみ表示する",
             dest="presetpattern"
-        ),
-        True, # bindapp
-    ),
-    (get_content, ('type', 'touch'),
+        )["target -r --recurse"](
+            help="配下のフォルダの中身も表示する",
+            type=int,
+            nargs="?",
+            const=0xFFFF,
+            default=1,
+        )
+    )["type ty"](
         describe_command(
-            description="ファイルの内容を表示します。", 
+            process=get_text_content,
+            description="ファイルの内容をテキストとして表示します。", 
         )["target target"](
             help="表示するファイル",
         )["target -e --encoding"](
             help="テキストエンコーディング [utf-8|utf-16|ascii|shift-jis]",
             default="utf-8"
-        )["target -b --binary"](
-            help="バイナリファイルとして開く",
-            const_option=True,
-        ),
-        True, # bindapp
+        )
+    )["bin"](
+        describe_command(
+            process=get_binary_content,
+            description="ファイルの内容をバイナリとして表示します。", 
+        )["target target"](
+            help="表示するファイル",
+        )["target --size"](
+            help="読み込むバイト数",
+            type=int,
+            default=128
+        )["target --width"](
+            help="表示の幅",
+            type=int,
+            default=16
+        )
     )
-]

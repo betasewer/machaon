@@ -12,16 +12,15 @@ import tkinter.filedialog
 import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
-from machaon.app import AppMessage, BasicCUI
-from machaon.command import describe_command
-from machaon.command_launcher import CommandLauncher
+from machaon.app import BasicCUI
+from machaon.command import describe_command, describe_command_package, CommandLauncher
 import machaon.platforms
 
 #
 #
 #
 class tkLauncherUI(BasicCUI):
-    def __init__(self):
+    def __init__(self, title="", geometry=(900,400)):
         super().__init__()
         self.app = None
         self.launcher = None
@@ -29,12 +28,17 @@ class tkLauncherUI(BasicCUI):
         
         self._cmdhistory = []
         self._curhistory = 0
+
+        self.theme = None
+        self.screen_title = title
+        self.screen_geo = geometry
         
     def init_with_app(self, app):
         self.app = app
         self.launcher = CommandLauncher(app)
         self.screen = tkLauncherScreen()
         self.screen.init_screen(app, self)
+        self.apply_screen_theme(dark_classic_theme())
     
     def get_launcher(self):
         return self.launcher
@@ -57,18 +61,15 @@ class tkLauncherUI(BasicCUI):
         instr += " >>> "
         self.app.message(instr, nobreak=True)
         inputtext = self.screen.wait_input()
-        self.app.print_message(AppMessage(inputtext, "input"))
+        self.app.custom_message("input", inputtext)
         return inputtext
     
     # コマンドを実行する
     def invoke_command(self, command):
-        index = self.add_command_history(command)
+        self.add_command_history(command)
         # スクリーンに表示
         self.reset_screen()
-        tim = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
-        self.app.message_em("{:02}[{}] >>> ".format(index+1, tim), nobreak=True)
-        self.post_message(AppMessage(command, "input"))
-        # 実行
+        # コマンド実行
         self.app.exec_command(command, threading=True)
 
     # コマンド欄を実行する
@@ -109,12 +110,6 @@ class tkLauncherUI(BasicCUI):
         if logs is not None:
             self.screen.rollback_log(logs)
     
-    def show_command_history(self):
-        self.app.message("<< 履歴 >>")
-        for i, his in enumerate(self._cmdhistory):
-            row = "{} | {}".format(i, his["command"])
-            self.app.message(row)
-    
     def rollback_current_command(self):
         if len(self._cmdhistory)==0:
             return False
@@ -128,6 +123,9 @@ class tkLauncherUI(BasicCUI):
         self.screen.replace_input_text(hisline)
         #self.app.message("現在のコマンドを復元：'{}' -> '{}'".format(curline, hisline))
         return True
+    
+    def get_command_history(self):
+        return self._cmdhistory
         
     # ダイアログからファイルパスを入力
     def input_filepath(self, *filters:Tuple[str, str]):
@@ -137,73 +135,42 @@ class tkLauncherUI(BasicCUI):
     # カレントディレクトリの変更
     def change_cd_dialog(self):
         path = tkinter.filedialog.askdirectory(initialdir = self.app.get_current_dir())
-        self.invoke_command("cd {}".format(path))
-        
-    # ハイパーリンクのURLを列挙する
-    def show_hyperlink_database(self):
-        for l in self.screen.hyperlinks.loglines():
-            self.app.message(l)
+        if path:
+            self.invoke_command("cd {}".format(path))
 
     # ハンドラ
     def run_mainloop(self):
         self.screen.run()
+    
+    def on_exec_command(self, process, argument):
+        tim = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
+        self.app.message_em("[{}] >>> ".format(tim), nobreak=True)
+        self.app.custom_message("input", process.get_prog() + " " + argument)
 
-    def on_exit_command(self, procclass):
-        self.app.message_em("実行終了\n")
+    def on_exit_command(self, process, command):
+        if process is None:
+            self.app.error("'{}'は不明なコマンドです".format(command))
+            if self.app.test_command("help"):
+                self.app.message("'help'でコマンド一覧を表示できます")
+        else:
+            self.app.message_em("実行終了\n")
         self.screen.take_logdump(self)
+    
+    def on_bad_command(self, process, argument, error):          
+        self.app.error("{}: コマンド引数が間違っています:".format(process.get_prog()))
+        self.app.error(error)
+        if process is not None:
+            process.help(self.app)
     
     def on_exit(self):
         self.screen.finish_input("") # 入力待ち状態を解消する
         self.screen.destroy()
 
-    # プリセットコマンドの定義
-    syscommands = [
-        ("command_theme", ("theme", ), 
-            describe_command(
-                description="アプリのテーマを変更します。"
-            )["target theme-name"](
-                help="テーマ名",
-                nargs="?"
-            )["target --alt"](
-                help="設定項目を上書きする [config-name]=[config-value]",
-                nargs=argparse.REMAINDER,
-                default=()
-            )["target --show"](
-                help="設定項目を表示する",
-                const_option=True
-            )["target --themes"](
-                help="選択可能なテーマ名の一覧",
-                const_option=True
-            )
-        ),
-    ]
-
-    def command_theme(self, themename=None, alters=(), show=False, showthemes=False):
-        if showthemes:
-            for name in themebook.keys():
-                self.app.hyperlink(name)
-            return
-
-        if themename is not None:
-            themenew = themebook.get(themename, None)
-            if themenew is None:
-                self.app.error("'{}'という名のテーマはありません".format(themename))
-                return
-            theme = themenew()
-        else:
-            theme = self.screen.theme
-        
-        for alt in alters:
-            cfgname, cfgval = alt.split("=")
-            theme.setval(cfgname, cfgval)
-        
-        if show:
-            for k, v in theme.config.items():
-                self.app.message("{}={}".format(k,v))
-        else:
-            self.screen.apply_theme(theme)
-
-
+    #
+    def apply_screen_theme(self, theme):
+        self.theme = theme
+        self.theme.apply(self.screen)
+    
 
 #
 # 色の設定
@@ -354,8 +321,8 @@ class tkLauncherScreen():
     
     # UIの配置と初期化
     def init_screen(self, app, launcher):
-        self.root.title(app.title)
-        self.root.geometry("900x400")
+        self.root.title(launcher.screen_title)
+        self.root.geometry("{}x{}".format(*launcher.screen_geo))
         self.root.protocol("WM_DELETE_WINDOW", app.exit)
 
         padx, pady = 3, 3
@@ -366,8 +333,8 @@ class tkLauncherScreen():
         self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
     
         # コマンド入力欄
-        self.commandline = tk.Text(self.frame, relief="solid", height=4)
-        self.commandline.grid(column=0, row=0, sticky="ew", padx=padx, pady=pady)
+        self.commandline = tk.Text(self.frame, relief="solid", height=4, width=40)
+        self.commandline.grid(column=0, row=0, sticky="ns", padx=padx, pady=pady)
         self.commandline.focus_set()
         
         def on_commandline_return(e):
@@ -401,26 +368,28 @@ class tkLauncherScreen():
             return f
 
         btnpanel = addframe(self.frame)
-        btnpanel.grid(column=1, row=0, rowspan=2, sticky="new", padx=padx)
+        btnpanel.grid(column=0, row=1, sticky="new", padx=padx)
+        
         btnunredo = addframe(btnpanel)
         btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
-        b = addbutton(btnunredo, text=u"◀", command=lambda:on_commandline_up(None), width=4)
+        b = addbutton(btnunredo, text=u"▲", command=lambda:on_commandline_up(None), width=4)
         b.pack(side=tk.LEFT, fill=tk.X, padx=padx)
-        b = addbutton(btnunredo, text=u"▶", command=lambda:on_commandline_down(None), width=4)
-        b.pack(side=tk.RIGHT, fill=tk.Y, padx=padx)
-        b = addbutton(btnpanel, text=u"ファイル入力...", command=launcher.input_filepath)
-        b.pack(side=tk.TOP, fill=tk.X, pady=pady)
-        b = addbutton(btnpanel, text=u"作業ディレクトリ...", command=launcher.change_cd_dialog)
-        b.pack(side=tk.TOP, fill=tk.X, pady=pady)
+        b = addbutton(btnunredo, text=u"▼", command=lambda:on_commandline_down(None), width=4)
+        b.pack(side=tk.LEFT, fill=tk.X, padx=padx)
+
+        b = addbutton(btnpanel, text=u"ファイル", command=launcher.input_filepath)
+        b.pack(side=tk.LEFT, fill=tk.X, pady=pady)
+        b = addbutton(btnpanel, text=u"作業ディレクトリ", command=launcher.change_cd_dialog)
+        b.pack(side=tk.LEFT, fill=tk.X, pady=pady)
         #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
         #b.pack(side=tk.TOP, fill=tk.X, pady=2)
-        b = addbutton(btnpanel, text=u"終了", command=app.exit)
+        b = addbutton(btnpanel, text=u"終了", command=app.exit, width=6)
         b.pack(side=tk.TOP, fill=tk.X, pady=pady)
         
         # ログウィンドウ
         #self.log = tk.scrolledtext.ScrolledText(self.frame, wrap="word", font="TkFixedFont")
         self.log = tk.Text(self.frame, wrap="word", font="TkFixedFont", relief="solid")
-        self.log.grid(column=0, row=1, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        self.log.grid(column=1, row=0, rowspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
@@ -429,12 +398,11 @@ class tkLauncherScreen():
         self.log.tag_bind("hlink", "<Control-Button-1>", lambda e: self.hyper_click(e, app))
         self.log.tag_bind("hlink", "<Double-Button-1>", lambda e: self.hyper_as_input_text(app))
         
-        tk.Grid.columnconfigure(self.frame, 0, weight=1)
-        tk.Grid.rowconfigure(self.frame, 1, weight=1)
+        tk.Grid.columnconfigure(self.frame, 1, weight=1)
+        tk.Grid.rowconfigure(self.frame, 0, weight=1)
     
         # フレームを除去       
         #self.root.overrideredirect(True)
-        self.apply_theme(dark_classic_theme())
     
     # ログの操作
     def insert_log(self, msg):
@@ -552,10 +520,6 @@ class tkLauncherScreen():
         self.insert_input_text(link)
 
     # 
-    def apply_theme(self, theme):
-        self.theme = theme
-        self.theme.apply(self)
-    
     def run(self):
         self.root.mainloop()
     
@@ -588,6 +552,89 @@ class HyperlinkDatabase:
         ds = []
         ds.extend(["{:03}|{}".format(key, link) for (key, link) in self.links.items()])
         return ds
+
+#
+# プリセットコマンドの定義
+#
+# テーマの選択
+def ui_command_theme(app, themename=None, alters=(), show=False, showthemes=False):
+    if showthemes or (themename is None and not alters and not show):
+        for name in themebook.keys():
+            app.hyperlink(name)
+        return
+
+    if themename is not None:
+        themenew = themebook.get(themename, None)
+        if themenew is None:
+            app.error("'{}'という名のテーマはありません".format(themename))
+            return
+        theme = themenew()
+    else:
+        theme = app.ui.theme
+    
+    for alt in alters:
+        cfgname, cfgval = alt.split("=")
+        theme.setval(cfgname, cfgval)
+    
+    if show:
+        for k, v in theme.config.items():
+            app.message("{}={}".format(k,v))
+    else:
+        app.ui.apply_screen_theme(theme)
+
+#
+def ui_commands():
+    return describe_command_package(
+        description="ターミナルの外観",
+    )["theme"](
+        describe_command(
+            ui_command_theme,
+            description="アプリのテーマを変更します。"
+        )["target theme-name"](
+            help="テーマ名",
+            nargs="?"
+        )["target --alt"](
+            help="設定項目を上書きする [config-name]=[config-value]",
+            nargs=argparse.REMAINDER,
+            default=()
+        )["target --show"](
+            help="設定項目を表示する",
+            const_option=True
+        )["target --themes"](
+            help="選択可能なテーマ名の一覧",
+            const_option=True
+        )
+    )
+
+
+#
+# デバッグ用コマンド
+#
+def show_history(app):
+    app.message("<< コマンド履歴 >>")
+    for i, his in enumerate(app.ui.get_command_history()):
+        row = "{} | {}".format(i, his["command"])
+        app.message(row)
+
+def show_hyperlink_database(app):
+    for l in app.ui.screen.hyperlinks.loglines():
+        app.message(l)
+
+def ui_sys_commands():
+    return describe_command_package(
+        description="ターミナルを操作するコマンドです。",
+    )["history"](
+        describe_command(
+            process=show_history,
+            description="入力履歴を表示します。"
+        )
+    )["hyperdb"](
+        describe_command(
+            process=show_hyperlink_database,
+            description="内部のハイパーリンクデータベースを表示します。"
+        )
+    )
+
 
 #
 #

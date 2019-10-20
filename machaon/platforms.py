@@ -1,4 +1,5 @@
 import subprocess
+from typing import Any
 
 #
 # OSごとの設定
@@ -11,16 +12,26 @@ class _Windows:
     @classmethod
     def openfile(cls, path):
         subprocess.run(["start", path], shell=True)
+    
+    @classmethod
+    def shell_ui(cls):
+        from machaon.shell import WinShellUI
+        return WinShellUI()
         
 #
 class _Macintosh:
     preferred_fontname = "Menlo"
-    preferred_fontsize = 16
+    preferred_fontsize = 14
 
     @classmethod
     def openfile(cls, path):
         subprocess.run(["open", path], check=True)
         
+    @classmethod
+    def shell_ui(cls):
+        from machaon.shell import ShellUI
+        return ShellUI("utf-8")
+
 #
 class _Unix:
     preferred_fontname = "Verdana"
@@ -30,11 +41,15 @@ class _Unix:
     def openfile(cls, path):
         subprocess.run(["open", path], check=True)
 
+    @classmethod
+    def shell_ui(cls):
+        from machaon.shell import ShellUI
+        return ShellUI("utf-8")
 
 #
 #
 #
-current = _Unix
+current: Any = _Unix
 
 import platform
 _platform = platform.system()

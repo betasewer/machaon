@@ -2,6 +2,7 @@
 # coding: utf-8
 import unicodedata
 from machaon.app import AppMessage
+from machaon.command import describe_command, describe_command_package
 
 #
 # Sample Processors
@@ -100,12 +101,55 @@ def char_detail_line(code, char=None):
     else:
         disp = char + "  " + name
     return " {:04X} {}".format(code, disp)
+    
+def encode_unicodes(app, text=""):
+    app.message("input:")
+    for char in text:
+        line = char_detail_line(ord(char), char)
+        app.message(line)
+
+def decode_unicodes(app, codebits=""):
+    app.message("input:")
+    for codebit in codebits.split():
+        try:        
+            code = int(codebit, 16)
+        except ValueError:
+            continue
+        line = char_detail_line(code)
+        app.message(line)
+
+#
+spec_commands = describe_command_package(
+        description="様々なテストコマンドです。"
+    )["spam"](
+        process=TestProcess
+    )["texts"](
+        process=ColorProcess
+    )["link"](
+        process=LinkProcess
+    )["unienc"](
+        describe_command(
+            process=encode_unicodes,
+            description="文字を入力 -> コードにする"
+        )["target characters"](
+            help="コードにしたい文字列"
+        )
+    )["unidec"](
+        describe_command(
+            process=decode_unicodes,
+            description="コードを入力 -> 文字にする"
+        )["target characters"](
+            help="文字列にしたいコード"
+        )
+    )
+    
+
 
 #
 def launch_sample_app(default_choice=None):
     import sys
     import argparse
-    from machaon.app import App
+    import machaon.starter
     from machaon.command import describe_command
 
     desc = 'machaon sample application'
@@ -114,63 +158,27 @@ def launch_sample_app(default_choice=None):
     p.add_argument("--tk", action="store_const", const="tk", dest="apptype")
     args = p.parse_args()
     
-    title = "sample app"
     apptype = args.apptype or default_choice
     if apptype is None or apptype == "cui":
-        from machaon.shell import WinShellUI
-        app = App(title, WinShellUI())
-        app.add_syscommands(exclude=("interrupt",))
+        boo = machaon.starter.ShellStarter()
     elif apptype == "tk":
-        from machaon.tk import tkLauncherUI
-        app = App(title, tkLauncherUI())
-        app.add_syscommands(exclude=("interrupt", "cls", "exit"))
+        boo = machaon.starter.TkStarter(title="machaon sample app", geometry=(900,500))
     else:
         p.print_help()
         sys.exit()
 
-    def encode_unicodes(text=""):
-        app.message("input:")
-        for char in text:
-            line = char_detail_line(ord(char), char)
-            app.message(line)
-            
-    def decode_unicodes(codebits=""):
-        app.message("input:")
-        for codebit in codebits.split():
-            try:        
-                code = int(codebit, 16)
-            except ValueError:
-                continue
-            line = char_detail_line(code)
-            app.message(line)
+    boo.install_commands("", spec_commands)
 
-    # コマンドの設定
-    app.add_command(TestProcess, ("spam",))
-    app.add_command(ColorProcess, ("texts",))
-    app.add_command(LinkProcess, ("link",))
+    import machaon.shell_command
+    boo.install_commands("", machaon.shell_command.commands)
 
-    app.add_command(encode_unicodes, ("unienc",), 
-        describe_command(
-            description="文字を入力 -> コードにする"
-        )["target characters"](
-            help="コードにしたい文字列"
-        )
-    )
-    app.add_command(decode_unicodes, ("unidec",),
-        describe_command(
-            description="コードを入力 -> 文字にする"
-        )["target characters"](
-            help="文字列にしたいコード"
-        )
-    )
+    boo.install_syscommands()
 
-    #app.launcher.command(app.ui.show_history, ("history",), desc="入力履歴を表示します。")
-    #app.launcher.command(app.ui.show_hyperlink_database, ("hyperlinks",), hidden=True, desc="内部のハイパーリンクデータベースを表示します。")
-    app.run()
+    boo.go()
 
 
 #
 #
 #
 if __name__ == "__main__":
-    launch_sample_app()
+    launch_sample_app("tk")

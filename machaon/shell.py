@@ -2,7 +2,7 @@
 # coding: utf-8
 import os
 from machaon.app import BasicCUI, App, ExitApp
-from machaon.command_launcher import CommandLauncher
+from machaon.command import CommandLauncher
 from machaon.cui import reencode, collapse_text
 
 #
@@ -71,7 +71,6 @@ class ShellUI(BasicCUI):
         
     def reset_screen(self):
         self.clear()
-        self.app.print_title()
     
     def run_mainloop(self):
         loop = True

@@ -6,13 +6,33 @@ import sys
 import queue
 import threading
 import traceback
-import configparser
 import subprocess
-from collections import OrderedDict
 
-from machaon.command import ProcessClass, ProcessFunction, BadCommand, describe_command
-from machaon.cui import reencode, test_yesno
+from machaon.command import BadCommand, describe_command
+from machaon.cui import test_yesno
 import machaon.platforms
+
+#
+#
+#
+class _appmsg_functor():
+    def __init__(self, fn, obj):
+        self.fn = fn
+        self.obj = obj
+
+    def __call__(self, *args, **kwargs):
+        self.obj.print_message(self.fn(self.obj, *args, **kwargs))
+        return None
+    
+    def msg(self, *args, **kwargs):
+        return self.fn(self.obj, *args, **kwargs)
+
+class _appmsg_method():
+    def __init__(self, fn):
+        self.fn = fn
+    
+    def __get__(self, obj, objtype=None):
+        return _appmsg_functor(self.fn, obj)
 
 #
 # ###################################################################
@@ -21,33 +41,62 @@ import machaon.platforms
 #   プロセッサーに渡され、メッセージ表示・設定項目へのアクセスを提供する
 # ###################################################################
 #
-class App:
-    def __init__(self, title, ui=None):
-        self.title = title
+class AppRoot:
+    def __init__(self):
         self.ui = None
-        self.settings = {}
         self.thr = None 
         self.lastresult = None # is_runnning中は外からアクセスしないのでセーフ？
         self.stopflag = False # boolの代入・読みだしはスレッドセーフ
-        
-        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
-        self.curdir = desktop # 基本ディレクトリ
-        
-        if ui is None:
-            from machaon.shell import WinShellUI
-            ui = WinShellUI() # デフォルトはとりあえずWindows決め打ち
-        self.init_ui(ui)
+        self.curdir = "" # 基本ディレクトリ        
+        self.spirits = {}
     
     @property
     def launcher(self):
         return self.ui.get_launcher()
     
-    def init_ui(self, ui=None):
-        if ui is not None:
-            self.ui = ui
+    def init_ui(self, ui):
+        self.ui = ui
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
         
+    #
+    #
+    #
+    def get_spirit(self, spirit):
+        if spirit is True or spirit is None:
+            spiid = App.spirit_id
+        else:
+            spiid = spirit.spirit_id
+        if spiid == App.spirit_id:
+            return self
+        
+        if spiid in self.spirits:
+            if self.spirits[spiid] is None:
+                instance = spirit(self)
+                self.spirits[spiid] = instance
+            else:
+                instance = self.spirits[spiid]
+            return instance
+        else:
+            raise ValueError("Unknown spirit id: {}".format(spiid))
+    
+    #
+    def touch_spirit(self, spirit):     
+        if spirit is None:
+            return None
+        if spirit is App:
+            return self
+
+        spiid = spirit.spirit_id
+        if spiid == App.spirit_id or spiid is None:
+            spiid = len(self.spirits)+101
+
+        if spiid not in self.spirits:
+            if spiid < 100:
+                raise ValueError("user spirit id must be > 100")
+            spirit.spirit_id = spiid
+        self.spirits[spiid] = None
+
     #
     #
     #
@@ -69,26 +118,58 @@ class App:
     #
     #　メッセージ
     #
+    @_appmsg_method
     def message(self, msg, **options):
-        self.print_message(AppMessage(msg, "message", **options))
+        return AppMessage(msg, "message", **options)
         
     # 重要
+    @_appmsg_method
     def message_em(self, msg, **options):
-        self.print_message(AppMessage(msg, "message_em", **options))
+        return AppMessage(msg, "message_em", **options)
         
     # エラー
+    @_appmsg_method
     def error(self, msg, **options):
-        self.print_message(AppMessage(msg, "error", **options))
-        return False
+        return AppMessage(msg, "error", **options)
         
     # 警告
+    @_appmsg_method
     def warn(self, msg, **options):
-        self.print_message(AppMessage(msg, "warn", **options))
+        return AppMessage(msg, "warn", **options)
 
     # リンクを貼る
-    def hyperlink(self, msg, link=None, tag=None, **options):
-        self.print_message(AppMessage(msg, "hyperlink", link=link, linktag=tag, **options))
+    @_appmsg_method
+    def hyperlink(self, msg, link=None, linktag=None, **options):
+        return AppMessage(msg, "hyperlink", link=link, linktag=linktag, **options)
     
+    @_appmsg_method
+    def custom_message(self, tag, msg, **options):
+        return AppMessage(msg, tag, **options)
+    
+    #
+    def print_message(self, msg):
+        for m in msg.expand():
+            self.ui.post_message(m)
+    
+    def print_target(self, target):
+        self.message_em('対象 --> [{}]'.format(target))
+    
+    #
+    # CUIの動作
+    #
+    def ask_yesno(self, desc):
+        answer = self.ui.get_input(desc)
+        return test_yesno(answer)
+    
+    def get_input(self, desc=""):
+        return self.ui.get_input(desc)
+    
+    def reset_screen(self):
+        self.ui.reset_screen()
+
+    def scroll_screen(self, index):
+        self.ui.scroll_screen(index)
+
     # リンクを開くハンドラ
     def open_hyperlink(self, link):
         if os.path.isfile(link):
@@ -97,43 +178,14 @@ class App:
             import webbrowser
             webbrowser.open_new_tab(link)
     
-    def msg(self, msg, tag, **options):
-        return AppMessage(msg, tag, **options)
-    
-    # メッセージを流す
-    def print_message(self, msg):
-        for m in msg.expand():
-            self.ui.post_message(m)
-    
-    def print_target(self, target):
-        self.message_em('対象 --> [{}]'.format(target))
-    
-    def print_title(self):
-        self.message_em(" ------ {} ------ ".format(self.title))
-    
-    # CUIの動作
-    def ask_yesno(self, desc):
-        answer = self.ui.get_input(desc)
-        return test_yesno(answer)
-    
-    def reset_screen(self):
-        self.ui.reset_screen()
-
-    def scroll_screen(self, index):
-        self.ui.scroll_screen(index)
-    
-    def get_input(self, desc=""):
-        return self.ui.get_input(desc)
-
+    #
     # 基本ディレクトリ
+    #
     def change_current_dir(self, path):
         if os.path.isdir(path):
             self.curdir = path
         else:
             self.error("'{}'は有効なパスではありません".format(path))
-    
-    def get_current_dir(self):
-        return self.curdir
     
     def abspath(self, path):
         # 絶対パスにする
@@ -144,179 +196,137 @@ class App:
             path = os.path.normpath(os.path.join(cd, path))
         return path
     
+    def get_current_dir(self):
+        return self.curdir
+    
+    def set_current_dir_desktop(self):
+        self.curdir = os.path.join(os.path.expanduser("~"), "Desktop")
+
     #
     # コマンド処理の流れ
     #
     # コマンド文字列からで呼び出す
     def exec_command(self, cmdstr, *, threading=False):
-        cmd = self.launcher.translate_command(cmdstr)
+        # プロセスを確定
+        cmd, cmdarg = self.launcher.translate_command(cmdstr)
         if cmd is None:
-            self.error("'{}'は不明なコマンドです".format(cmdstr))
-            cmd = self.launcher.translate_command("help")
-            if cmd is not None:
-                self.message("'help'でコマンド一覧を表示")
-            self.on_exit_command(None)
+            self.on_exit_command(None, cmdstr)
             return None
-
+        process = cmd.process
+            
+        # プロセスのスピリットを取得する
+        spirit = self.get_spirit(process.get_bound_app())
+        
+        # 引数コマンドを解析
+        argmap = self.parse_process_command(process, spirit, cmdarg)
+        if argmap is None:
+            self.on_exit_command(process, cmdarg)
+            return None
+        
+        # 実行
         ret = None
         if threading:
-            self.run_process(cmd.get_command(), cmd.get_argument())
+            self.run_process(process, spirit, argmap)
         else:
-            ret = self.exec_process(cmd.get_command(), cmd.get_argument())
+            ret = self.exec_process(process, spirit, argmap)
         return ret
     
-    # プロセスを即時実行する
-    def exec(self, process, commandstr="", describer=None, bindapp=None, bindargs=None, prog=None):        
-        proc = self.wrapped_process(process, describer=describer, bindapp=bindapp, bindargs=bindargs, prog=prog)
-        return self.exec_process(proc, commandstr)
+    # コマンド文字列を解析する
+    def parse_process_command(self, process, spirit, commandarg):
+        # 遅延コマンド初期化関数があればここで呼ぶ
+        process.load_lazy_describer(spirit)
+
+        # コマンドを処理
+        bad = None
+        argument = commandarg
+        try:
+            argmap, argument = process.run_argparser(spirit, commandarg)
+        except BadCommand as b:
+            bad = b.error
+
+        self.on_exec_command(process, argument)
+        if bad:
+            self.on_bad_command(process, commandarg, bad)
+            return None
+
+        # help表示
+        if argmap is None:
+            process.get_argparser().print_parser_message(self)
+        return argmap
     
-    # コマンドクラスと引数文字列を渡して実行する
-    def exec_process(self, proc, commandstr):
+    # プロセスを即時実行する
+    def exec(self, process, argument="", *, bindapp=True, bindargs=None, custom_command_parser=None, prog=None):        
+        # コマンドエントリの構築
+        d = describe_command(process, bindapp=bindapp, bindargs=bindargs, custom_command_parser=custom_command_parser)
+        prog = prog or getattr(process, "__name__") or "$"
+        entry = d.build_entry(self, prog, (prog,))
+        # 実行
+        spirit = self.get_spirit(entry.process.get_bound_app())
+        argmap = self.parse_process_command(entry.process, spirit, argument)
+        if argmap is not None:
+            return self.exec_process(entry.process, spirit, argmap)
+        return None
+    
+    # プロセスクラスと引数文字列を渡して実行する
+    def exec_process(self, process, spirit, argmap):
+        proc = None
         result = None
         try:
-            procs = proc.generate_instances(self, commandstr)
-            for proc in procs:
+            for proc in process.generate_instances(spirit, argmap):
                 if self.is_process_interrupted():
                     self.message_em("中断しました")
                     break
                 result = proc.start()
         except BadCommand as b:
-            self.error("コマンド引数が間違っています:")
-            proc.help(self)
-            self.error(b.error)
+            self.on_bad_command(process, "", b.error())
         except Exception:
             self.error("失敗しました。以下、発生したエラーの詳細：")
             self.error(traceback.format_exc())
             
         self.lastresult = result
-        self.on_exit_command(proc)
+        self.on_exit_command(proc, argmap)
         return result
+    
+    # 有効なプロセスコマンドか調べる（オプションまでは調べない）
+    def test_command(self, commandstr):
+        cmd, _ = self.launcher.translate_command(commandstr)
+        return cmd is not None
         
-    # コマンド（プロセス/CommandFunction）実行終了時に呼び出されるハンドラ
-    def on_exit_command(self, procclass):
-        self.ui.on_exit_command(procclass)
+    # コマンドパッケージを導入
+    def install_commands(self, prefixes, package, *, exclude=()):
+        # コマンドエントリを構築
+        cmdset = package.build_commands(self, prefixes, exclude)
+        # ランチャーに設定
+        self.launcher.install_commands(cmdset)
+
+    #
+    # ハンドラ
+    #
+    # プロセス実行直前に呼び出されるハンドラ
+    def on_exec_command(self, proc, argument):
+        self.ui.on_exec_command(proc, argument)
+
+    # コマンド解析失敗時に呼ばれるハンドラ
+    def on_bad_command(self, proc, argument, error):   
+        self.ui.on_bad_command(proc, argument, error)
+        
+    # プロセス実行終了時に呼び出されるハンドラ
+    def on_exit_command(self, proc, argmap):
+        self.ui.on_exit_command(proc, argmap)
     
     # アプリケーション終了時に呼び出されるハンドラ
     def on_exit(self):
         self.ui.on_exit()
 
     #
-    #
-    #
-    def wrapped_process(self, process, *, prog, describer=None, bindapp=False, bindargs=None):
-        if isinstance(process, type):
-            proc = ProcessClass(process, prog=prog)
-        else:
-            args = []
-            if bindapp:
-                args.append(self)
-            if bindargs:
-                args.extend(bindargs)
-            proc = ProcessFunction(process, describer, *args, prog=prog)
-        return proc
-    
-    # コマンド登録
-    def add_command(self, process, keywords, describer=None, hidden=False, auxiliary=False, bindapp=False, bindargs=None, prog=None): 
-        if len(keywords)<1:
-            raise ValueError("keywords must be defined 1 or more")
-        if prog is None:
-            prog=keywords[0]
-        proc = self.wrapped_process(process, prog=prog, describer=describer, bindapp=bindapp, bindargs=bindargs)
-        return self.launcher.define_command(proc, keywords=keywords, hidden=hidden, auxiliary=auxiliary)
-
-    def add_syscommands(self, *, exclude=(), shell=True):
-        entries = []
-
-        modules = []
-        if shell:
-            from machaon.shell_command import definitions as shell_definitions
-            modules.append(shell_definitions)
-
-        for defs in modules:
-            for entry in defs:
-                entries.append(entry)
-        
-        for obj in (self.ui, self.launcher, self):
-            for entry in getattr(obj, "syscommands", ()):
-                fnname = entry[0]
-                cmd = getattr(obj, fnname, None)
-                if cmd is None:
-                    continue
-                entries.append((cmd, *entry[1:]))
-        
-        for entry in entries:
-            cmd = entry[0]
-            keywords = entry[1]
-            describer = entry[2]
-            bindapp = entry[3] if len(entry)>3 else False
-            bindargs = entry[4] if len(entry)>4 else None
-            if len(keywords)==0 or keywords[0] in exclude:
-                continue
-            self.add_command(cmd, keywords=keywords, describer=describer, auxiliary=True, bindapp=bindapp, bindargs=bindargs)
-
-    #
-    # システムコマンド
-    #
-    def command_interrupt(self):    
-        if not self.is_process_running():
-            self.message("実行中のプロセスはありません")
-            return
-        self.message("プロセスを中断します")
-        self.interrupt_process()
-        
-    def command_exit(self, ask=False):
-        if ask:
-            if not self.ask_yesno("終了しますか？ (Y/N)"):
-                return
-        return ExitApp
-        
-    def command_cls(self):
-        self.reset_screen()
-
-    def command_cd(self, path=None):
-        if path is not None:
-            path = self.abspath(path)
-            self.change_current_dir(path)
-        self.message("現在の作業ディレクトリ：" + self.get_current_dir())
-
-    syscommands = [
-        ("command_interrupt", ("interrupt", "it"), 
-            describe_command(
-                description="現在実行中のプロセスを中断します。"
-            )
-        ),
-        ("command_cls", ("cls",), 
-            describe_command(
-                description="画面をクリアします。"
-            )
-        ),
-        ("command_cd", ('cd',), 
-            describe_command(
-                description="作業ディレクトリを変更します。", 
-            )["target directory-path"](
-                nargs="?",
-                help="移動先のパス"
-            )
-        ),
-        ("command_exit", ("exit",),
-            describe_command(
-                description="終了します。"
-            )["target --ask -a"](
-                const_option=True,            
-                help="確認してから終了する"
-            )
-        ),
-    ]
-    
-    #
     # 非同期処理
     #
-    def run_process(self, proc, commandstr=None):
+    def run_process(self, process, spirit, argmap):
         if self.is_process_running():
             return
         self.stopflag = False
         self.lastresult = None
-        self.thr = threading.Thread(target=self.exec_process, args=(proc, commandstr))
+        self.thr = threading.Thread(target=self.exec_process, args=(process, spirit, argmap))
         self.thr.start()
 
     def is_process_running(self):
@@ -345,7 +355,6 @@ class App:
         return AppMessageIO(self, **kwargs)
         
     
-
 #
 #
 #
@@ -478,3 +487,48 @@ class BasicCUI:
     def on_exit(self):
         pass
 
+
+#
+# ###################################################################
+#  App Spirit
+# ###################################################################
+#
+default_app_id = 0
+#
+class App():
+    spirit_id: int = default_app_id
+
+    def __init__(self, app=None):
+        self.root = app
+    
+    # rootアプリにリダイレクトする
+    def __getattr__(self, name):
+        if self.root is None:
+            raise ValueError("App '{}': AppRoot must be bound, but none".format(type(self)))
+        return getattr(self.root, name, None)
+
+#
+# Appを遅延して生成／初期化するローダータイプ
+#
+class Spirit():
+    def __init__(self, klass, setup_fn):
+        self.klass = klass
+        self.setup = setup_fn
+    
+    @property
+    def spirit_id(self):
+        return self.klass.spirit_id
+    
+    @spirit_id.setter
+    def spirit_id(self, v):
+        self.klass.spirit_id = v
+        return self
+    
+    def __call__(self, app): # -> app.App inheriting instance
+        return self.setup(app)
+
+# デコレータ
+def spirit(klass):
+    def _deco(fn):
+        return Spirit(klass, fn)
+    return _deco
