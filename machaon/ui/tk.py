@@ -13,7 +13,7 @@ import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
 from machaon.app import BasicCUI
-from machaon.command import describe_command, describe_command_package, CommandLauncher
+from machaon.command import describe_command, describe_command_package
 import machaon.platforms
 
 #
@@ -23,7 +23,6 @@ class tkLauncherUI(BasicCUI):
     def __init__(self, title="", geometry=(900,400)):
         super().__init__()
         self.app = None
-        self.launcher = None
         self.screen = None
         
         self._cmdhistory = []
@@ -35,13 +34,9 @@ class tkLauncherUI(BasicCUI):
         
     def init_with_app(self, app):
         self.app = app
-        self.launcher = CommandLauncher(app)
         self.screen = tkLauncherScreen()
         self.screen.init_screen(app, self)
         self.apply_screen_theme(dark_classic_theme())
-    
-    def get_launcher(self):
-        return self.launcher
 
     # メッセージはすべてキュー
     def post_message(self, msg):
@@ -142,25 +137,33 @@ class tkLauncherUI(BasicCUI):
     def run_mainloop(self):
         self.screen.run()
     
-    def on_exec_command(self, process, argument):
+    def display_input_header(self):
         tim = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
         self.app.message_em("[{}] >>> ".format(tim), nobreak=True)
-        self.app.custom_message("input", process.get_prog() + " " + argument)
-
-    def on_exit_command(self, process, command):
-        if process is None:
-            self.app.error("'{}'は不明なコマンドです".format(command))
-            if self.app.test_command("help"):
-                self.app.message("'help'でコマンド一覧を表示できます")
+    
+    def on_exec_command(self, process, argument):
+        if process=="set-prefix":
+            self.app.message_em("コマンド接頭辞：{}".format(argument))
         else:
-            self.app.message_em("実行終了\n")
+            self.display_input_header()
+            self.app.custom_message("input", process.get_prog() + " " + argument)
+
+    def on_exit_command(self, process):
+        self.app.message_em("実行終了\n")
         self.screen.take_logdump(self)
     
-    def on_bad_command(self, process, argument, error):          
-        self.app.error("{}: コマンド引数が間違っています:".format(process.get_prog()))
-        self.app.error(error)
-        if process is not None:
-            process.help(self.app)
+    def on_bad_command(self, process, command, error):
+        self.display_input_header()
+        self.app.custom_message("input", command)
+        if process is None:
+            self.app.error("'{}'は不明なコマンドです".format(command))
+            if self.app.test_valid_process("help"):
+                self.app.message("'help'でコマンド一覧を表示できます")
+        else:
+            self.app.error("{}: コマンド引数が間違っています:".format(process.get_prog()))
+            self.app.error(error)
+            for line in process.get_help():
+                self.app.message(line)
     
     def on_exit(self):
         self.screen.finish_input("") # 入力待ち状態を解消する
@@ -635,10 +638,3 @@ def ui_sys_commands():
         )
     )
 
-
-#
-#
-#
-if __name__ == "__main__":
-    from machaon.sample import launch_sample_app
-    launch_sample_app("tk")

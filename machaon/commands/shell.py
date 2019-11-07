@@ -3,8 +3,10 @@ import shutil
 import re
 import time
 
+from typing import Optional
+
 from machaon.command import describe_command, describe_command_package
-from machaon.shell import reencode
+from machaon.cui import reencode
 
 #
 #
@@ -77,15 +79,27 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, re
 #
 #
 #
-def get_text_content(app, target, encoding="utf-8"):
+def get_text_content(app, target, encoding="utf-8", head=0, tail=0, full=False):
+    if full:
+        head, tail = 0, 0
     app.message_em("ファイル名：[%1%]", embed=[
         app.hyperlink.msg(target)
     ])
     app.message_em("--------------------")
+    tails = []
     with open(app.abspath(target), "r", encoding=encoding) as fi:
-        for line in fi:
-            app.message(line, nobreak=True)
-    app.message_em("--------------------")
+        for i, line in enumerate(fi):
+            if head and i >= head:
+                break
+            if tail:
+                tails.append(line)
+            else:
+                app.message(line, nobreak=True)
+
+        if tail and tails:
+            for l in tails[-tail:]:
+                app.message(l, nobreak=True)
+    app.message_em("\n--------------------")
 
 #
 #
@@ -106,38 +120,41 @@ def get_binary_content(app, target, readsize=128, width=16):
         if i % width == width-1:
             app.message("")
             j += 1
-    app.message_em("--------------------")
+    app.message_em("\n--------------------")
 
 #
 # プリセットコマンドの定義
 #
-commands = describe_command_package(
+def shell_commands():
+    return describe_command_package(
         description="PC内のファイルを操作するコマンドです。"
-    )["dir ls"](
+    )["ls"](
         describe_command(
             process=filelist,
             description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
         )["target pattern"](
             help="表示するフォルダ・ファイルを絞り込む正規表現パターン（部分一致）",
-            nargs="?"
+            nargs="?",
+            const=None
         )["target -l --long"](
             const_option=True,
             help="詳しい情報を表示する"
         )["target -t --time"](
             const_option="t",
             help="更新日時で降順に並び替える",
+            dest="howsort"
         )["target -o --opc"](
             const_option=r"\.(docx|doc|xlsx|xls|pptx|ppt)$",
             help="OPCパッケージのみ表示する",
             dest="presetpattern"
         )["target -r --recurse"](
-            help="配下のフォルダの中身も表示する",
+            help="配下のフォルダの中身も表示する[深度を数値で指定]",
             type=int,
             nargs="?",
             const=0xFFFF,
             default=1,
         )
-    )["type ty"](
+    )["text tx"](
         describe_command(
             process=get_text_content,
             description="ファイルの内容をテキストとして表示します。", 
@@ -146,8 +163,23 @@ commands = describe_command_package(
         )["target -e --encoding"](
             help="テキストエンコーディング [utf-8|utf-16|ascii|shift-jis]",
             default="utf-8"
+        )["target -d --head"](
+            help="先頭からの表示行",
+            type=int,
+            nargs="?",
+            const=1,
+            default=10
+        )["target -t --tail"](
+            help="末尾からの表示行",
+            type=int,
+            nargs="?",
+            const=1,
+            default=0
+        )["target -a --all"](
+            help="全て表示",
+            const_option=True
         )
-    )["bin"](
+    )["hex"](
         describe_command(
             process=get_binary_content,
             description="ファイルの内容をバイナリとして表示します。", 

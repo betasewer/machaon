@@ -2,7 +2,6 @@
 # coding: utf-8
 import os
 from machaon.app import BasicCUI, App, ExitApp
-from machaon.command import CommandLauncher
 from machaon.cui import reencode, collapse_text
 
 #
@@ -13,15 +12,10 @@ class ShellUI(BasicCUI):
         self.encoding = encoding
         self.preftextwidth = textwidth
         self.maxlinecount = maxlinecount
-        self.launcher = None
         self.app = None
 
     def init_with_app(self, app):
         self.app = app
-        self.launcher = CommandLauncher(app)
-            
-    def get_launcher(self):
-        return self.launcher
 
     def message_handler(self, msg):    
         text = self.printing_text(msg.text, collapse=False)

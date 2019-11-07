@@ -33,8 +33,8 @@ class ShellStarter(Starter):
         self.app.init_ui(ui)
     
     def install_syscommands(self):
-        from machaon.app_command import app_commands
-        self.install_commands("", app_commands(), exclude=("interrupt",))
+        from machaon.commands.app import app_commands
+        self.install_commands("", app_commands().excluded("interrupt"))
 
 #
 #
@@ -42,23 +42,13 @@ class ShellStarter(Starter):
 class TkStarter(Starter):
     def __init__(self, *, title, geometry):
         super().__init__()
-        from machaon.tk import tkLauncherUI
+        from machaon.ui.tk import tkLauncherUI
         ui = tkLauncherUI(title, geometry)
         self.app.init_ui(ui)
     
     def install_syscommands(self):
-        from machaon.app_command import app_commands
-        from machaon.tk import ui_commands, ui_sys_commands
-        pkg = app_commands().annex(ui_commands(), ui_sys_commands())
-        self.install_commands("", pkg, exclude=("interrupt","cls","exit"))
+        from machaon.commands.app import app_commands
+        from machaon.ui.tk import ui_commands, ui_sys_commands
+        pkg = app_commands().excluded("interrupt","cls","exit").annex(ui_commands(), ui_sys_commands())
+        self.install_commands("", pkg)
 
-    
-"""
-install_commands(
-    klass="xut",
-    xuthus.app.commands,
-    pip_install = 
-)
-
-
-"""

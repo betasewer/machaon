@@ -8,8 +8,9 @@ import threading
 import traceback
 import subprocess
 
-from machaon.command import BadCommand, describe_command
-from machaon.cui import test_yesno
+from machaon.engine import BadCommand, CommandEngine 
+from machaon.command import describe_command
+from machaon.cui import test_yesno, fixsplit
 import machaon.platforms
 
 #
@@ -47,22 +48,21 @@ class AppRoot:
         self.thr = None 
         self.lastresult = None # is_runnning中は外からアクセスしないのでセーフ？
         self.stopflag = False # boolの代入・読みだしはスレッドセーフ
-        self.curdir = "" # 基本ディレクトリ        
+        self.curdir = "" # 基本ディレクトリ   
+
         self.spirits = {}
-    
-    @property
-    def launcher(self):
-        return self.ui.get_launcher()
-    
+        self.cmdengine = None
+
     def init_ui(self, ui):
         self.ui = ui
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
-        
+        self.cmdengine = CommandEngine(self)
+
     #
     #
     #
-    def get_spirit(self, spirit):
+    def access_spirit(self, spirit):
         if spirit is True or spirit is None:
             spiid = App.spirit_id
         else:
@@ -103,7 +103,7 @@ class AppRoot:
     def run(self):
         if self.ui is None:
             raise ValueError("App UI must be initialized")
-        if self.launcher is None:
+        if self.cmdengine is None:
             raise ValueError("App launcher must be initialized")
         self.mainloop()
         self.join_process_running()
@@ -205,100 +205,104 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    # コマンド文字列からで呼び出す
-    def exec_command(self, cmdstr, *, threading=False):
-        # プロセスを確定
-        cmd, cmdarg = self.launcher.translate_command(cmdstr)
-        if cmd is None:
-            self.on_exit_command(None, cmdstr)
-            return None
-        process = cmd.process
-            
-        # プロセスのスピリットを取得する
-        spirit = self.get_spirit(process.get_bound_app())
-        
-        # 引数コマンドを解析
-        argmap = self.parse_process_command(process, spirit, cmdarg)
-        if argmap is None:
-            self.on_exit_command(process, cmdarg)
+    # コマンド文字列から呼び出す
+    def exec_command(self, commandstr, *, threading=False):
+        # 文字列を空白で区切る
+        commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
+
+        # コマンド接頭辞の設定
+        if commandhead.endswith("."):
+            prefix = commandhead[:-1]
+            self.cmdengine.set_command_prefix(prefix)
+            self.on_exec_command("set-prefix", prefix)
             return None
         
-        # 実行
-        ret = None
-        if threading:
-            self.run_process(process, spirit, argmap)
+        # コマンドを解析
+        possible_entries = self.cmdengine.parse_command(commandhead, commandtail)
+        if not possible_entries:
+            # すべて失敗
+            lastcmd, lastcmderror = self.cmdengine.get_last_process_parse_fail()
+            self.on_bad_command(lastcmd, commandstr, lastcmderror)
+            return None
+        
+        # 一つを選択する
+        # TODO: ランチャー上で選択させる
+        process, spirit, parseresult = possible_entries[0]
+        self.on_exec_command(process, parseresult.get_expanded_command())
+
+        # コマンドを実行
+        #   引数ではなくパーサーメッセージを出力
+        if parseresult.has_message():
+            for line in parseresult.get_messages():
+                self.message(line)
+            return None
+        #   引数を渡して実行
         else:
-            ret = self.exec_process(process, spirit, argmap)
-        return ret
-    
-    # コマンド文字列を解析する
-    def parse_process_command(self, process, spirit, commandarg):
-        # 遅延コマンド初期化関数があればここで呼ぶ
-        process.load_lazy_describer(spirit)
+            ret = None
+            if threading:
+                self.run_process(process, spirit, parseresult)
+            else:
+                ret = self.exec_process(process, spirit, parseresult)
+            return ret
 
-        # コマンドを処理
-        bad = None
-        argument = commandarg
-        try:
-            argmap, argument = process.run_argparser(spirit, commandarg)
-        except BadCommand as b:
-            bad = b.error
-
-        self.on_exec_command(process, argument)
-        if bad:
-            self.on_bad_command(process, commandarg, bad)
-            return None
-
-        # help表示
-        if argmap is None:
-            process.get_argparser().print_parser_message(self)
-        return argmap
-    
-    # プロセスを即時実行する
-    def exec(self, process, argument="", *, bindapp=True, bindargs=None, custom_command_parser=None, prog=None):        
-        # コマンドエントリの構築
-        d = describe_command(process, bindapp=bindapp, bindargs=bindargs, custom_command_parser=custom_command_parser)
-        prog = prog or getattr(process, "__name__") or "$"
-        entry = d.build_entry(self, prog, (prog,))
-        # 実行
-        spirit = self.get_spirit(entry.process.get_bound_app())
-        argmap = self.parse_process_command(entry.process, spirit, argument)
-        if argmap is not None:
-            return self.exec_process(entry.process, spirit, argmap)
-        return None
-    
-    # プロセスクラスと引数文字列を渡して実行する
-    def exec_process(self, process, spirit, argmap):
+    # プロセスクラスと構築済み引数辞書を渡して実行する
+    def exec_process(self, process, spirit, parsedcommand):
+        parsedcommand.expand_filepath_arguments(self)
         proc = None
         result = None
         try:
-            for proc in process.generate_instances(spirit, argmap):
+            for proc in process.generate_instances(spirit, parsedcommand):
                 if self.is_process_interrupted():
                     self.message_em("中断しました")
                     break
-                result = proc.start()
-        except BadCommand as b:
-            self.on_bad_command(process, "", b.error())
+                result = proc.invoke()
         except Exception:
             self.error("失敗しました。以下、発生したエラーの詳細：")
             self.error(traceback.format_exc())
             
         self.lastresult = result
-        self.on_exit_command(proc, argmap)
+        self.on_exit_command(proc)
+        
+        if proc and proc.last_not_found_args:
+            self.warn("以下の引数は与えられませんでした：")
+            for a in proc.last_not_found_args:
+                self.warn("  {}".format(a))
+                
         return result
     
-    # 有効なプロセスコマンドか調べる（オプションまでは調べない）
-    def test_command(self, commandstr):
-        cmd, _ = self.launcher.translate_command(commandstr)
-        return cmd is not None
-        
-    # コマンドパッケージを導入
-    def install_commands(self, prefixes, package, *, exclude=()):
-        # コマンドエントリを構築
-        cmdset = package.build_commands(self, prefixes, exclude)
-        # ランチャーに設定
-        self.launcher.install_commands(cmdset)
+    # プロセスを即時実行する
+    # 　コマンド選択、ヘルプメッセージ出力を処理しない
+    def exec(self, process, argument="", *, bindapp=True, bindargs=None, custom_command_parser=None, prog=None):        
+        # コマンドエントリの構築
+        d = describe_command(process, bindapp=bindapp, bindargs=bindargs, custom_command_parser=custom_command_parser)
+        prog = prog or getattr(process, "__name__") or "$"
+        entry = d.build_entry(self, prog, (prog,))
 
+        # 実行
+        process = entry.process
+        spirit = self.access_spirit(bindapp)
+        possible_syntaxes = process.run_argparser(spirit, argument, "")
+        if not possible_syntaxes:
+            return None
+
+        parseresult = possible_syntaxes[0]
+        if parseresult.has_message():
+            return None
+
+        self.on_exec_command(process, parseresult.get_expanded_command())
+        return self.exec_process(process, spirit, parseresult)
+    
+    # 有効なプロセスコマンドか調べる
+    def test_valid_process(self, processname):
+        return self.cmdengine.test_command_head(processname)
+    
+    def get_command_sets(self):
+        return self.cmdengine.command_sets()
+    
+    def parse_possible_commands(self, commandstr):
+        head, tail = fixsplit(commandstr, maxsplit=1, default="")
+        return self.cmdengine.parse_command(head, tail)
+        
     #
     # ハンドラ
     #
@@ -311,8 +315,8 @@ class AppRoot:
         self.ui.on_bad_command(proc, argument, error)
         
     # プロセス実行終了時に呼び出されるハンドラ
-    def on_exit_command(self, proc, argmap):
-        self.ui.on_exit_command(proc, argmap)
+    def on_exit_command(self, proc):
+        self.ui.on_exit_command(proc)
     
     # アプリケーション終了時に呼び出されるハンドラ
     def on_exit(self):
@@ -353,6 +357,17 @@ class AppRoot:
     #
     def message_io(self, **kwargs):
         return AppMessageIO(self, **kwargs)
+        
+    #
+    # コマンドパッケージ
+    #
+    # コマンドパッケージを導入
+    def install_commands(self, prefixes, package):
+        # コマンドエントリを構築
+        cmdset = package.build_commands(self, prefixes)
+        # ランチャーに設定
+        self.cmdengine.install_commands(cmdset)
+
         
     
 #

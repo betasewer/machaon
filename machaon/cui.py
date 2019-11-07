@@ -84,3 +84,11 @@ def test_yesno(answer):
         return False
     else:
         return False
+
+#
+def fixsplit(s, sep=None, *, maxsplit, default=""):
+    spl = s.split(sep=sep, maxsplit=maxsplit)
+    if maxsplit>0:
+        for _ in range(maxsplit-len(spl)+1):
+            spl.append(default)
+    return spl
