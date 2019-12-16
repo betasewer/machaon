@@ -52,14 +52,14 @@ def unicode_commands():
         description="文字に関するコマンドです。"
     )["unicode"](
         describe_command(
-            process=encode_unicodes,
+            target=encode_unicodes,
             description="文字を入力 -> コードにする"
         )["target characters"](
             help="コードにしたい文字列"
         )
     )["unidec"](
         describe_command(
-            process=decode_unicodes,
+            target=decode_unicodes,
             description="コードを入力 -> 文字にする"
         )["target characters"](
             help="文字列にしたいコード"

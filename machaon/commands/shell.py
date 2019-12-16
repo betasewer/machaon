@@ -11,6 +11,19 @@ from machaon.cui import reencode
 #
 #
 #
+def currentdir(spi, path=None, silent=False):
+    if path is not None:
+        path = spi.abspath(path)
+        if spi.change_current_dir(path):
+            spi.message("現在の作業ディレクトリ：" + spi.get_current_dir())
+            if not silent:
+                filelist(spi)
+        else:
+            spi.error("'{}'は有効なパスではありません".format(path))
+
+#
+#
+#
 def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1):
     if howsort == "t":
         def sorter(path):
@@ -79,8 +92,8 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, re
 #
 #
 #
-def get_text_content(app, target, encoding="utf-8", head=0, tail=0, full=False):
-    if full:
+def get_text_content(app, target, encoding="utf-8", head=0, tail=0, all=False):
+    if all:
         head, tail = 0, 0
     app.message_em("ファイル名：[%1%]", embed=[
         app.hyperlink.msg(target)
@@ -104,13 +117,13 @@ def get_text_content(app, target, encoding="utf-8", head=0, tail=0, full=False):
 #
 #
 #
-def get_binary_content(app, target, readsize=128, width=16):
+def get_binary_content(app, target, size=128, width=16):
     app.message_em("ファイル名：[%1%]", embed=[
         app.hyperlink.msg(target)
     ])
     app.message_em("--------------------")
     with open(app.abspath(target), "rb") as fi:
-        bits = fi.read(readsize)
+        bits = fi.read(size)
     j = 0
     app.message_em("        |" + " ".join(["{:0>2X}".format(x) for x in range(width)]))
     for i, bit in enumerate(bits):
@@ -128,9 +141,20 @@ def get_binary_content(app, target, readsize=128, width=16):
 def shell_commands():
     return describe_command_package(
         description="PC内のファイルを操作するコマンドです。"
+    )["cd"](
+        describe_command(
+            currentdir,
+            description="作業ディレクトリを変更します。", 
+        )["target path"](
+            nargs="?",
+            help="移動先のパス"
+        )["target -s --silent"](
+            const_option=True,
+            help="変更後lsを実行しない"
+        ),
     )["ls"](
         describe_command(
-            process=filelist,
+            target=filelist,
             description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
         )["target pattern"](
             help="表示するフォルダ・ファイルを絞り込む正規表現パターン（部分一致）",
@@ -148,15 +172,15 @@ def shell_commands():
             help="OPCパッケージのみ表示する",
             dest="presetpattern"
         )["target -r --recurse"](
-            help="配下のフォルダの中身も表示する[深度を数値で指定]",
+            help="配下のフォルダの中身も表示する[深度を指定：デフォルトは3]",
             type=int,
             nargs="?",
-            const=0xFFFF,
+            const=3,
             default=1,
         )
-    )["text tx"](
+    )["text txt"](
         describe_command(
-            process=get_text_content,
+            target=get_text_content,
             description="ファイルの内容をテキストとして表示します。", 
         )["target target"](
             help="表示するファイル",
@@ -181,7 +205,7 @@ def shell_commands():
         )
     )["hex"](
         describe_command(
-            process=get_binary_content,
+            target=get_binary_content,
             description="ファイルの内容をバイナリとして表示します。", 
         )["target target"](
             help="表示するファイル",

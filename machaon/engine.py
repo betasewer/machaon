@@ -112,10 +112,11 @@ class CommandParser():
         self.add_arg(ExitArg, *args, **kwargs)
     
     # 引数解析
-    def split_query(self, q):
+    def split_singleline_query(self, q):
         splitting = True
         parts = []
         for ch in q:
+            # -- によるエスケープ
             if splitting and ch.isspace():
                 if len(parts)>0:
                     if parts[-1] == "--":
@@ -129,6 +130,24 @@ class CommandParser():
                 parts[-1] += ch
         return parts
     
+    def split_multiline_query(self, qs):
+        parts = []
+        for q in qs:
+            if q.startswith("-"): # 先頭のオプションと引数を切り離す
+                for part in q.split(maxsplit=1):
+                    if part == "--":
+                        continue
+                    parts.append(part.strip())
+            else:
+                parts.append(q.strip()) # 行の内部では区切らない
+        return parts
+    
+    def split_query(self, q):
+        if "\n" in q:
+            return self.split_multiline_query(q.splitlines())
+        else:
+            return self.split_singleline_query(q)
+
     #
     def parse_args(self, commandarg, commandoption=""):
         # 抱合語的オプションの展開
@@ -143,14 +162,16 @@ class CommandParser():
         bad = None
         for expandedopt in expandedopts:
             # クエリの分割
-            commands = [*self.split_query(commandarg), *self.split_query(expandedopt)]
+            headoptions = self.split_query(expandedopt)
+            tailoptions = self.split_query(commandarg)
+            commands = [*tailoptions, *headoptions]
+            expanded_command = (commandarg + " " + " ".join(headoptions)).strip()
             # パーサーによる解析
             self.new_parser_message_queue()
             try:
                 parsedargs = self.argp.parse_args(commands)
                 # 引数の構築
-                expandedcmd = " ".join(commands)
-                res = CommandParserResult(expandedcmd)
+                res = CommandParserResult(expanded_command)
                 for argtype, name in self.argnames:
                     value = getattr(parsedargs, name, None)
                     if argtype&JoinListArg:
@@ -158,8 +179,8 @@ class CommandParser():
                     res.add_arg(argtype, name, value)
                 results.append(res)
             except ArgumentParserExit as e:
-                expandedcmd = " ".join(commands)
-                results.append(CommandParserResult(expandedcmd, messages=self._parsermsgs))
+                res = CommandParserResult(expanded_command, messages=self._parsermsgs)
+                results.append(res)
             except BadCommand as b:
                 bad = b
                 pass
@@ -203,10 +224,13 @@ class CommandParserResult():
     def get_expanded_command(self):
         return self.expandedcmd
     
-    def has_message(self):
+    def count_command_part(self):
+        return len(self.expandedcmd.split())
+    
+    def has_exit_message(self):
         return True if self.messages else False
     
-    def get_messages(self):
+    def get_exit_messages(self):
         return self.messages
         
     def add_arg(self, argtype, name, value):
@@ -266,7 +290,7 @@ class CompoundOptions:
         d = self.trie
         for ch in name+" ":
             if ch == " ":
-                d["$$"] = True
+                d["$"] = True
                 break
             elif ch not in d:
                 d[ch] = {}
@@ -311,7 +335,7 @@ class CompoundOptions:
                 if tree is None:
                     continue
                     
-                if "$$" in tree:
+                if "$" in tree:
                     begin = spr[1]
                     ranges.append((begin, i))                    
                     if len(tree) > 1:
@@ -370,10 +394,9 @@ class CompoundOptions:
 # 文字列から対応するコマンドを見つけ出す
 #
 class CommandEngine:
-    def __init__(self, app):
-        self.app = app
+    def __init__(self):
         self.commandsets = []
-        self.lastparsefail = None
+        self.parsefails = []
         self.prefix = ""
         
     def install_commands(self, commandset):
@@ -386,8 +409,8 @@ class CommandEngine:
         self.prefix = prefix
 
     # コマンドを解析する
-    def parse_command(self, commandhead, commandtail):
-        self.lastparsefail = None
+    def parse_command(self, commandhead, commandtail, app):
+        self.parsefails = []
 
         # 文字列が示すコマンドエントリを選び出す
         possible_commands = [] # (entry, reststr)
@@ -401,28 +424,30 @@ class CommandEngine:
         # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
         possible_entries = []
         for commandentry, commandoptions in possible_commands:
-            process = commandentry.process
-            spirit = self.app.access_spirit(process.get_bound_app())
+            target = commandentry.get_target()
+            spirit = target.invoke_spirit(app)
             
             # 引数コマンドを解析
             possible_syntaxes = []
-            process.load_lazy_describer(spirit)
+            target.load_lazy_describer(spirit)
             try:
-                possible_syntaxes = process.run_argparser(commandtail, commandoptions)
+                possible_syntaxes = target.run_argparser(commandtail, commandoptions)
             except BadCommand as b:
-                self.lastparsefail = (process, b.error)
+                self.parsefails.append((target, b.error))
             
             # 可能性のある解釈として追加
             for parseresult in possible_syntaxes:                
-                possible_entries.append((process, spirit, parseresult))
+                possible_entries.append((target, spirit, parseresult))
 
+        # 最も長く入力コマンドにマッチしている解釈の順に並べ直す
+        possible_entries.sort(key=lambda x:x[2].count_command_part())
         return possible_entries
     
     # 
-    def get_last_process_parse_fail(self):
-        if self.lastparsefail is None:
+    def get_first_parse_command_fail(self):
+        if not self.parsefails:
             return None, None
-        return self.lastparsefail # process, error
+        return self.parsefails[0] # process, error
 
     #
     def test_command_head(self, commandhead):

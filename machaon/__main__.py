@@ -15,7 +15,7 @@ def launch_sample_app(default_choice=None):
     p.add_argument("--cui", action="store_const", const="cui", dest="apptype")
     p.add_argument("--tk", action="store_const", const="tk", dest="apptype")
     args = p.parse_args()
-    
+
     apptype = args.apptype or default_choice
     if apptype is None or apptype == "cui":
         boo = machaon.starter.ShellStarter()
@@ -27,7 +27,7 @@ def launch_sample_app(default_choice=None):
 
     import machaon.commands.app
     import machaon.commands.character
-    boo.install_commands("", machaon.commands.app.sample_commands().annex(machaon.commands.character.unicode_commands()))
+    boo.install_commands("", machaon.commands.app.sample_commands().annexed(machaon.commands.character.unicode_commands()))
 
     import machaon.commands.shell
     boo.install_commands("", machaon.commands.shell.shell_commands())

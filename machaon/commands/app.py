@@ -10,40 +10,32 @@ from machaon.cui import test_yesno, composit_text
 # アプリ基本コマンド
 #
 #
-def command_syntax(app, command_string):
-    results = app.parse_possible_commands(command_string)
+def command_syntax(spi, command_string):
+    results = spi.get_app().parse_possible_commands(command_string)
     if not results:
-        app.message("[有効なコマンドではありません]")
+        spi.message("[有効なコマンドではありません]")
     else:
         for process, _spirit, result in results:
-            app.message(process.get_prog()+" "+result.get_expanded_command())
+            spi.message(process.get_prog()+" "+result.get_expanded_command())
 
 # 
-def command_interrupt(app):    
+def command_interrupt(spi):  
+    pass
+"""  
     if not app.is_process_running():
         app.message("実行中のプロセスはありません")
         return
     app.message("プロセスを中断します")
     app.interrupt_process()
-  
-#  
-def command_cls(app):
-    app.reset_screen()
+"""
 
 #
-def command_cd(app, path=None):
-    if path is not None:
-        path = app.abspath(path)
-        app.change_current_dir(path)
-    app.message("現在の作業ディレクトリ：" + app.get_current_dir())
-
-#
-def command_help(app, command_name=None):
-    app.message("<< コマンド一覧 >>")
-    app.message("各コマンドの詳細は command --help で")
-    app.message("")
+def command_help(spi, command_name=None):
+    spi.message("<< コマンド一覧 >>")
+    spi.message("各コマンドの詳細は command --help で")
+    spi.message("")
     
-    for cmdset in app.get_command_sets():
+    for cmdset in spi.get_app().get_command_sets():
         pfx = cmdset.get_prefixes()
         msgs = []
 
@@ -60,34 +52,65 @@ def command_help(app, command_name=None):
                 continue
 
             for h in heads:
-                msgs.append(app.hyperlink.msg(h, nobreak=True))
-                msgs.append(app.message.msg(", ", nobreak=True))
+                msgs.append(spi.hyperlink.msg(h, nobreak=True))
+                msgs.append(spi.message.msg(", ", nobreak=True))
             msgs.pop()
             
             for l in composit_text(entry.get_description(), 100, indent=4, first_indent=6).splitlines():
-                msgs.append(app.message.msg(l))
+                msgs.append(spi.message.msg(l))
         
         if not msgs:
             continue
 
         if pfx:
-            msg = app.warn.msg(pfx[0])
-            app.message_em("[%1%] ", embed=[msg], nobreak=True)
-        app.message_em(cmdset.get_description())
-        app.message("---------------------------")
+            msg = spi.warn.msg(pfx[0])
+            spi.message_em("[%1%] ", embed=[msg], nobreak=True)
+        spi.message_em(cmdset.get_description())
+        spi.message("---------------------------")
         for m in msgs:
-            app.print_message(m)
-        app.message("")
+            spi.post_message(m)
+        spi.message("")
     
-    app.message("")
+    spi.message("")
 
 #
-def command_exit(app, ask=False):
+def command_exit(spi, ask=False):
     if ask:
-        if not app.ask_yesno("終了しますか？ (Y/N)"):
+        if not spi.ask_yesno("終了しますか？ (Y/N)"):
             return
     return ExitApp
     
+#
+# プリセットコマンドの定義
+#
+# テーマの選択
+def command_ui_theme(app, themename=None, alt=(), show=False):
+    from machaon.ui.theme import themebook
+    if themename is None and not alt and not show:
+        for name in themebook.keys():
+            app.hyperlink(name)
+        return
+
+    root = app.get_app()
+    if themename is not None:
+        themenew = themebook.get(themename, None)
+        if themenew is None:
+            app.error("'{}'という名のテーマはありません".format(themename))
+            return
+        theme = themenew()
+    else:
+        theme = root.get_ui().get_theme()
+    
+    for altline in alt:
+        cfgname, cfgval = altline.split("=")
+        theme.setval(cfgname, cfgval)
+    
+    if show:
+        for k, v in theme.config.items():
+            app.message("{}={}".format(k,v))
+    else:
+        root.get_ui().apply_theme(theme)
+
 #
 # エントリ
 #
@@ -107,19 +130,6 @@ def app_commands():
             command_interrupt,
             description="現在実行中のプロセスを中断します。"
         )
-    )["cls"](
-        describe_command(
-            command_cls,
-            description="画面をクリアします。"
-        )
-    )["cd"](
-        describe_command(
-            command_cd,
-            description="作業ディレクトリを変更します。", 
-        )["target path"](
-            nargs="?",
-            help="移動先のパス"
-        ),
     )["help h"](
         describe_command(
             command_help,      
@@ -136,7 +146,23 @@ def app_commands():
             const_option=True,            
             help="確認してから終了する"
         ),
+    )["theme"](
+        describe_command(
+            command_ui_theme,
+            description="アプリのテーマを変更します。"
+        )["target themename"](
+            help="テーマ名",
+            nargs="?"
+        )["target --alt"](
+            help="設定項目を上書きする [config-name]=[config-value]",
+            remainder=True,
+            default=()
+        )["target --show"](
+            help="設定項目を表示する",
+            const_option=True
+        )
     )
+
     
 #
 # クラスサンプル用コマンド
@@ -155,7 +181,6 @@ class TestProcess():
             self.app.error("数値が必要です")
         else:
             self.app.message_em("\n".join([target for _ in range(int(templ))]))   
-    
 
     def exit_process(self):
         self.app.message("文字列を倍増するプロセスを終了.")
@@ -198,8 +223,8 @@ class ColorProcess():
     def process_target(self, text):
         self.app.message(text)
         self.app.message_em("【強調】" + text)
-        self.app.print_message(AppMessage("【入力】" + text, "input"))
-        self.app.print_message(AppMessage("【リンク】" + text, "hyperlink"))
+        self.app.custom_message("input", "【入力】" + text)
+        self.app.custom_message("hyperlink", "【リンク】" + text)
         self.app.warn("【注意】" + text)
         self.app.error("【エラー発生】" + text)
     
@@ -216,11 +241,11 @@ def sample_commands():
     return describe_command_package(
         description="テスト用コマンドです。"
     )["spam"](
-        process=TestProcess
+        target=TestProcess
     )["texts"](
-        process=ColorProcess
+        target=ColorProcess
     )["link"](
-        process=LinkProcess
+        target=LinkProcess
     )
     
     

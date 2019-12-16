@@ -1,5 +1,7 @@
+import os
 import subprocess
 from typing import Any
+
 
 #
 # OSごとの設定
@@ -15,7 +17,7 @@ class _Windows:
     
     @classmethod
     def shell_ui(cls):
-        from machaon.shell import WinShellUI
+        from machaon.ui.shell import WinShellUI
         return WinShellUI()
         
 #
@@ -29,7 +31,7 @@ class _Macintosh:
         
     @classmethod
     def shell_ui(cls):
-        from machaon.shell import ShellUI
+        from machaon.ui.shell import ShellUI
         return ShellUI("utf-8")
 
 #
@@ -43,7 +45,7 @@ class _Unix:
 
     @classmethod
     def shell_ui(cls):
-        from machaon.shell import ShellUI
+        from machaon.ui.shell import ShellUI
         return ShellUI("utf-8")
 
 #
@@ -58,3 +60,4 @@ if _platform == 'Windows':
 elif _platform == 'Darwin':
     current = _Macintosh
 del _platform
+

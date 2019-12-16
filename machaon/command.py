@@ -2,9 +2,9 @@
 # coding: utf-8
 from typing import Sequence
 
-from machaon.process import ProcessClass, ProcessFunction
+from machaon.process import ProcessTargetClass, ProcessTargetFunction, Spirit
 from machaon.engine import CommandParser
-         
+
 #
 # ###################################################################
 #  command and command package
@@ -15,8 +15,8 @@ hidden_command = 2
 
 # process + command keyword
 class CommandEntry():
-    def __init__(self, process, keywordset, commandtype):
-        self.process = process
+    def __init__(self, process_target, keywordset, commandtype):
+        self.process_target = process_target
         self.keywords = keywordset # 展開済みのキーワード
         self.commandtype = commandtype
 
@@ -27,11 +27,14 @@ class CommandEntry():
                 return rest
         return None
     
+    def get_target(self):
+        return self.process_target
+    
     def get_keywords(self):
         return self.keywords
 
     def get_description(self):
-        return self.process.get_description()
+        return self.process_target.get_description()
         
 
 # set of CommandEntry
@@ -85,19 +88,19 @@ class CommandSet:
 #
 class CommandBuilder():
     def __init__(self, 
-        process=None, *, 
+        target=None, *, 
         prog=None, 
-        bindargs=None, 
-        bindapp=None,
+        args=None, 
+        spirit=None,
         custom_command_parser=None, 
         auxiliary=False,
         hidden=False,
         **kwargs
     ):
-        self.process = process
+        self.target = target
         self.prog = prog
-        self.bindargs = bindargs
-        self.bindapp = bindapp
+        self.args = args
+        self.spirit = spirit
         self.auxiliary = auxiliary
         self.hidden = hidden
         self.cmdinitargs = kwargs
@@ -106,9 +109,9 @@ class CommandBuilder():
         self.lazy_describers = []
         
         # コマンド自体に定義された初期化処理があれば呼ぶ
-        if hasattr(process, "describe"):
+        if hasattr(target, "describe"):
             describer = CommandBuilder.BuildDescriber(self)
-            process.describe(describer)
+            target.describe(describer)
 
     #
     class BuildDescriber():
@@ -117,8 +120,8 @@ class CommandBuilder():
             
         def describe(self, 
             prog=None, 
-            bindargs=None, 
-            bindapp=None,
+            args=None, 
+            spirit=None,
             custom_command_parser=None, 
             auxiliary=None,
             hidden=None,
@@ -126,10 +129,10 @@ class CommandBuilder():
         ):
             if prog is not None:
                 self.builder.prog = prog
-            if bindargs is not None:
-                self.builder.bindargs = bindargs
-            if bindapp is not None:
-                self.builder.bindapp = bindapp
+            if args is not None:
+                self.builder.args = args
+            if spirit is not None:
+                self.builder.spirit = spirit
             if custom_command_parser is not None:
                 self.builder.custom_cmd_parser = custom_command_parser
             if auxiliary is not None:
@@ -144,9 +147,9 @@ class CommandBuilder():
     
     #
     def __getitem__(self, commandstr):
-        def _command(**kwargs):
+        def _command(**commandkwargs):
             cmdtype, *cmds = commandstr.split()
-            self.cmdargs.append((cmdtype, cmds, kwargs))
+            self.cmdargs.append((cmdtype, cmds, commandkwargs))
             return self
         return _command
     
@@ -178,29 +181,26 @@ class CommandBuilder():
             else:
                 raise ValueError("Undefined command type '{}'".format(cmdtype))
         
-        # bindapp
-        bindapp = self.bindapp
-        if bindapp is True:
-            from machaon.app import App
-            bindapp = App
-        elif not bindapp:
-            bindapp = None
-        else:
-            app.touch_spirit(bindapp) # Appクラスを登録
-            
+        # spirit
+        spirit = self.spirit
+        if spirit is True:
+            spirit = Spirit
+        elif not spirit:
+            spirit = None
+        
         # 遅延コマンド初期化処理を実行する
         if self.lazy_describe:
-            def lazy_arg_describe(boundapp, argp):
+            def lazy_arg_describe(boundspirit, argp):
                 for lzydesc in self.lazy_describers:
-                    lzydesc(boundapp, argp)
+                    lzydesc(boundspirit, argp)
         else:
             lazy_arg_describe = None
         
-        # プロセスインスタンス
-        if isinstance(self.process, type):
-            proc = ProcessClass(self.process, argp, bindapp=bindapp, lazyargdescribe=lazy_arg_describe)
+        # コマンドで実行する処理
+        if isinstance(self.target, type):
+            targ = ProcessTargetClass(self.target, argp, spirittype=spirit, lazyargdescribe=lazy_arg_describe)
         else:
-            proc = ProcessFunction(self.process, argp, bindapp=bindapp, bindargs=self.bindargs, lazyargdescribe=lazy_arg_describe)
+            targ = ProcessTargetFunction(self.target, argp, spirittype=spirit, args=self.args, lazyargdescribe=lazy_arg_describe)
         
         # 特殊なコマンドの種別
         typecode = 0
@@ -209,28 +209,28 @@ class CommandBuilder():
         if self.hidden: 
             typecode = hidden_command
 
-        return CommandEntry(proc, (firstkwd, *kwds), typecode)
+        return CommandEntry(targ, (firstkwd, *kwds), typecode)
 
 #
 #
 #
 class CommandPackage():
-    def __init__(self, *, description, bindapp=True):
+    def __init__(self, *, description, spirit):
         self.desc = description
-        self.bindapp = bindapp
+        self.spirit = spirit
         self.builders = []
     
     def __getitem__(self, commandstr):
-        def _command(builder=None, *, process=None, **kwargs):
+        def _command(builder=None, *, target=None, **kwargs):
             cmds = commandstr.split()
 
             if builder is None:
-                if process is None:
-                    raise ValueError("CommandPackage: 'builder' or 'process' argument is required")
-                builder = CommandBuilder(process, **kwargs)
+                if target is None:
+                    raise ValueError("CommandPackage: 'builder' or 'target' argument is required")
+                builder = CommandBuilder(target, **kwargs)
 
-            if self.bindapp is not None:
-                builder.bindapp = self.bindapp
+            if self.spirit is not None and builder.spirit is None:
+                builder.spirit = self.spirit
 
             self.builders.append([cmds, builder])
             return self
@@ -253,8 +253,8 @@ class CommandPackage():
         return CommandSet(command_prefixes, entries, description=self.desc)
     
     # パッケージをまとめて新しいパッケージに
-    def annex(self, *others):
-        p = CommandPackage(description=self.desc, bindapp=self.bindapp)
+    def annexed(self, *others):
+        p = CommandPackage(description=self.desc, spirit=self.spirit)
         p.builders = self.builders
         for other in others:
             p.builders += other.builders
@@ -262,7 +262,7 @@ class CommandPackage():
     
     # コマンドを除外して新しいパッケージに
     def excluded(self, *excludenames):
-        p = CommandPackage(description=self.desc, bindapp=self.bindapp)
+        p = CommandPackage(description=self.desc, spirit=self.spirit)
         for cmds, builder in self.builders:
             if cmds[0] in excludenames:
                 continue
@@ -273,18 +273,18 @@ class CommandPackage():
 #       
 #
 def describe_command(
-    process,
+    target,
     *,
     prog=None, 
-    bindargs=None, 
+    args=None, 
     custom_command_parser=None, 
     auxiliary=False,
     hidden=False,
     **kwargs
 ):
     return CommandBuilder(
-        process, 
-        prog=prog, bindargs=bindargs, custom_command_parser=custom_command_parser,
+        target, 
+        prog=prog, args=args, custom_command_parser=custom_command_parser,
         auxiliary=auxiliary, hidden=hidden,
         **kwargs
     )
@@ -292,10 +292,10 @@ def describe_command(
 #
 def describe_command_package(
     description,
-    bindapp=True
+    spirit=True
 ):
     return CommandPackage(
         description=description,
-        bindapp=bindapp
+        spirit=spirit
     )
 

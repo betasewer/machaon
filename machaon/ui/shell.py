@@ -1,13 +1,13 @@
 ﻿#!/usr/bin/env python3
 # coding: utf-8
 import os
-from machaon.app import BasicCUI, App, ExitApp
+from machaon.app import App, ExitApp
 from machaon.cui import reencode, collapse_text
 
 #
 #
 #
-class ShellUI(BasicCUI):
+class ShellUI():
     def __init__(self, encoding, textwidth=None, maxlinecount=None):
         self.encoding = encoding
         self.preftextwidth = textwidth
@@ -63,9 +63,6 @@ class ShellUI(BasicCUI):
             instr += " >> "
         return input(instr)
         
-    def reset_screen(self):
-        self.clear()
-    
     def run_mainloop(self):
         loop = True
         while loop:
@@ -82,8 +79,8 @@ class ShellUI(BasicCUI):
             ret = self.app.exec_command(nextcmd, threading=False)
             if ret is ExitApp:
                 break
-
-    def on_exit_command(self, procclass):
+    
+    def on_exit_process(self, process):
         self.printer("")
     
     def on_exit(self):

@@ -9,7 +9,7 @@ class Starter():
         self.sources = []
 
     def set_cd(self, path):
-        self.app.change_current_dir(path)
+        self.app.set_current_dir(path)
     
     def install_commands(self, prefixes, package, *, pip_install=None, **kwargs):
         source = None
@@ -42,13 +42,13 @@ class ShellStarter(Starter):
 class TkStarter(Starter):
     def __init__(self, *, title, geometry):
         super().__init__()
-        from machaon.ui.tk import tkLauncherUI
-        ui = tkLauncherUI(title, geometry)
+        from machaon.ui.tk import tkLauncher
+        ui = tkLauncher(title, geometry)
         self.app.init_ui(ui)
     
     def install_syscommands(self):
         from machaon.commands.app import app_commands
-        from machaon.ui.tk import ui_commands, ui_sys_commands
-        pkg = app_commands().excluded("interrupt","cls","exit").annex(ui_commands(), ui_sys_commands())
+        from machaon.ui.tk import ui_sys_commands
+        pkg = app_commands().excluded("interrupt","exit").annexed(ui_sys_commands())
         self.install_commands("", pkg)
 
