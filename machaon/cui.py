@@ -9,6 +9,17 @@ import unicodedata
 #
 def reencode(s, encoding, errors="replace"):
     return s.encode(encoding,errors).decode(encoding)
+    
+#
+#
+#
+def get_char_width(c, *, a=False):
+    eaw = unicodedata.east_asian_width(c)
+    if eaw in u"WF":
+        return 2
+    if a and eaw == u"A":
+        return 2
+    return 1
 
 #
 # 指定の長さ以下は省略する
@@ -22,7 +33,7 @@ def collapse_text(text, width):
             if c == "\n":
                 break
         
-            c_width = (2 if unicodedata.east_asian_width(c) in u"WFA" else 1)
+            c_width = get_char_width(c, a=True)
             if s_width + c_width > width:
                 s_res += "..."
                 break
@@ -47,7 +58,7 @@ def composit_text(s, max_width, indent, first_indent=None):
     text = " " * indent
     line_width = 0
     for ch in s:
-        line_width += (2 if unicodedata.east_asian_width(ch) in u"WFA" else 1)
+        line_width += get_char_width(ch, a=True)
         text += ch
         
         if line_width > max_width:

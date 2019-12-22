@@ -136,6 +136,25 @@ def get_binary_content(app, target, size=128, width=16):
     app.message_em("\n--------------------")
 
 #
+#
+#
+def calculator(app, expression, library):
+    expression = expression.strip()
+    if not expression:
+        raise TypeError("expression needed")
+
+    glo = {}
+    import math
+    glo["math"] = math
+    if library:
+        import importlib
+        for libname in library:
+            glo[libname] = importlib.import_module(libname)
+
+    val = eval(expression, glo, {})
+    app.message_em(val)
+
+#
 # プリセットコマンドの定義
 #
 def shell_commands():
@@ -178,7 +197,7 @@ def shell_commands():
             const=3,
             default=1,
         )
-    )["text txt"](
+    )["text xt"](
         describe_command(
             target=get_text_content,
             description="ファイルの内容をテキストとして表示します。", 
@@ -217,5 +236,16 @@ def shell_commands():
             help="表示の幅",
             type=int,
             default=16
+        )
+    )["calc"](
+        describe_command(
+            target=calculator,
+            description="任意の式を実行します。"
+        )["target -l --library"](
+            help="ライブラリをロード",
+            action="append",
+        )["target expression"](
+            help="Pythonの式",
+            remainder=True
         )
     )
