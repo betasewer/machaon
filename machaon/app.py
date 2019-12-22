@@ -85,11 +85,15 @@ class AppRoot:
         # 文字列を先頭の空白で区切る
         commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
 
-        # コマンド接頭辞の設定
         if commandhead.endswith("."):
-            prefix = commandhead[:-1]
+            commandtail = commandhead[:-1]
+            commandhead = ".set-prefix"
+
+        # コマンド接頭辞の設定
+        if commandhead == ".set-prefix":
+            prefix = commandtail
             proc = SetPrefixProcedure(self, self.cmdengine, prefix)
-            self.processhive.add(proc, commandstr)
+            self.processhive.add(proc, proc.get_full_command())
             self.processhive.execute(self)
             return proc
             
@@ -208,9 +212,9 @@ class ExitApp():
 #
 class SetPrefixProcedure(InstantProcedure):
     def __init__(self, app, cmdengine, prefix):
-        super().__init__(app, ".set-prefix "+prefix, cmdengine=cmdengine, prefix=prefix)
+        super().__init__(app, "set-prefix "+prefix, cmdengine=cmdengine, prefix=prefix)
 
     def procedure(self, cmdengine, prefix):
         cmdengine.set_command_prefix(prefix)
-        self.spirit.message_em("コマンド接頭辞：{}".format(prefix))
+        self.spirit.message_em("コマンド接頭辞'{}'を設定".format(prefix))
 

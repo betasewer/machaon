@@ -133,11 +133,8 @@ class CommandParser():
     def split_multiline_query(self, qs):
         parts = []
         for q in qs:
-            if q.startswith("-"): # 先頭のオプションと引数を切り離す
-                for part in q.split(maxsplit=1):
-                    if part == "--":
-                        continue
-                    parts.append(part.strip())
+            if q.startswith("-"): # オプションで開始する行は通常通り空白で区切る
+                parts.extend(self.split_singleline_query(q))
             else:
                 parts.append(q.strip()) # 行の内部では区切らない
         return parts
@@ -254,11 +251,11 @@ class CommandParserResult():
         return self.argmap[ExitArg]
 
     # パス引数を展開する
-    def expand_filepath_arguments(self, app):
+    def expand_filepath_arguments(self, spirit):
         if self.target_filepath_arg:
             paths = []
             for fpath in self.target_filepath_arg:
-                fpath = app.abspath(fpath)
+                fpath = spirit.abspath(fpath)
                 globs = glob.glob(fpath)
                 if len(globs)>0:
                     paths.extend(globs)

@@ -273,6 +273,8 @@ class Process:
                 self.spirit.message(line)
             self.last_invocation = None
         else:
+            # パスの展開: ここでいいのか？
+            self.parsedcommand.expand_filepath_arguments(self.spirit) 
             # 操作を実行する
             inv = self.target.invoke(self.spirit, self.parsedcommand)
             self.last_invocation = inv
@@ -368,11 +370,12 @@ class ProcessInterrupted(Exception):
 # スレッドなしで即時実行
 #
 class InstantProcedure():
-    def __init__(self, app, **kwargs):
+    def __init__(self, app, pseudocommand="nothing", **kwargs):
         self.spirit = Spirit(app)
         self.kwargs = kwargs
         self.messages = []
         self.spirit.bind_process(self)
+        self.pseudocommand = "."+pseudocommand
     
     def procedure(self, **kwargs):
         raise NotImplementedError()
@@ -382,6 +385,9 @@ class InstantProcedure():
     
     def get_spirit(self):
         return self.spirit
+    
+    def get_full_command(self):
+        return self.pseudocommand
     
     def is_running(self):
         return False
