@@ -80,6 +80,10 @@ class tkLauncher(Launcher):
         self.commandline = tk.Text(self.frame, relief="solid", height=4, width=40)
         self.commandline.grid(column=0, row=0, sticky="ns", padx=padx, pady=pady)
         self.commandline.focus_set()
+        self.commandline.bind('<Return>', on_commandline_return)
+        self.commandline.bind('<Shift-Return>', on_commandline_ctlreturn)
+        self.commandline.bind('<Shift-Up>', on_commandline_up)
+        self.commandline.bind('<Shift-Down>', on_commandline_down)
         
         # ボタンパネル
         def addbutton(parent, **kwargs):
@@ -139,8 +143,8 @@ class tkLauncher(Launcher):
     
         # フレームを除去       
         #self.root.overrideredirect(True)
-        
-        #self.apply_screen_theme(dark_classic_theme())
+        from machaon.ui.theme import dark_classic_theme
+        self.apply_theme(dark_classic_theme())
     
     #
     # ログの操作
