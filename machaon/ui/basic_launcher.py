@@ -91,7 +91,6 @@ class Launcher():
         """ 入力文字列を取り出しクリアする """
         return ""
 
-    
     #
     #
     #
@@ -143,7 +142,7 @@ class Launcher():
     def change_cd_dialog(self):
         dirpath = self.opendirname_dialog(initialdir = self.app.get_current_dir())
         if dirpath:
-            self.invoke_command("cd {}".format(dirpath))
+            self.invoke_command("cd -- {}".format(dirpath))
 
     def openfilename_dialog(self, *, filters=None, initialdir=None):
         raise NotImplementedError()
