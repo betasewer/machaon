@@ -35,7 +35,7 @@ class ShellTheme():
 def dark_classic_theme():
     return ShellTheme({
         "color.message" : "#CCCCCC",
-        "color.background" : "#000000",
+        "color.background" : "#242428",
         "color.insertmarker" : "#CCCCCC",
         "color.message_em" : "#FFFFFF",
         "color.warning" : "#FF00FF",
@@ -43,7 +43,8 @@ def dark_classic_theme():
         "color.hyperlink" : "#00FFFF",
         "color.userinput" : "#00FF00",
         "color.label" : "#FFFFFF",
-        "color.highlight" : "#000080",
+        "color.highlight" : "#242480",
+        "color.sectionbackground" : "#000008",
         "ttktheme" : "clam",
     })
     

@@ -97,7 +97,7 @@ class tkLauncher(Launcher):
             return f
         
         histlist = tk.Text(self.frame, relief="solid", height=10, width=40)
-        histlist.grid(column=0, row=1, sticky="ew", padx=padx)
+        histlist.grid(column=0, row=1, sticky="ew", padx=padx, pady=pady)
         histlist.tag_configure("link")
         histlist.tag_bind("link", "<Enter>", lambda e: histlist.config(cursor="hand2"))
         histlist.tag_bind("link", "<Leave>", lambda e: histlist.config(cursor=""))
@@ -106,30 +106,11 @@ class tkLauncher(Launcher):
         histlist.tag_configure("running", foreground="#00A000")
         histlist.mark_unset("insert")
         self.chambermenu = histlist
-
-        btnpanel = addframe(self.frame)
-        btnpanel.grid(column=0, row=2, sticky="new", padx=padx)
-        
-        btnunredo = addframe(btnpanel)
-        btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
-        b = addbutton(btnunredo, text=u"▲", command=lambda:on_commandline_up(None), width=4)
-        b.pack(side=tk.LEFT, fill=tk.X, padx=padx)
-        b = addbutton(btnunredo, text=u"▼", command=lambda:on_commandline_down(None), width=4)
-        b.pack(side=tk.LEFT, fill=tk.X, padx=padx)
-
-        b = addbutton(btnpanel, text=u"ファイル", command=self.input_filepath)
-        b.pack(side=tk.LEFT, fill=tk.X, pady=pady)
-        b = addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog)
-        b.pack(side=tk.LEFT, fill=tk.X, pady=pady)
-        #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
-        #b.pack(side=tk.TOP, fill=tk.X, pady=2)
-        b = addbutton(btnpanel, text=u"終了", command=self.app.exit, width=6)
-        b.pack(side=tk.TOP, fill=tk.X, pady=pady)
         
         # ログウィンドウ
         #self.log = tk.scrolledtext.ScrolledText(self.frame, wrap="word", font="TkFixedFont")
         self.log = tk.Text(self.frame, wrap="word", font="TkFixedFont", relief="solid")
-        self.log.grid(column=1, row=0, rowspan=3, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        self.log.grid(column=1, row=0, rowspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
@@ -140,6 +121,25 @@ class tkLauncher(Launcher):
         
         tk.Grid.columnconfigure(self.frame, 1, weight=1)
         tk.Grid.rowconfigure(self.frame, 0, weight=1)
+
+        # ボタン等
+        btnpanel = addframe(self.frame)
+        btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
+        
+        #btnunredo = addframe(btnpanel)
+        #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
+        b = addbutton(btnpanel, text=u"終了", command=self.app.exit, width=6)
+        b.pack(side=tk.RIGHT, pady=padx)
+        b = addbutton(btnpanel, text=u"▲", command=lambda:on_commandline_up(None), width=4)
+        b.pack(side=tk.RIGHT, padx=padx)
+        b = addbutton(btnpanel, text=u"▼", command=lambda:on_commandline_down(None), width=4)
+        b.pack(side=tk.RIGHT, padx=padx)
+        b = addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog)
+        b.pack(side=tk.RIGHT, padx=padx)
+        b = addbutton(btnpanel, text=u"ファイルパス", command=self.input_filepath)
+        b.pack(side=tk.RIGHT, padx=padx)
+        #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
+        #b.pack(side=tk.TOP, fill=tk.X, pady=2)
     
         # フレームを除去       
         #self.root.overrideredirect(True)
@@ -188,7 +188,6 @@ class tkLauncher(Launcher):
         else:
             self.update_chamber_menu(ceased=procchamber)
             print("[{}] watch finished.".format(procchamber.get_command()))
-    
 
     #
     # ハイパーリンク
@@ -322,6 +321,7 @@ class tkLauncher(Launcher):
         insmark = theme.getval("color.insertmarker", msg)
         label = theme.getval("color.label", msg_em)
         highlight = theme.getval("color.highlight", msg_em)
+        secbg = theme.getval("color.sectionbackground", bg)
 
         style.configure("TButton", relief="flat", background=bg, foreground=msg)
         style.map("TButton", 
@@ -341,8 +341,9 @@ class tkLauncher(Launcher):
         commandfont = theme.getfont("commandfont")
         logfont = theme.getfont("logfont")
 
-        self.commandline.configure(background=bg, foreground=msg, insertbackground=insmark, font=commandfont, borderwidth=0)
-        self.log.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
+        self.commandline.configure(background=bg, foreground=msg, insertbackground=insmark, font=commandfont, borderwidth=1)
+        
+        self.log.configure(background=secbg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.log.tag_configure("message", foreground=msg)
         self.log.tag_configure("message_em", foreground=msg_em)
         self.log.tag_configure("warn", foreground=msg_wan)
@@ -350,7 +351,7 @@ class tkLauncher(Launcher):
         self.log.tag_configure("input", foreground=msg_inp)
         self.log.tag_configure("hyperlink", foreground=msg_hyp)
 
-        self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
+        self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.chambermenu.tag_configure("chamber", foreground=msg)
         self.chambermenu.tag_configure("running", foreground=msg_em)
 
