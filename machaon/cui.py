@@ -97,9 +97,64 @@ def test_yesno(answer):
         return False
 
 #
+#
+#
 def fixsplit(s, sep=None, *, maxsplit, default=""):
     spl = s.split(sep=sep, maxsplit=maxsplit)
     if maxsplit>0:
         for _ in range(maxsplit-len(spl)+1):
             spl.append(default)
     return spl
+
+#
+#
+#
+class MiniProgressDisplay:
+    def __init__(self, spirit, total=None, tag=None, width=30, title=None):
+        self.spirit = spirit
+        self.total = total
+        self.suma = None
+        self.tag = tag
+        self.width = width
+        self.title = title or "進行中"
+        self.marquee = None if total is not None else 0
+
+    def update(self, delta=None):
+        suma = self.suma 
+        if suma is None:
+            suma = 0
+        else:
+            suma += delta
+            self.spirit.delete_message()
+
+        if self.marquee is not None:
+            mq = self.marquee
+            midbarwidth = 2
+            fullbar = self.width * "-" + "o" * midbarwidth + (self.width + midbarwidth) * "-"
+            d = int(self.width / midbarwidth * mq)
+            if self.width + midbarwidth * 2 <= d:
+                d = 0
+                mq = 0
+            bar = "[{}] ({})".format(fullbar[d:self.width+d], suma)
+            self.marquee = mq + 1
+        else:
+            rate = suma / self.total
+            hund = 100 * rate
+            factor = self.width / 100
+            head = round(factor * hund)
+            rest = self.width - head
+            isum = round(suma)
+            itot = round(self.total)
+            bar = "[{}{}] {}% ({}/{})".format(head*"o", rest*"-", round(hund), isum, itot)
+
+        bar = "{}: ".format(self.title) + bar
+        self.spirit.custom_message(self.tag, bar)
+        self.suma = suma
+
+    #
+    def finish(self, total):
+        if self.suma is not None:
+            self.spirit.delete_message()
+        bar = "[{}] 完了 ({})".format("o"*self.width, total)
+        bar = "{}: ".format(self.title) + bar
+        self.spirit.custom_message(self.tag, bar)

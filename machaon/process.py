@@ -6,10 +6,11 @@ import inspect
 import threading
 import queue
 import traceback
+import time
 from typing import Sequence, Optional
 from collections import defaultdict
 
-from machaon.cui import test_yesno
+from machaon.cui import test_yesno, MiniProgressDisplay
          
 #
 # 各アプリクラスを格納する
@@ -359,6 +360,7 @@ class Process:
         """
         self.last_input = text
         self.event_inputend.set()
+    
 
 #
 # プロセスの中断指示
@@ -442,9 +444,14 @@ class Spirit():
     def __init__(self, app):
         self.app = app
         self.process = None
-    
+        # プログレスバー        
+        self.cur_prog_display = None 
+
     def get_app(self):
         return self.app
+    
+    def get_app_ui(self):
+        return self.app.get_ui()
     
     def bind_process(self, process):
         self.process = process
@@ -488,9 +495,17 @@ class Spirit():
     def custom_message(self, tag, msg, **options):
         return ProcessMessage(msg, tag, **options)
 
+    @_spirit_msgmethod
+    def delete_message(self, line=None, count=None):
+        return ProcessMessage("", "delete-line", count=count, line=line)
+        
     # ファイル対象に使用するとよい...
     def print_target(self, target):
         self.message_em('対象 --> [{}]'.format(target))
+
+    #
+    def message_io(self, tag="message", *, oneliner=False, **options):
+        return ProcessMessageIO(self, tag, oneliner, **options)
     
     #
     # UIの動作を命じる
@@ -511,14 +526,29 @@ class Spirit():
         self.app.get_ui().scroll_screen(index)
 
     #
-    # スレッド操作
+    # スレッド操作／プログレスバー操作
     #
     # プロセススレッド側で中断指示を確認する
-    def interruption_point(self):
+    def interruption_point(self, *, nowait=False, progress=None):
         if self.process is None:
             return
         if self.process.is_interrupted():
             raise ProcessInterrupted()
+        if not nowait:
+            time.sleep(0.1)
+        if progress and self.cur_prog_bar:
+            self.cur_prog_bar.update(progress)
+
+    # プログレスバーを開始する
+    def start_progress_display(self, *, total=None):
+        self.cur_prog_bar = MiniProgressDisplay(spirit=self, total=total)
+
+    # プログレスバーを完了した状態にする
+    def finish_progress_display(self, total=None):
+        if self.cur_prog_bar is None:
+            return
+        if total:
+            self.cur_prog_bar.finish(total)
 
     #
     # カレントディレクトリ
@@ -541,9 +571,24 @@ class Spirit():
                 cd = os.getcwd()
             path = os.path.normpath(os.path.join(cd, path))
         return path
-    
-        
 
+#
+class DummySpirit(Spirit):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.q = []
+
+    def bind_process(self, p):
+        pass
+
+    def post_message(self, msg):
+        for m in msg.expand():
+            self.q.append(m)
+    
+    def printout(self):
+        for msg in self.q:
+            print("[{}]{}".format(msg.tag, msg.text))
+    
 #
 #  メッセージクラス
 #
@@ -603,6 +648,45 @@ class ProcessMessage():
             
         expanded.append(partmsg(text=lasttext, withbreak=True))
         return expanded
+
+#
+#
+#
+class ProcessMessageIO():
+    def __init__(self, spirit, tag, oneliner, **options):
+        self.spirit = spirit
+        self.tag = tag
+        self.oneliner = oneliner
+        self.options = options
+        self.linecnt = 0
+    
+    def write(self, msg):
+        if self.oneliner and self.linecnt == 1:
+            #self.spirit.delete_message_line()
+            self.linecnt = 0
+        self.spirit.custom_message(self.tag, msg, **self.options)
+        self.linecnt += 1
+    
+    def flush(self):
+        pass
+
+    def truncate(self, size=None):
+        return size
+    
+    def seekable(self):
+        return False
+
+    def writable(self):
+        return True
+
+    def readable(self):
+        return False
+    
+    def close(self):
+        pass
+    
+    def closed(self):
+        return False
 
 #
 # #####################################################################
