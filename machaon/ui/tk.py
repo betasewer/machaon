@@ -114,10 +114,10 @@ class tkLauncher(Launcher):
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
-        self.log.tag_bind("hlink", "<Enter>", lambda e: self.hyper_enter(e))
-        self.log.tag_bind("hlink", "<Leave>", lambda e: self.hyper_leave(e))
-        self.log.tag_bind("hlink", "<Control-Button-1>", lambda e: self.hyper_click(e))
-        self.log.tag_bind("hlink", "<Double-Button-1>", lambda e: self.hyper_as_input_text(e))
+        self.log.tag_bind("clickable", "<Enter>", lambda e: self.hyper_enter(e))
+        self.log.tag_bind("clickable", "<Leave>", lambda e: self.hyper_leave(e))
+        self.log.tag_bind("clickable", "<Control-Button-1>", lambda e: self.hyper_click(e))
+        self.log.tag_bind("clickable", "<Double-Button-1>", lambda e: self.hyper_as_input_text(e))
         
         tk.Grid.columnconfigure(self.frame, 1, weight=1)
         tk.Grid.rowconfigure(self.frame, 0, weight=1)
@@ -153,18 +153,35 @@ class tkLauncher(Launcher):
         """ メッセージをログ欄に追加する """
         if msg.tag == "hyperlink":
             dbtag = self.hyperlinks.add(msg.get_hyperlink_link())
-            tags = (msg.argument("linktag") or "hyperlink", "hlink", "hlink-{}".format(dbtag))
+            tags = (msg.argument("linktag") or "hyperlink", "clickable", "hlink-{}".format(dbtag))
         else:
             tags = (msg.tag or "message",)
         
         self.log.configure(state='normal')
         
-        self.log.insert("end", msg.text, tags)
-        if not msg.argument("nobreak", False):
-            self.log.insert("end", "\n")
-            
+        if msg.tag == "delete-line":
+            # 前行を削除する特殊なメッセージを処理
+            cnt = msg.argument("count")
+            if cnt is None:
+                cnt = 1
+            lno = msg.argument("line")
+            if lno is None or lno < 0:
+                if lno is None:
+                    lno = -1
+                indices = ("end linestart {} lines".format(lno-cnt), "end linestart {} lines".format(lno))
+            elif 0<lno:
+                indices = ("{} linestart".format(lno), "{} linestart".format(lno+cnt))
+            else:
+                pass
+            self.log.delete(*indices)
+        else:
+            # メッセージの挿入
+            self.log.insert("end", msg.text, tags)
+            if not msg.argument("nobreak", False):
+                self.log.insert("end", "\n")
+
         self.log.configure(state='disabled')
-        self.log.yview_moveto(0)
+        #self.log.yview_moveto(0)
 
     def replace_screen_message(self, msgs):
         """ ログ欄をクリアし別のメッセージで置き換える """
@@ -184,7 +201,7 @@ class tkLauncher(Launcher):
         for msg in procchamber.handle_message():
             self.insert_screen_message(msg)
         if running:
-            self.log.after(100, self.watch_process, procchamber) # 100ms
+            self.log.after(300, self.watch_process, procchamber) # 100ms
         else:
             self.update_chamber_menu(ceased=procchamber)
             print("[{}] watch finished.".format(procchamber.get_command()))
