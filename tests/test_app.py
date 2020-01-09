@@ -1,16 +1,19 @@
-from machaon.shell import ShellApp, WinShellUI
+from machaon.app import AppRoot
+from machaon.process import Spirit
 
-def test_shellapp_load(tmpdir):
-    app = BasicShellApp("APPTITLE", WinShellUI())
-    assert app.title == "APPTITLE"
-    assert isinstance(app.ui, WinShellUI)
-    assert app.launcher is not None
-    #
+def test_spirit_currentdir(tmpdir):
+    app = AppRoot()
+    assert app.ui is None
+    assert app.cmdengine is None
+    assert app.processhive is None
+    # current directory
+    assert not app.curdir
+    spi = Spirit(app)
     d = tmpdir.mkdir("basedir")
-    app.change_current_dir(str(d))
-    assert app.get_current_dir() == str(d)
-    assert app.abspath("c:\\moge") == "c:\\moge"
+    spi.change_current_dir(str(d))
+    assert spi.get_current_dir() == str(d)
+    assert spi.abspath("c:\\moge") == "c:\\moge"
     th = d.join("thunder.wav")
-    assert app.abspath("thunder.wav") == str(th)
+    assert spi.abspath("thunder.wav") == str(th)
     
     
