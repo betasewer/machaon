@@ -585,8 +585,11 @@ class DummySpirit(Spirit):
         pass
 
     def post_message(self, msg):
-        for m in msg.expand():
-            self.q.append(m)
+        if msg.is_embeded():
+            for m in msg.expand():
+                self.q.append(m)
+        else:
+            self.q.append(msg)
     
     def printout(self):
         for msg in self.q:

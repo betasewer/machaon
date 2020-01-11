@@ -42,7 +42,7 @@ def test_message_window(approot):
     l1 = wnd.log.get("end linestart -2 lines", "end linestart -1 lines")
     l2 = wnd.log.get("end linestart -3 lines", "end linestart -2 lines")
 
-    wnd.insert_screen_message(spi.delete_message.msg())
+    wnd.message_handler(spi.delete_message.msg())
     assert "test-error-message" == getlastline(wnd.log)
     
     #wnd.run_mainloop()

@@ -229,7 +229,15 @@ class ColorProcess():
         )["target --text"](
             default="文字色のサンプルです。"
         )
-   
+
+#
+def progress_display(app):
+    app.message("プログレスバーのテスト")
+    app.start_progress_display(total=50)
+    for _ in range(50):
+        app.interruption_point(progress=1)
+    app.finish_progress_display(total=50)
+
 #   
 def sample_commands():
     return describe_command_package(
@@ -240,6 +248,11 @@ def sample_commands():
         target=ColorProcess
     )["link"](
         target=LinkProcess
+    )["progress"](
+        describe_command(
+            target=progress_display,
+            description="プログレスバーのテスト"
+        )
     )
     
     

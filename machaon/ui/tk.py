@@ -143,36 +143,38 @@ class tkLauncher(Launcher):
         
         self.log.configure(state='normal')
         
-        if msg.tag == "delete-line":
-            # 前行を削除する特殊なメッセージを処理
-            cnt = msg.argument("count")
-            if cnt is None:
-                cnt = 1
-            lno = msg.argument("line")
-            if lno is None or lno < 0:
-                if lno is None:
-                    lno = -1
-                indices = ("end linestart {} lines".format(lno-cnt), "end linestart {} lines".format(lno))
-            elif 0<lno:
-                indices = ("{} linestart".format(lno), "{} linestart".format(lno+cnt))
-            else:
-                pass
-            self.log.delete(*indices)
-        else:
-            # メッセージの挿入
-            self.log.insert("end", msg.text, tags)
-            if not msg.argument("nobreak", False):
-                self.log.insert("end", "\n")
+        # メッセージの挿入
+        self.log.insert("end", msg.text, tags)
+        if not msg.argument("nobreak", False):
+            self.log.insert("end", "\n")
 
         self.log.configure(state='disabled')
         #self.log.yview_moveto(0)
+    
+    def delete_screen_message(self, lineno=None, count=None):
+        """ ログ欄からメッセージ行を削除する"""
+        if lineno is None:
+            lineno = -1
+        if count is None:
+            count = 1
+              
+        if lineno < 0:
+            indices = ("end linestart {} lines".format(lineno-count), "end linestart {} lines".format(lineno))
+        elif 0 < lineno:
+            indices = ("{} linestart".format(lineno), "{} linestart".format(lineno+count))
+        else:
+            return
+
+        self.log.configure(state='normal')  
+        self.log.delete(*indices)
+        self.log.configure(state='disabled')
 
     def replace_screen_message(self, msgs):
         """ ログ欄をクリアし別のメッセージで置き換える """
         self.log.configure(state='normal')        
         self.log.delete(1.0, tk.END)
         for msg in msgs:
-            self.insert_screen_message(msg)
+            self.message_handler(msg)
         self.log.configure(state='disabled')
         self.log.yview_moveto(0) # ログ上端へスクロール
         

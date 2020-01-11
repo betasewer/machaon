@@ -33,9 +33,10 @@ class Launcher():
                 self.message_handler(msg)
         else:
             tag = msg.tag
-            if tag == "exit-app":
-                # アプリ終了の指示
-                self.app.exit()
+            if tag == "delete-message":
+                cnt = msg.argument("count")
+                lno = msg.argument("line")
+                self.delete_screen_message(lno, cnt)
             else:
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_message(msg)
@@ -50,6 +51,9 @@ class Launcher():
     # メッセージウィンドウの操作
     #
     def insert_screen_message(self, msg):
+        pass
+
+    def delete_screen_message(self, lineno, count):
         pass
 
     def replace_screen_message(self, msgs):
