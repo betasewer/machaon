@@ -23,10 +23,9 @@ class tkLauncher(Launcher):
         # GUI
         self.root = tkinter.Tk() #
         self.rootframe = None    #
-        self.frames = []         #
+        self.tkwidgets = []      # [(typename, widget)...]
         self.commandline = None  #
         self.chambermenu = None  #
-        self.buttons = []        #
         self.log = None          #
         #
         self.hyperlinks = HyperlinkDatabase()
@@ -73,17 +72,17 @@ class tkLauncher(Launcher):
         # ボタンパネル
         def addbutton(parent, **kwargs):
             b = ttk.Button(parent, **kwargs)
-            self.buttons.append(b)
+            self.tkwidgets.append(("button", b))
             return b
         
         def addcheckbox(parent, **kwargs):
             ch = ttk.Checkbutton(parent, **kwargs)
-            self.buttons.append(ch)
+            self.tkwidgets.append(("checkbox", ch))
             return ch
         
         def addframe(parent, **kwargs):
             f = ttk.Frame(parent, **kwargs)
-            self.frames.append(f)
+            self.tkwidgets.append(("frame", f))
             return f
         
         histlist = tk.Text(self.frame, relief="solid", height=10, width=40)
@@ -117,25 +116,27 @@ class tkLauncher(Launcher):
         btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
         #btnunredo = addframe(btnpanel)
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
-        b = addbutton(btnpanel, text=u"終了", command=self.app.exit, width=6)
-        b.pack(side=tk.RIGHT, pady=padx)
+        # ----------------------
+        b = addcheckbox(btnpanel, text=u"末尾に追従", variable=self.is_stick_bottom, onvalue=True, offvalue=False)
+        b.pack(side=tk.RIGHT, padx=padx)
         b = addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
         b = addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
-        b = addcheckbox(btnpanel, text=u"末尾に追従", variable=self.is_stick_bottom, onvalue=True, offvalue=False)
-        b.pack(side=tk.RIGHT, padx=padx)
+        # ----------------------
+        b = addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
+        b.pack(side=tk.LEFT, padx=padx)
         b = addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog)
-        b.pack(side=tk.RIGHT, padx=padx)
-        b = addbutton(btnpanel, text=u"ファイルパス", command=self.input_filepath)
-        b.pack(side=tk.RIGHT, padx=padx)
+        b.pack(side=tk.LEFT, padx=padx)
         #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
         #b.pack(side=tk.TOP, fill=tk.X, pady=2)
     
+        tk.Grid.rowconfigure(self.frame, 2, weight=0)
+
         # フレームを除去       
         #self.root.overrideredirect(True)
         from machaon.ui.theme import dark_classic_theme
-        #self.apply_theme(dark_classic_theme())
+        self.apply_theme(dark_classic_theme())
     
     #
     # ログの操作
@@ -374,13 +375,21 @@ class tkLauncher(Launcher):
             darkcolor=[("pressed", bg)],
             bordercolor=[("alternate", label)]
         )
+        style.configure("TCheckbutton", background=bg, foreground=msg)
+        style.map("TCheckbutton", 
+            background=[("disabled", bg), ("pressed", bg), ("active", highlight)],
+        )
         style.configure("TFrame", background=bg)
 
         self.rootframe.configure(style="TFrame")
-        for button in self.buttons:
-            button.configure(style="TButton")
-        for frame in self.frames + [self.frame]:
-            frame.configure(style="TFrame")
+        for typename, wid in self.tkwidgets:
+            if typename == "button":
+                wid.configure(style="TButton")
+            elif typename == "frame":
+                wid.configure(style="TFrame")
+            elif typename == "checkbox":
+                wid.configure(style="TCheckbutton")
+        self.frame.configure(style="TFrame")
         
         commandfont = theme.getfont("commandfont")
         logfont = theme.getfont("logfont")
