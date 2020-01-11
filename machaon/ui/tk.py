@@ -31,6 +31,7 @@ class tkLauncher(Launcher):
         #
         self.hyperlinks = HyperlinkDatabase()
         self.chambermenu_active = None
+        self.is_stick_bottom = tk.BooleanVar(value=False)
 
     def openfilename_dialog(self, *, filters=None, initialdir=None):
         return tkinter.filedialog.askopenfilename(filetypes = filters, initialdir = initialdir)
@@ -75,6 +76,11 @@ class tkLauncher(Launcher):
             self.buttons.append(b)
             return b
         
+        def addcheckbox(parent, **kwargs):
+            ch = ttk.Checkbutton(parent, **kwargs)
+            self.buttons.append(ch)
+            return ch
+        
         def addframe(parent, **kwargs):
             f = ttk.Frame(parent, **kwargs)
             self.frames.append(f)
@@ -109,14 +115,15 @@ class tkLauncher(Launcher):
         # ボタン等
         btnpanel = addframe(self.frame)
         btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
-        
         #btnunredo = addframe(btnpanel)
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
         b = addbutton(btnpanel, text=u"終了", command=self.app.exit, width=6)
         b.pack(side=tk.RIGHT, pady=padx)
-        b = addbutton(btnpanel, text=u"▲", command=lambda:self.on_commandline_up(None), width=4)
+        b = addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
-        b = addbutton(btnpanel, text=u"▼", command=lambda:self.on_commandline_down(None), width=4)
+        b = addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4)
+        b.pack(side=tk.RIGHT, padx=padx)
+        b = addcheckbox(btnpanel, text=u"末尾に追従", variable=self.is_stick_bottom, onvalue=True, offvalue=False)
         b.pack(side=tk.RIGHT, padx=padx)
         b = addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog)
         b.pack(side=tk.RIGHT, padx=padx)
@@ -128,7 +135,7 @@ class tkLauncher(Launcher):
         # フレームを除去       
         #self.root.overrideredirect(True)
         from machaon.ui.theme import dark_classic_theme
-        self.apply_theme(dark_classic_theme())
+        #self.apply_theme(dark_classic_theme())
     
     #
     # ログの操作
@@ -149,7 +156,9 @@ class tkLauncher(Launcher):
             self.log.insert("end", "\n")
 
         self.log.configure(state='disabled')
-        #self.log.yview_moveto(0)
+
+        if self.is_stick_bottom.get():
+            self.log.yview_moveto(1.0)
     
     def delete_screen_message(self, lineno=None, count=None):
         """ ログ欄からメッセージ行を削除する"""
@@ -168,6 +177,9 @@ class tkLauncher(Launcher):
         self.log.configure(state='normal')  
         self.log.delete(*indices)
         self.log.configure(state='disabled')
+        
+        if self.is_stick_bottom.get():
+            self.log.yview_moveto(1.0)
 
     def replace_screen_message(self, msgs):
         """ ログ欄をクリアし別のメッセージで置き換える """
@@ -176,7 +188,11 @@ class tkLauncher(Launcher):
         for msg in msgs:
             self.message_handler(msg)
         self.log.configure(state='disabled')
-        self.log.yview_moveto(0) # ログ上端へスクロール
+
+        if self.is_stick_bottom.get():
+            self.log.yview_moveto(1.0) # ログ下端へスクロール
+        else:
+            self.log.yview_moveto(0) # ログ上端へスクロール
         
     def watch_process(self, procchamber):
         """ アクティブなプロセスの状態を監視する。
@@ -191,6 +207,10 @@ class tkLauncher(Launcher):
         else:
             self.update_chamber_menu(ceased=procchamber)
             print("[{}] watch finished.".format(procchamber.get_command()))
+    
+    #
+    def scroll_page(self, delta):
+        self.log.yview_scroll(delta, "pages")
     
     #
     # key handler
@@ -319,6 +339,8 @@ class tkLauncher(Launcher):
         self.insert_input_text(link)
 
     # 
+    #
+    #
     def run_mainloop(self):
         self.root.mainloop()
     
