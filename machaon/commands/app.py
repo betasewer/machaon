@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-from machaon.app import ExitApp
 from machaon.command import describe_command, describe_command_package
 from machaon.cui import test_yesno, composit_text
 
@@ -73,16 +72,10 @@ def command_help(spi, command_name=None):
     
     spi.message("")
 
-#
-def command_exit(spi, ask=False):
-    if ask:
-        if not spi.ask_yesno("終了しますか？ (Y/N)"):
-            return
-    return ExitApp
+# 終了処理はAppRoot内にある
+def command_exit(spi):
+    raise NotImplementedError()
     
-#
-# プリセットコマンドの定義
-#
 # テーマの選択
 def command_ui_theme(app, themename=None, alt=(), show=False):
     from machaon.ui.theme import themebook
@@ -110,6 +103,10 @@ def command_ui_theme(app, themename=None, alt=(), show=False):
             app.message("{}={}".format(k,v))
     else:
         root.get_ui().apply_theme(theme)
+
+# 立ち上げスクリプトのひな形を吐き出す
+def command_bootstrap(app, tk=True):
+    pass
 
 #
 # エントリ
@@ -142,9 +139,6 @@ def app_commands():
         describe_command(
             command_exit,
             description="終了します。",
-        )["target --ask -a"](
-            const_option=True,            
-            help="確認してから終了する"
         ),
     )["theme"](
         describe_command(

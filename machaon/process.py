@@ -90,7 +90,7 @@ class ProcessTargetClass(ProcessTarget):
 
     # 
     def invoke(self, spirit, parsedcommand):
-        invocation = ProcessTargetInvokation()
+        invocation = ProcessTargetInvocation()
 
         # プロセスを生成
         proc = self.klass(spirit)
@@ -123,7 +123,7 @@ class ProcessTargetFunction(ProcessTarget):
         self.target_invoker = FunctionInvoker(fn)
 
     def invoke(self, spirit, parsedcommand):
-        invocation = ProcessTargetInvokation()
+        invocation = ProcessTargetInvocation()
         # 束縛引数
         args = []
         if self.spirittype is not None:
@@ -204,7 +204,7 @@ class MissingArgumentError(Exception):
 #
 #
 #
-class ProcessTargetInvokation:
+class ProcessTargetInvocation:
     def __init__(self):
         self.results = defaultdict(list)
         self.argerrors = defaultdict(list)
@@ -446,6 +446,8 @@ class Spirit():
         self.process = None
         # プログレスバー        
         self.cur_prog_display = None 
+        # exit
+        self.to_be_appexit = False
 
     def get_app(self):
         return self.app
@@ -464,8 +466,7 @@ class Spirit():
         if self.process is None:
             print("discarded message:", msg.text)
             return
-        for m in msg.expand():
-            self.process.post_message(m)
+        self.process.post_message(msg)
     
     @_spirit_msgmethod
     def message(self, msg, **options):
@@ -497,7 +498,7 @@ class Spirit():
 
     @_spirit_msgmethod
     def delete_message(self, line=None, count=None):
-        return ProcessMessage("", "delete-line", count=count, line=line)
+        return ProcessMessage(tag="delete-message", count=count, line=line)
         
     # ファイル対象に使用するとよい...
     def print_target(self, target):
@@ -571,7 +572,9 @@ class Spirit():
                 cd = os.getcwd()
             path = os.path.normpath(os.path.join(cd, path))
         return path
-
+    
+#
+#
 #
 class DummySpirit(Spirit):
     def __init__(self, *args, **kwargs):
@@ -593,8 +596,8 @@ class DummySpirit(Spirit):
 #  メッセージクラス
 #
 class ProcessMessage():
-    def __init__(self, text, tag="message", embed=None, **kwargs):
-        self.text = str(text)
+    def __init__(self, text=None, tag="message", embed=None, **kwargs):
+        self.text = text
         self.tag = tag
         self.embed = embed
         self.kwargs = kwargs
@@ -610,10 +613,15 @@ class ProcessMessage():
         if l is not None:
             return l
         return self.text
+    
+    def is_embeded(self):
+        return self.embed is not None
 
     def expand(self):
-        if self.embed is None:
-            return [self]
+        if self.text is None:
+            raise ValueError("Attempt to print bad message text : tag={}".format(self.tag))
+        else:
+            self.text = str(self.text)
 
         def partmsg(msg=None, text=None, withbreak=False):
             if text is not None:

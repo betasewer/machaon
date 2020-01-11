@@ -46,28 +46,12 @@ class tkLauncher(Launcher):
         self.root.geometry("{}x{}".format(*self.screen_geo))
         self.root.protocol("WM_DELETE_WINDOW", self.app.exit)
         
-        def on_commandline_return(e):
-            self.execute_command_input()
-            self.commandline.mark_set("INSERT", 0.0)
-            return "break"
-        self.root.bind('<Return>', on_commandline_return)
-
-        def on_commandline_ctlreturn(e):
+        def commandline_break(e):
             return None
-        self.root.bind('<Shift-Return>', on_commandline_ctlreturn)
-        
-        def on_commandline_up(e):
-            if not self.rollback_command_input():
-                self.shift_active_chamber(1)
-            self.commandline.mark_set("INSERT", 0.0)
-            return "break"
-        self.root.bind('<Shift-Up>', on_commandline_up)
-
-        def on_commandline_down(e):
-            self.shift_active_chamber(-1)
-            self.commandline.mark_set("INSERT", 0.0)
-            return "break"
-        self.root.bind('<Shift-Down>', on_commandline_down)
+        self.root.bind('<Return>', self.on_commandline_return)
+        self.root.bind('<Shift-Return>', commandline_break)
+        self.root.bind('<Shift-Up>', self.on_commandline_up)
+        self.root.bind('<Shift-Down>', self.on_commandline_down)
 
         padx, pady = 3, 3
         self.rootframe = ttk.Frame(self.root)
@@ -80,10 +64,10 @@ class tkLauncher(Launcher):
         self.commandline = tk.Text(self.frame, relief="solid", height=4, width=40)
         self.commandline.grid(column=0, row=0, sticky="ns", padx=padx, pady=pady)
         self.commandline.focus_set()
-        self.commandline.bind('<Return>', on_commandline_return)
-        self.commandline.bind('<Shift-Return>', on_commandline_ctlreturn)
-        self.commandline.bind('<Shift-Up>', on_commandline_up)
-        self.commandline.bind('<Shift-Down>', on_commandline_down)
+        self.commandline.bind('<Return>', self.on_commandline_return)
+        self.commandline.bind('<Shift-Return>', commandline_break)
+        self.commandline.bind('<Shift-Up>', self.on_commandline_up)
+        self.commandline.bind('<Shift-Down>', self.on_commandline_down)
         
         # ボタンパネル
         def addbutton(parent, **kwargs):
@@ -101,7 +85,7 @@ class tkLauncher(Launcher):
         histlist.tag_configure("link")
         histlist.tag_bind("link", "<Enter>", lambda e: histlist.config(cursor="hand2"))
         histlist.tag_bind("link", "<Leave>", lambda e: histlist.config(cursor=""))
-        histlist.tag_bind("link", "<Button-1>", lambda e: self.chamber_menu_click(e))
+        histlist.tag_bind("link", "<Button-1>", self.chamber_menu_click)
         histlist.tag_configure("chamber", foreground="#000000")
         histlist.tag_configure("running", foreground="#00A000")
         histlist.mark_unset("insert")
@@ -114,10 +98,10 @@ class tkLauncher(Launcher):
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
-        self.log.tag_bind("clickable", "<Enter>", lambda e: self.hyper_enter(e))
-        self.log.tag_bind("clickable", "<Leave>", lambda e: self.hyper_leave(e))
-        self.log.tag_bind("clickable", "<Control-Button-1>", lambda e: self.hyper_click(e))
-        self.log.tag_bind("clickable", "<Double-Button-1>", lambda e: self.hyper_as_input_text(e))
+        self.log.tag_bind("clickable", "<Enter>", self.hyper_enter)
+        self.log.tag_bind("clickable", "<Leave>", self.hyper_leave)
+        self.log.tag_bind("clickable", "<Control-Button-1>", self.hyper_click)
+        self.log.tag_bind("clickable", "<Double-Button-1>", self.hyper_as_input_text)
         
         tk.Grid.columnconfigure(self.frame, 1, weight=1)
         tk.Grid.rowconfigure(self.frame, 0, weight=1)
@@ -130,9 +114,9 @@ class tkLauncher(Launcher):
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
         b = addbutton(btnpanel, text=u"終了", command=self.app.exit, width=6)
         b.pack(side=tk.RIGHT, pady=padx)
-        b = addbutton(btnpanel, text=u"▲", command=lambda:on_commandline_up(None), width=4)
+        b = addbutton(btnpanel, text=u"▲", command=lambda:self.on_commandline_up(None), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
-        b = addbutton(btnpanel, text=u"▼", command=lambda:on_commandline_down(None), width=4)
+        b = addbutton(btnpanel, text=u"▼", command=lambda:self.on_commandline_down(None), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
         b = addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog)
         b.pack(side=tk.RIGHT, padx=padx)
@@ -198,13 +182,32 @@ class tkLauncher(Launcher):
         # プロセスの発したメッセージを読みに行く
         print("[{}] watching message...".format(procchamber.get_command()))
         running = procchamber.is_running()
-        for msg in procchamber.handle_message():
-            self.insert_screen_message(msg)
+        if not self.handle_chamber_message(procchamber):
+            return
         if running:
             self.log.after(300, self.watch_process, procchamber) # 100ms
         else:
             self.update_chamber_menu(ceased=procchamber)
             print("[{}] watch finished.".format(procchamber.get_command()))
+    
+    #
+    # key handler
+    #
+    def on_commandline_return(self, e):
+        if self.execute_command_input():
+            self.commandline.mark_set("INSERT", 0.0)
+        return "break"
+
+    def on_commandline_up(self, e):
+        if not self.rollback_command_input():
+            self.shift_active_chamber(1)
+        self.commandline.mark_set("INSERT", 0.0)
+        return "break"
+
+    def on_commandline_down(self, e):
+        self.shift_active_chamber(-1)
+        self.commandline.mark_set("INSERT", 0.0)
+        return "break"
 
     #
     # ハイパーリンク

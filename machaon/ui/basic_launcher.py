@@ -23,10 +23,29 @@ class Launcher():
     def init_screen(self):
         pass
 
-    # ログウィンドウにメッセージを出力
+    #
+    #
+    #
     def message_handler(self, msg):
-        self.insert_screen_message(msg)
+        """ メッセージを処理する """
+        if msg.is_embeded():
+            for msg in msg.expand():
+                self.message_handler(msg)
+        else:
+            tag = msg.tag
+            if tag == "exit-app":
+                # アプリ終了の指示
+                self.app.exit()
+            else:
+                # ログウィンドウにメッセージを出力
+                self.insert_screen_message(msg)
     
+    #
+    def handle_chamber_message(self, chamber):
+        for msg in chamber.handle_message():
+            self.message_handler(msg)
+        return True
+
     #
     # メッセージウィンドウの操作
     #
@@ -46,9 +65,13 @@ class Launcher():
     # 入力欄の操作
     #    
     # コマンドを実行する
+    #  戻り値: False - なるべく早くアプリを終了させること
     def invoke_command(self, command):
         self.app.execute_command(command)
+        if self.app.is_to_be_exit():
+            return False
         self.install_chamber()
+        return True
         
     # 入力を取得
     def get_input(self, spirit, instr):
@@ -59,14 +82,16 @@ class Launcher():
         return inputtext
     
     # コマンド欄を実行する
+    #  戻り値: False - なるべく早くアプリを終了させること
     def execute_command_input(self):
         command = self.pop_input_text()
         cha = self.app.get_active_chamber()
         if cha is not None and cha.is_waiting_input():
             cha.finish_input(command)
         else:
-            self.invoke_command(command)
-    
+            return self.invoke_command(command)
+        return True
+
     # コマンド欄を復元する
     def rollback_command_input(self):
         cha = self.app.get_active_chamber()
@@ -117,7 +142,7 @@ class Launcher():
         msgs = chamber.get_message()
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
         self.watch_process(chamber)
-        if updateinput:            
+        if updateinput:
             cmd = chamber.get_command()
             self.replace_input_text(cmd)
         if updatemenu:
@@ -142,7 +167,7 @@ class Launcher():
     def change_cd_dialog(self):
         dirpath = self.opendirname_dialog(initialdir = self.app.get_current_dir())
         if dirpath:
-            self.invoke_command("cd -- {}".format(dirpath))
+            return self.invoke_command("cd -- {}".format(dirpath))
 
     def openfilename_dialog(self, *, filters=None, initialdir=None):
         raise NotImplementedError()

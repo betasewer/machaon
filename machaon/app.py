@@ -27,8 +27,9 @@ class AppRoot:
         self.cmdengine = None 
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
+        self.to_be_exit = False
 
-    def init_ui(self, ui):
+    def initialize(self, *, ui):
         self.ui = ui
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
@@ -59,8 +60,12 @@ class AppRoot:
         self.mainloop()
 
     def exit(self):
+        self.to_be_exit = True
         self.processhive.stop()
         self.ui.on_exit()
+    
+    def is_to_be_exit(self):
+        return self.to_be_exit
     
     def mainloop(self):
         self.ui.run_mainloop()
@@ -82,14 +87,19 @@ class AppRoot:
     #
     # コマンド文字列から呼び出す
     def execute_command(self, commandstr):
+        # 終了コマンド
+        if commandstr == "exit":
+            self.exit()
+            return
+
         # 文字列を先頭の空白で区切る
         commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
 
+        # コマンド接頭辞の設定
         if commandhead.endswith("."):
             commandtail = commandhead[:-1]
             commandhead = ".set-prefix"
 
-        # コマンド接頭辞の設定
         if commandhead == ".set-prefix":
             prefix = commandtail
             proc = SetPrefixProcedure(self, self.cmdengine, prefix)
@@ -195,17 +205,6 @@ class AppRoot:
         if scr is not None:
             proc = scr.get_process()
             proc.set_interrupt()
-    
-#
-#
-#
-
-    
-#
-# このクラスをプロセスの返り値として返すとアプリが終了する
-#
-class ExitApp():
-    pass
 
 #
 #
