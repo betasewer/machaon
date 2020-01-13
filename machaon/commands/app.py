@@ -42,16 +42,18 @@ def command_help(spi, command_name=None):
             heads = []
             for i, k in enumerate(entry.keywords):
                 if i == 0 and pfx:
-                    k = "{}.{}".format(pfx[0], k)
+                    fk = "{}.{}".format(pfx[0], k)
                 elif pfx:
-                    k = "{}{}".format(pfx[1 if len(pfx)>=1 else 0], k)
-                heads.append(k)
+                    fk = "{}{}".format(pfx[1 if len(pfx)>=1 else 0], k)
+                else:
+                    fk = k
+                heads.append((k, fk))
 
-            if command_name and not any(head.startswith(command_name) for head in heads):
+            if command_name and not any(command_name in head for (_, head) in heads):
                 continue
 
-            for h in heads:
-                msgs.append(spi.hyperlink.msg(h, nobreak=True))
+            for k, fk in heads:
+                msgs.append(spi.hyperlink.msg(k, nobreak=True, link=fk))
                 msgs.append(spi.message.msg(", ", nobreak=True))
             msgs.pop()
             
