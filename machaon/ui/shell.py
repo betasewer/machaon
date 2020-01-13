@@ -1,7 +1,6 @@
 ﻿#!/usr/bin/env python3
 # coding: utf-8
 import os
-from machaon.app import App, ExitApp
 from machaon.cui import reencode, collapse_text
 
 #

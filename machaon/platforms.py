@@ -11,6 +11,8 @@ class _Windows:
     preferred_fontname = "Consolas"
     preferred_fontsize = 10
 
+    default_encoding = "cp932"
+
     @classmethod
     def openfile(cls, path):
         subprocess.run(["start", path], shell=True)
@@ -24,6 +26,8 @@ class _Windows:
 class _Macintosh:
     preferred_fontname = "Menlo"
     preferred_fontsize = 14
+    
+    default_encoding = "shift-jis"
 
     @classmethod
     def openfile(cls, path):
@@ -39,6 +43,8 @@ class _Unix:
     preferred_fontname = "Verdana"
     preferred_fontsize = 10
     
+    default_encoding = "utf-8"
+
     @classmethod
     def openfile(cls, path):
         subprocess.run(["open", path], check=True)
