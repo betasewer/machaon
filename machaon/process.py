@@ -545,15 +545,21 @@ class Spirit():
     # スレッド操作／プログレスバー操作
     #
     # プロセススレッド側で中断指示を確認する
-    def interruption_point(self, *, nowait=False, progress=None):
+    def interruption_point(self, *, nowait=False, progress=None, noexception=False):
         if self.process is None:
-            return
+            raise ValueError("no process attached")
         if self.process.is_interrupted():
-            raise ProcessInterrupted()
+            if not noexception:
+                raise ProcessInterrupted()
+            return False
         if not nowait:
             time.sleep(0.05)
         if progress and self.cur_prog_bar:
             self.cur_prog_bar.update(progress)
+        return True
+    
+    def raise_interruption(self):
+        raise ProcessInterrupted()
 
     # プログレスバーを開始する
     def start_progress_display(self, *, total=None):

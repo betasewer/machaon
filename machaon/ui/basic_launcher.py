@@ -191,9 +191,9 @@ class Launcher():
         """ プロセス実行時 """
         self.put_input_command(spirit, process.get_full_command())
     
-    def on_interrupt_process(self, spirit):
+    def on_interrupt_process(self, spirit, process):
         """ プロセス中断時 """
-        spirit.message_em("実行中のプロセスを中断しました")
+        spirit.message_em("中断しました")
     
     def on_error_process(self, spirit, process, excep):
         """ プロセスのエラーによる終了時 """
@@ -202,10 +202,10 @@ class Launcher():
 
     def on_exit_process(self, spirit, process, invocation):
         """ プロセスの正常終了時 """
-        spirit.message_em("実行終了\n")
+        if invocation is not None:
+            spirit.message_em("実行終了\n")
         
-        # 引数エラーを報告
-        if invocation:
+            # 引数エラーを報告
             for label, missings, unuseds in invocation.arg_errors():
                 if missings:
                     spirit.warn("[{}] 以下の引数は与えられませんでした：".format(label))

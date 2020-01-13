@@ -31,7 +31,10 @@ def execprocess(spi, commandhead, commandstr):
     out = None
     err = None
     while True:
-        spi.interruption_point()
+        if not spi.interruption_point(noexception=True):
+            proc.kill()
+            spi.warn("実行中のプロセスを強制終了しました")
+            spi.raise_interruption()
         
         try:
             out, err = proc.communicate(timeout=1)

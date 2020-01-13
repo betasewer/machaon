@@ -204,7 +204,7 @@ class AppRoot:
         scr = self.processhive.get_active()
         if scr is not None:
             proc = scr.get_process()
-            proc.set_interrupt()
+            proc.tell_interruption()
 
 #
 #

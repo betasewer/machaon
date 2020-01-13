@@ -141,6 +141,8 @@ class tkLauncher(Launcher):
         b = addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
         b = addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4)
+        b.pack(side=tk.RIGHT, padx=padx)        
+        b = addbutton(btnpanel, text=u"停止", command=lambda:self.app.interrupt_process(), width=4)
         b.pack(side=tk.RIGHT, padx=padx)
         # ----------------------
         b = addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
@@ -425,7 +427,7 @@ class tkLauncher(Launcher):
 
         self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.chambermenu.tag_configure("chamber", foreground=msg)
-        self.chambermenu.tag_configure("running", foreground=msg_em)
+        self.chambermenu.tag_configure("running", foreground=msg_inp)
 
         self.set_theme(theme)
 
