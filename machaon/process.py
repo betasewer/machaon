@@ -68,6 +68,19 @@ class ProcessTarget():
     def invoke(self, spirit, parsedcommand):
         raise NotImplementedError()
 
+    #
+    def _target_invocation(self, invocation, invoker, preargs, parsedcommand):
+        # 先頭引数の処理
+        targs = parsedcommand.get_target_args()
+        multitarget = parsedcommand.get_multiple_targets()
+        if multitarget:
+            for a_target in multitarget:
+                targs["target"] = a_target
+                invocation.add("target", invoker.invoke(*preargs, **targs))
+        else:
+            invocation.add("target", invoker.invoke(*preargs, **targs))
+
+
 #
 #
 #
@@ -99,14 +112,8 @@ class ProcessTargetClass(ProcessTarget):
             if invocation.is_init_failed():
                 return invocation
 
-        # 先頭引数の処理
-        targs = parsedcommand.get_target_args()
-        multitarget = parsedcommand.get_multiple_targets()
-        if multitarget:
-            for a_target in multitarget:
-                invocation.add("target", self.target_invoker.invoke(proc, target=a_target, **targs))
-        else:
-            invocation.add("target", self.target_invoker.invoke(proc, **targs))
+        # メイン処理
+        self._target_invocation(invocation, self.target_invoker, (proc,), parsedcommand)
 
         # 後処理
         if self.exit_invoker:
@@ -124,13 +131,15 @@ class ProcessTargetFunction(ProcessTarget):
 
     def invoke(self, spirit, parsedcommand):
         invocation = ProcessTargetInvocation()
+
         # 束縛引数
-        args = []
+        preargs = []
         if self.spirittype is not None:
-            args.append(spirit)
-        args.extend(self.args)
-        inv = self.target_invoker.invoke(*args, **parsedcommand.get_target_args())
-        invocation.add("target", inv)
+            preargs.append(spirit)
+        preargs.extend(self.args)
+        
+        # メイン処理
+        self._target_invocation(invocation, self.target_invoker, preargs, parsedcommand)
         return invocation
 
 #
@@ -275,7 +284,7 @@ class Process:
             self.last_invocation = None
         else:
             # パスの展開: ここでいいのか？
-            self.parsedcommand.expand_filepath_arguments(self.spirit) 
+            self.parsedcommand.expand_special_arguments(self.spirit) 
             # 操作を実行する
             inv = self.target.invoke(self.spirit, self.parsedcommand)
             self.last_invocation = inv
@@ -525,6 +534,12 @@ class Spirit():
     
     def scroll_screen(self, index):
         self.app.get_ui().scroll_screen(index)
+    
+    def ask_openfilename(self, **kwargs):
+        return self.app.get_ui().openfilename_dialog(**kwargs)
+    
+    def ask_opendirname(self, **kwargs):
+        return self.app.get_ui().opendirname_dialog(**kwargs)
 
     #
     # スレッド操作／プログレスバー操作
@@ -536,7 +551,7 @@ class Spirit():
         if self.process.is_interrupted():
             raise ProcessInterrupted()
         if not nowait:
-            time.sleep(0.1)
+            time.sleep(0.05)
         if progress and self.cur_prog_bar:
             self.cur_prog_bar.update(progress)
 
@@ -650,6 +665,7 @@ class ProcessMessage():
                         expanded.append(partmsg(text=lasttext))
                         expanded.append(partmsg(emsg))
                         lasttext = ""
+                    lastkey = ""
                     state = 0
             elif state == 1 or state == 2:
                 lastkey += ch

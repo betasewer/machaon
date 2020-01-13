@@ -173,10 +173,10 @@ class Launcher():
         if dirpath:
             return self.invoke_command("cd -- {}".format(dirpath))
 
-    def openfilename_dialog(self, *, filters=None, initialdir=None):
+    def openfilename_dialog(self, **options):
         raise NotImplementedError()
 
-    def opendirname_dialog(self, *, filters=None, initialdir=None):
+    def opendirname_dialog(self, **options):
         raise NotImplementedError()
     
     #

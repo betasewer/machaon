@@ -17,6 +17,9 @@ ExitArg = 2
 PositTargetArg = 5 # 1+4
 FilepathArg = 0x10
 JoinListArg = 0x20
+
+#
+SpecArgSig = "?"
     
 #
 # argparseを継承しいくつかの挙動を書き換えている。
@@ -216,6 +219,7 @@ class CommandParserResult():
         self.messages = messages
         self.argvalues = argvalues
         self.argmap = defaultdict(dict)
+        self.specarg_descriptors = [] # (argtype, name, desc, descargs...)
         self.target_filepath_arg = None
         
     def get_expanded_command(self):
@@ -231,10 +235,17 @@ class CommandParserResult():
         return self.messages
         
     def add_arg(self, argtype, name, value):
-        if argtype&FilepathArg:
-            self.target_filepath_arg = value
-        else:
-            self.argmap[argtype&0xF][name] = value
+        if argtype & FilepathArg:
+            self.target_filepath_arg = (argtype&0xF, name)
+
+        if isinstance(value, str) and value.startswith(SpecArgSig):
+            self.specarg_descriptors.append((argtype, name, value[1:]))
+        elif isinstance(value, list) and len(value)==1 and value[0].startswith(SpecArgSig):
+            self.specarg_descriptors.append((argtype, name, value[0][1:], "list"))
+        elif argtype & FilepathArg:
+            self.specarg_descriptors.append((argtype, name, "filename_pattern"))
+        
+        self.argmap[argtype&0xF][name] = value
     
     def get_init_args(self):
         return self.argmap[InitArg]
@@ -244,25 +255,65 @@ class CommandParserResult():
     
     def get_multiple_targets(self):
         if self.target_filepath_arg:
-            return self.target_filepath_arg
+            at, name = self.target_filepath_arg
+            return self.argmap[at][name]
         return None
     
     def get_exit_args(self):
         return self.argmap[ExitArg]
 
     # パス引数を展開する
-    def expand_filepath_arguments(self, spirit):
-        if self.target_filepath_arg:
-            paths = []
-            for fpath in self.target_filepath_arg:
-                fpath = spirit.abspath(fpath)
-                globs = glob.glob(fpath)
-                if len(globs)>0:
-                    paths.extend(globs)
+    def expand_special_arguments(self, spirit):
+        for argtype, argname, descvalue, *islist in self.specarg_descriptors:
+            preexpand = self.argmap[argtype&0xF][argname]
+
+            expanded = None
+            if descvalue.startswith(SpecArgSig):
+                # エスケープ
+                expanded = descvalue[1:]
+
+            if descvalue == "":
+                # 省略形を展開する
+                if argtype & FilepathArg:
+                    descvalue = "file"
                 else:
-                    paths.append(fpath)
-            self.target_filepath_arg = paths
+                    descvalue = "dir"
+            
+            if descvalue == "file":
+                if islist:
+                    paths = spirit.ask_openfilename(title="ファイルを選択[{}]".format(argname), multiple=True)
+                    expanded = list(paths)
+                else:
+                    path = spirit.ask_openfilename(title="ファイルを選択[{}]".format(argname))
+                    expanded = path
     
+            elif descvalue == "dir":
+                path = spirit.ask_opendirname(title="ディレクトリを選択[{}]".format(argname))
+                expanded = path
+            
+            elif descvalue == "color":
+                expanded = 0
+            
+            elif descvalue == "filename_pattern":
+                # ファイルパターンから対象となるすべてのファイルパスを展開する
+                patterns = preexpand
+                paths = []
+                for fpath in patterns:
+                    fpath = spirit.abspath(fpath)
+                    globs = glob.glob(fpath)
+                    if len(globs)>0:
+                        paths.extend(globs)
+                    else:
+                        paths.append(fpath)
+                expanded = paths
+
+            else:
+                continue
+
+            self.argmap[argtype&0xF][argname] = expanded
+
+        self.specarg_descriptors = []
+
     #
     def preview_handlers(self, io):
         funcnames = {

@@ -32,11 +32,30 @@ class tkLauncher(Launcher):
         self.chambermenu_active = None
         self.is_stick_bottom = tk.BooleanVar(value=False)
 
-    def openfilename_dialog(self, *, filters=None, initialdir=None):
-        return tkinter.filedialog.askopenfilename(filetypes = filters, initialdir = initialdir)
+    def openfilename_dialog(self, *, 
+        filters=None, 
+        initialdir=None, 
+        multiple=False,
+        title=None
+    ):
+        return tkinter.filedialog.askopenfilename(
+            filetypes = filters or (), 
+            initialdir = initialdir, 
+            multiple = multiple, 
+            title = title
+        )
 
-    def opendirname_dialog(self, *, filters=None, initialdir=None):
-        return tkinter.filedialog.askdirectory(initialdir = initialdir)
+    def opendirname_dialog(self, *, 
+        filters=None, 
+        initialdir=None,     
+        title=None,
+        mustexist=False,
+    ):
+        return tkinter.filedialog.askdirectory(
+            initialdir = initialdir, 
+            title = title,
+            mustexist = mustexist  
+        )
 
     #
     # UIの配置と初期化
