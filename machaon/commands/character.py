@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import unicodedata
-from machaon.command import describe_command, describe_command_package
 
 #
 def char_detail_line(code, char=None):
@@ -46,22 +45,4 @@ def decode_unicodes(app, characters):
         line = char_detail_line(code)
         app.message(line)
         
-#
-def unicode_commands():
-    return describe_command_package(
-        description="文字に関するコマンドです。"
-    )["unicode"](
-        describe_command(
-            target=encode_unicodes,
-            description="文字を入力 -> コードにする"
-        )["target characters"](
-            help="コードにしたい文字列"
-        )
-    )["unidec"](
-        describe_command(
-            target=decode_unicodes,
-            description="コードを入力 -> 文字にする"
-        )["target characters"](
-            help="文字列にしたいコード"
-        )
-    )        
+

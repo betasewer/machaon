@@ -27,7 +27,6 @@ class AppRoot:
         self.cmdengine = None 
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
-        self.to_be_exit = False
 
     def initialize(self, *, ui):
         self.ui = ui
@@ -44,9 +43,7 @@ class AppRoot:
     #
     # コマンドパッケージを導入
     def install_commands(self, prefixes, package):
-        # コマンドエントリを構築
-        cmdset = package.build_commands(self, prefixes)
-        # ランチャーに設定
+        cmdset = package.create_commands(self, prefixes)
         self.cmdengine.install_commands(cmdset)
 
     #
@@ -63,9 +60,6 @@ class AppRoot:
         self.to_be_exit = True
         self.processhive.stop()
         self.ui.on_exit()
-    
-    def is_to_be_exit(self):
-        return self.to_be_exit
     
     def mainloop(self):
         self.ui.run_mainloop()
@@ -129,10 +123,10 @@ class AppRoot:
         # コマンドエントリの構築
         d = describe_command(target, spirit=spirit, args=args, custom_command_parser=custom_command_parser)
         prog = prog or getattr(target, "__name__") or "$"
-        entry = d.build_entry(self, prog, (prog,))
+        entry = d.create_entry((prog,))
 
         # 実行
-        process_target = entry.get_target()
+        process_target = entry.load()
         process_spirit = process_target.invoke_spirit(self)
         possible_syntaxes = process_target.run_argparser(process_spirit, argument, "")
         if not possible_syntaxes:

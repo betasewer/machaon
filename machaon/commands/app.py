@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-from machaon.command import describe_command, describe_command_package
 from machaon.cui import test_yesno, composit_text
 
 
@@ -110,54 +109,6 @@ def command_ui_theme(app, themename=None, alt=(), show=False):
 def command_bootstrap(app, tk=True):
     pass
 
-#
-# エントリ
-#
-def app_commands():
-    return describe_command_package(
-        description="ターミナルを操作するコマンドです。",
-    )["syntax"](
-        describe_command(
-            command_syntax,
-            description="コマンド文字列を解析し、可能な解釈をすべて示します。"
-        )["target command_string"](
-            help="コマンド文字列",
-            remainder=True
-        )
-    )["interrupt it"](
-        describe_command(
-            command_interrupt,
-            description="現在実行中のプロセスを中断します。"
-        )
-    )["help h"](
-        describe_command(
-            command_help,      
-            description="ヘルプを表示します。",
-        )["target command_name"](
-            nargs="?",
-            help="ヘルプを見るコマンド"
-        ),
-    )["exit"](
-        describe_command(
-            command_exit,
-            description="終了します。",
-        ),
-    )["theme"](
-        describe_command(
-            command_ui_theme,
-            description="アプリのテーマを変更します。"
-        )["target themename"](
-            help="テーマ名",
-            nargs="?"
-        )["target --alt"](
-            help="設定項目を上書きする [config-name]=[config-value]",
-            remainder=True,
-            default=()
-        )["target --show"](
-            help="設定項目を表示する",
-            const_option=True
-        )
-    )
 
     
 #
@@ -240,21 +191,5 @@ def progress_display(app):
         app.interruption_point(progress=1)
     app.finish_progress_display(total=50)
 
-#   
-def sample_commands():
-    return describe_command_package(
-        description="テスト用コマンドです。"
-    )["spam"](
-        target=TestProcess
-    )["texts"](
-        target=ColorProcess
-    )["link"](
-        target=LinkProcess
-    )["progress"](
-        describe_command(
-            target=progress_display,
-            description="プログレスバーのテスト"
-        )
-    )
     
     

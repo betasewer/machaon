@@ -72,11 +72,11 @@ class Launcher():
     # 入力欄の操作
     #    
     # コマンドを実行する
-    #  戻り値: False - なるべく早くアプリを終了させること
     def invoke_command(self, command):
         process = self.app.create_process(command)
         if process is None:
             self.app.exit()
+            return
 
         chamber = self.app.run_process(process) # 実行
 
@@ -87,8 +87,6 @@ class Launcher():
         states = self.app.get_chambers_state()
         states["running"].append(chamber.get_index())
         self.watch_running_process(states)
-
-        return True
         
     # 入力を取得
     def get_input(self, spirit, instr):

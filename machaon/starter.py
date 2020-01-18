@@ -33,7 +33,7 @@ class ShellStarter(Starter):
         self.root.initialize(ui=ui)
     
     def install_syscommands(self):
-        from machaon.commands.app import app_commands
+        from machaon.commands.catalogue import app_commands
         self.install_commands("", app_commands().excluded("interrupt"))
 
 #
@@ -47,7 +47,7 @@ class TkStarter(Starter):
         self.root.initialize(ui=ui)
     
     def install_syscommands(self):
-        from machaon.commands.app import app_commands
+        from machaon.commands.catalogue import app_commands
         from machaon.ui.tk import ui_sys_commands
         pkg = app_commands().excluded("interrupt").annexed(ui_sys_commands())
         self.install_commands("", pkg)

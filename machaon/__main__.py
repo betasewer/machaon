@@ -25,13 +25,9 @@ def launch_sample_app(default_choice=None):
         p.print_help()
         sys.exit()
 
-    import machaon.commands.app
-    import machaon.commands.character
-    boo.install_commands("", machaon.commands.app.sample_commands().annexed(machaon.commands.character.unicode_commands()))
-
-    import machaon.commands.shell
-    boo.install_commands("", machaon.commands.shell.shell_commands())
-
+    import machaon.commands.catalogue as catalogue
+    boo.install_commands("", catalogue.app_sample_commands().annexed(catalogue.unicode_commands()))
+    boo.install_commands("", catalogue.shell_commands())
     boo.install_syscommands()
 
     boo.go()

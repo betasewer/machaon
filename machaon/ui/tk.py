@@ -71,6 +71,8 @@ class tkLauncher(Launcher):
         self.root.bind('<Shift-Return>', commandline_break)
         self.root.bind('<Shift-Up>', self.on_commandline_up)
         self.root.bind('<Shift-Down>', self.on_commandline_down)
+        self.root.bind('<Control-Up>', lambda e: self.scroll_page(-1))
+        self.root.bind('<Control-Down>', lambda e: self.scroll_page(1))
 
         padx, pady = 3, 3
         self.rootframe = ttk.Frame(self.root)

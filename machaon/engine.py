@@ -472,7 +472,7 @@ class CommandEngine:
         # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
         possible_entries = []
         for commandentry, commandoptions in possible_commands:
-            target = commandentry.get_target()
+            target = commandentry.load()
             spirit = target.invoke_spirit(app)
             
             # 引数コマンドを解析

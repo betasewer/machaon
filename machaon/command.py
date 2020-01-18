@@ -10,14 +10,25 @@ from machaon.engine import CommandParser
 #  command and command package
 # ###################################################################
 #
+normal_command = 0
 auxiliary_command = 1
 hidden_command = 2
 
 # process + command keyword
 class CommandEntry():
-    def __init__(self, process_target, keywordset, commandtype):
-        self.process_target = process_target
-        self.keywords = keywordset # 展開済みのキーワード
+    def __init__(
+        self, 
+        keywords,
+        prog=None, 
+        description="",
+        builder=None,
+        commandtype=normal_command,
+    ):
+        self.target = None
+        self.keywords = keywords # 展開済みのキーワード
+        self.builder = builder
+        self.prog = prog
+        self.description = description
         self.commandtype = commandtype
 
     def match(self, target):
@@ -27,14 +38,24 @@ class CommandEntry():
                 return rest
         return None
     
-    def get_target(self):
-        return self.process_target
+    def load(self):
+        if self.builder:
+            process_target = self.builder.build_target(self)
+            self.target = process_target
+            self.builder = None
+        return self.target
+    
+    def get_prog(self):
+        return self.prog
     
     def get_keywords(self):
         return self.keywords
 
     def get_description(self):
-        return self.process_target.get_description()
+        return self.description
+    
+    def is_hidden(self):
+        return self.commandtype == hidden_command
         
 
 # set of CommandEntry
@@ -78,7 +99,7 @@ class CommandSet:
     def display_entries(self, *, forcehidden=False):
         entries = []
         for x in sorted(self.entries, key=lambda x: x.commandtype):
-            if not forcehidden and x.commandtype == hidden_command:
+            if not forcehidden and x.is_hidden():
                 continue
             entries.append(x)
         return entries
@@ -88,63 +109,34 @@ class CommandSet:
 #
 class CommandBuilder():
     def __init__(self, 
-        target=None, *, 
+        target, 
+        *, 
+        from_module=None,
         prog=None, 
+        description="",
+        commandtype=normal_command,
         args=None, 
         spirit=None,
         custom_command_parser=None, 
-        auxiliary=False,
-        hidden=False,
         **kwargs
     ):
         self.target = target
         self.prog = prog
+        self.description = description
         self.args = args
         self.spirit = spirit
-        self.auxiliary = auxiliary
-        self.hidden = hidden
-        self.cmdinitargs = kwargs
-        self.cmdargs = []
         self.custom_cmdparser = custom_command_parser
-        self.lazy_describers = []
-        
-        # コマンド自体に定義された初期化処理があれば呼ぶ
-        if hasattr(target, "describe"):
-            describer = CommandBuilder.BuildDescriber(self)
-            target.describe(describer)
+        self.frommodule = from_module
+        self.commandtype = commandtype
+        self.cmdinitargs = kwargs
 
-    #
-    class BuildDescriber():
-        def __init__(self, builder):
-            self.builder = builder
-            
-        def describe(self, 
-            prog=None, 
-            args=None, 
-            spirit=None,
-            custom_command_parser=None, 
-            auxiliary=None,
-            hidden=None,
-            **kwargs
-        ):
-            if prog is not None:
-                self.builder.prog = prog
-            if args is not None:
-                self.builder.args = args
-            if spirit is not None:
-                self.builder.spirit = spirit
-            if custom_command_parser is not None:
-                self.builder.custom_cmd_parser = custom_command_parser
-            if auxiliary is not None:
-                self.builder.auxiliary = auxiliary
-            if hidden is not None:
-                self.builder.hidden = hidden
-            self.builder.cmdinitargs.update(kwargs)
-            return self.builder
-            
-        def lazy_describe(self, fn):
-            self.builder.lazy_describe(fn)
-    
+        self.cmdargs = []
+        self.lazy_describers = []
+
+        #
+        if isinstance(target, str) and self.frommodule is None:
+            raise ValueError("'target'に識別名(str)を指定した場合、'from_module'にモジュール名の指定が必要です")
+
     #
     def __getitem__(self, commandstr):
         def _command(**commandkwargs):
@@ -152,18 +144,65 @@ class CommandBuilder():
             self.cmdargs.append((cmdtype, cmds, commandkwargs))
             return self
         return _command
-    
+
+    #
+    def describe(self, 
+        args=None, 
+        spirit=None,
+        custom_command_parser=None, 
+        **kwargs
+    ):
+        if args is not None:
+            self.args = args
+        if spirit is not None:
+            self.spirit = spirit
+        if custom_command_parser is not None:
+            self.custom_cmd_parser = custom_command_parser
+        self.cmdinitargs.update(kwargs)
+        return self
+
     #
     def lazy_describe(self, fn):
         self.lazy_describers.append(fn)
-
+    
     #
-    def build_entry(self, app, setname, keywords):
-        firstkwd, *kwds = keywords
+    #
+    #
+    def create_entry(self, keywords, setname=None):
+        firstkwd, *_kwds = keywords
 
         prog = self.prog
         if prog is None:
             prog = "{}.{}".format(setname, firstkwd) if setname else firstkwd
+
+        return CommandEntry(
+            keywords,
+            prog = prog,
+            description = self.description, 
+            builder = self,
+            commandtype = self.commandtype
+        )
+    
+    #
+    #
+    #
+    def build_target(self, entry):
+        prog = entry.get_prog()
+
+        # コマンドをロードする
+        target = self.target
+        if isinstance(target, str):
+            if isinstance(self.frommodule, str):
+                import importlib
+                mod = importlib.import_module(self.frommodule)
+                member = getattr(mod, target, None)
+                if member is None:
+                    raise ValueError("コマンド'{}'のターゲット'{}'が見つかりません".format(prog, target))
+                target = member
+            
+        # コマンド自体に定義された初期化処理があれば呼ぶ
+        if hasattr(target, "describe"):
+            target.describe(self)
 
         # 引数パーサの作成       
         if self.custom_cmdparser is not None:
@@ -182,34 +221,27 @@ class CommandBuilder():
                 raise ValueError("Undefined command type '{}'".format(cmdtype))
         
         # spirit
-        spirit = self.spirit
-        if spirit is True:
-            spirit = Spirit
-        elif not spirit:
-            spirit = None
+        spirittype = self.spirit
+        if spirittype is None:
+            spirittype = Spirit
         
-        # 遅延コマンド初期化処理を実行する
-        if self.lazy_describe:
-            def lazy_arg_describe(boundspirit, argp):
+        # 遅延コマンド初期化処理を定義する
+        if self.lazy_describers:
+            def lazy_arg_describe(spirit, argparser):
                 for lzydesc in self.lazy_describers:
-                    lzydesc(boundspirit, argp)
+                    lzydesc(spirit, argparser)
         else:
             lazy_arg_describe = None
         
         # コマンドで実行する処理
-        if isinstance(self.target, type):
-            targ = ProcessTargetClass(self.target, argp, spirittype=spirit, lazyargdescribe=lazy_arg_describe)
+        if isinstance(target, type):
+            targ = ProcessTargetClass(target, argp, spirittype=spirittype, lazyargdescribe=lazy_arg_describe)
         else:
-            targ = ProcessTargetFunction(self.target, argp, spirittype=spirit, args=self.args, lazyargdescribe=lazy_arg_describe)
+            targ = ProcessTargetFunction(target, argp, spirittype=spirittype, args=self.args, lazyargdescribe=lazy_arg_describe)
         
-        # 特殊なコマンドの種別
-        typecode = 0
-        if self.auxiliary: 
-            typecode = auxiliary_command
-        if self.hidden: 
-            typecode = hidden_command
+        return targ
+        
 
-        return CommandEntry(targ, (firstkwd, *kwds), typecode)
 
 #
 #
@@ -219,25 +251,25 @@ class CommandPackage():
         self.desc = description
         self.spirit = spirit
         self.builders = []
-    
-    def __getitem__(self, commandstr):
-        def _command(builder=None, *, target=None, **kwargs):
-            cmds = commandstr.split()
 
+    def __getitem__(self, commandstr):
+        def _command(builder=None, *, 
+            target=None, 
+            **kwargs
+        ):
+            cmds = commandstr.split()
             if builder is None:
                 if target is None:
-                    raise ValueError("CommandPackage: 'builder' or 'target' argument is required")
-                builder = CommandBuilder(target, **kwargs)
-
-            if self.spirit is not None and builder.spirit is None:
-                builder.spirit = self.spirit
-
+                    raise ValueError("CommandPackage: 'entry' or 'target' argument is required")
+                if self.spirit is not None and "spirit" not in kwargs:
+                    kwargs["spirit"] = self.spirit
+                builder = describe_command(target, **kwargs)
             self.builders.append([cmds, builder])
             return self
         return _command
     
     #
-    def build_commands(self, app, command_prefixes):
+    def create_commands(self, app, command_prefixes):
         if not command_prefixes:
             setname = None
         else:
@@ -247,7 +279,7 @@ class CommandPackage():
         for cmds, builder in self.builders:
             if len(cmds)==0:
                 continue
-            entry = builder.build_entry(app, setname, cmds)
+            entry = builder.create_entry(cmds, setname)
             entries.append(entry)
         
         return CommandSet(command_prefixes, entries, description=self.desc)
@@ -275,17 +307,31 @@ class CommandPackage():
 def describe_command(
     target,
     *,
+    description="",
     prog=None, 
+    spirit=None,
     args=None, 
     custom_command_parser=None, 
     auxiliary=False,
     hidden=False,
+    from_module=None,
     **kwargs
 ):
+    typecode = normal_command
+    if auxiliary: 
+        typecode = auxiliary_command
+    if hidden: 
+        typecode = hidden_command
+
     return CommandBuilder(
         target, 
-        prog=prog, args=args, custom_command_parser=custom_command_parser,
-        auxiliary=auxiliary, hidden=hidden,
+        prog=prog, 
+        description=description, 
+        from_module=from_module,
+        spirit=spirit,
+        args=args, 
+        commandtype=typecode,
+        custom_command_parser=custom_command_parser,
         **kwargs
     )
 
