@@ -62,7 +62,10 @@ class Launcher():
     #
     # プロセスの情報を更新するために監視
     #
-    def watch_process(self, process):
+    def watch_active_process(self):
+        pass
+
+    def watch_running_process(self, states):
         pass
     
     #
@@ -71,10 +74,20 @@ class Launcher():
     # コマンドを実行する
     #  戻り値: False - なるべく早くアプリを終了させること
     def invoke_command(self, command):
-        self.app.execute_command(command)
-        if self.app.is_to_be_exit():
-            return False
-        self.install_chamber()
+        process = self.app.create_process(command)
+        if process is None:
+            self.app.exit()
+
+        chamber = self.app.run_process(process) # 実行
+
+        self.update_active_chamber(chamber, updatemenu=False, updateinput=False)
+        self.add_chamber_menu(chamber)
+
+        # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
+        states = self.app.get_chambers_state()
+        states["running"].append(chamber.get_index())
+        self.watch_running_process(states)
+
         return True
         
     # 入力を取得
@@ -86,15 +99,13 @@ class Launcher():
         return inputtext
     
     # コマンド欄を実行する
-    #  戻り値: False - なるべく早くアプリを終了させること
     def execute_command_input(self):
         command = self.pop_input_text()
         cha = self.app.get_active_chamber()
         if cha is not None and cha.is_waiting_input():
             cha.finish_input(command)
         else:
-            return self.invoke_command(command)
-        return True
+            self.invoke_command(command)
 
     # コマンド欄を復元する
     def rollback_command_input(self):
@@ -123,10 +134,15 @@ class Launcher():
     #
     #
     #
-    def install_chamber(self):
+    def activate_new_chamber(self):
         chamber = self.app.get_active_chamber()
         self.update_active_chamber(chamber, updatemenu=False, updateinput=False)
         self.add_chamber_menu(chamber)
+
+        # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
+        states = self.app.get_chambers_state()
+        states["running"].append(chamber.get_index())
+        self.watch_running_process(states)
 
     def shift_active_chamber(self, d):
         index = self.app.get_active_chamber_index()
@@ -145,12 +161,14 @@ class Launcher():
     def update_active_chamber(self, chamber, updatemenu=True, updateinput=True):
         msgs = chamber.get_message()
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
-        self.watch_process(chamber)
+        self.watch_active_process()
+
+        if updatemenu:
+            self.update_chamber_menu(active=chamber.get_index())
+
         if updateinput:
             cmd = chamber.get_command()
             self.replace_input_text(cmd)
-        if updatemenu:
-            self.update_chamber_menu(active=chamber)
 
     def add_chamber_menu(self, chamber):
         pass

@@ -381,18 +381,21 @@ class ProcessInterrupted(Exception):
 # スレッドなしで即時実行
 #
 class InstantProcedure():
-    def __init__(self, app, pseudocommand="nothing", **kwargs):
+    def __init__(self, app, pseudocommand=".nothing", **kwargs):
         self.spirit = Spirit(app)
         self.kwargs = kwargs
         self.messages = []
         self.spirit.bind_process(self)
-        self.pseudocommand = "."+pseudocommand
+        self.pseudocommand = pseudocommand
     
     def procedure(self, **kwargs):
         raise NotImplementedError()
         
     def execute(self):
         return self.procedure(**self.kwargs)
+    
+    def run(self, _app):
+        return self.execute()
     
     def get_spirit(self):
         return self.spirit

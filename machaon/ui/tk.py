@@ -216,19 +216,33 @@ class tkLauncher(Launcher):
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
         
-    def watch_process(self, procchamber):
-        """ アクティブなプロセスの状態を監視する。
-            定期的に自動実行する """
-        # プロセスの発したメッセージを読みに行く
+    def watch_active_process(self):
+        # アクティブなプロセスの発するメッセージを読みに行く
+        procchamber = self.app.get_active_chamber()
         print("[{}] watching message...".format(procchamber.get_command()))
         running = procchamber.is_running()
         if not self.handle_chamber_message(procchamber):
             return
         if running:
-            self.log.after(300, self.watch_process, procchamber) # 100ms
+            self.log.after(300, self.watch_active_process) # 300ms
         else:
-            self.update_chamber_menu(ceased=procchamber)
-            print("[{}] watch finished.".format(procchamber.get_command()))
+            print("stopped watching.")
+
+    def watch_running_process(self, states):
+        curstates = self.app.get_chambers_state()
+        print("checking running... = [{}]".format(curstates["running"]))
+
+        # 停止したプロセスを調べる
+        for wasrunning in states["running"]:
+            if wasrunning not in curstates["running"]:
+                self.update_chamber_menu(ceased=wasrunning)
+                procchamber = self.app.get_chamber(wasrunning)
+                print("[{}] finished.".format(procchamber.get_command()))
+        
+        if curstates["running"]:
+            self.log.after(100, self.watch_running_process, curstates) 
+        else:
+            print("stopped checking.")
     
     #
     def scroll_page(self, delta):
@@ -292,9 +306,9 @@ class tkLauncher(Launcher):
         self.chambermenu.yview_moveto(1.0)
         self.chambermenu.configure(state='disable')
         if chamber.is_running():
-            self.update_chamber_menu(active=chamber)
+            self.update_chamber_menu(active=chamber.get_index())
         else:
-            self.update_chamber_menu(active=chamber, ceased=chamber)
+            self.update_chamber_menu(active=chamber.get_index(), ceased=chamber.get_index())
     
     def update_chamber_menu(self, *, active=None, ceased=None):
         def update_prefix(index, b, prefix):
@@ -311,18 +325,16 @@ class tkLauncher(Launcher):
 
         self.chambermenu.configure(state='normal')
 
-        if active:
+        if active is not None:
             # 以前のアクティブチャンバー
             if self.chambermenu_active is not None:
                 update_prefix(self.chambermenu_active, 0, "  ")
-            # 新たなアクティブチャンバー
-            idx = active.get_index()
-            update_prefix(idx, 0, "> ")
-            self.chambermenu_active = idx
+            # 新たなアクティブチャン
+            update_prefix(active, 0, "> ")
+            self.chambermenu_active = active
 
-        if ceased:
-            idx = ceased.get_index()
-            remove_tag(idx, "running")
+        if ceased is not None:
+            remove_tag(ceased, "running")
 
         self.chambermenu.configure(state='disable')
 

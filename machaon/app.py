@@ -86,11 +86,10 @@ class AppRoot:
     # コマンド処理の流れ
     #
     # コマンド文字列から呼び出す
-    def execute_command(self, commandstr):
+    def create_process(self, commandstr):
         # 終了コマンド
         if commandstr == "exit":
-            self.exit()
-            return
+            return None
 
         # 文字列を先頭の空白で区切る
         commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
@@ -102,30 +101,27 @@ class AppRoot:
 
         if commandhead == ".set-prefix":
             prefix = commandtail
-            proc = SetPrefixProcedure(self, self.cmdengine, prefix)
-            self.processhive.add(proc, proc.get_full_command())
-            self.processhive.execute(self)
-            return proc
+            return SetPrefixProcedure(self, self.cmdengine, prefix)
             
         # コマンドを解析
         possible_entries = self.cmdengine.parse_command(commandhead, commandtail, self)
         if not possible_entries:
             # すべて失敗
-            proc = InstantProcedure(self)
-            self.processhive.add(proc, commandstr)
             failcmd, failcmderror = self.cmdengine.get_first_parse_command_fail()
-            self.ui.on_bad_command(proc.get_spirit(), failcmd, commandstr, failcmderror)
-            return proc
+            return CommandFailureProcedure(self, commandstr=commandstr, failcmd=failcmd, failcmderror=failcmderror)
         
         # 一つを選択する
         # TODO: ランチャー上で選択させる
         process_target, spirit, parseresult = possible_entries[0]
 
-        # 引数を渡してプロセスを実行
-        process = Process(process_target, spirit, parseresult)
-        self.processhive.add(process, process.get_full_command())
+        # プロセスの作成
+        return Process(process_target, spirit, parseresult)
+    
+    # プロセスを実行しアクティブにする
+    def run_process(self, process):
+        chamber = self.processhive.add(process, process.get_full_command())
         self.processhive.run(self)
-        return process
+        return chamber
     
     # プロセスを即時実行する
     # メッセージ出力を処理しない
@@ -198,6 +194,13 @@ class AppRoot:
     
     def get_chamber(self, index):
         return self.processhive.get(index)
+    
+    def get_chambers_state(self):
+        runs = self.processhive.get_runnings()
+        report = {
+            "running" : [x.get_index() for x in runs]
+        }
+        return report
         
     # メインスレッド側から操作中断
     def interrupt_process(self):
@@ -211,9 +214,19 @@ class AppRoot:
 #
 class SetPrefixProcedure(InstantProcedure):
     def __init__(self, app, cmdengine, prefix):
-        super().__init__(app, "set-prefix "+prefix, cmdengine=cmdengine, prefix=prefix)
+        super().__init__(app, ".set-prefix "+prefix, cmdengine=cmdengine, prefix=prefix)
 
     def procedure(self, cmdengine, prefix):
         cmdengine.set_command_prefix(prefix)
         self.spirit.message_em("コマンド接頭辞'{}'を設定".format(prefix))
 
+#
+#
+#
+class CommandFailureProcedure(InstantProcedure):
+    def __init__(self, app, commandstr, failcmd, failcmderror):
+        super().__init__(app, commandstr, failcmd=failcmd, failcmderror=failcmderror)
+
+    def procedure(self, failcmd, failcmderror):
+        ui = self.spirit.get_app_ui()
+        ui.on_bad_command(self.spirit, failcmd, self.get_full_command(), failcmderror)
