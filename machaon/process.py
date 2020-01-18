@@ -277,17 +277,20 @@ class Process:
         self.thread.start()
     
     def execute(self):
+        invocation = None
+        
         if self.parsedcommand.has_exit_message():
             # コマンドパーサのメッセージがある場合は出力して終了
             for line in self.parsedcommand.get_exit_messages():
                 self.spirit.message(line)
-            self.last_invocation = None
         else:
             # パスの展開: ここでいいのか？
             self.parsedcommand.expand_special_arguments(self.spirit) 
             # 操作を実行する
-            inv = self.target.invoke(self.spirit, self.parsedcommand)
-            self.last_invocation = inv
+            invocation = self.target.invoke(self.spirit, self.parsedcommand)
+
+        self.last_invocation = invocation
+        return invocation
     
     def get_target(self):
         return self.target 

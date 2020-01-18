@@ -230,7 +230,7 @@ class tkLauncher(Launcher):
 
     def watch_running_process(self, states):
         curstates = self.app.get_chambers_state()
-        print("checking running... = [{}]".format(curstates["running"]))
+        print("checking running... = {}".format(curstates["running"]))
 
         # 停止したプロセスを調べる
         for wasrunning in states["running"]:
