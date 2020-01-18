@@ -27,7 +27,7 @@ def execprocess(spi, commandhead, commandstr):
     import machaon.platforms
     shell_encoding = machaon.platforms.current.shell_ui().encoding
 
-    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     out = None
     err = None
     while True:
@@ -102,6 +102,8 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, re
         app.message("-------------------------------------------------------")
 
     for fpath in paths:
+        app.interruption_point()
+
         ftext = os.path.normpath(os.path.relpath(fpath, cd))
         isdir = os.path.isdir(fpath)
         if isdir and not ftext.endswith(os.path.sep):
