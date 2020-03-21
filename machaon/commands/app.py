@@ -28,11 +28,69 @@ def command_interrupt(spi):
 """
 
 #
+class HelpItem():
+    def __init__(self, cmdset, command_entry):
+        self.cmdset = cmdset
+        self.cmdentry = command_entry
+        
+    def keyword(self):
+        return ", ".join(self.cmdentry.keywords)
+
+    def qual_keyword(self):
+        pfx = self.cmdset.get_prefixes()
+        heads = []
+        for i, kwd in enumerate(self.cmdentry.keywords):
+            if i == 0 and pfx:
+                qualkwd = "{}.{}".format(pfx[0], kwd)
+            elif pfx:
+                qualkwd = "{}{}".format(pfx[1 if len(pfx)>=1 else 0], kwd)
+            else:
+                qualkwd = kwd
+            heads.append(qualkwd)
+        return ", ".join(heads)
+    
+    def description(self):
+        return self.cmdentry.get_description()
+    
+    def setname(self):
+        return self.cmdset.get_name()
+
+    def setdescription(self):
+        return self.cmdset.get_description()
+    
+    @classmethod
+    def describe(cls, builder):
+        builder.default_columns(
+            table=("keyword", "description", "setname"),
+        )["keyword kwd"](
+            disp="キーワード"
+        )["qual_keyword qkwd"](
+            disp="コマンド"
+        )["description desc"](
+            disp="説明"
+        )["setname"](
+            disp="コマンドセット"
+        )["setdescription setdesc"](
+            disp="コマンドセットの説明"
+        )
+
+    
+
+#
 def command_help(spi, command_name=None):
     spi.message("<< コマンド一覧 >>")
     spi.message("各コマンドの詳細は command --help で")
     spi.message("")
     
+    items = []
+    for cmdset in spi.get_app().get_command_sets():
+        for entry in cmdset.display_entries():
+            items.append(HelpItem(cmdset, entry))
+
+    spi.create_data(items, ":table")
+    spi.dataview()
+
+"""   
     for cmdset in spi.get_app().get_command_sets():
         pfx = cmdset.get_prefixes()
         msgs = []
@@ -72,6 +130,7 @@ def command_help(spi, command_name=None):
         spi.message("")
     
     spi.message("")
+"""
 
 # 終了処理はAppRoot内にある
 def command_exit(spi):

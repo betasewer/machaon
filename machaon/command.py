@@ -56,11 +56,12 @@ class CommandEntry():
     
     def is_hidden(self):
         return self.commandtype == hidden_command
-        
+
 
 # set of CommandEntry
 class CommandSet:
-    def __init__(self, prefixes, entries, *, description=""):
+    def __init__(self, name, prefixes, entries, *, description=""):
+        self.name = name
         self.entries = entries
         self.prefixes = prefixes
         self.description = description
@@ -86,6 +87,9 @@ class CommandSet:
                 continue
             m.append((e, rest))
         return m
+    
+    def get_name(self):
+        return self.name
     
     def get_description(self):
         return self.description
@@ -247,7 +251,8 @@ class CommandBuilder():
 #
 #
 class CommandPackage():
-    def __init__(self, *, description, spirit):
+    def __init__(self, name, *, description, spirit):
+        self.name = name
         self.desc = description
         self.spirit = spirit
         self.builders = []
@@ -261,9 +266,10 @@ class CommandPackage():
             if builder is None:
                 if target is None:
                     raise ValueError("CommandPackage: 'entry' or 'target' argument is required")
-                if self.spirit is not None and "spirit" not in kwargs:
-                    kwargs["spirit"] = self.spirit
                 builder = describe_command(target, **kwargs)
+
+            if self.spirit is not None and builder.spirit is None:
+                builder.spirit = self.spirit
             self.builders.append([cmds, builder])
             return self
         return _command
@@ -282,11 +288,11 @@ class CommandPackage():
             entry = builder.create_entry(cmds, setname)
             entries.append(entry)
         
-        return CommandSet(command_prefixes, entries, description=self.desc)
+        return CommandSet(self.name, command_prefixes, entries, description=self.desc)
     
     # パッケージをまとめて新しいパッケージに
     def annexed(self, *others):
-        p = CommandPackage(description=self.desc, spirit=self.spirit)
+        p = CommandPackage(self.name, description=self.desc, spirit=self.spirit)
         p.builders = self.builders
         for other in others:
             p.builders += other.builders
@@ -294,7 +300,7 @@ class CommandPackage():
     
     # コマンドを除外して新しいパッケージに
     def excluded(self, *excludenames):
-        p = CommandPackage(description=self.desc, spirit=self.spirit)
+        p = CommandPackage(self.name, description=self.desc, spirit=self.spirit)
         for cmds, builder in self.builders:
             if cmds[0] in excludenames:
                 continue
@@ -337,10 +343,12 @@ def describe_command(
 
 #
 def describe_command_package(
+    package_name,
     description,
-    spirit=True
+    spirit=None
 ):
     return CommandPackage(
+        package_name,
         description=description,
         spirit=spirit
     )

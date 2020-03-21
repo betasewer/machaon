@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+from datetime import datetime
 from typing import Tuple, Sequence, List
 
 import tkinter as tk
@@ -11,8 +12,58 @@ import tkinter.ttk as ttk
 
 from machaon.ui.basic_launcher import Launcher
 from machaon.command import describe_command, describe_command_package
-from machaon.cui import collapse_text
+from machaon.cui import collapse_text, get_text_width, ljust
 import machaon.platforms
+
+#
+class textindex():
+    def __init__(self, tkindex=None, *, line=None, char=None):
+        if tkindex:
+            parts = str(tkindex).split(".")
+            if len(parts) < 2:
+                return None
+            if line is None:
+                line = int(parts[0])
+            if char is None:
+                char = int(parts[1])
+        if line is None:
+            line = 1
+        if char is None:
+            char = 0        
+        self.line = line
+        self.char = char
+    
+    def __call__(self, *, line=None, char=None):
+        if line is not None:
+            self.line = line
+        if char is not None:
+            self.char = char
+        return self
+    
+    def __str__(self):
+        return "{}.{}".format(self.line, self.char)
+    
+    def compare(self, right):
+        left = self
+        if left.line < right.line:
+            return 1
+        elif left.line == right.line:
+            if left.char == right.char:
+                return 0
+            elif left.char < right.char:
+                return 1
+            else:
+                return -1
+        else:
+            return -1
+        
+    @staticmethod
+    def rangetest(beg, end, point):
+        return beg.compare(point) >= 0 and point.compare(end) > 0
+
+#
+class HYPERLABEL_DATAITEM:
+    pass
 
 #
 #
@@ -29,8 +80,10 @@ class tkLauncher(Launcher):
         self.log = None          #
         #
         self.hyperlinks = HyperlinkDatabase()
+        self.hyperlabels = []
         self.chambermenu_active = None
-        self.is_stick_bottom = tk.BooleanVar(value=False)
+        self.focusbg = (None, None)
+        self.is_stick_bottom = tk.BooleanVar(value=True)
 
     def openfilename_dialog(self, *, 
         filters=None, 
@@ -56,39 +109,29 @@ class tkLauncher(Launcher):
             title = title,
             mustexist = mustexist  
         )
-
+    
     #
     # UIの配置と初期化
     #
     def init_screen(self):
         self.root.title(self.screen_title)
         self.root.geometry("{}x{}".format(*self.screen_geo))
-        self.root.protocol("WM_DELETE_WINDOW", self.app.exit)
+        self.root.protocol("WM_DELETE_WINDOW", self.app.exit)        
         
-        def commandline_break(e):
-            return None
-        self.root.bind('<Return>', self.on_commandline_return)
-        self.root.bind('<Shift-Return>', commandline_break)
-        self.root.bind('<Shift-Up>', self.on_commandline_up)
-        self.root.bind('<Shift-Down>', self.on_commandline_down)
-        self.root.bind('<Control-Up>', lambda e: self.scroll_page(-1))
-        self.root.bind('<Control-Down>', lambda e: self.scroll_page(1))
-
         padx, pady = 3, 3
         self.rootframe = ttk.Frame(self.root)
         self.rootframe.pack(fill=tk.BOTH, expand=1)
 
         self.frame = ttk.Frame(self.rootframe)
         self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
-    
+
         # コマンド入力欄
-        self.commandline = tk.Text(self.frame, relief="solid", height=4, width=40)
-        self.commandline.grid(column=0, row=0, sticky="ns", padx=padx, pady=pady)
+        self.commandline = tk.Text(self.frame, relief="solid", height=4)
         self.commandline.focus_set()
-        self.commandline.bind('<Return>', self.on_commandline_return)
-        self.commandline.bind('<Shift-Return>', commandline_break)
-        self.commandline.bind('<Shift-Up>', self.on_commandline_up)
-        self.commandline.bind('<Shift-Down>', self.on_commandline_down)
+        #self.commandline.bind('<Return>', self.on_commandline_return)
+        #self.commandline.bind('<Shift-Return>', commandline_break)
+        #self.commandline.bind('<Shift-Up>', self.on_commandline_up)
+        #self.commandline.bind('<Shift-Down>', self.on_commandline_down)
         
         # ボタンパネル
         def addbutton(parent, **kwargs):
@@ -106,8 +149,7 @@ class tkLauncher(Launcher):
             self.tkwidgets.append(("frame", f))
             return f
         
-        histlist = tk.Text(self.frame, relief="solid", height=10, width=40)
-        histlist.grid(column=0, row=1, sticky="ew", padx=padx, pady=pady)
+        histlist = tk.Text(self.frame, relief="solid", height=4, width=45)
         histlist.tag_configure("link")
         histlist.tag_bind("link", "<Enter>", lambda e: histlist.config(cursor="hand2"))
         histlist.tag_bind("link", "<Leave>", lambda e: histlist.config(cursor=""))
@@ -120,21 +162,21 @@ class tkLauncher(Launcher):
         # ログウィンドウ
         #self.log = tk.scrolledtext.ScrolledText(self.frame, wrap="word", font="TkFixedFont")
         self.log = tk.Text(self.frame, wrap="word", font="TkFixedFont", relief="solid")
-        self.log.grid(column=1, row=0, rowspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
         self.log.tag_bind("clickable", "<Enter>", self.hyper_enter)
         self.log.tag_bind("clickable", "<Leave>", self.hyper_leave)
-        self.log.tag_bind("clickable", "<Control-Button-1>", self.hyper_click)
-        self.log.tag_bind("clickable", "<Double-Button-1>", self.hyper_as_input_text)
-        
-        tk.Grid.columnconfigure(self.frame, 1, weight=1)
-        tk.Grid.rowconfigure(self.frame, 0, weight=1)
+        self.log.tag_bind("clickable", "<Button-1>", self.hyper_select)
+        self.log.tag_bind("clickable", "<Control-Button-1>", self.hyper_open)
+        self.log.tag_bind("clickable", "<Double-Button-1>", self.hyper_copy_input_text)
 
+        # エラーログウィンドウ
+        #self.errlog = tk.Text(self.frame, width=30, wrap="word", font="TkFixedFont", relief="solid")
+        #self.errlog.configure(state='disabled')
+        
         # ボタン等
         btnpanel = addframe(self.frame)
-        btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
         #btnunredo = addframe(btnpanel)
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
         # ----------------------
@@ -154,28 +196,127 @@ class tkLauncher(Launcher):
         #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
         #b.pack(side=tk.TOP, fill=tk.X, pady=2)
     
+        # メインウィジェットの配置
+        self.commandline.grid(column=0, row=0, sticky="news", padx=padx, pady=pady)
+        self.chambermenu.grid(column=1, row=0, sticky="news", padx=0, pady=pady)
+        self.log.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
+    
+        tk.Grid.columnconfigure(self.frame, 0, weight=1)
+        tk.Grid.rowconfigure(self.frame, 1, weight=1)
         tk.Grid.rowconfigure(self.frame, 2, weight=0)
 
         # フレームを除去       
         #self.root.overrideredirect(True)
         from machaon.ui.theme import dark_classic_theme
         self.apply_theme(dark_classic_theme())
+        
+        # イベント
+        def bind_event(*widgets):
+            def _deco(fn):
+                fnname: str = fn.__name__
+                onpos = fnname.find("on_")
+                if onpos == -1:
+                    raise ValueError("")
+                sequence = "<{}>".format("-".join(fnname[onpos+3:].split("_")))
+                for w in widgets:
+                    w.bind(sequence, fn)
+            return _deco
+
+        # コマンド入力
+        @bind_event(self.commandline)
+        def cmdline_on_Return(e):
+            self.on_commandline_return()        
+            return "break"
+        
+        @bind_event(self.commandline)
+        def cmdline_on_Control_Return(e): # 改行を入力
+            return None
+        
+        @bind_event(self.commandline)
+        def cmdline_on_Escape(e):
+            self.log.focus_set() # 選択モードへ
+            return "break"
+        
+        @bind_event(self.commandline)
+        def cmdline_on_Alt_Right(e):
+            self.rollback_command_input()
+            return "break"
+        
+        @bind_event(self.commandline)
+        def cmdline_on_Alt_Left(e):
+            self.replace_input_text("")
+            return "break"
+        
+        # ログウィンドウ
+        @bind_event(self.log)
+        def log_on_Return(e):
+            self.log_input_selection()
+            self.commandline.focus_set()
+            return "break"
     
+        @bind_event(self.log)
+        def log_on_Escape(e):
+            self.log_set_selection() # 項目選択を外す
+            self.commandline.focus_set() # コマンド入力モードへ
+            return None
+            
+        @bind_event(self.log)
+        def log_on_Down(e):
+            self.hyper_select_next()
+            return "break"
+
+        @bind_event(self.log)
+        def log_on_Up(e):
+            self.hyper_select_prev()
+            return "break"
+
+        # 全体
+        @bind_event(self.root)
+        def on_Shift_Up(e):
+            self.on_commandline_up()
+            return "break"
+
+        @bind_event(self.root)
+        def on_Shift_Down(e):
+            self.on_commandline_down()
+            return "break"
+
+        @bind_event(self.root)
+        def on_Control_Up(e):
+            self.scroll_page(-1)
+
+        @bind_event(self.root)
+        def on_Control_Down(e):
+            self.scroll_page(1)
+
+        @bind_event(self.root, self.commandline, self.log)
+        def on_Control_C(e):
+            self.app.interrupt_process()
+            return "break"
+
+        @bind_event(self.commandline, self.log)
+        def on_FocusIn(e):
+            e.widget.configure(background=self.focusbg[0])
+            
+        @bind_event(self.commandline, self.log)
+        def on_FocusOut(e):
+            e.widget.configure(background=self.focusbg[1])
+            
     #
     # ログの操作
     #
     def insert_screen_message(self, msg):
         """ メッセージをログ欄に追加する """
         if msg.tag == "hyperlink":
-            dbtag = self.hyperlinks.add(msg.get_hyperlink_link())
-            tags = (msg.argument("linktag") or "hyperlink", "clickable", "hlink-{}".format(dbtag))
+            tags = self.new_hyper_tags(msg.get_hyperlink_link(), msg.get_hyperlink_label(), msg.argument("linktag"))
         else:
             tags = (msg.tag or "message",)
         
         self.log.configure(state='normal')
         
         # メッセージの挿入
-        self.log.insert("end", msg.text, tags)
+        self.log.insert("end", msg.get_text(), tags)
         if not msg.argument("nobreak", False):
             self.log.insert("end", "\n")
 
@@ -219,7 +360,7 @@ class tkLauncher(Launcher):
             self.log.yview_moveto(0) # ログ上端へスクロール
         
     def watch_active_process(self):
-        # アクティブなプロセスの発するメッセージを読みに行く
+        """ アクティブなプロセスの発するメッセージを読みに行く """
         procchamber = self.app.get_active_chamber()
         print("[{}] watching message...".format(procchamber.get_command()))
         running = procchamber.is_running()
@@ -253,44 +394,56 @@ class tkLauncher(Launcher):
     #
     # key handler
     #
-    def on_commandline_return(self, e):
+    def on_commandline_return(self):
         if self.execute_command_input():
             self.commandline.mark_set("INSERT", 0.0)
-        return "break"
 
-    def on_commandline_up(self, e):
-        if not self.rollback_command_input():
-            self.shift_active_chamber(1)
+    def on_commandline_up(self):
+        self.shift_active_chamber(1)
         self.commandline.mark_set("INSERT", 0.0)
-        return "break"
 
-    def on_commandline_down(self, e):
+    def on_commandline_down(self):
         self.shift_active_chamber(-1)
         self.commandline.mark_set("INSERT", 0.0)
-        return "break"
 
     #
     # ハイパーリンク
     #
+    def new_hyper_tags(self, link, label=None, linktag=None):
+        dbkey = self.hyperlinks.add(link)
+        tags = (linktag or "hyperlink", "clickable", "hlink-{}".format(dbkey))
+        if label is not None:
+            self.hyperlabels.append(label)
+            labelkey = len(self.hyperlabels)-1
+            tags = tags + ("label-{}".format(labelkey),)
+        return tags
+
     def hyper_enter(self, _event):
         self.log.config(cursor="hand2")
 
     def hyper_leave(self, _event):
         self.log.config(cursor="")
     
-    def hyper_clicked_link(self):
-        tags = self.log.tag_names(tk.CURRENT)
+    def hyper_resolve_link(self, index):
+        linkkey = None
+        labelkey = None
+        tags = self.log.tag_names(index)
         for tag in tags:
             if tag.startswith("hlink-"):
-                break
-        else:
-            return
-        key = int(tag[len("hlink-"):])
-        link = self.hyperlinks.resolve(key)
-        return link
+                linkkey = int(tag[len("hlink-"):])
+            elif tag.startswith("label-"):
+                labelkey = int(tag[len("label-"):])
 
-    def hyper_click(self, _event):
-        link = self.hyper_clicked_link()
+        if linkkey is None:
+            return None, None
+        link = self.hyperlinks.resolve(linkkey)
+        label = None
+        if labelkey is not None:
+            label = self.hyperlabels[labelkey]
+        return link, label
+
+    def hyper_open(self, _event):
+        link, _label = self.hyper_resolve_link(tk.CURRENT)
         if link is not None:
             if os.path.isfile(link) or os.path.isdir(link):
                 machaon.platforms.current.openfile(link)
@@ -298,12 +451,145 @@ class tkLauncher(Launcher):
                 import webbrowser
                 webbrowser.open_new_tab(link)
 
+    def hyper_select(self, _event):
+        cur = textindex(self.log.index(tk.CURRENT))
+
+        ppoints = self.log.tag_prevrange("hyperlink", tk.CURRENT)
+        if ppoints and cur.compare(textindex(ppoints[1])) >= 0:
+            beg, end = ppoints[0], ppoints[1]
+        else: 
+            # rend -> compare の順になっている
+            npoints = self.log.tag_nextrange("hyperlink", tk.CURRENT)
+            if not npoints:
+                return
+            beg, end = npoints[0], npoints[1]
+            
+        self.log_set_selection(beg, end)
+        self.hyper_select_dataview_item(beg)
+
+    def hyper_select_next(self):
+        _beg, end = self.log_get_selection()
+        if end is None:
+            end = 1.0
+        points = self.log.tag_nextrange("hyperlink", end)
+        if not points:
+            # 先頭に戻る
+            points = self.log.tag_nextrange("hyperlink", "1.0")
+            if not points:
+                return
+        self.log_set_selection(points[0], points[1])
+        self.hyper_select_dataview_item(points[0])
+        self.log.see(points[1])
+    
+    def hyper_select_prev(self):
+        beg, _end = self.log_get_selection()
+        if beg is None:
+            beg = tk.END
+        points = self.log.tag_prevrange("hyperlink", beg)
+        if not points:
+            # 末尾に戻る
+            points = self.log.tag_prevrange("hyperlink", tk.END)
+            if not points:
+                return
+        self.log_set_selection(points[0], points[1])
+        self.hyper_select_dataview_item(points[0])
+        self.log.see(points[1])
+
+    #
+    # 選択
+    #
+    def log_get_selection(self):
+        selpoints = self.log.tag_ranges("log-selection")
+        if not selpoints:
+            return None, None
+        return selpoints[0], selpoints[1]
+    
+    def log_set_selection(self, beg=None, end=None):
+        # 現在の選択を取り除く
+        oldbeg, oldend = self.log_get_selection()
+        if oldbeg is not None:
+            self.log.tag_remove("log-selection", oldbeg, oldend)
+
+        # 新しい選択を設定
+        if beg is not None:
+            self.log.tag_add("log-selection", beg, end)
+    
+    def log_input_selection(self):
+        # 選択位置を取得
+        beg, _end = self.log_get_selection()
+        if beg is None:
+            return None
+
+        # リンクからオブジェクトを取り出す
+        resolved_as_item = False
+        link, label = self.hyper_resolve_link(beg)
+        if label is HYPERLABEL_DATAITEM:
+            # データ取り出し
+            resolved_as_item = True
+
+        if not resolved_as_item:
+            self.insert_input_text(link)
+    
+    #
+    #
+    #
+    def dataviewer(self, viewtype):
+        return {
+            "table" : DataTableView,
+            "wide" : DataWideView,
+        }[viewtype]
+    
+    def insert_screen_dataview(self, msg, viewer, data):
+        self.log.configure(state='normal')
+        viewer.render(self, self.log, data)
+        self.log.configure(state='disabled')
+    
+    def select_screen_dataview_item(self, index, charindex):
+        # 現在のデータセットのアイテムを選択する
+        datas = self.app.get_active_chamber().get_bound_data(running=True)
+        if datas is None:
+            return False
+        datas.select(index)
+        self.log.configure(state='normal')
+        self.dataviewer(datas.get_viewtype()).change_select(self, self.log, charindex)
+        self.log.configure(state='disabled')
+        return True
+    
+    def hyper_select_dataview_item(self, index):
+        # リンクからオブジェクトを取り出す        
+        link, label = self.hyper_resolve_link(index)
+        if label is HYPERLABEL_DATAITEM:
+            itemindex = int(link)
+            if self.select_screen_dataview_item(itemindex, charindex=index):
+                return True
+        return False
+
+    def select_dataview_item(self, index):
+        # リンクの場所を探す
+        points = self.log.tag_ranges("hyperlink")
+        for i in range(0, len(points), 2):
+            link, label = self.hyper_resolve_link(points[i])
+            if label is HYPERLABEL_DATAITEM:
+                itemindex = int(link)
+                if itemindex == index:
+                    linkbeg = points[i]
+                    linkend = points[i+1]
+                    break
+        else:
+            raise ValueError("invalid dataview index")
+        
+        self.log_set_selection(linkbeg, linkend)
+        self.select_screen_dataview_item(index, charindex=linkbeg)
+
     #
     # チャンバーメニューの操作
     #
     def add_chamber_menu(self, chamber):
-        line = collapse_text("  " + " ".join(chamber.get_command().splitlines()), 35)
+        #sign = datetime.now().strftime("%Y-%m-%d %H:%M.%S")
+        line = collapse_text(" ".join(chamber.get_command().splitlines()), 30)
+        line = "[{}]".format(chamber.get_index()+1).ljust(6) + " " + line
         self.chambermenu.configure(state='normal')
+        self.chambermenu.insert(tk.END, "  ", ("chamber,"))
         self.chambermenu.insert(tk.END, line + "\n", ("running", "link", "chamber",))
         self.chambermenu.yview_moveto(1.0)
         self.chambermenu.configure(state='disable')
@@ -334,6 +620,8 @@ class tkLauncher(Launcher):
             # 新たなアクティブチャン
             update_prefix(active, 0, "> ")
             self.chambermenu_active = active
+            # 必要ならスクロールする
+            self.chambermenu.see("{}.0".format(self.chambermenu_active))
 
         if ceased is not None:
             remove_tag(ceased, "running")
@@ -367,9 +655,9 @@ class tkLauncher(Launcher):
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
 
-    def hyper_as_input_text(self, _event):
+    def hyper_copy_input_text(self, _event):
         """ クリックされたハイパーリンクを入力欄に追加する """
-        link = self.hyper_clicked_link()
+        link, _label = self.hyper_resolve_link(tk.CURRENT)
         if os.path.exists(link):
             link = os.path.relpath(link, self.app.get_current_dir()) # 存在するパスであれば相対パスに直す
         self.insert_input_text(link)
@@ -403,6 +691,8 @@ class tkLauncher(Launcher):
         highlight = theme.getval("color.highlight", msg_em)
         secbg = theme.getval("color.sectionbackground", bg)
 
+        self.focusbg = (secbg, bg)
+
         style.configure("TButton", relief="flat", background=bg, foreground=msg)
         style.map("TButton", 
             lightcolor=[("pressed", bg)],
@@ -425,25 +715,92 @@ class tkLauncher(Launcher):
             elif typename == "checkbox":
                 wid.configure(style="TCheckbutton")
         self.frame.configure(style="TFrame")
-        
+ 
         commandfont = theme.getfont("commandfont")
         logfont = theme.getfont("logfont")
 
-        self.commandline.configure(background=bg, foreground=msg, insertbackground=insmark, font=commandfont, borderwidth=1)
+        self.commandline.configure(background=secbg, foreground=msg, insertbackground=insmark, font=commandfont, borderwidth=1)
         
-        self.log.configure(background=secbg, selectbackground=highlight, font=logfont, borderwidth=1)
+        self.log.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.log.tag_configure("message", foreground=msg)
         self.log.tag_configure("message_em", foreground=msg_em)
         self.log.tag_configure("warn", foreground=msg_wan)
         self.log.tag_configure("error", foreground=msg_err)
         self.log.tag_configure("input", foreground=msg_inp)
         self.log.tag_configure("hyperlink", foreground=msg_hyp)
+        self.log.tag_configure("log-selection", background=highlight, foreground=msg)
+        self.log.tag_configure("log-item-selection", foreground=msg_em)
 
         self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.chambermenu.tag_configure("chamber", foreground=msg)
         self.chambermenu.tag_configure("running", foreground=msg_inp)
+        self.chambermenu.tag_configure("header", foreground=msg_em)
 
         self.set_theme(theme)
+
+#
+#
+#
+class DataTableView():    
+    @classmethod
+    def render(cls, ui, wnd, data):
+        rows, colwidth = data.to_string_table()
+        
+        columns = [x.get_description() for x in data.get_predicates()]
+        colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colwidth)]
+
+        # ヘッダー
+        head = "      | "
+        wnd.insert("end", head, ("message",))
+        line = ""
+        for col, width in zip(columns, colwidths):
+            line += ljust(col, width)
+        wnd.insert("end", line+"\n", ("message_em",))
+
+        # 値
+        for i, row in enumerate(rows):
+            line = " | "
+            for s, width in zip(row, colwidths):
+                line += ljust(s, width)
+
+            index = str(i)
+            if i == data.selection():
+                head = ">> " + " "*(2-len(index))
+                tags = ("message", "log-item-selection")
+                linktags = ui.new_hyper_tags(index, HYPERLABEL_DATAITEM) + ("log-selection",)
+            else:   
+                head = " "*(5-len(index))
+                tags = ("message",)
+                linktags = ui.new_hyper_tags(index, HYPERLABEL_DATAITEM)
+
+            wnd.insert("end", head, tags) # ヘッダー
+            wnd.insert("end", index, linktags) # No. リンク
+            wnd.insert("end", line+"\n", tags) # 行本体
+    
+    #
+    @classmethod
+    def change_select(cls, ui, wnd, charindex):
+        wnd.configure(state='normal')
+        
+        selpoints = wnd.tag_ranges("log-item-selection")
+        if selpoints:
+            for i in range(0, len(selpoints), 2):
+                wnd.tag_remove("log-item-selection", selpoints[i], selpoints[i+1])
+            oline = textindex(selpoints[0])
+            wnd.delete(str(oline(char=0)), str(oline(char=2)))
+            wnd.insert(str(oline(char=0)), "  ")
+        
+        line = textindex(charindex)
+        wnd.tag_add("log-item-selection", str(line(char=0)), str(line(char="end")))
+        wnd.delete(str(line(char=0)), str(line(char=2)))
+        wnd.insert(str(line(char=0)), ">>", "log-item-selection")
+        
+        wnd.configure(state='disabled')
+
+
+#
+class DataWideView(DataTableView):
+    pass
 
 #
 #
@@ -452,6 +809,7 @@ class HyperlinkDatabase:
     def __init__(self):
         self.keys = {}
         self.links = {}
+        self.labels = {}
     
     def add(self, link):
         if link in self.keys:
@@ -489,6 +847,7 @@ def show_hyperlink_database(app):
 
 def ui_sys_commands():
     return describe_command_package(
+        "machaon.ui.system",
         description="ターミナルを操作するコマンドです。",
     )["history"](
         describe_command(

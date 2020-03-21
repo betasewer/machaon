@@ -8,7 +8,7 @@ from typing import Any
 #
 #
 class _Windows:
-    preferred_fontname = "Consolas"
+    preferred_fontname = "ＭＳ ゴシック"
     preferred_fontsize = 10
 
     default_encoding = "cp932"

@@ -65,10 +65,92 @@ def currentdir(spi, path=None, silent=False):
         else:
             spi.error("'{}'は有効なパスではありません".format(path))
 
+
 #
 #
 #
-def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1):
+class FilePath():
+    def __init__(self, path):
+        self.path = path
+        self._isdir = None
+    
+    def link(self):
+        return self.path
+
+    @property
+    def isdir(self):
+        if self._isdir is None:
+            self._isdir = os.path.isdir(self.path)
+        return self._isdir
+
+    def name(self):
+        return os.path.basename(self.path)
+    
+    def ftype(self):
+        if self.isdir:
+            return "DIR"
+        else:
+            _, fext = os.path.splitext(self.path)
+            if fext!="":
+                fext = fext[1:].upper()
+            return fext
+    
+    def modtime(self):
+        mtime = time.localtime(os.path.getmtime(self.path))
+        wkday = {6:"日",0:"月",1:"火",2:"水",3:"木",4:"金",5:"土"}.get(mtime[6],"？")
+        ftime = "{:02}/{:02}/{:02}（{}）{:02}:{:02}.{:02}".format(
+            mtime[0] % 100, mtime[1], mtime[2], wkday, 
+            mtime[3], mtime[4], mtime[5])
+        return ftime
+    
+    def size(self):
+        if self.isdir:
+            return None
+        else:
+            return os.path.getsize(self.path)
+    
+    @classmethod
+    def describe(cls, ref):
+        ref.default_columns(
+            table = ("ftype", "modtime", "size", "name"),
+            wide = ("name",),
+        )["name n"](
+            disp="ファイル名"
+        )["ftype t"](
+            disp="タイプ"
+        )["modtime"](
+            disp="更新日時", 
+            type="datetime"
+        )["size"](
+            disp="サイズ", 
+            type="int"
+        )
+
+
+#
+def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1, view=None):
+    # パスを集める
+    paths = []
+    def walk(dirpath, level):
+        items = [(x,os.path.join(dirpath,x)) for x in os.listdir(dirpath)]
+        for fname, fpath in items:
+            if pattern is None or re.search(pattern, fname):
+                paths.append(FilePath(fpath))
+            if recurse>level and os.path.isdir(fpath):
+                walk(fpath, level+1)
+
+    cd = app.get_current_dir()
+    walk(cd, 1)
+
+    if not view:
+        view = ":table" if long else ":wide"
+    app.create_data(paths, view)
+    app.dataview()
+
+#
+#
+#
+def _filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1):
     if howsort == "t":
         def sorter(path):
             d = 1 if os.path.isdir(path) else 2

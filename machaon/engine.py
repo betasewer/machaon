@@ -68,35 +68,48 @@ class CommandParser():
         self._compoptions = CompoundOptions()
         self._compoptions.add_option("h")
         self.enable_compound_options = True
+        self.sole_positional = None
        
     # argparse.add_argumentの引数に加え、以下を指定可能：
-    #  files = True/False ファイルパス/globパターンを受け入れ、ファイルパスのリストに展開する
+    #  files = True/False : ファイルパス/globパターンを受け入れ、ファイルパスのリストに展開する
+    #  const_option = Object : action=store_const + const=Object
+    #  append_const_option = Object : action=append_const + const=Object
+    #  take_remainder : nargs=argparse.REMAINDER
     def add_arg(self, argtype, *names, **kwargs):
+        if not names:
+            raise ValueError("option names must be specified")
+
         isfile = kwargs.pop("files", False)
         if isfile:
             kwargs["nargs"] = "+"
             argtype |= FilepathArg
         
         cstopt = kwargs.pop("const_option", None)
-        if cstopt:
+        if cstopt is not None:
             kwargs["action"] = "store_const"
             kwargs["const"] = cstopt
         
         apcstopt = kwargs.pop("append_const_option", None)
-        if apcstopt:
+        if apcstopt is not None:
             kwargs["action"] = "append_const"
             kwargs["const"] = apcstopt
         
-        remopt = kwargs.pop("remainder", False)
+        remopt = kwargs.pop("take_remainder", False)
         if remopt:
             kwargs["nargs"] = argparse.REMAINDER
             argtype |= JoinListArg
 
         act = self.argp.add_argument(*names, **kwargs)
-        #if (methodtype&TargetArg)>0 and len(names)>0 and not names[0].startswith("-"):
-        #    self.argnames.append((methodtype|PositTargetArg, act.dest))
         if not any(x for (_,x) in self.argnames if x == act.dest):
             self.argnames.append((argtype, act.dest))
+
+        # sole positional argument will be handled specially
+        if not names[0].startswith("-"):
+            if self.sole_positional:
+                self.sole_positional = False
+            elif self.sole_positional is None:
+                self.sole_positional = act.dest
+        #    self.argnames.append((methodtype|PositTargetArg, act.dest))
 
         # trie
         for name in names:
@@ -164,17 +177,29 @@ class CommandParser():
             # クエリの分割
             headoptions = self.split_query(expandedopt)
             tailoptions = self.split_query(commandarg)
-            commands = [*tailoptions, *headoptions]
-            expanded_command = (commandarg + " " + " ".join(headoptions)).strip()
+            commands = [*headoptions, *tailoptions]
+            expanded_command = (" ".join(headoptions) + " " + commandarg).replace("\n", "<br>").strip()
             # パーサーによる解析
             self.new_parser_message_queue()
             try:
-                parsedargs = self.argp.parse_args(commands)
+                if self.sole_positional:
+                    parsedargs, remained = self.argp.parse_known_args(commands)
+                    if remained:
+                        # 一つの位置引数にすべてを結合する
+                        solepos = []
+                        value = getattr(parsedargs, self.sole_positional)
+                        if value:
+                            solepos.append(value)
+                        solepos.extend([x for x in remained if not x.startswith("-")])
+                        setattr(parsedargs, self.sole_positional, " ".join(solepos))
+                else:
+                    parsedargs = self.argp.parse_args(commands)
+                
                 # 引数の構築
                 res = CommandParserResult(expanded_command)
                 for argtype, name in self.argnames:
                     value = getattr(parsedargs, name, None)
-                    if argtype&JoinListArg:
+                    if argtype&JoinListArg and value is not None:
                         value = " ".join(value)
                     res.add_arg(argtype, name, value)
                 results.append(res)
@@ -276,8 +301,7 @@ class CommandParserResult():
                 # 省略形を展開する
                 if argtype & FilepathArg:
                     descvalue = "file"
-                else:
-                    descvalue = "dir"
+                continue
             
             if descvalue == "file":
                 if islist:

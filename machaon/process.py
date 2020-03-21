@@ -10,6 +10,7 @@ import time
 from typing import Sequence, Optional
 from collections import defaultdict
 
+from machaon.dataset import DataViewFactory
 from machaon.cui import test_yesno, MiniProgressDisplay
          
 #
@@ -268,6 +269,8 @@ class Process:
         self.input_waiting = False
         self.event_inputend = threading.Event()
         self.last_input = None
+        # 付属データ
+        self.bound_data = None
         
         self.spirit.bind_process(self)
         
@@ -373,7 +376,18 @@ class Process:
         self.last_input = text
         self.event_inputend.set()
     
+    #
+    #
+    #
+    def bind_data(self, data):
+        self.bound_data = data
 
+    def get_data(self, running=False):
+        if not running and self.is_running():
+            # 動作中はアクセスできない
+            return None
+        return self.bound_data
+    
 #
 # プロセスの中断指示
 #
@@ -390,6 +404,7 @@ class InstantProcedure():
         self.messages = []
         self.spirit.bind_process(self)
         self.pseudocommand = pseudocommand
+        self.bound_data = None
     
     def procedure(self, **kwargs):
         raise NotImplementedError()
@@ -417,12 +432,21 @@ class InstantProcedure():
 
     # メッセージは単に貯蔵する
     def post_message(self, msg):
-        self.messages.extend(msg.expand())
+        self.messages.append(msg)
 
     def handle_post_message(self):
         msgs = self.messages[:]
         self.messages = []
         return msgs
+        
+    def bind_data(self, data):
+        self.bound_data = data
+
+    def get_data(self, running=False):
+        if not running and self.is_running():
+            # 動作中はアクセスできない
+            return None
+        return self.bound_data
 
 #
 # ###################################################################
@@ -461,8 +485,7 @@ class Spirit():
         self.process = None
         # プログレスバー        
         self.cur_prog_display = None 
-        # exit
-        self.to_be_appexit = False
+        print("spirit born")
 
     def get_app(self):
         return self.app
@@ -504,8 +527,8 @@ class Spirit():
 
     # リンクを貼る
     @_spirit_msgmethod
-    def hyperlink(self, msg, link=None, linktag=None, **options):
-        return ProcessMessage(msg, "hyperlink", link=link, linktag=linktag, **options)
+    def hyperlink(self, msg, link=None, linktag=None, label=None, **options):
+        return ProcessMessage(msg, "hyperlink", link=link, linktag=linktag, label=label, **options)
     
     @_spirit_msgmethod
     def custom_message(self, tag, msg, **options):
@@ -514,7 +537,11 @@ class Spirit():
     @_spirit_msgmethod
     def delete_message(self, line=None, count=None):
         return ProcessMessage(tag="delete-message", count=count, line=line)
-        
+    
+    @_spirit_msgmethod
+    def dataview(self):
+        return ProcessMessage(tag="dataview")
+
     # ファイル対象に使用するとよい...
     def print_target(self, target):
         self.message_em('対象 --> [{}]'.format(target))
@@ -600,13 +627,39 @@ class Spirit():
             path = os.path.normpath(os.path.join(cd, path))
         return path
     
+    #
+    #
+    #
+    def bind_data(self, dataview):
+        if self.process is None:
+            raise ValueError("no process to be bound dataset exists")
+        self.process.bind_data(dataview)
+    
+    def create_data(self, dataclass, datas, *command_args, **command_kwargs):
+        dataview = DataViewFactory(dataclass, datas, *command_args, **command_kwargs)
+        self.bind_data(dataview)
+        return dataview
+
+    #
+    def select_process_chamber(self, index=None):
+        chm = None
+        if not index:
+            chm = self.app.get_previous_active_chamber()
+        elif isinstance(index, str):
+            try:
+                process_index = int(index, 10)-1
+                chm = self.app.get_chamber(process_index)
+            except ValueError:
+                raise ValueError(str(process_index))
+        return chm
+
 #
 #
 #
-class DummySpirit(Spirit):
+class TempSpirit(Spirit):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.q = []
+        self.msgs = []
 
     def bind_process(self, p):
         pass
@@ -614,13 +667,17 @@ class DummySpirit(Spirit):
     def post_message(self, msg):
         if msg.is_embeded():
             for m in msg.expand():
-                self.q.append(m)
+                self.msgs.append(m)
         else:
-            self.q.append(msg)
+            self.msgs.append(msg)
     
     def printout(self):
-        for msg in self.q:
-            print("[{}]{}".format(msg.tag, msg.text))
+        for msg in self.msgs:
+            kwargs = str(msg.kwargs) if msg.kwargs else ""
+            print("[{}]{} {}".format(msg.tag, msg.text, kwargs))
+    
+    def get(self):
+        return self.msgs
     
 #
 #  メッセージクラス
@@ -638,11 +695,17 @@ class ProcessMessage():
     def set_argument(self, name, value):
         self.kwargs[name] = value
     
+    def get_text(self):
+        return str(self.text)
+    
     def get_hyperlink_link(self):
         l = self.kwargs.get("link")
         if l is not None:
             return l
         return self.text
+    
+    def get_hyperlink_label(self):
+        return self.kwargs.get("label")
     
     def is_embeded(self):
         return self.embed is not None
@@ -778,6 +841,9 @@ class ProcessChamber:
     def get_bound_spirit(self):
         return self.process.get_spirit()
     
+    def get_bound_data(self, running=False):
+        return self.process.get_data(running=running)
+
     def get_index(self):
         return self.index
 
@@ -787,7 +853,8 @@ class ProcessChamber:
 class ProcessHive:
     def __init__(self):
         self.chambers = []
-        self.activechamber = None
+        self.active = None
+        self.prevactive = None
     
     def run(self, app):
         cha = self.get_active()
@@ -803,7 +870,7 @@ class ProcessHive:
         newindex = len(self.chambers)
         scr = ProcessChamber(newindex, process, commandstr)
         self.chambers.append(scr)
-        self.activechamber = newindex # アクティブにする
+        self.set_active_index(newindex) # アクティブにする
         return scr
     
     def count(self):
@@ -814,17 +881,25 @@ class ProcessHive:
     
     def set_active_index(self, index):
         if 0<=index and index<len(self.chambers):
-            self.activechamber = index
+            self.prevactive = self.active
+            self.active = index
             return True
         return False
 
     def get_active_index(self):
-        return self.activechamber
+        return self.active
 
     def get_active(self):
-        if self.activechamber is not None:
-            return self.chambers[self.activechamber]
+        if self.active is not None:
+            return self.chambers[self.active]
     
+    def get_previous_active(self):
+        if self.prevactive is not None:
+            return self.chambers[self.prevactive]
+
+    def get_chambers(self):
+        return self.chambers
+
     #
     #
     #
@@ -836,26 +911,3 @@ class ProcessHive:
             cha.interrupt()
         for cha in self.get_runnings():
             cha.join()
-
-"""
-    def this_thread_chamber(self):
-        curident = threading.get_ident()
-        for cha in self.chambers:
-            if cha.test_thread_ident(curident):
-                return cha
-        return None
-"""
-#
-def dbgchamber(pref, cha):
-    if cha is None:
-        chamb = "[no chamber found]"
-        msgcount = None
-    else:
-        chamb = cha.get_full_command()
-        if not hasattr(cha, "dbgcounters"):
-            cha.dbgcounters = {}
-        if pref not in cha.dbgcounters:
-            cha.dbgcounters[pref] = 0
-        cha.dbgcounters[pref] += 1
-        msgcount = cha.dbgcounters[pref]
-    print("[{}] {}: {}.  ".format(msgcount, pref, chamb))

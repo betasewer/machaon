@@ -6,6 +6,8 @@ import datetime
 import traceback
 from typing import Tuple, Sequence, List
 
+from machaon.process import TempSpirit
+
 #
 #
 #
@@ -37,6 +39,15 @@ class Launcher():
                 cnt = msg.argument("count")
                 lno = msg.argument("line")
                 self.delete_screen_message(lno, cnt)
+            elif tag == "dataview":
+                datas = self.app.get_active_chamber().get_bound_data(running=True)
+                if datas is None:
+                    msg.tag = "message"
+                    msg.text = "<no dataset found>"
+                    self.insert_screen_message(msg)
+                else:
+                    viewer = self.dataviewer(datas.get_viewtype())
+                    self.insert_screen_dataview(msg, viewer, datas)
             else:
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_message(msg)
@@ -67,12 +78,41 @@ class Launcher():
 
     def watch_running_process(self, states):
         pass
+        
+    # 
+    def dataviewer(self, viewtype):
+        return None
+
+    def insert_screen_dataview(self, msg, viewer, data):
+        pass
     
     #
     # 入力欄の操作
     #    
     # コマンドを実行する
     def invoke_command(self, command):
+        # 終了コマンド
+        if command == "exit":
+            self.app.exit()
+            return
+        
+        if not command:
+            return
+
+        # 特殊コマンド
+        if command[0] == ":":
+            body = command[1:]
+            if body.isdigit():
+                # データのインデックスによる即時選択
+                index = int(body)
+                self.select_dataview_item(index)
+                return
+            elif body.endswith("."):
+                prefix = command[2:].strip()
+                self.app.set_command_prefix(prefix)
+                #self.spirit.message_em("コマンド接頭辞'{}'を設定".format(prefix)) 
+                return
+            
         process = self.app.create_process(command)
         if process is None:
             self.app.exit()
@@ -80,7 +120,7 @@ class Launcher():
 
         chamber = self.app.run_process(process) # 実行
 
-        self.update_active_chamber(chamber, updatemenu=False, updateinput=False)
+        self.update_active_chamber(chamber, updatemenu=False)
         self.add_chamber_menu(chamber)
 
         # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
@@ -134,7 +174,7 @@ class Launcher():
     #
     def activate_new_chamber(self):
         chamber = self.app.get_active_chamber()
-        self.update_active_chamber(chamber, updatemenu=False, updateinput=False)
+        self.update_active_chamber(chamber, updatemenu=False)
         self.add_chamber_menu(chamber)
 
         # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
@@ -151,22 +191,16 @@ class Launcher():
             # 先頭を超えた場合は変化なし
             return
         if not self.app.set_active_chamber_index(newindex):
-            # 末尾を超えた場合はコマンド欄を空にする
-            self.replace_input_text("") 
             return
         self.update_active_chamber(self.app.get_active_chamber())
         
-    def update_active_chamber(self, chamber, updatemenu=True, updateinput=True):
+    def update_active_chamber(self, chamber, updatemenu=True):
         msgs = chamber.get_message()
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
         self.watch_active_process()
 
         if updatemenu:
             self.update_chamber_menu(active=chamber.get_index())
-
-        if updateinput:
-            cmd = chamber.get_command()
-            self.replace_input_text(cmd)
 
     def add_chamber_menu(self, chamber):
         pass
@@ -194,6 +228,12 @@ class Launcher():
 
     def opendirname_dialog(self, **options):
         raise NotImplementedError()
+
+    #
+    #
+    #
+    def select_dataview_item(self, index):
+        raise NotImplementedError()
     
     #
     # ハンドラ
@@ -205,7 +245,7 @@ class Launcher():
     
     def on_exec_process(self, spirit, process):
         """ プロセス実行時 """
-        self.put_input_command(spirit, process.get_full_command())
+        #self.put_input_command(spirit, process.get_full_command())
     
     def on_interrupt_process(self, spirit, process):
         """ プロセス中断時 """
@@ -234,7 +274,7 @@ class Launcher():
     
     def on_bad_command(self, spirit, process, command, error):
         """ 不明なコマンド """
-        self.put_input_command(spirit, command)
+        #self.put_input_command(spirit, command)
         if process is None:
             spirit.error("'{}'は不明なコマンドです".format(command))
             if self.app.test_valid_process("help"):

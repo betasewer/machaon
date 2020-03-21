@@ -81,22 +81,9 @@ class AppRoot:
     #
     # コマンド文字列から呼び出す
     def create_process(self, commandstr):
-        # 終了コマンド
-        if commandstr == "exit":
-            return None
-
         # 文字列を先頭の空白で区切る
         commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
-
-        # コマンド接頭辞の設定
-        if commandhead.endswith("."):
-            commandtail = commandhead[:-1]
-            commandhead = ".set-prefix"
-
-        if commandhead == ".set-prefix":
-            prefix = commandtail
-            return SetPrefixProcedure(self, self.cmdengine, prefix)
-            
+        
         # コマンドを解析
         possible_entries = self.cmdengine.parse_command(commandhead, commandtail, self)
         if not possible_entries:
@@ -172,6 +159,9 @@ class AppRoot:
     def parse_possible_commands(self, commandstr):
         head, tail = fixsplit(commandstr, maxsplit=1, default="")
         return self.cmdengine.parse_command(head, tail, self)
+    
+    def set_command_prefix(self, prefix):
+        self.cmdengine.set_command_prefix(prefix)
 
     #
     # プロセススレッド
@@ -186,6 +176,9 @@ class AppRoot:
     def set_active_chamber_index(self, index):
         return self.processhive.set_active_index(index)
     
+    def get_previous_active_chamber(self):
+        return self.processhive.get_previous_active()
+    
     def get_chamber(self, index):
         return self.processhive.get(index)
     
@@ -195,24 +188,13 @@ class AppRoot:
             "running" : [x.get_index() for x in runs]
         }
         return report
-        
+    
     # メインスレッド側から操作中断
     def interrupt_process(self):
         scr = self.processhive.get_active()
         if scr is not None:
             proc = scr.get_process()
             proc.tell_interruption()
-
-#
-#
-#
-class SetPrefixProcedure(InstantProcedure):
-    def __init__(self, app, cmdengine, prefix):
-        super().__init__(app, ".set-prefix "+prefix, cmdengine=cmdengine, prefix=prefix)
-
-    def procedure(self, cmdengine, prefix):
-        cmdengine.set_command_prefix(prefix)
-        self.spirit.message_em("コマンド接頭辞'{}'を設定".format(prefix))
 
 #
 #

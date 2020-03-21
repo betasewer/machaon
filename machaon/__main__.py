@@ -27,7 +27,7 @@ def launch_sample_app(default_choice=None):
 
     import machaon.commands.catalogue as catalogue
     boo.install_commands("", catalogue.app_sample_commands().annexed(catalogue.unicode_commands()))
-    boo.install_commands("", catalogue.shell_commands())
+    boo.install_commands("", catalogue.shell_commands().annexed(catalogue.dataset_commands()))
     boo.install_syscommands()
 
     boo.go()

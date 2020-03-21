@@ -8,6 +8,7 @@ from machaon.command import describe_command, describe_command_package
 def app_commands():
     import machaon.commands.app as appcmd
     return describe_command_package(
+        "machaon.app",
         description="ターミナルを操作するコマンドです。",
     )["syntax"](
         describe_command(
@@ -15,7 +16,7 @@ def app_commands():
             description="コマンド文字列を解析し、可能な解釈をすべて示します。"
         )["target command_string"](
             help="コマンド文字列",
-            remainder=True
+            take_remainder=True
         )
     )["interrupt it"](
         describe_command(
@@ -44,7 +45,7 @@ def app_commands():
             nargs="?"
         )["target --alt"](
             help="設定項目を上書きする [config-name]=[config-value]",
-            remainder=True,
+            take_remainder=True,
             default=()
         )["target --show"](
             help="設定項目を表示する",
@@ -57,6 +58,7 @@ def app_commands():
 #
 def app_sample_commands():
     return describe_command_package(
+        "machaon.sample",
         description="テスト用コマンドです。"
     )["spam"](
         target="TestProcess",
@@ -85,6 +87,7 @@ def app_sample_commands():
 #
 def unicode_commands():
     return describe_command_package(
+        "machaon.text",
         description="文字に関するコマンドです。"
     )["unicode"](
         describe_command(
@@ -111,6 +114,7 @@ def unicode_commands():
 #
 def shell_commands():
     return describe_command_package(
+        "machaon.shell",
         description="PC内のファイルを操作するコマンドです。"
     )["$"](
         describe_command(
@@ -121,7 +125,7 @@ def shell_commands():
             help="実行するコマンド",
         )["target commandstr"](
             help="コマンド引数",
-            remainder=True
+            take_remainder=True
         )
     )["cd"](
         describe_command(
@@ -161,6 +165,9 @@ def shell_commands():
             nargs="?",
             const=3,
             default=1,
+        )["target --view"](
+            help="データの表示方法",
+            take_remainder=True
         )
     )["text xt"](
         describe_command(
@@ -216,8 +223,29 @@ def shell_commands():
             action="append",
         )["target expression"](
             help="Pythonの式",
-            remainder=True
+            take_remainder=True
         )
     )
 
     
+#
+#
+#
+#
+#
+def dataset_commands():
+    return describe_command_package(
+        "machaon.dataset",
+        description="データの集合を簡易的に扱う汎用パッケージ"
+    )["%"](
+        describe_command(
+            target="list_operation",
+            from_module="machaon.dataset",
+            description="データを表示・選択する"
+        )["target expression"](
+            help="表示カラムの指定とフィルタ・ソート記述式",
+        )["target --dataset -d"](
+            help="対象データセットを指定",
+            dest="dataset_index",
+        )
+    )

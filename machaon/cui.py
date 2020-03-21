@@ -21,6 +21,20 @@ def get_char_width(c, *, a=False):
         return 2
     return 1
 
+def get_text_width(text, *, a=False):
+    width = 0
+    for ch in text:
+        chwidth = get_char_width(ch, a=True)
+        width += chwidth
+    return width
+
+def ljust(text, width, sep=" "):
+    return text + sep * (width - get_text_width(text))
+
+def rjust(text, width, sep=" "):
+    return sep * (width - get_text_width(text)) + text
+
+
 #
 # 指定の長さ以下は省略する
 #

@@ -1,7 +1,7 @@
 import pytest
 
 from machaon.app import AppRoot
-from machaon.process import ProcessMessage, Spirit, DummySpirit, Process, ProcessTargetFunction
+from machaon.process import ProcessMessage, Spirit, TempSpirit, Process, ProcessTargetFunction
 from machaon.ui.tk import tkLauncher
 
 def gettext(log):
@@ -48,7 +48,7 @@ def test_message_window(approot):
     #wnd.run_mainloop()
 
 def test_progress_display(approot):
-    spi = DummySpirit(approot)
+    spi = TempSpirit(approot)
     wnd = approot.get_ui()
 
     import time
@@ -64,3 +64,16 @@ def test_progress_display(approot):
     def dd():
         spi.printout()
 
+
+def test_textindex(approot):
+    from machaon.ui.tk import textindex
+
+    assert textindex("1.2").line == 1 and textindex("1.2").char == 2
+    assert str(textindex("2.3")) == "2.3"
+    assert str(textindex("10.2")(char=5)) == "10.5"
+    assert str(textindex("10.2")(line=0, char=0)) == "0.0"
+    assert str(textindex(line=3, char="end")) == "3.end"
+    assert textindex("1.0").compare(textindex("1.3")) == 1
+    assert textindex("1.2").compare(textindex("2.3")) == 1
+    assert textindex("2.3").compare(textindex("2.3")) == 0
+    assert textindex("2.3").compare(textindex("1.2")) == -1
