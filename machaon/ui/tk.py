@@ -156,6 +156,7 @@ class tkLauncher(Launcher):
         histlist.tag_bind("link", "<Button-1>", self.chamber_menu_click)
         histlist.tag_configure("chamber", foreground="#000000")
         histlist.tag_configure("running", foreground="#00A000")
+        histlist.tag_configure("failed", foreground="#F00000")
         histlist.mark_unset("insert")
         self.chambermenu = histlist
         
@@ -362,7 +363,7 @@ class tkLauncher(Launcher):
     def watch_active_process(self):
         """ アクティブなプロセスの発するメッセージを読みに行く """
         procchamber = self.app.get_active_chamber()
-        print("[{}] watching message...".format(procchamber.get_command()))
+        print("active shift: watching... [{}]".format(procchamber.get_command()))
         running = procchamber.is_running()
         if not self.handle_chamber_message(procchamber):
             return
@@ -373,7 +374,7 @@ class tkLauncher(Launcher):
 
     def watch_running_process(self, states):
         curstates = self.app.get_chambers_state()
-        print("checking running... = {}".format(curstates["running"]))
+        print("running: watching... [{}]".format(curstates["running"]))
 
         # 停止したプロセスを調べる
         for wasrunning in states["running"]:
@@ -599,32 +600,38 @@ class tkLauncher(Launcher):
             self.update_chamber_menu(active=chamber.get_index(), ceased=chamber.get_index())
     
     def update_chamber_menu(self, *, active=None, ceased=None):
-        def update_prefix(index, b, prefix):
-            begin = "{}.{}".format(index+1, b)
-            end = "{}.{}".format(index+1, b+len(prefix))
+        def update_prefix(index, prefix):
+            begin = "{}.0".format(index+1)
+            end = "{}.{}".format(index+1, len(prefix))
             if self.chambermenu.get(begin, end):
                 self.chambermenu.replace(begin, end, prefix, ("chamber",))
 
-        def remove_tag(index, tag):
+        def update_tag(index, tag, on):
             begin = "{}.0".format(index+1)
             end = "{}.end".format(index+1)
             if self.chambermenu.get(begin, end):
-                self.chambermenu.tag_remove(tag, begin, end)
+                if on:
+                    self.chambermenu.tag_add(tag, begin, end)
+                else:
+                    self.chambermenu.tag_remove(tag, begin, end)
 
         self.chambermenu.configure(state='normal')
 
         if active is not None:
             # 以前のアクティブチャンバー
             if self.chambermenu_active is not None:
-                update_prefix(self.chambermenu_active, 0, "  ")
+                update_prefix(self.chambermenu_active, "  ")
             # 新たなアクティブチャン
-            update_prefix(active, 0, "> ")
+            update_prefix(active, "> ")
             self.chambermenu_active = active
             # 必要ならスクロールする
             self.chambermenu.see("{}.0".format(self.chambermenu_active))
 
         if ceased is not None:
-            remove_tag(ceased, "running")
+            update_tag(ceased, "running", False)
+            chm = self.app.get_chamber(ceased)
+            if chm.is_failed():
+                update_tag(ceased, "failed", True)
 
         self.chambermenu.configure(state='disable')
 

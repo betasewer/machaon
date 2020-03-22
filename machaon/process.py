@@ -5,7 +5,6 @@ import sys
 import inspect
 import threading
 import queue
-import traceback
 import time
 from typing import Sequence, Optional
 from collections import defaultdict
@@ -29,6 +28,12 @@ def process_target(self, target) -> bool: # True/None 成功 / False 中断・�
 def exit_process(self):
     pass
 """
+
+#
+#
+#
+class ProcessInitFailed(Exception):
+    pass
 
 #
 # ###################################################################
@@ -70,17 +75,12 @@ class ProcessTarget():
         raise NotImplementedError()
 
     #
-    def _target_invocation(self, invocation, invoker, preargs, parsedcommand):
-        # 先頭引数の処理
-        targs = parsedcommand.get_target_args()
-        multitarget = parsedcommand.get_multiple_targets()
-        if multitarget:
-            for a_target in multitarget:
-                targs["target"] = a_target
-                invocation.add("target", invoker.invoke(*preargs, **targs))
-        else:
-            invocation.add("target", invoker.invoke(*preargs, **targs))
-
+    def _target_invocation(self, label, invocation, invoker, preargs, parsedcommand):
+        for inv in invoker.prepare_invocations(label, preargs, parsedcommand):
+            invoker.invoke(inv)
+            if not invocation.continue_(label, inv):
+                return False
+        return True
 
 #
 #
@@ -96,7 +96,7 @@ class ProcessTargetClass(ProcessTarget):
             self.init_invoker = None
         
         self.target_invoker = FunctionInvoker(klass.process_target)
-            
+        
         if hasattr(klass, "exit_process"):
             self.exit_invoker = FunctionInvoker(klass.exit_process)
         else:
@@ -109,18 +109,20 @@ class ProcessTargetClass(ProcessTarget):
         # プロセスを生成
         proc = self.klass(spirit)
         if self.init_invoker:
-            invocation.add("init", self.init_invoker.invoke(proc, **parsedcommand.get_init_args()))
-            if invocation.is_init_failed():
+            if not self._target_invocation("init", invocation, self.init_invoker, (proc,), parsedcommand):
                 return invocation
 
         # メイン処理
-        self._target_invocation(invocation, self.target_invoker, (proc,), parsedcommand)
+        if not self._target_invocation("target", invocation, self.target_invoker, (proc,), parsedcommand):
+            return invocation
 
         # 後処理
         if self.exit_invoker:
-            invocation.add("exit", self.exit_invoker.invoke(proc, **parsedcommand.get_exit_args()))
+            if not self._target_invocation("exit", invocation, self.exit_invoker, (proc,), parsedcommand):
+                return invocation
 
         return invocation
+
 #
 #
 #
@@ -140,7 +142,7 @@ class ProcessTargetFunction(ProcessTarget):
         preargs.extend(self.args)
         
         # メイン処理
-        self._target_invocation(invocation, self.target_invoker, preargs, parsedcommand)
+        self._target_invocation("target", invocation, self.target_invoker, preargs, parsedcommand)
         return invocation
 
 #
@@ -169,7 +171,8 @@ class FunctionInvoker:
         # デバッグ用
         return self.fn.__qualname__
     
-    def invoke(self, *args, **kwargs):
+    #
+    def prepare(self, *args, **kwargs):
         argmap = {}
         argmap.update(kwargs)
 
@@ -189,21 +192,56 @@ class FunctionInvoker:
         if missing_args:
             raise MissingArgumentError(self.fnqualname, missing_args)
         
+        kwargs = {}
         if self.kwargvarname:
-            kwargs = {}
             for pname, aname in remained_argnames.items():
                 if pname in argmap:
                     kwargs[pname] = argmap[aname]
             
-            result = self.fn(*values, **kwargs)
-
             for pname in kwargs.keys():
                 remained_argnames.pop(pname)
-        else:
-            result = self.fn(*values)
-        
+
         unused_args = list(remained_argnames.values())
-        return [result, missing_args, unused_args]
+        
+        #
+        entry = InvocationEntry(values, kwargs)
+        entry.set_arg_errors(missing_args, unused_args)
+        return entry
+    
+    #
+    def prepare_next_target(self, entry, **kwargs):
+        entry = entry.clone()
+        target_arg = kwargs["target"]
+        if "target" in self.argnames:
+            entry.args[self.argnames.index("target")] = target_arg
+        else:
+            raise ValueError("'target' argument not found")
+        return entry
+    
+    #
+    def prepare_invocations(self, label, preargs, parsedcommand):
+        inv = None
+        for targs in parsedcommand.prepare_arguments(label):
+            if inv is None:
+                inv = self.prepare(*preargs, **targs)
+            else:
+                inv = self.prepare_next_target(inv, **targs)
+            yield inv
+    
+    #
+    def invoke(self, invocation):            
+        # 関数を実行する
+        result = None
+        exception = None
+        try:
+            result = self.fn(*invocation.args, **invocation.kwargs)
+        except ProcessInterrupted as e:
+            raise e
+        except Exception as e:
+            exception = e
+
+        invocation.set_result(result, exception)
+        return invocation
 
 #
 class MissingArgumentError(Exception):
@@ -214,38 +252,77 @@ class MissingArgumentError(Exception):
 #
 #
 #
+class InvocationEntry():
+    def __init__(self, args, kwargs):
+        self.args = args
+        self.kwargs = kwargs
+        self.result = None
+        self.missing_args = []
+        self.unused_args = []
+        self.exception = None
+    
+    def clone(self):
+        inv = InvocationEntry(self.args, self.kwargs)
+        inv.result = self.result
+        inv.missing_args = self.missing_args
+        inv.unused_args = self.unused_args
+        inv.exception = self.exception
+        return inv
+
+    def set_arg_errors(self, missing_args, unused_args):
+        self.missing_args = missing_args
+        self.unused_args = unused_args
+    
+    def set_result(self, result, exception):
+        self.result = result
+        self.exception = exception
+    
+    def is_failed(self):
+        if self.exception:
+            return True
+        return False
+
+    def is_init_failed(self):
+        if self.exception:
+            return True
+        else:
+            return self.result is False
+
+#
+#
+#
 class ProcessTargetInvocation:
     def __init__(self):
-        self.results = defaultdict(list)
-        self.argerrors = defaultdict(list)
+        self.entries = defaultdict(list)
+        self.last_exception = None
     
-    def add(self, invokelabel, invocation):
-        result, missing_args, unused_args = invocation
-        self.results[invokelabel].append(result)
-        self.argerrors[invokelabel] = {
-            "missing" : missing_args,
-            "unused" : unused_args
-        }
-    
-    def is_init_failed(self):
-        if self.results["init"]:
-            ret = self.results["init"][-1]
-            return ret is False
-        return False
+    def continue_(self, label, invocation):
+        self.entries[label].append(invocation)
+        if invocation.is_failed():
+            self.last_exception = invocation.exception
+            return False
+        if label == "init" and invocation.is_init_failed():
+            self.last_exception = ProcessInitFailed()
+            return False
+        return True
     
     def get_result_of(self, label, index=-1):
-        return self.results[label][index]
+        return self.entries[label][index].result
     
     def get_last_result(self):
-        if self.results["target"]:
-            return self.results["target"][-1]
+        if self.entries["target"]:
+            return self.entries["target"][-1].result
         return None
     
     def arg_errors(self):
         for label in ("init", "target", "exit"):
-            err = self.argerrors.get(label, None)
-            if err:
-                yield label, err["missing"], err["unused"]
+            if label not in self.entries:
+                continue
+            tail = self.entries[label][-1] # 同じラベルであればエラーも同一のはず
+            yield label, tail.missing_args, tail.unused_args
+
+    def get_last_exception(self):
+        return self.last_exception
 
 #
 # ######################################################################
@@ -313,6 +390,12 @@ class Process:
         if self.is_running():
             raise Exception("")
         return self.last_invocation
+    
+    def is_failed(self):
+        if self.last_invocation:
+            e = self.last_invocation.get_last_exception()
+            return e is not None
+        return False
 
     #
     # スレッド
@@ -429,6 +512,9 @@ class InstantProcedure():
     
     def is_waiting_input(self):
         return False
+    
+    def is_failed(self):
+        return False
 
     # メッセージは単に貯蔵する
     def post_message(self, msg):
@@ -444,7 +530,7 @@ class InstantProcedure():
 
     def get_data(self, running=False):
         if not running and self.is_running():
-            # 動作中はアクセスできない
+            # 動作中は別スレッドからアクセスさせない
             return None
         return self.bound_data
 
@@ -803,6 +889,9 @@ class ProcessChamber:
         self.process = process
         self.commandstr = commandstr
         self.handled_msgs = []
+        
+    def is_failed(self):
+        return self.process.is_failed()
     
     def is_running(self):
         return self.process.is_running()

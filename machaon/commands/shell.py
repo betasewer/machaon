@@ -225,12 +225,15 @@ def get_text_content(app, target, encoding=None, head=0, tail=0, all=False):
         head, tail = 0, 0
     pth = app.abspath(target)
 
+    app.message_em("ファイル名：[%1%]", embed=[
+        app.hyperlink.msg(pth)
+    ])
+
     if encoding is None:
         # 自動検出
         encoding = detect_text_encoding(pth)
 
-    app.message_em("ファイル名：[%1%](%2%)", embed=[
-        app.hyperlink.msg(pth),
+    app.message_em("エンコーディング：%1%", embed=[
         app.message.msg(encoding or "unknown")
     ])
     app.message_em("--------------------")

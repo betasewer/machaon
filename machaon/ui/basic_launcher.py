@@ -127,7 +127,7 @@ class Launcher():
         states = self.app.get_chambers_state()
         states["running"].append(chamber.get_index())
         self.watch_running_process(states)
-        
+
     # 入力を取得
     def get_input(self, spirit, instr):
         instr += " >>> "
@@ -253,8 +253,8 @@ class Launcher():
     
     def on_error_process(self, spirit, process, excep):
         """ プロセスのエラーによる終了時 """
-        spirit.error("失敗しました。以下、発生したエラーの詳細：")
-        spirit.error(traceback.format_exc())
+        spirit.error("失敗して中断しました。発生したエラーの詳細：")
+        spirit.message("".join(traceback.format_exception(type(excep), excep, excep.__traceback__)))
 
     def on_exit_process(self, spirit, process, invocation):
         """ プロセスの正常終了時 """

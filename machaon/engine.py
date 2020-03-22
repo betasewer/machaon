@@ -271,21 +271,24 @@ class CommandParserResult():
             self.specarg_descriptors.append((argtype, name, "filename_pattern"))
         
         self.argmap[argtype&0xF][name] = value
-    
-    def get_init_args(self):
-        return self.argmap[InitArg]
-    
-    def get_target_args(self):
-        return self.argmap[TargetArg]
-    
-    def get_multiple_targets(self):
+
+    # 呼び出し引数を展開する
+    def prepare_arguments(self, label):
+        at = {"init":InitArg, "target":TargetArg, "exit":ExitArg}[label]
+        targs = self.argmap[at]
+
+        multitarget = None
         if self.target_filepath_arg:
-            at, name = self.target_filepath_arg
-            return self.argmap[at][name]
-        return None
-    
-    def get_exit_args(self):
-        return self.argmap[ExitArg]
+            tgat, name = self.target_filepath_arg
+            if tgat == at:
+                multitarget = self.argmap[tgat][name]
+        
+        if multitarget:
+            for a_target in multitarget:
+                targs["target"] = a_target
+                yield targs
+        else:
+            yield targs
 
     # パス引数を展開する
     def expand_special_arguments(self, spirit):

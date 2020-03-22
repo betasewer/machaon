@@ -134,20 +134,23 @@ class AppRoot:
         self.ui.on_exec_process(spirit, process)
 
         # プロセスを実行する
+        result = None
         invocation = None
         try:
             invocation = process.execute()
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
-        except Exception as e:
-            self.ui.on_error_process(spirit, process, e)
-
-        self.ui.on_exit_process(spirit, process, invocation)
 
         if invocation:
+            # エラーが発生しているか
+            e = invocation.get_last_exception()
+            if e:
+                self.ui.on_error_process(spirit, process, e)
             # 最後のtargetの返り値を返す
-            return invocation.get_last_result()
-        return None
+            result = invocation.get_last_result()
+
+        self.ui.on_exit_process(spirit, process, invocation)
+        return result
     
     # 有効なプロセスコマンドか調べる
     def test_valid_process(self, processname):
@@ -206,3 +209,6 @@ class CommandFailureProcedure(InstantProcedure):
     def procedure(self, failcmd, failcmderror):
         ui = self.spirit.get_app_ui()
         ui.on_bad_command(self.spirit, failcmd, self.get_full_command(), failcmderror)
+
+    def is_failed(self):
+        return True
