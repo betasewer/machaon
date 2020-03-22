@@ -53,7 +53,7 @@ class DataReference():
         if viewtype in self.defcolumns:
             return self.defcolumns[viewtype]
         else:
-            return [self.get_first_pred()[1]] # 先頭カラム
+            return [self.firstpred] # 先頭カラム
     
     def normalize_column(self, name):
         return self._predicates[name][0]

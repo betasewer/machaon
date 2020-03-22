@@ -485,7 +485,7 @@ class Spirit():
         self.process = None
         # プログレスバー        
         self.cur_prog_display = None 
-        print("spirit born")
+        #print("spirit born")
 
     def get_app(self):
         return self.app

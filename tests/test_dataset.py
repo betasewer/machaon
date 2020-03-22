@@ -1,10 +1,10 @@
-from machaon.dataset.dataset import DataClass
+from machaon.dataset import DataViewFactory
 
 #
 #
 #
 def test():
-    class TestDataClass(DataClass):
+    class TestDataClass():
         def __init__(self, name):
             self._name = name
 
@@ -23,10 +23,14 @@ def test():
                 type="int"
             )
 
-    dset = TestDataClass.create_view(["ken", "yuuji", "kokons"])
-    view = dset.command_create_view("? name } ke || (name == yuuji && length == 5) || name { ko")
+    view = DataViewFactory(
+        [TestDataClass(x) for x in ("ken", "yuuji", "kokons")], 
+        "? name } ke || (name == yuuji && length == 5) || name { ko"
+    )
     assert view.count() == 2
-    assert view.create_string_table() == ([["ken","3"], ["yuuji","5"]], [5, 1])
+    assert view.to_string_table() == ([["ken","3"], ["yuuji","5"]], [5, 1])
     view.select(1)
     assert view.selection() == 1
     assert view.row(view.selection()) == ["yuuji",5]
+
+test()
