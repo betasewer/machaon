@@ -17,6 +17,7 @@ ExitArg = 2
 PositTargetArg = 5 # 1+4
 FilepathArg = 0x10
 JoinListArg = 0x20
+ColorCodeArg = 0x100
 
 #
 SpecArgSig = "?"
@@ -301,25 +302,17 @@ class CommandParserResult():
                 expanded = descvalue[1:]
 
             if descvalue == "":
-                # 省略形を展開する
-                if argtype & FilepathArg:
-                    descvalue = "file"
-                continue
+                # 現在選択中のデータから展開
+                expanded = self.expand_from_data_selection(spirit, islist)
             
-            if descvalue == "file":
-                if islist:
-                    paths = spirit.ask_openfilename(title="ファイルを選択[{}]".format(argname), multiple=True)
-                    expanded = list(paths)
+            elif descvalue in ("dlg", "dialog"):
+                # タイプに沿ったダイアログボックスを表示する
+                if argtype & ColorCodeArg:
+                    expanded = self.expand_from_colorpicker(spirit, argname)
+                elif argtype & FilepathArg:
+                    expanded = self.expand_from_openfilename(spirit, argname, islist)
                 else:
-                    path = spirit.ask_openfilename(title="ファイルを選択[{}]".format(argname))
-                    expanded = path
-    
-            elif descvalue == "dir":
-                path = spirit.ask_opendirname(title="ディレクトリを選択[{}]".format(argname))
-                expanded = path
-            
-            elif descvalue == "color":
-                expanded = 0
+                    expanded = self.expand_from_opendirname(spirit, argname)
             
             elif descvalue == "filename_pattern":
                 # ファイルパターンから対象となるすべてのファイルパスを展開する
@@ -340,16 +333,48 @@ class CommandParserResult():
             self.argmap[argtype&0xF][argname] = expanded
 
         self.specarg_descriptors = []
+    
+    #
+    def expand_from_data_selection(self, spi, islist):
+        item = None
+        chm = spi.select_process_chamber()
+        if chm:
+            data = chm.get_bound_data()
+            if data:
+                item = data.selection_item()
+                
+        if not item:
+            raise ValueError("no item selected")
+
+        if islist:
+            return [item.get_link()]
+        else:
+            return item.get_link()
+    
+    def expand_from_openfilename(self, spi, argname, islist):
+        if islist:            
+            paths = spi.ask_openfilename(title="ファイルを選択[{}]".format(argname), multiple=True)
+            return list(paths)
+        else:
+            return spi.ask_openfilename(title="ファイルを選択[{}]".format(argname))
+        
+    def expand_from_opendirname(self, spi, argname):
+        return spi.ask_opendirname(title="ディレクトリを選択[{}]".format(argname))
+
+    def expand_from_colorpicker(self, spi, argname):
+        return "<colorpicker-not-implemented-yet>"
 
     #
-    def preview_handlers(self, io):
+    def preview_handlers(self):
         funcnames = {
             InitArg : "init_process",
             TargetArg : "process_target",
             ExitArg : "exit_process"
         }
+        lines = []
         for argtype, args in self.argmap.items():
-            io.write("{}({})".format(funcnames[argtype], ", ".join(["self"] + [str(x) for x in args])))
+            lines.append("{}({})".format(funcnames[argtype], ", ".join(["self"] + [str(x) for x in args])))
+        return lines
 
 #
 # ###############################################################

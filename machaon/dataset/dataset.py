@@ -140,6 +140,11 @@ class DataView():
     def selection(self):
         return self.selecting
     
+    def selection_item(self):
+        if self.selecting is None:
+            return None
+        return self.datas[self.selecting]
+    
     #
     def get_viewtype(self):
         return self.viewtype

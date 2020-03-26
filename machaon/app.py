@@ -140,6 +140,9 @@ class AppRoot:
             invocation = process.execute()
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
+        except Exception as appexcep:
+            # プロセス外のアプリコードからの例外
+            self.ui.on_error_process(spirit, process, appexcep)
 
         if invocation:
             # エラーが発生しているか
@@ -184,6 +187,9 @@ class AppRoot:
     
     def get_chamber(self, index):
         return self.processhive.get(index)
+
+    def get_chambers(self):
+        return self.processhive.get_chambers()
     
     def get_chambers_state(self):
         runs = self.processhive.get_runnings()
