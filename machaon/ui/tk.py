@@ -839,32 +839,4 @@ class HyperlinkDatabase:
         return ds
 
 
-#
-# デバッグ用コマンド
-#
-def show_history(app):
-    app.message("<< コマンド履歴 >>")
-    for i, his in enumerate(app.get_app().get_ui().get_command_history()):
-        row = "{} | {}".format(i, his["command"])
-        app.message(row)
-
-def show_hyperlink_database(app):
-    for l in app.ui.screen.hyperlinks.loglines():
-        app.message(l)
-
-def ui_sys_commands():
-    return describe_command_package(
-        "machaon.ui.system",
-        description="ターミナルを操作するコマンドです。",
-    )["history"](
-        describe_command(
-            target=show_history,
-            description="入力履歴を表示します。"
-        )
-    )["hyperdb"](
-        describe_command(
-            target=show_hyperlink_database,
-            description="内部のハイパーリンクデータベースを表示します。"
-        )
-    )
 

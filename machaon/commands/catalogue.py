@@ -31,9 +31,14 @@ def app_commands():
             nargs="?",
             help="ヘルプを見るコマンド"
         ),
+    )["process_list"](
+        describe_command(
+            appcmd.command_processlist,
+            description="プロセスの一覧を表示します。"
+        )
     )["exit"](
         describe_command(
-            appcmd.command_exit,
+            lambda: None, # 実際に呼び出されることはない
             description="終了します。",
         ),
     )["theme"](

@@ -48,7 +48,6 @@ class TkStarter(Starter):
     
     def install_syscommands(self):
         from machaon.commands.catalogue import app_commands
-        from machaon.ui.tk import ui_sys_commands
-        pkg = app_commands().excluded("interrupt").annexed(ui_sys_commands())
+        pkg = app_commands().excluded("interrupt")
         self.install_commands("", pkg)
 

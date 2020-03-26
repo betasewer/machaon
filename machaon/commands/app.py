@@ -33,10 +33,16 @@ class HelpItem():
         self.cmdset = cmdset
         self.cmdentry = command_entry
         
+    def get_link(self):
+        return self.qual_keyword_list()[0]
+    
+    def keyword_list(self):
+        return self.cmdentry.keywords
+        
     def keyword(self):
         return ", ".join(self.cmdentry.keywords)
-
-    def qual_keyword(self):
+    
+    def qual_keyword_list(self):
         pfx = self.cmdset.get_prefixes()
         heads = []
         for i, kwd in enumerate(self.cmdentry.keywords):
@@ -47,7 +53,10 @@ class HelpItem():
             else:
                 qualkwd = kwd
             heads.append(qualkwd)
-        return ", ".join(heads)
+        return heads
+
+    def qual_keyword(self):
+        return ", ".join(self.qual_keyword_list())
     
     def description(self):
         return self.cmdentry.get_description()
@@ -74,8 +83,6 @@ class HelpItem():
             disp="コマンドセットの説明"
         )
 
-    
-
 #
 def command_help(spi, command_name=None):
     spi.message("<< コマンド一覧 >>")
@@ -90,52 +97,68 @@ def command_help(spi, command_name=None):
     spi.create_data(items, ":table")
     spi.dataview()
 
-"""   
-    for cmdset in spi.get_app().get_command_sets():
-        pfx = cmdset.get_prefixes()
-        msgs = []
 
-        for entry in cmdset.display_entries():
-            heads = []
-            for i, k in enumerate(entry.keywords):
-                if i == 0 and pfx:
-                    fk = "{}.{}".format(pfx[0], k)
-                elif pfx:
-                    fk = "{}{}".format(pfx[1 if len(pfx)>=1 else 0], k)
-                else:
-                    fk = k
-                heads.append((k, fk))
+#
+class ProcessListItem():
+    def __init__(self, chamber):
+        self.chamber = chamber
 
-            if command_name and not any(command_name in head for (_, head) in heads):
-                continue
+    def get_link(self):
+        return self.chamber.get_index()
+    
+    def id(self):
+        return self.chamber.get_index()
 
-            for k, fk in heads:
-                msgs.append(spi.hyperlink.msg(k, nobreak=True, link=fk))
-                msgs.append(spi.message.msg(", ", nobreak=True))
-            msgs.pop()
-            
-            for l in composit_text(entry.get_description(), 100, indent=4, first_indent=6).splitlines():
-                msgs.append(spi.message.msg(l))
+    def command(self):
+        return self.chamber.get_command()
+    
+    def full_command(self):
+        return self.chamber.get_process().get_full_command()
         
-        if not msgs:
-            continue
+    def handler(self):
+        parsedcommand = self.chamber.get_process().get_command_args()
+        return " / ".join(parsedcommand.preview_handlers())
 
-        if pfx:
-            msg = spi.warn.msg(pfx[0])
-            spi.message_em("[%1%] ", embed=[msg], nobreak=True)
-        spi.message_em(cmdset.get_description())
-        spi.message("---------------------------")
-        for m in msgs:
-            spi.post_message(m)
-        spi.message("")
-    
-    spi.message("")
-"""
+    def status(self):
+        if self.chamber.is_waiting_input():
+            return "稼働中：入力待ち"
+        elif self.chamber.is_running():
+            return "稼働中"
+        elif self.chamber.is_failed():
+            return "終了：失敗"
+        else:
+            return "終了：成功"
 
-# 終了処理はAppRoot内にある
-def command_exit(spi):
-    raise NotImplementedError()
+    def spirit_type(self):
+        return type(self.chamber.get_bound_spirit()).__name__
     
+    @classmethod
+    def describe(cls, builder):
+        builder.default_columns(
+            table=("id", "full_command", "status"),
+        )["id"](
+            disp="ID"
+        )["full_command fcmd"](
+            disp="コマンド全体"
+        )["command"](
+            disp="コマンド"
+        )["status"](
+            disp="状態"
+        )["spirit_type"](
+            disp="スピリット"
+        )["handler"](
+            disp="ハンドラ呼び出し"
+        )
+
+
+#
+def command_processlist(spi):
+    spi.message("<< プロセス一覧 >>")
+    items = [ProcessListItem(x) for x in spi.get_app().get_chambers()]
+    spi.create_data(items, ":table")
+    spi.dataview()
+
+
 # テーマの選択
 def command_ui_theme(app, themename=None, alt=(), show=False):
     from machaon.ui.theme import themebook

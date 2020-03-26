@@ -74,7 +74,7 @@ class FilePath():
         self.path = path
         self._isdir = None
     
-    def link(self):
+    def get_link(self):
         return self.path
 
     @property
