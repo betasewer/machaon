@@ -36,11 +36,6 @@ def app_commands():
             appcmd.command_processlist,
             description="プロセスの一覧を表示します。"
         )
-    )["exit"](
-        describe_command(
-            lambda: None, # 実際に呼び出されることはない
-            description="終了します。",
-        ),
     )["theme"](
         describe_command(
             appcmd.command_ui_theme,
@@ -56,6 +51,34 @@ def app_commands():
             help="設定項目を表示する",
             const_option=True
         )
+    )["dataview %"](
+        describe_command(
+            target="list_operation",
+            from_module="machaon.dataset",
+            description="データを表示・選択する"
+        )["target expression"](
+            help="表示カラムの指定とフィルタ・ソート記述式",
+        )["target --dataset -d"](
+            help="対象データセットを指定",
+            dest="dataset_index",
+        )
+    )["calc"](
+        describe_command(
+            "calculator",
+            from_module="machaon.commands.shell",
+            description="任意の式を実行します。"
+        )["target -l --library"](
+            help="ライブラリをロード",
+            action="append",
+        )["target expression"](
+            help="Pythonの式",
+            take_remainder=True
+        )
+    )["exit"](
+        describe_command(
+            lambda: None, # 実際に呼び出されることはない
+            description="終了します。",
+        ),
     )
     
 #   
@@ -218,39 +241,6 @@ def shell_commands():
             type=int,
             default=16
         )
-    )["calc"](
-        describe_command(
-            "calculator",
-            from_module="machaon.commands.shell",
-            description="任意の式を実行します。"
-        )["target -l --library"](
-            help="ライブラリをロード",
-            action="append",
-        )["target expression"](
-            help="Pythonの式",
-            take_remainder=True
-        )
     )
 
     
-#
-#
-#
-#
-#
-def dataset_commands():
-    return describe_command_package(
-        "machaon.dataset",
-        description="データの集合を簡易的に扱う汎用パッケージ"
-    )["%"](
-        describe_command(
-            target="list_operation",
-            from_module="machaon.dataset",
-            description="データを表示・選択する"
-        )["target expression"](
-            help="表示カラムの指定とフィルタ・ソート記述式",
-        )["target --dataset -d"](
-            help="対象データセットを指定",
-            dest="dataset_index",
-        )
-    )

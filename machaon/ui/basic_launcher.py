@@ -114,10 +114,6 @@ class Launcher():
                 return
             
         process = self.app.create_process(command)
-        if process is None:
-            self.app.exit()
-            return
-
         chamber = self.app.run_process(process) # 実行
 
         self.update_active_chamber(chamber, updatemenu=False)

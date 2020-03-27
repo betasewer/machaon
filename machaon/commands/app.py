@@ -70,7 +70,7 @@ class HelpItem():
     @classmethod
     def describe(cls, builder):
         builder.default_columns(
-            table=("keyword", "description", "setname"),
+            table=("qual_keyword", "description", "setname"),
         )["keyword kwd"](
             disp="キーワード"
         )["qual_keyword qkwd"](
