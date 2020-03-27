@@ -197,12 +197,7 @@ class CommandParser():
                     parsedargs = self.argp.parse_args(commands)
                 
                 # 引数の構築
-                res = CommandParserResult(expanded_command)
-                for argtype, name in self.argnames:
-                    value = getattr(parsedargs, name, None)
-                    if argtype&JoinListArg and value is not None:
-                        value = " ".join(value)
-                    res.add_arg(argtype, name, value)
+                res = self.build_parse_result(expanded_command, parsedargs)
                 results.append(res)
             except ArgumentParserExit as e:
                 res = CommandParserResult(expanded_command, messages=self._parsermsgs)
@@ -216,6 +211,25 @@ class CommandParser():
         if bad is not None:
             raise bad
         return results
+        
+    #
+    def list_argspecs(self):
+        for argtype, name in self.argnames:
+            yield argtype, name
+
+    def build_parse_result(self, expanded_command, kwargs):
+        if isinstance(kwargs, dict):
+            getter = lambda a, k: a.get(k, None)
+        else:
+            getter = lambda a, k: getattr(a, k, None)
+            
+        res = CommandParserResult(expanded_command)
+        for argtype, name in self.argnames:
+            value = getter(kwargs, name)
+            if argtype&JoinListArg and value is not None:
+                value = " ".join(value)
+            res.add_arg(argtype, name, value)
+        return res
     
     # 
     def get_description(self):
@@ -251,6 +265,11 @@ class CommandParserResult():
     def get_expanded_command(self):
         return self.expandedcmd
     
+    def reproduce_command(self):
+        # expandedcmd + argmapからコマンドを再現する
+        head = self.expandedcmd.split()[0]
+        raise NotImplementedError()
+
     def count_command_part(self):
         return len(self.expandedcmd.split())
     
@@ -488,6 +507,21 @@ class CompoundOptions:
 
 #
 # ###############################################################
+#  CommandDialogSpec
+# ###############################################################
+#
+class CommandDialogSpec():
+    use_command_dialog = True
+
+    def __init__(self, parser, commandhead):
+        self.parser = parser
+        self.commandhead = commandhead
+    
+    def get_expanded_command(self):
+        return "-?"
+    
+#
+# ###############################################################
 #  CommandLauncher
 # ###############################################################
 #
@@ -520,29 +554,49 @@ class CommandEngine:
             if self.prefix:
                 matches = cmdset.match(self.prefix + commandhead)
                 possible_commands.extend(matches)
+
+        use_dialog = False
         
         # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
         possible_entries = []
         for commandentry, commandoptions in possible_commands:
             target = commandentry.load()
             spirit = target.invoke_spirit(app)
+
+            if commandoptions.endswith("?"):
+                use_dialog = True
+                commandoptions = commandoptions[:-1]
             
             # 引数コマンドを解析
             possible_syntaxes = []
             target.load_lazy_describer(spirit)
+            apser = target.get_argparser()
             try:
-                possible_syntaxes = target.run_argparser(commandtail, commandoptions)
+                possible_syntaxes = apser.parse_args(commandtail, commandoptions)
             except BadCommand as b:
                 self.parsefails.append((target, b.error))
+            
+            if use_dialog:
+                break
             
             # 可能性のある解釈として追加
             for parseresult in possible_syntaxes:                
                 possible_entries.append((target, spirit, parseresult))
+        
+        #
+        if not possible_commands:
+            return []
+        elif not possible_entries or use_dialog:
+            # ダイアログモードで選択
+            commandverb = commandentry.get_keywords()[0]
+            parseresult = CommandDialogSpec(apser, commandverb)
+            self.parsefails = []
+            return [(target, spirit, parseresult)]
+        else:
+            # 最も長く入力コマンドにマッチしている解釈の順に並べ直す
+            possible_entries.sort(key=lambda x:x[2].count_command_part())
+            return possible_entries
 
-        # 最も長く入力コマンドにマッチしている解釈の順に並べ直す
-        possible_entries.sort(key=lambda x:x[2].count_command_part())
-        return possible_entries
-    
     # 
     def get_first_parse_command_fail(self):
         if not self.parsefails:

@@ -54,9 +54,6 @@ class ProcessTarget():
     def get_argparser(self):
         return self.argparser
     
-    def run_argparser(self, commandarg, commandoption=""):
-        return self.argparser.parse_args(commandarg, commandoption)
-    
     def get_help(self):
         return self.argparser.get_help()
     
@@ -316,7 +313,7 @@ class ProcessTargetInvocation:
     
     def arg_errors(self):
         for label in ("init", "target", "exit"):
-            if label not in self.entries:
+            if label not in self.entries or not self.entries[label]:
                 continue
             tail = self.entries[label][-1] # 同じラベルであればエラーも同一のはず
             yield label, tail.missing_args, tail.unused_args
@@ -359,6 +356,9 @@ class Process:
     def execute(self):
         invocation = None
         
+        if hasattr(self.parsedcommand, "use_command_dialog"):
+            raise NotImplementedError("CommandDialog")
+
         if self.parsedcommand.has_exit_message():
             # コマンドパーサのメッセージがある場合は出力して終了
             for line in self.parsedcommand.get_exit_messages():
