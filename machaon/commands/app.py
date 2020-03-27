@@ -158,34 +158,30 @@ def command_processlist(spi):
     spi.create_data(items, ":table")
     spi.dataview()
 
-
 # テーマの選択
-def command_ui_theme(app, themename=None, alt=(), show=False):
-    from machaon.ui.theme import themebook
-    if themename is None and not alt and not show:
-        for name in themebook.keys():
-            app.hyperlink(name)
-        return
-
-    root = app.get_app()
-    if themename is not None:
-        themenew = themebook.get(themename, None)
-        if themenew is None:
-            app.error("'{}'という名のテーマはありません".format(themename))
-            return
-        theme = themenew()
+def command_ui_theme(spi, themename=None, alt="", show=False):
+    from machaon.ui.theme import theme_dict, ShellThemeItem
+    if themename is None and not alt:
+        theme_items = [ShellThemeItem(k,fn()) for (k,fn) in theme_dict.items()]
+        spi.create_data(theme_items, ":table")
+        spi.dataview()
     else:
-        theme = root.get_ui().get_theme()
-    
-    for altline in alt:
-        cfgname, cfgval = altline.split("=")
-        theme.setval(cfgname, cfgval)
-    
-    if show:
-        for k, v in theme.config.items():
-            app.message("{}={}".format(k,v))
-    else:
+        root = spi.get_app()
+        if themename:
+            themenew = theme_dict.get(themename, None)
+            if themenew is None:
+                spi.error("'{}'という名のテーマはありません".format(themename))
+                return
+            theme = themenew()        
+        else:
+            theme = root.get_ui().get_theme()
+        
+        for altrow in alt.split():
+            cfgname, cfgval = altrow.split("=")
+            theme.setval(cfgname, cfgval)
+        
         root.get_ui().apply_theme(theme)
+
 
 # 立ち上げスクリプトのひな形を吐き出す
 def command_bootstrap(app, tk=True):

@@ -25,11 +25,15 @@ class ShellTheme():
         return c
     
     def getfont(self, key):
-        fontname = self.getval("font", machaon.platforms.current.preferred_fontname)
+        fontname = self.getfontname()
         fontsize = self.getval(key+"size", machaon.platforms.current.preferred_fontsize)
         if isinstance(fontsize, str) and not fontsize.isdigit():
             return None
         return (fontname, int(fontsize))
+    
+    def getfontname(self):
+        return self.getval("font", machaon.platforms.current.preferred_fontname)
+
 
 #
 def dark_classic_theme():
@@ -46,6 +50,8 @@ def dark_classic_theme():
         "color.highlight" : "#242480",
         "color.sectionbackground" : "#000008",
         "ttktheme" : "clam",
+        "commandfontsize" : None,
+        "logfontsize" : None,
     })
     
 def dark_blue_theme():
@@ -80,10 +86,64 @@ def papilio_machaon_theme():
         "color.highlight" : "#FFA500",
     })
 
-themebook = {
-    "classic" : dark_classic_theme,
-    "darkblue" : dark_blue_theme,
-    "greygreen" : grey_green_theme,
-    "papilio.machaon" : papilio_machaon_theme
+
+#
+#
+#
+class ShellThemeItem():
+    def __init__(self, name, theme):
+        self._name = name
+        self._theme = theme
+
+    def get_link(self):
+        return self._name
+
+    def name(self):
+        return self._name
+
+    def theme(self):
+        return self._theme
+
+    def fontname(self):
+        return self._theme.getfontname()
+    
+    def message(self):
+        return self._theme.getval("color.message")
+    
+    def message_em(self):
+        return self._theme.getval("color.message_em")
+
+    def background(self):
+        return self._theme.getval("color.background")
+
+    def values(self):
+        lines = []
+        for k, v in self._theme.config.items():
+            lines.append("{}={}".format(k,v))
+        return " ".join(lines)
+    
+    @classmethod
+    def describe(cls, ref):
+        ref.default_columns(
+            table = ("name", "message", "message_em", "background", "fontname")
+        )["name"](
+            disp="名前"
+        )["message"](
+            disp="文字色"
+        )["message_em"](
+            disp="強調文字色"
+        )["background"](
+            disp="背景色"
+        )["values"](
+            disp="設定項目"
+        )["fontname"](
+            disp="フォント名"
+        )
+
+theme_dict = {
+        "classic" : dark_classic_theme,
+        "darkblue" : dark_blue_theme,
+        "greygreen" : grey_green_theme,
+        "papilio.machaon" : papilio_machaon_theme
 }
 
