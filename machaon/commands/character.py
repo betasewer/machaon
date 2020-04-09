@@ -45,4 +45,3 @@ def decode_unicodes(app, characters):
         line = char_detail_line(code)
         app.message(line)
         
-

@@ -543,6 +543,7 @@ class tkLauncher(Launcher):
     def insert_screen_dataview(self, msg, viewer, data):
         self.log.configure(state='normal')
         viewer.render(self, self.log, data)
+        self.log.insert("end", "\n")
         self.log.configure(state='disabled')
     
     def select_screen_dataview_item(self, index, charindex):

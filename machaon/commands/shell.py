@@ -3,6 +3,7 @@ import shutil
 import re
 import time
 import subprocess
+from collections import defaultdict
 
 from typing import Optional
 
@@ -333,4 +334,40 @@ def calculator(app, expression, library):
 
     val = eval(expression, glo, {})
     app.message_em(val)
+
+#
+#
+#
+def unzip(app, path, out=None, win=False):
+    path = app.abspath(path)
+
+    from zipfile import ZipFile
+    if out is None:
+        out, _ = os.path.splitext(path)
+    if not os.path.isdir(out):
+        os.mkdir(out)
+
+    memberdict = defaultdict(dict)
+    with ZipFile(path) as zf:
+        for membername in zf.namelist():
+            zf.extract(membername, out)
+            node = memberdict
+            # リネーム用にパスをツリー構造で記録する
+            if win:
+                for part in membername.split("/"):
+                    if not part:
+                        continue
+                    if part not in node:
+                        node[part] = {}
+                    node = node[part]
+    
+    # 文字化けしたファイル名をすべてリネーム
+    if win:
+        stack = [(out, memberdict, x) for x in memberdict.keys()]
+        while stack:
+            cd, d, memberpath = stack.pop()
+            oldpath = os.path.join(cd, memberpath)
+            newpath = os.path.join(cd, memberpath.encode("cp437").decode("utf-8"))
+            os.rename(oldpath, newpath)
+            stack.extend([(newpath, d[memberpath], x) for x in d[memberpath]])
 
