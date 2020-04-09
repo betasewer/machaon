@@ -103,7 +103,7 @@ def test_remainder():
 
 def test_accumulate():    
     p = build_parser(
-        option("name", variable=True, join=True),
+        option("name", joinspace=True),
         option("--page", "-p", valuetype=int, accumulate=True),
     )
     assert p.do_parse_args(["watanabe", "mieko", "--page", "23", "--page", "3", "--page", "128"]) == {
@@ -113,7 +113,7 @@ def test_accumulate():
     
 def test_defaults(): 
     p = build_parser(
-        option("name", variable=True, join=True),
+        option("name", joinspace=True),
         option("--page", "-p", valuetype=int, accumulate=True),
         option("--zoo-alpha", "-za", flag=True, dest="zoo"),
         option("--zoo-omega", "-zo", const="omega", dest="zoo"), # デフォルト値は無視される
@@ -138,7 +138,7 @@ def test_defaults():
 #
 def test_compound_rows():  
     p = build_parser(
-        option("name", join=True, variable=True),
+        option("name", joinspace=True),
         option("--horizontal", "-h", flag=True),
         option("--vertical", "-v", flag=True),
         option("--alt", "-a", flag=True),

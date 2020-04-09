@@ -224,14 +224,14 @@ class CommandParser():
         flag=False,
         const=None,
         variable=False, # 任意の数の引数をとる
-        join=False, # 値を結合する
+        joinspace=False, # 値を結合する
         remainder=False, # 書式を無視して以降をすべて引数とする
         accumulate=False, # 重複するオプションをリストに集積する
         optional=None, # 省略可能な位置引数
         typespec=None,
-        arity=None, # arity=1, あるいは arity=(1,3) も可
-        min=1,
-        max=1,
+        arity=None,
+        min=-1,
+        max=-1,
         value=None,
         default=None,
         dest=None,        
@@ -241,8 +241,8 @@ class CommandParser():
         if not names:
             raise ValueError("option names must be specified")
 
-        min = 1
-        max = 1
+        minarg = 1
+        maxarg = 1
         flags = 0
 
         option = names[0].startswith("-")
@@ -254,13 +254,13 @@ class CommandParser():
             default = False
 
         if const is not None:
-            min = 0
-            max = 0
+            minarg = 0
+            maxarg = 0
             value = const
             
         if variable or remainder:
-            min = 0
-            max = None
+            minarg = 0
+            maxarg = None
             if valuetype is None:
                 typespec = OptionValueList(valuetype)
             else:
@@ -268,7 +268,8 @@ class CommandParser():
             flags |= OPT_OPTIONAL
             default = [] if default is None else default
         
-        if join:
+        if joinspace:
+            maxarg = None
             typespec = OptionValueJoiner(str)
             default = ""
         
@@ -284,7 +285,7 @@ class CommandParser():
             typespec = OptionValueAccumulator(valuetype, type(default))
         
         if optional:
-            min = 0
+            minarg = 0
             flags |= OPT_OPTIONAL
 
         if typespec is None:
@@ -296,14 +297,15 @@ class CommandParser():
             else:
                 typespec = OptionValueType(valuetype)
         
+        if min != -1:
+            minarg = min
+        
+        if max != -1:
+            maxarg = max
+        
         if arity is not None:
-            if isinstance(arity, int):
-                min = arity
-                max = arity
-            elif isinstance(arity, tuple) and len(arity)>1:
-                min, max = arity
-            else:
-                raise ValueError("arity")
+            minarg = arity
+            maxarg = arity
 
         if isinstance(methodtype, int):
             flags |= methodtype
@@ -316,7 +318,7 @@ class CommandParser():
             
         #
         cxt = OptionContext(*names, 
-            valuetype=typespec, min=min, max=max, value=value,
+            valuetype=typespec, min=minarg, max=maxarg, value=value,
             default=default, dest=dest, flags=flags, 
             help=help
         )
