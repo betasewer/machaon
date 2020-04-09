@@ -84,9 +84,9 @@ class HelpItem():
         )
 
 #
-def command_help(spi, command_name=None):
+def command_help(spi):
     spi.message("<< コマンド一覧 >>")
-    spi.message("各コマンドの詳細は command --help で")
+    spi.message("各コマンドの詳細は <command> --help で")
     spi.message("")
     
     items = []
@@ -113,7 +113,7 @@ class ProcessListItem():
         return self.chamber.get_command()
     
     def full_command(self):
-        return self.chamber.get_process().get_full_command()
+        return self.chamber.get_process().build_command_string()
         
     def handler(self):
         parsedcommand = self.chamber.get_process().get_command_args()

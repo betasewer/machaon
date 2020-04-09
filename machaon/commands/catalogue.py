@@ -16,21 +16,13 @@ def app_commands():
             description="コマンド文字列を解析し、可能な解釈をすべて示します。"
         )["target command_string"](
             help="コマンド文字列",
-            take_remainder=True
+            remainder=True
         )
-    )["interrupt it"](
-        describe_command(
-            appcmd.command_interrupt,
-            description="現在実行中のプロセスを中断します。"
-        )
-    )["help h"](
+    )["help"](
         describe_command(
             appcmd.command_help,      
             description="ヘルプを表示します。",
-        )["target command_name"](
-            nargs="?",
-            help="ヘルプを見るコマンド"
-        ),
+        )
     )["process_list"](
         describe_command(
             appcmd.command_processlist,
@@ -42,14 +34,13 @@ def app_commands():
             description="アプリのテーマを変更します。"
         )["target themename"](
             help="テーマ名",
-            nargs="?"
+            optional=True
         )["target --alt"](
             help="設定項目を上書きする [config-name]=[config-value]",
-            take_remainder=True,
-            default=()
+            remainder=True,
         )["target --show"](
             help="設定項目を表示する",
-            const_option=True
+            flag=True
         )
     )["dataview %"](
         describe_command(
@@ -69,10 +60,10 @@ def app_commands():
             description="任意の式を実行します。"
         )["target -l --library"](
             help="ライブラリをロード",
-            action="append",
+            accumulate=True,
         )["target expression"](
             help="Pythonの式",
-            take_remainder=True
+            remainder=True
         )
     )["exit"](
         describe_command(
@@ -161,11 +152,11 @@ def shell_commands():
             from_module="machaon.commands.shell",
             description="作業ディレクトリを変更します。", 
         )["target path"](
-            nargs="?",
-            help="移動先のパス"
+            help="移動先のパス",
+            optional=True
         )["target -s --silent"](
-            const_option=True,
-            help="変更後lsを実行しない"
+            help="変更後lsを実行しない",
+            flag=True
         ),
     )["ls"](
         describe_command(
@@ -174,28 +165,26 @@ def shell_commands():
             description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
         )["target pattern"](
             help="表示するフォルダ・ファイルを絞り込む正規表現パターン（部分一致）",
-            nargs="?",
-            const=None
+            optional=True
         )["target -l --long"](
-            const_option=True,
-            help="詳しい情報を表示する"
+            help="詳しい情報を表示する",
+            flag=True
         )["target -t --time"](
-            const_option="t",
             help="更新日時で降順に並び替える",
+            const="t",
             dest="howsort"
         )["target -o --opc"](
-            const_option=r"\.(docx|doc|xlsx|xls|pptx|ppt)$",
             help="OPCパッケージのみ表示する",
+            const=r"\.(docx|doc|xlsx|xls|pptx|ppt)$",
             dest="presetpattern"
         )["target -r --recurse"](
             help="配下のフォルダの中身も表示する[深度を指定：デフォルトは3]",
-            type=int,
-            nargs="?",
+            valuetype=int,
             const=3,
             default=1,
         )["target --view"](
             help="データの表示方法",
-            take_remainder=True
+            remainder=True
         )
     )["text xt"](
         describe_command(
@@ -204,25 +193,23 @@ def shell_commands():
             description="ファイルの内容をテキストとして表示します。", 
         )["target target"](
             help="表示するファイル",
-            files=True,
+            valuetype="filepath",
         )["target -e --encoding"](
             help="テキストエンコーディング [utf-8|utf-16|ascii|shift-jis]",
             default=None
         )["target -d --head"](
             help="先頭からの表示行",
-            type=int,
-            nargs="?",
+            valuetype=int,
             const=1,
             default=10
         )["target -t --tail"](
             help="末尾からの表示行",
-            type=int,
-            nargs="?",
+            valuetype=int,
             const=1,
             default=0
         )["target -a --all"](
             help="全て表示",
-            const_option=True
+            flag=True,
         )
     )["hex"](
         describe_command(
@@ -231,15 +218,43 @@ def shell_commands():
             description="ファイルの内容をバイナリとして表示します。", 
         )["target target"](
             help="表示するファイル",
-            files=True,
+            valuetype="filepath",
         )["target --size"](
             help="読み込むバイト数",
-            type=int,
+            valuetype=int,
             default=128
         )["target --width"](
             help="表示の幅",
-            type=int,
+            valuetype=int,
             default=16
+        )
+    )["reencfname"](
+        describe_command(
+            "reencode_filename",
+            from_module="machaon.commands.shell",
+            description="文字化けしたファイル名をエンコードしなおします。",
+        )["target dirpath"](
+            help="対象とするディレクトリ",
+            valuetype="dirpath"
+        )["target --current"](
+            help="現在の誤ったエンコーディング",
+            default="cp932"
+        )["target --original"](
+            help="本来のエンコーディング",
+            default="utf-8"
+        )
+    )["unzip"](
+        describe_command(
+            "unzip",
+            from_module="machaon.commands.shell",
+            description="zipを解凍します。",
+        )["target path"](
+            help="ZIPのパス",
+            valuetype="dirpath"
+        )["target --out"](
+            help="解凍ディレクトリ",
+        )["target --win -w"](
+            help="UTF-8でエンコードされたファイル名をcp932に変換（Windows）",
         )
     )
 
