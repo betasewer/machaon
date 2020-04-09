@@ -103,7 +103,7 @@ class DataReference():
 #
 #
 class DataView():
-    def __init__(self, ref, datas, rows=None, viewtype=None, viewpreds=None):
+    def __init__(self, ref, datas, rows=None, viewtype="table", viewpreds=None):
         self.ref = ref
         self.datas = datas
         self.rows = rows or []
@@ -299,9 +299,7 @@ class _DataViewFactory():
         firstitem = items[0]
         ref = self.get_reference(type(firstitem))
         dataview = DataView(ref, datas=items)
-        if command_args or command_kwargs:
-            return dataview.command_create_view(*command_args, **command_kwargs)
-        return dataview
+        return dataview.command_create_view(*command_args, **command_kwargs)
 
 #
 DataViewFactory = _DataViewFactory()
