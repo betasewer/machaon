@@ -45,10 +45,12 @@ class CommandEntry():
         return self.target
     
     def match(self, target):
+        match_rests = []
         for keyword in self.keywords:
             if target.startswith(keyword):
-                rest = target[len(keyword):]
-                return True, rest
+                match_rests.append(target[len(keyword):])
+        if match_rests:
+            return True, min(match_rests, key=lambda x:len(x)) # 最も長くマッチした結果を採用する
         return False, None
     
     def get_prog(self):
