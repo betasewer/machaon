@@ -81,7 +81,7 @@ def test_variable_posit():
 
 def test_typespec():
     p = build_parser(
-        option("name", variable=True, join=True),
+        option("name", joinspace=True),
         option("--age", "-a", valuetype=int),
         option("--offset", valuetype=int)
     )

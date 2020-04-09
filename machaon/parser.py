@@ -224,7 +224,7 @@ class CommandParser():
         flag=False,
         const=None,
         variable=False, # 任意の数の引数をとる
-        joinspace=False, # 値を結合する
+        joinspace=False, # 区切りを結合してひとつの引数とする
         remainder=False, # 書式を無視して以降をすべて引数とする
         accumulate=False, # 重複するオプションをリストに集積する
         optional=None, # 省略可能な位置引数
@@ -258,25 +258,27 @@ class CommandParser():
             maxarg = 0
             value = const
             
-        if variable or remainder:
+        if variable:
             minarg = 0
             maxarg = None
-            if valuetype is None:
-                typespec = OptionValueList(valuetype)
-            else:
-                typespec = OptionValueType(valuetype)
             flags |= OPT_OPTIONAL
             default = [] if default is None else default
+            typespec = OptionValueList(valuetype)
         
         if joinspace:
+            minarg = 0
             maxarg = None
-            typespec = OptionValueJoiner(str)
+            flags |= OPT_OPTIONAL
             default = ""
+            typespec = OptionValueJoiner(str)
         
         if remainder:
-            typespec = OptionValueJoiner(str)
-            default = ""
+            minarg = 0
+            maxarg = None
             flags |= OPT_REMAINDER
+            flags |= OPT_OPTIONAL
+            default = ""
+            typespec = OptionValueJoiner(str)
         
         if accumulate:
             flags |= OPT_ACCUMULATE
