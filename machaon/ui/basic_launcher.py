@@ -113,8 +113,7 @@ class Launcher():
                 #self.spirit.message_em("コマンド接頭辞'{}'を設定".format(prefix)) 
                 return
             
-        process = self.app.create_process(command)
-        chamber = self.app.run_process(process) # 実行
+        chamber = self.app.run_process(command) # 実行
 
         self.update_active_chamber(chamber, updatemenu=False)
         self.add_chamber_menu(chamber)
