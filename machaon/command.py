@@ -3,111 +3,14 @@
 from typing import Sequence
 
 from machaon.process import ProcessTargetClass, ProcessTargetFunction, Spirit
-from machaon.engine import CommandParser
+from machaon.parser import CommandParser
+from machaon.engine import CommandEntry, CommandSet
 
 #
 # ###################################################################
 #  command and command package
 # ###################################################################
 #
-normal_command = 0
-auxiliary_command = 1
-hidden_command = 2
-
-# process + command keyword
-class CommandEntry():
-    def __init__(
-        self, 
-        keywords,
-        prog=None, 
-        description="",
-        builder=None,
-        commandtype=normal_command,
-    ):
-        self.target = None
-        self.keywords = keywords # 展開済みのキーワード
-        self.builder = builder
-        self.prog = prog
-        self.description = description
-        self.commandtype = commandtype
-
-    def match(self, target):
-        for keyword in self.keywords:
-            if target.startswith(keyword):
-                rest = target[len(keyword):]
-                return rest
-        return None
-    
-    def load(self):
-        if self.builder:
-            process_target = self.builder.build_target(self)
-            self.target = process_target
-            self.builder = None
-        return self.target
-    
-    def get_prog(self):
-        return self.prog
-    
-    def get_keywords(self):
-        return self.keywords
-
-    def get_description(self):
-        return self.description
-    
-    def is_hidden(self):
-        return self.commandtype == hidden_command
-
-
-# set of CommandEntry
-class CommandSet:
-    def __init__(self, name, prefixes, entries, *, description=""):
-        self.name = name
-        self.entries = entries
-        self.prefixes = prefixes
-        self.description = description
-        
-    def match(self, target):
-        m = []
-        if self.prefixes:
-            hit = None
-            for pfx in self.prefixes:
-                if target.startswith(pfx):
-                    hit = pfx
-                    break
-            if hit is None:
-                return m
-                
-            target = target[len(pfx):]
-            if target.startswith("."):
-                target = target[1:]
-        
-        for e in self.entries:
-            rest = e.match(target)
-            if rest is None:
-                continue
-            m.append((e, rest))
-        return m
-    
-    def get_name(self):
-        return self.name
-    
-    def get_description(self):
-        return self.description
-    
-    def get_prefixes(self):
-        return self.prefixes
-    
-    def get_entries(self):
-        return self.entries
-    
-    def display_entries(self, *, forcehidden=False):
-        entries = []
-        for x in sorted(self.entries, key=lambda x: x.commandtype):
-            if not forcehidden and x.is_hidden():
-                continue
-            entries.append(x)
-        return entries
-
 #
 # build CommandEntry
 #
@@ -118,7 +21,7 @@ class CommandBuilder():
         from_module=None,
         prog=None, 
         description="",
-        commandtype=normal_command,
+        commandtype="normal",
         args=None, 
         spirit=None,
         custom_command_parser=None, 
@@ -212,15 +115,12 @@ class CommandBuilder():
         if self.custom_cmdparser is not None:
             argp = self.custom_cmdparser(prog=prog, **self.cmdinitargs)
         else:
-            argp = CommandParser(prog=prog, **self.cmdinitargs)
+            argp = CommandParser(prog=prog, description=self.description)
 
         for cmdtype, cmds, kwa in self.cmdargs:
-            if cmdtype == "target":
-                argp.target_arg(*cmds, **kwa)
-            elif cmdtype == "init":
-                argp.init_arg(*cmds, **kwa)
-            elif cmdtype == "exit":
-                argp.exit_arg(*cmds, **kwa)
+            if cmdtype in ("target", "init", "exit"):
+                kwa["methodtype"] = cmdtype
+                argp.add_arg(*cmds, **kwa)
             else:
                 raise ValueError("Undefined command type '{}'".format(cmdtype))
         
@@ -245,8 +145,6 @@ class CommandBuilder():
         
         return targ
         
-
-
 #
 #
 #
@@ -323,11 +221,11 @@ def describe_command(
     from_module=None,
     **kwargs
 ):
-    typecode = normal_command
+    typecode = "normal"
     if auxiliary: 
-        typecode = auxiliary_command
+        typecode = "auxiliary"
     if hidden: 
-        typecode = hidden_command
+        typecode = "hidden"
 
     return CommandBuilder(
         target, 

@@ -64,8 +64,10 @@ class ProcessTarget():
         return self.argparser.get_description()
     
     # 自らのスピリットを生成する
-    def invoke_spirit(self, app):
-        return self.spirittype(app)
+    def inherit_spirit(self, other_spirit):
+        sp = self.spirittype(other_spirit.app)
+        sp.inherit(other_spirit)
+        return sp
         
     #
     def invoke(self, spirit, parsedcommand):
@@ -329,10 +331,12 @@ class ProcessTargetInvocation:
 # スレッドの実行、停止、操作を行う 
 #
 class Process:
-    def __init__(self, target, spirit, parsedcommand):
-        self.target = target
-        self.spirit = spirit
-        self.parsedcommand = parsedcommand
+    def __init__(self, command):
+        self.command = command
+        # 
+        self.target = None
+        self.spirit = None
+        self.parsedcommand = None
         # スレッド
         self.thread = None
         self.stop_flag = False
@@ -346,29 +350,18 @@ class Process:
         # 付属データ
         self.bound_data = None
         
-        self.spirit.bind_process(self)
-        
     def run(self, app):
         self.thread = threading.Thread(target=app.execute_process, args=(self,))
         self.stop_flag = False
         self.thread.start()
     
-    def execute(self):
-        invocation = None
-        
-        if hasattr(self.parsedcommand, "use_command_dialog"):
-            raise NotImplementedError("CommandDialog")
+    def execute(self, target, spirit, parsedcommand):
+        self.target = target
+        self.spirit = spirit
+        self.parsedcommand = parsedcommand
 
-        if self.parsedcommand.has_exit_message():
-            # コマンドパーサのメッセージがある場合は出力して終了
-            for line in self.parsedcommand.get_exit_messages():
-                self.spirit.message(line)
-        else:
-            # パスの展開: ここでいいのか？
-            self.parsedcommand.expand_special_arguments(self.spirit) 
-            # 操作を実行する
-            invocation = self.target.invoke(self.spirit, self.parsedcommand)
-
+        # 操作を実行する
+        invocation = target.invoke(spirit, parsedcommand)
         self.last_invocation = invocation
         return invocation
     
@@ -381,10 +374,13 @@ class Process:
     def get_command_args(self):
         return self.parsedcommand
     
-    def get_full_command(self):
+    def build_command_string(self):
         prog = self.target.get_prog()
         exp = self.parsedcommand.get_expanded_command()
         return " ".join(x for x in [prog, exp] if x)
+    
+    def get_command_string(self):
+        return self.command
 
     def get_last_invocation(self):
         if self.is_running():
@@ -478,63 +474,6 @@ class ProcessInterrupted(Exception):
     pass
 
 #
-# スレッドなしで即時実行
-#
-class InstantProcedure():
-    def __init__(self, app, pseudocommand=".nothing", **kwargs):
-        self.spirit = Spirit(app)
-        self.kwargs = kwargs
-        self.messages = []
-        self.spirit.bind_process(self)
-        self.pseudocommand = pseudocommand
-        self.bound_data = None
-    
-    def procedure(self, **kwargs):
-        raise NotImplementedError()
-        
-    def execute(self):
-        return self.procedure(**self.kwargs)
-    
-    def run(self, _app):
-        return self.execute()
-    
-    def get_spirit(self):
-        return self.spirit
-    
-    def get_full_command(self):
-        return self.pseudocommand
-    
-    def is_running(self):
-        return False
-
-    def is_interrupted(self):
-        return False
-    
-    def is_waiting_input(self):
-        return False
-    
-    def is_failed(self):
-        return False
-
-    # メッセージは単に貯蔵する
-    def post_message(self, msg):
-        self.messages.append(msg)
-
-    def handle_post_message(self):
-        msgs = self.messages[:]
-        self.messages = []
-        return msgs
-        
-    def bind_data(self, data):
-        self.bound_data = data
-
-    def get_data(self, running=False):
-        if not running and self.is_running():
-            # 動作中は別スレッドからアクセスさせない
-            return None
-        return self.bound_data
-
-#
 # ###################################################################
 #  Process Spirit
 #  プロセスがアプリケーションにたいし使用するコントローラー
@@ -566,12 +505,15 @@ class _spirit_msgmethod():
 #
 #
 class Spirit():
-    def __init__(self, app):
+    def __init__(self, app, process=None):
         self.app = app
-        self.process = None
+        self.process = process
         # プログレスバー        
         self.cur_prog_display = None 
-        #print("spirit born")
+    
+    def inherit(self, other):
+        self.app = other.app
+        self.process = other.process
 
     def get_app(self):
         return self.app
@@ -721,8 +663,8 @@ class Spirit():
             raise ValueError("no process to be bound dataset exists")
         self.process.bind_data(dataview)
     
-    def create_data(self, dataclass, datas, *command_args, **command_kwargs):
-        dataview = DataViewFactory(dataclass, datas, *command_args, **command_kwargs)
+    def create_data(self, datas, *command_args, **command_kwargs):
+        dataview = DataViewFactory(datas, *command_args, **command_kwargs)
         self.bind_data(dataview)
         return dataview
 
@@ -884,10 +826,9 @@ class ProcessMessageIO():
 # プロセスの動作を表示する
 #
 class ProcessChamber:
-    def __init__(self, index, process, commandstr):
+    def __init__(self, index, process):
         self.index = index
         self.process = process
-        self.commandstr = commandstr
         self.handled_msgs = []
         
     def is_failed(self):
@@ -922,14 +863,16 @@ class ProcessChamber:
         return self.handled_msgs
     
     def get_command(self):
-        return self.commandstr
+        return self.process.get_command_string()
     
     def get_process(self):
         return self.process
     
+    # ヌルの可能性あり
     def get_bound_spirit(self):
         return self.process.get_spirit()
     
+    # ヌルの可能性あり
     def get_bound_data(self, running=False):
         return self.process.get_data(running=running)
 
@@ -955,9 +898,9 @@ class ProcessHive:
         p = cha.get_process()
         app.execute_process(p)
 
-    def add(self, process, commandstr):
+    def add(self, process):
         newindex = len(self.chambers)
-        scr = ProcessChamber(newindex, process, commandstr)
+        scr = ProcessChamber(newindex, process)
         self.chambers.append(scr)
         self.set_active_index(newindex) # アクティブにする
         return scr

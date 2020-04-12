@@ -8,10 +8,10 @@ import threading
 import traceback
 import subprocess
 
-from machaon.engine import BadCommand, CommandEngine 
+from machaon.engine import CommandEngine 
 from machaon.command import describe_command
-from machaon.process import ProcessInterrupted, Process, InstantProcedure, ProcessHive
-from machaon.cui import test_yesno, fixsplit
+from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive
+from machaon.cui import test_yesno
 import machaon.platforms
 
 #
@@ -79,28 +79,10 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    # コマンド文字列から呼び出す
-    def create_process(self, commandstr):
-        # 文字列を先頭の空白で区切る
-        commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
-        
-        # コマンドを解析
-        possible_entries = self.cmdengine.parse_command(commandhead, commandtail, self)
-        if not possible_entries:
-            # すべて失敗
-            failcmd, failcmderror = self.cmdengine.get_first_parse_command_fail()
-            return CommandFailureProcedure(self, commandstr=commandstr, failcmd=failcmd, failcmderror=failcmderror)
-        
-        # 一つを選択する
-        # TODO: ランチャー上で選択させる
-        process_target, spirit, parseresult = possible_entries[0]
-
-        # プロセスの作成
-        return Process(process_target, spirit, parseresult)
-    
-    # プロセスを実行しアクティブにする
-    def run_process(self, process):
-        chamber = self.processhive.add(process, process.get_full_command())
+    # プロセスをスレッドで実行しアクティブにする
+    def run_process(self, commandstr):
+        process = Process(commandstr)
+        chamber = self.processhive.add(process)
         self.processhive.run(self)
         return chamber
     
@@ -130,14 +112,43 @@ class AppRoot:
     
     # プロセスの実行フロー
     def execute_process(self, process):
-        spirit = process.get_spirit()
+        commandstr = process.get_command_string()
+
+        # メインスレッドへの伝達者
+        spirit = Spirit(self, process)
+
+        # コマンドを解析
+        target = None
+        parsedcommand = None
+        entries = self.cmdengine.expand_parsing_command(commandstr, spirit)
+        entry = self.cmdengine.select_parsing_command(spirit, entries)
+        if entry is not None:
+            target, spirit = entry.target, entry.spirit
+            parsedcommand = self.cmdengine.parse_command(target.get_argparser(), spirit, entry.command_row)
+        
+        if parsedcommand is None:
+            if entry is None:
+                failtarget, failreason = None, "合致するコマンドが無かった"
+            else:
+                failtarget, failreason = entry.target, self.cmdengine.get_last_parse_error()
+            self.ui.on_bad_command(spirit, failtarget, commandstr, failreason)
+            return None
+
+        # 実行開始！
         self.ui.on_exec_process(spirit, process)
+        
+        # コマンドパーサのメッセージがある場合は出力して終了
+        if parsedcommand.has_exit_message():
+            for line in parsedcommand.get_exit_messages():
+                spirit.message(line)
+            return None
 
         # プロセスを実行する
         result = None
         invocation = None
         try:
-            invocation = process.execute()
+            parsedcommand.expand_special_arguments(spirit)
+            invocation = process.execute(target, spirit, parsedcommand)
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
         except Exception as appexcep:
@@ -159,12 +170,13 @@ class AppRoot:
     def test_valid_process(self, processname):
         return self.cmdengine.test_command_head(processname)
     
+    # 可能な構文解釈の一覧を提示する
+    def parse_possible_commands(self, commandstr):
+        spirit = Spirit(self, None) # processはもちろん関連付けられていない
+        return self.cmdengine.expand_parsing_command(commandstr, spirit)
+    
     def get_command_sets(self):
         return self.cmdengine.command_sets()
-    
-    def parse_possible_commands(self, commandstr):
-        head, tail = fixsplit(commandstr, maxsplit=1, default="")
-        return self.cmdengine.parse_command(head, tail, self)
     
     def set_command_prefix(self, prefix):
         self.cmdengine.set_command_prefix(prefix)
@@ -205,16 +217,3 @@ class AppRoot:
             proc = scr.get_process()
             proc.tell_interruption()
 
-#
-#
-#
-class CommandFailureProcedure(InstantProcedure):
-    def __init__(self, app, commandstr, failcmd, failcmderror):
-        super().__init__(app, commandstr, failcmd=failcmd, failcmderror=failcmderror)
-
-    def procedure(self, failcmd, failcmderror):
-        ui = self.spirit.get_app_ui()
-        ui.on_bad_command(self.spirit, failcmd, self.get_full_command(), failcmderror)
-
-    def is_failed(self):
-        return True
