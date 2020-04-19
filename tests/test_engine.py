@@ -1,4 +1,42 @@
 from machaon.engine import CommandEntry, CommandSet, CommandEngine, CommandParserResult
+from machaon.command import describe_command
+from machaon.process import TempSpirit
+from machaon.parser import OPT_METHOD_TARGET, PARSE_SEP
+
+import pytest
+
+def equal_contents(l, r):
+    return set(map(frozenset, l)) == set(map(frozenset, r))
+
+@pytest.fixture
+def a_cmdset():
+    dummy_target = describe_command(lambda a,b,c: print("a={}, b={}, c={}".format(a,b,c)),
+        description="Dummy Command", 
+    )["target alpha"](
+        help="param A",
+        dest="a"
+    )["target --beta -b"](
+        help="param B",
+        dest="b"
+    )["target --cappa -c"](
+        help="param C",
+        dest="c"
+    )["target --epsilon -e"](
+        help="param B e",
+        flag=True,
+        dest="b"
+    )["target --rho -r"](
+        help="param C r",
+        flag=True,
+        dest="c"
+    )
+    entries = {
+        "command" : CommandEntry(("cmd", "command"), prog="command", description="A Command.", builder=dummy_target),
+        "ending" : CommandEntry(("en", "ending"), prog="ending", description="A Ending command.", builder=dummy_target),
+        "commander" : CommandEntry(("commander",), prog="commander", description="A Commander command.", builder=dummy_target),
+    }
+    cmdset = CommandSet("test", ("test","ts"), entries.values(), description="Test command set.")
+    return cmdset, entries
 
 def test_entry():
     entry = CommandEntry(("cmd", "command"), prog="command", description="A Command.")
@@ -9,13 +47,8 @@ def test_entry():
     assert entry.get_prog() == "command"
     assert entry.get_description() == "A Command."
 
-def test_entryset():
-    entries = {
-        "command" : CommandEntry(("cmd", "command"), prog="command", description="A Command."),
-        "ending" : CommandEntry(("en", "ending"), prog="ending", description="A Ending command."),
-        "commander" : CommandEntry(("commander",), prog="commander", description="A Commander command."),
-    }
-    cmdset = CommandSet("test", ("test","ts"), entries.values(), description="Test command set.")
+def test_entryset(a_cmdset):
+    cmdset, entries = a_cmdset
     
     assert len(cmdset.match("test.cmd")) == 1
     assert cmdset.match("test.cmd")[0] == (entries["command"], "")
@@ -32,3 +65,50 @@ def test_entryset():
     assert len(cmdset.match("test.commander")) == 2
     assert cmdset.match("test.commander")[0] == (entries["command"], "er")
     assert cmdset.match("test.commander")[1] == (entries["commander"], "")
+
+def test_engine_parsing(a_cmdset):
+    cmdset, entries = a_cmdset
+    eng = CommandEngine()
+    eng.install_commands(cmdset)
+
+    assert eng.expand_parsing_command_head("tscommander") == [
+        (entries["command"], "er"),
+        (entries["commander"], "")
+    ]
+
+    spirit = TempSpirit()
+    assert [x.command_string() for x in eng.expand_parsing_command("tscommander targetname", spirit)] == [
+        "commander targetname",
+        "command --epsilon --rho | targetname",
+    ]
+
+    cmdrows = eng.expand_parsing_command("""
+        tscommander targetname
+        beta lao gamma
+        cappa iwate-no-cappa
+    """, spirit)
+    argparser2 = entries["command"].target.argparser
+    epsilon = argparser2.find_context("epsilon")
+    rho = argparser2.find_context("rho")
+    assert [x.command_row for x in cmdrows] == [
+            ["targetname", "--beta", "lao gamma", "--cappa" ,"iwate-no-cappa"],
+            [epsilon, rho, PARSE_SEP, "targetname", "--beta", "lao gamma", "--cappa", "iwate-no-cappa"],
+        ]
+
+    assert eng.parse_command(cmdrows[0]).argmap[OPT_METHOD_TARGET] == {
+        "a" : "targetname",
+        "b" : "lao gamma",
+        "c" : "iwate-no-cappa",
+    }
+
+@pytest.mark.xfail()
+def test_bad_compound_engine_parsing(a_cmdset):
+    cmdset, entries = a_cmdset
+    eng = CommandEngine()
+    eng.install_commands(cmdset)
+
+    spirit = TempSpirit()
+    assert eng.expand_parsing_command("tscommandxyz", spirit)
+    # -xyzは解釈不能なので例外を投げる
+
+

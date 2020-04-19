@@ -2,19 +2,23 @@
 # coding: utf-8
 import glob
 from collections import defaultdict
-from typing import List, Sequence, Optional, Any, Tuple
+from typing import List, Sequence, Optional, Any, Tuple, Dict, Union
     
 #
 # ########################################################
 #  Command Parser
 # ########################################################
-#
 SpecArgSig = "?"
 
 #
 OPT_ACCUMULATE = 0x0001
 OPT_REMAINDER = 0x0002
-OPT_OPTIONAL = 0x0004
+OPT_POSITIONAL = 0x0004
+OPT_NULLARY = 0x0010
+OPT_OPTIONAL_UNARY = 0x0020
+OPT_UNARY = 0x0040
+
+#
 OPT_METHOD_TYPE = 0xF000
 OPT_METHOD_INIT = 0x1000
 OPT_METHOD_TARGET = 0x2000
@@ -27,6 +31,10 @@ ARG_TYPE_DIRPATH = 3
 ARG_TYPE_COLORCODE = 4
 
 #
+PARSE_SEP = 0
+PARSE_END = 1
+
+#
 class BadCommand(Exception):
     pass
 
@@ -35,28 +43,18 @@ class BadCommand(Exception):
 #
 class OptionContext():
     def __init__(self, 
-        *names, 
-        valuetype=None,
-        min=1, 
-        max=1, 
-        value=None,
-        default=None,
-        dest=None,
-        flags=0,
-        help="",
+        longnames: Sequence[str],
+        shortnames: Sequence[str],
+        valuetype: Any = None,
+        value: Any = None,
+        default: Any = None,
+        dest: int = None,
+        flags: int = 0,
+        help: str = "",
     ):
-        self.topname = None
-        for name in names:
-            if not name.startswith("-") or name.startswith("--"):
-                self.topname = name
-                break
-        else:
-            raise ValueError("long name needed")
-
-        self.names = names
-        self.min_args = min
-        self.max_args = max
-        self.dest = dest or self.get_name().lstrip("-")
+        self.longnames = longnames
+        self.shortnames = shortnames
+        self.dest = dest
         self.value = value
         self.default = default
         self.valuetype = valuetype
@@ -66,11 +64,19 @@ class OptionContext():
     def __repr__(self):
         return "<OptionContext '{}'>".format(self.get_name())
     
-    def get_keys(self):
-        return self.names
-
     def get_name(self):
-        return self.topname
+        return self.longnames[0]
+
+    def match_name(self, key):
+        return key in self.longnames or key in self.shortnames
+    
+    def make_key(self, prefix=None):
+        return self.get_name() if not prefix else prefix*2 + self.longnames[0]
+    
+    def make_keys(self, prefix=None):
+        lk = [x if not prefix else prefix*2+x for x in self.longnames]
+        sk = [x if not prefix else prefix*1+x for x in self.shortnames]
+        return lk + sk
     
     def get_dest(self):
         return self.dest
@@ -79,41 +85,46 @@ class OptionContext():
         return self.flags & OPT_METHOD_TYPE
     
     def is_positional(self):
-        return not self.names[0].startswith("-")
+        return (self.flags & OPT_POSITIONAL) > 0
 
-    def is_optional(self):
-        return (self.flags & OPT_OPTIONAL) > 0
+    def is_unary(self):
+        return (self.flags & OPT_UNARY) > 0
+
+    def is_optional_unary(self):
+        return (self.flags & OPT_OPTIONAL_UNARY) > 0
     
+    def is_nullary(self):
+        return (self.flags & OPT_NULLARY) > 0
+
     def consumes_remainder(self):
         return (self.flags & OPT_REMAINDER) > 0
     
-    def is_accumulate(self):
+    def is_accumulative(self):
         return (self.flags & OPT_ACCUMULATE) > 0
-    
-    def is_nullary(self):
-        return self.max_args == 0
 
-    def is_ready(self, args):
-        if self.min_args is None:
-            return True
-        return len(args) >= self.min_args
-
-    def is_full(self, args):
-        if self.max_args is None:
-            return False
-        return len(args) >= self.max_args
-
-    def parse_arg(self, args, outputs):
-        value = outputs.get(self.dest, None)
-        if not args:
-            value = self.valuetype.convert(self.value)
-        elif self.is_accumulate():
-            value = self.valuetype.generate(*args, prev=value)
+    def parse_arg(self, arg, outputs):
+        defval = None
+        use_defval = not arg
+        if use_defval:
+            if self.value is not None: # Noneは変換しない
+                defval = self.valuetype.convert(self.value) # valueがデフォルト値になる
+        
+        if hasattr(self.valuetype, "accumulate"):
+            if use_defval:
+                va = defval
+            else:
+                va = self.valuetype.convert(arg)
+            prevvalue = outputs.get(self.dest, None)
+            value = self.valuetype.accumulate(va, prevvalue)
         else:
-            value = self.valuetype.generate(*args)
+            if use_defval:
+                value = defval
+            else:
+                value = self.valuetype.convert(arg)
+
         outputs[self.dest] = value
         
-    def parse_default(self, outputs):   
+    def parse_default(self, outputs):
         if self.default is None:
             value = None # Noneは変換しない
         else:
@@ -146,9 +157,6 @@ class OptionValueType():
             return self.type.__name__
         else:
             return str(self.type)
-
-    def generate(self, *args):
-        return self.type(*args)
     
     def convert(self, v):
         if not isinstance(v, self.type):
@@ -160,16 +168,8 @@ class OptionValueList(OptionValueType):
     def __init__(self, valtype):
         super().__init__(valtype)
     
-    def generate(self, *args):
-        return [*args]
-
-#
-class OptionValueJoiner(OptionValueType):
-    def __init__(self, valtype):
-        super().__init__(valtype)
-    
-    def generate(self, *args):
-        return " ".join(args)
+    def convert(self, arg):
+        return arg.split()
 
 #
 class OptionValueAccumulator(OptionValueType):
@@ -177,21 +177,25 @@ class OptionValueAccumulator(OptionValueType):
         super().__init__(valtype)
         self.listtype = listtype
     
-    def generate(self, *args, prev=None):
-        v = self.type(*args)
-        part = self.listtype((v,))
-        if prev is None:
-            return part
-        else:
-            return prev + part
-
     def convert(self, v):
         if not v:
             return self.listtype()
         elif isinstance(v, self.listtype):
             return v
         else:
-            return self.listtype((v,))
+            vc = super().convert(v)
+            return self.listtype((vc,))
+
+    def accumulate(self, arg, prev):
+        if prev is None:
+            return arg
+        else:
+            return prev + arg
+
+#
+#
+Token = Union[str, int, OptionContext]
+TokenRow = List[Token]
 
 #
 #
@@ -203,111 +207,81 @@ class CommandParser():
     #
     # __init__(["targets"], ("--template","-t"), ...)
     #
-    def __init__(self, *, description, prog):
+    def __init__(self, *, description, prog, prefix_chars=("-",)):
         self.description = description
         self.prog = prog
+        self.prefix_chars = prefix_chars
 
         self._optiontrie = CompoundOptions()
         self._optiontrie.add_option("h", None)
         self.enable_compound_options = True
 
-        self.positionals = []
-        self.options = {}
-        self.argnames = {}
-       
+        self.positional: Optional[OptionContext] = None
+        self.options: List[OptionContext] = []
+        self.argnames: Dict[str, OptionContext] = {} 
+
     #
-    #
+    # valuetype int []
     #
     def add_arg(self,
         *names, 
         valuetype=None,
         flag=False,
         const=None,
-        variable=False, # 任意の数の引数をとる
-        joinspace=False, # 区切りを結合してひとつの引数とする
-        remainder=False, # 書式を無視して以降をすべて引数とする
+        defarg=None,
+        arg=1,            # 引数の数 [1: 引数を1つ取る（デフォルト）, 0: 引数なし, ?: 1つ取るが省略可能（キー自体が存在する場合はvalueの値がデフォルト値になる）]
+        remainder=False,  # 書式を無視して以降をすべて引数とする
         accumulate=False, # 重複するオプションをリストに集積する
-        optional=None, # 省略可能な位置引数
         typespec=None,
-        arity=None,
-        min=-1,
-        max=-1,
-        value=None,
         default=None,
-        dest=None,        
+        value=None,
+        dest=None,
         methodtype=None,
         help=""
     ):
         if not names:
-            raise ValueError("option names must be specified")
+            raise ValueError("At least 1 name must be specified")
 
-        minarg = 1
-        maxarg = 1
         flags = 0
 
-        option = names[0].startswith("-")
-        if optional is None and option:
-            optional = True
-        
         if flag:
             const = True
             default = False
 
         if const is not None:
-            minarg = 0
-            maxarg = 0
+            arg = 0
             value = const
-            
-        if variable:
-            minarg = 0
-            maxarg = None
-            flags |= OPT_OPTIONAL
-            default = [] if default is None else default
-            typespec = OptionValueList(valuetype)
         
-        if joinspace:
-            minarg = 0
-            maxarg = None
-            flags |= OPT_OPTIONAL
-            default = ""
-            typespec = OptionValueJoiner(str)
+        if defarg is not None:
+            arg = "?"
+            value = defarg
         
+        if valuetype is None:
+            if value is not None:
+                valuetype = type(value)
+
         if remainder:
-            minarg = 0
-            maxarg = None
+            arg = "?"
             flags |= OPT_REMAINDER
-            flags |= OPT_OPTIONAL
             default = ""
-            typespec = OptionValueJoiner(str)
+            typespec = OptionValueType(str)
         
         if accumulate:
             flags |= OPT_ACCUMULATE
-            flags |= OPT_OPTIONAL
             default = [] if default is None else default
             typespec = OptionValueAccumulator(valuetype, type(default))
         
-        if optional:
-            minarg = 0
-            flags |= OPT_OPTIONAL
+        if arg == "?":
+            flags |= OPT_OPTIONAL_UNARY
+        elif arg == 0 or arg == "0":
+            flags |= OPT_NULLARY
+        elif arg == 1 or arg == "1":
+            flags |= OPT_UNARY
+        else:
+            raise ValueError("bad arity '{}'".format(arg))
 
         if typespec is None:
-            if valuetype is None:
-                if value is not None:
-                    typespec = OptionValueType(type(value))
-                else:
-                    typespec = OptionValueType()
-            else:
-                typespec = OptionValueType(valuetype)
-        
-        if min != -1:
-            minarg = min
-        
-        if max != -1:
-            maxarg = max
-        
-        if arity is not None:
-            minarg = arity
-            maxarg = arity
+            typespec = OptionValueType(valuetype)
 
         if isinstance(methodtype, int):
             flags |= methodtype
@@ -318,36 +292,68 @@ class CommandParser():
         elif methodtype == "exit":
             flags |= OPT_METHOD_EXIT
             
+        longnames = []
+        shortnames = []
+        for name in names:
+            leng = self._prefix_length(name)
+            if leng == 0:
+                flags |= OPT_POSITIONAL
+                longnames = [name]
+                break
+            elif leng == 1:
+                shortnames.append(name[1:])
+            elif leng == 2:
+                longnames.append(name[2:])
+        
+        if not longnames:
+            raise ValueError("option '{}': at least 1 long name needed".format("/".join(names)))
+        
+        if dest is None:
+            dest = longnames[0]
+
         #
-        cxt = OptionContext(*names, 
-            valuetype=typespec, min=minarg, max=maxarg, value=value,
-            default=default, dest=dest, flags=flags, 
+        cxt = OptionContext(longnames, shortnames, 
+            valuetype=typespec, value=value, default=default, 
+            dest=dest, flags=flags, 
             help=help
         )
+
         dest = cxt.get_dest()
         if cxt.is_positional():
-            self.positionals.append(cxt)
+            if self.positional is not None:
+                raise ValueError("positional argument has already existed")
+            self.positional = cxt
             self.argnames[dest] = cxt
         else:
-            for name in cxt.names:
-                self.options[name] = cxt
+            self.options.append(cxt)
             if dest not in self.argnames:
                 self.argnames[dest] = cxt
         
-        # trie
-        for name in names:
-            if name.startswith("--"):
-                continue
-            elif name.startswith("-"):
-                sig = name[1:]
-            else:
-                continue
-            self._optiontrie.add_option(sig, cxt)
+            # trie木に登録
+            for name in cxt.shortnames:
+                self._optiontrie.add_option(name, cxt)
         
         return cxt
     
+    # おもにデバッグ用
+    def find_context(self, name) -> Optional[OptionContext]:
+        for cxt in self.options:
+            if cxt.match_name(name):
+                return cxt
+        if self.positional and self.positional.match_name(name):
+            return self.positional
+        return None
+    
+    #
     # 引数解析
-    def split_singleline_query(self, q):
+    #
+    def split_query(self, q):
+        if "\n" in q:
+            return self._multiline_query(q)
+        else:
+            return self._singleline_query(q)
+    
+    def _singleline_query(self, q):
         splitting = True
         parts = []
         for ch in q:
@@ -365,32 +371,46 @@ class CommandParser():
                 parts[-1] += ch
         return parts
     
-    def split_multiline_query(self, qs):
+    def _multiline_query(self, q):
         parts = []
-        for q in qs:
-            if q.startswith("-"): # オプションで開始する行は通常通り空白で区切る
-                parts.extend(self.split_singleline_query(q))
+        for i, line in enumerate(q.splitlines()):
+            if i == 0: # 先頭行はそのまま値とする
+                parts.append(line.strip())
             else:
-                parts.append(q.strip()) # 行の内部では区切らない
+                spl = line.split(maxsplit=1)
+                if not spl:
+                    continue
+                elif len(spl) == 2:
+                    option, value = spl
+                    if self._prefix_length(option) == 0:
+                        option = self.add_option_prefix(option, autolength=True) # オプション記号が一つもなければ着ける
+                    parts.extend([option, value]) # 先頭をオプションとみなし、一度だけ区切る
+                else:
+                    parts.append(spl[0])
         return parts
     
-    def split_query(self, q):
-        if "\n" in q:
-            return self.split_multiline_query(q.splitlines())
-        else:
-            return self.split_singleline_query(q)
+    def _prefix_length(self, command):
+        leng = 0
+        for ch in command:
+            if ch not in self.prefix_chars or leng>=2:
+                break
+            else:
+                leng += 1
+        return leng
     
-    def generate_command_rows(self, command):
+    def generate_command_rows(self, command: str) -> List[TokenRow]:
         # コマンド解釈の候補一覧を作成
-        command_rows = [[]]
+        command_rows: List[TokenRow] = [[]]
         commands = self.split_query(command)
         if self.enable_compound_options:
             for command in commands:
-                if command.startswith("-") and not command.startswith("--"):
+                if self._prefix_length(command) == 1:
                     newrows = []
                     for newrow in self._optiontrie.parse(command[1:]):
                         for cmdrow in command_rows:
                             newrows.append(cmdrow + newrow)
+                    if commands and not newrows:
+                        raise BadCommand("抱合オプション'{}'を解釈できません".format(command))
                     command_rows = newrows
                 else:
                     command_rows = [x+[command] for x in command_rows]
@@ -402,84 +422,121 @@ class CommandParser():
         # コマンドを解析し結果を作成する     
         try:
             kwargs = self.do_parse_args(commandrow)
-            res = self.build_parse_result(display_command_row(commandrow), kwargs)
+            res = self.build_parse_result(self.display_command_row(commandrow), kwargs)
         except BadCommand as e:
             raise e
         return res
     
     #
-    def do_parse_args(self, args):
-        kwargs = {}
-        
-        context = None
-        positcontexts = [x for x in reversed(self.positionals)]
+    def do_parse_args(self, args):        
+        # 区切られた文字列のリストを解析する
+        argstack = []
+        curcxt = None 
+        contexts: List[Tuple[OptionContext, str]] = [] 
+        tokens = [*args, PARSE_END]
+        for token in tokens:
+            newcxt = None
+            pfxlen = None
+            if token == PARSE_SEP:
+                # コンテキストを即座に終了し、新しいコンテキストを開始する
+                contexts.append((curcxt, argstack))
+                argstack = []
+                curcxt = None
+                continue
 
-        stack = []
-        appeared = set()
-        def finish_context(cxt):
-            # 値を生成する
-            cxt.parse_arg(stack, kwargs)
-            # 出現したコンテキストを記録する
-            d = cxt.get_dest()
-            appeared.add(d)            
-            # スタックを空に
-            stack.clear()
-
-        for arg in args:
-            if isinstance(arg, OptionContext):
+            elif isinstance(token, OptionContext):
                 # 既に解析済みのオプション
-                optcontext = arg
-            elif arg.startswith("-") and arg in self.options:
-                # オプションとして読み取る
-                optcontext = self.options[arg]
-            else:
-                # 引数として読み取る
-                optcontext = None
-                stack.append(arg)
+                newcxt = token
+
+            elif isinstance(token, str):
+                arg = token
+                foundcxt = None
+                pfxlen = self._prefix_length(arg)
+                if pfxlen > 0:
+                    for cxt in self.options:
+                        if cxt.match_name(arg[pfxlen:]):
+                            foundcxt = cxt
+                            break
+
+                consuming_remainder = curcxt and curcxt.consumes_remainder()
+                if foundcxt is not None and not consuming_remainder: #remainder属性の文脈ではない
+                    # オプションとして読み取る
+                    newcxt = foundcxt
+                elif arg:
+                    # 引数として読み取る
+                    argstack.append(arg)
             
-            if context is not None and context.consumes_remainder():
-                # remainder属性の引数を処理する
-                if optcontext:
-                    optcontext = None
-                    stack.append(arg)
+            elif token == PARSE_END:
+                # 終端まで来た
+                newcxt = "<end>"
                 
-            if optcontext is None and context is None:
-                # 次の位置引数へ
-                if not positcontexts:
-                    if arg.startswith("-"):
-                        raise BadCommand("undefined option: '{}'".format(arg))
+            # 新たなオプションが開始した：前の引数を解決する
+            if newcxt:
+                if curcxt is None:
+                    # 位置引数を解決する
+                    if self.positional is not None:
+                        curcxt = self.positional
                     else:
-                        raise BadCommand("undefined positional argument: '{}'".format(arg))
-                context = positcontexts.pop()
+                        if argstack: # 位置引数が存在せず、かつ解決不能な引数が置かれている
+                            raise BadCommand("予期しない引数'{}'を解釈できません".format(arg))
+                        curcxt = newcxt
+                        continue
+                        
+                # 現在のコンテキストを終了し、新しいコンテキストを開始する
+                contexts.append((curcxt, argstack))
+                argstack = []
+                curcxt = newcxt
 
-            if optcontext is not None:
-                # 新たなオプションが開始した：前の引数を解決する
-                if context is not None:
-                    if context.is_ready(stack):
-                        finish_context(context)
-                    else:
-                        raise BadCommand("too few option arguments for <{}>".format(context.get_name()))
-                context = optcontext
-            
-            if context.is_full(stack):
-                # 引数が満杯であれば即座に解決（0個も含めて）
-                finish_context(context)
-                context = None
+        # 引数をチェックする
+        postposit = self.positional is not None
+        missing_posit_arg = None
+        for i, (cxt, stack) in enumerate(contexts):   
+            if self.positional is not None:     
+                # 一つ目は位置引数
+                if i == 0 and cxt is not self.positional:
+                    raise BadCommand("positional argument must come at first or last")
+
+                if cxt is self.positional:
+                    if cxt.is_unary() and not stack:
+                        # 中間に置かれていると考える
+                        continue
+                    postposit = False
+
+            if cxt.is_nullary() and stack:
+                # 引数が多すぎる
+                if i == len(contexts)-1 and postposit:
+                    missing_posit_arg = stack.copy() # 後置された位置引数と考える
+                    stack.clear()
+                else:
+                    raise BadCommand("予期しない引数'{}'を解釈できません".format(arg))
+
+            elif cxt.is_unary() and not stack:
+                # 引数が少なすぎる
+                raise BadCommand("オプション<{}>に必要な引数がありません".format(cxt.make_key(self.prefix_chars[0])))
+
+        if postposit:
+            # 後置の位置引数
+            contexts = [(x,a) for x,a in contexts if x is not self.positional]
+            if missing_posit_arg:
+                contexts.append((self.positional, missing_posit_arg))
+            elif not any(x is self.positional for x,_ in contexts):
+                # 位置引数が無い
+                raise BadCommand("位置引数<{}>に相当する引数がありません".format(self.positional.make_key()))
+
+        # 引数の文字列を値へと変換する
+        kwargs = {}
+        appeared = set()
+        for cxt, stack in contexts:  
+            # 値を生成する
+            argstring = " ".join(stack)
+            cxt.parse_arg(argstring, kwargs)
+            # 出現したコンテキストを記録する
+            appeared.add(cxt.get_dest())
         
-        # 最後の引数を解決する
-        if context:
-            finish_context(context)
-
-        #
         # デフォルト引数で埋める
-        #
-        # 指定のないオプション
         for name, cxt in self.argnames.items():
             if name not in appeared:
-                if cxt.is_optional():
-                    cxt.parse_default(kwargs)
-                else:
-                    raise BadCommand("too few positional arguments for <{}>".format(name))
+                cxt.parse_default(kwargs)
 
         return kwargs
         
@@ -494,13 +551,43 @@ class CommandParser():
     #
     def list_contexts(self):
         cxts = []
-        for cxt in self.positionals:
-            if cxt not in cxts:
-                cxts.append(cxt)
-        for cxt in self.options.values():
+        if self.positional:
+            cxts.append(self.positional)
+        for cxt in self.options:
             if cxt not in cxts:
                 cxts.append(cxt)
         return cxts
+    
+    def add_option_prefix(self, option: str, *, long=False, autolength=False) -> str:
+        pfx = self.prefix_chars[0]
+        if autolength:
+            # 存在するオプション名として、プレフィックスの長さを確かめる
+            cxt: Optional[OptionContext] = next((x for x in self.options if x.match_name(option)), None)
+            if cxt is None:
+                raise ValueError("No such option exists: '{}'".format(option))
+            long = option in cxt.longnames
+
+        if long:
+            return pfx*2 + option
+        else:
+            return pfx*1 + option
+            
+    #
+    def display_command_row(self, commandrow: Sequence[TokenRow]):
+        parts: List[str] = []
+        for i, cmd in enumerate(commandrow):
+            if isinstance(cmd, str):
+                parts.append(cmd)
+            elif isinstance(cmd, OptionContext):
+                parts.append(cmd.make_key(self.prefix_chars[0]))
+            elif isinstance(cmd, int):
+                if cmd == PARSE_END:
+                    continue
+                elif cmd == PARSE_SEP and i < len(commandrow)-1:
+                    parts.append("|")
+
+        return " ".join(parts).replace("\n", "<br>").strip()
+
     
     # 
     def get_description(self):
@@ -513,7 +600,7 @@ class CommandParser():
         #queue = self.new_parser_message_queue()
         #self.argp.print_help()
         #return queue
-        return "<help>"
+        return ["<help>"]
 
 #
 #
@@ -525,7 +612,7 @@ class CommandParserResult():
         self.argmap = defaultdict(dict)
         self.specarg_descriptors = [] # (argtype, name, desc, descargs...)
         self.target_filepath_arg = None
-        
+    
     def get_expanded_command(self):
         return self.expandedcmd
     
@@ -793,7 +880,7 @@ class CompoundOptions:
                 if start<beg:
                     line.append(optionstr[start:beg])
                 option = optionstr[beg:end]
-                if not cxt.is_accumulate() and option in line:
+                if not cxt.is_accumulative() and option in line:
                     disallow = True
                     break
                 line.append(cxt)
@@ -807,14 +894,3 @@ class CompoundOptions:
         
         return lines
 
-#
-#
-#
-def display_command_row(cmdrow):
-    c = ""
-    for cmd in cmdrow:
-        if isinstance(cmd, str):
-            c += cmd
-        elif isinstance(cmd, OptionContext):
-            c += cmd.get_name()
-    return c.replace("\n", "<br>").strip()

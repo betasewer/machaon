@@ -11,6 +11,7 @@ from collections import defaultdict
 
 from machaon.dataset import DataViewFactory
 from machaon.cui import test_yesno, MiniProgressDisplay
+from machaon.parser import CommandParser
          
 #
 # 各アプリクラスを格納する
@@ -685,8 +686,8 @@ class Spirit():
 #
 #
 class TempSpirit(Spirit):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, app=None):
+        super().__init__(app, process=None)
         self.msgs = []
 
     def bind_process(self, p):

@@ -1,7 +1,8 @@
 from typing import List, Sequence, Optional, Any, Tuple
 
 from machaon.cui import fixsplit
-from machaon.parser import BadCommand, display_command_row, CommandParserResult
+from machaon.parser import BadCommand, CommandParser, CommandParserResult, PARSE_SEP, TokenRow
+from machaon.process import ProcessTarget, Spirit
 
 #
 # ###############################################################
@@ -30,21 +31,22 @@ class CommandEntry():
         prog=None, 
         description="",
         builder=None,
+        target=None,
         commandtype=normal_command,
     ):
-        self.target = None
+        self.target = target
         self.keywords = keywords # 展開済みのキーワード
         self.builder = builder
         self.prog = prog
         self.description = description
         self.commandtype = COMMAND_TYPES.get(commandtype, normal_command)
 
-    def load(self):
+    def load(self) -> ProcessTarget:
         if self.target is None and self.builder:
             self.target = self.builder.build_target(self)
         return self.target
     
-    def match(self, target):
+    def match(self, target: str) -> bool:
         match_rests = []
         for keyword in self.keywords:
             if target.startswith(keyword):
@@ -127,7 +129,8 @@ class PossibleCommandSyntaxItem():
         self.command_row = cmdrow
     
     def command_string(self):
-        return (self.target.get_prog() + " " + display_command_row(self.command_row)).strip()
+        cmdstring = self.target.get_argparser().display_command_row(self.command_row)
+        return (self.target.get_prog() + " " + cmdstring).strip()
     
     def description(self):
         return self.target.get_description()
@@ -159,40 +162,57 @@ class CommandEngine:
     
     def set_command_prefix(self, prefix):
         self.prefix = prefix
-
-    # コマンドを解析して候補を選ぶ
-    def expand_parsing_command(self, commandstr, spirit) -> List[PossibleCommandSyntaxItem]:
-        # コマンドを先頭の空白で区切る
-        commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
-
-        # 先頭文字列が示すコマンドエントリを選び出す
-        possible_commands: List[Tuple[CommandEntry, str]] = [] # (entry, reststr)
+    
+    # 先頭文字列が示すコマンドエントリを選び出す
+    def expand_parsing_command_head(self, commandhead) -> List[Tuple[CommandEntry, str]]: # [(entry, optioncompound)...]
+        possible_commands: List[Tuple[CommandEntry, str]] = []
         for cmdset in self.commandsets:
             matches = cmdset.match(commandhead)
             possible_commands.extend(matches)
             if self.prefix:
                 matches = cmdset.match(self.prefix + commandhead)
                 possible_commands.extend(matches)
-        
-        # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
-        possible_entries = []
-        for commandentry, commandoption in possible_commands:
-            if commandoption:
-                commandtail = "-{} {}".format(commandoption, commandtail)
+        return possible_commands
 
+    # コマンドを解析して候補を選ぶ
+    def expand_parsing_command(self, commandstr: str, spirit: Spirit) -> List[PossibleCommandSyntaxItem]:
+        # コマンドを先頭の空白で区切る
+        commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
+
+        # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
+        possible_commands = self.expand_parsing_command_head(commandhead) # コマンドエントリの解釈
+        possible_entries: List[PossibleCommandSyntaxItem] = []
+        for commandentry, optioncompound in possible_commands:
             target = commandentry.load()
             spirit = target.inherit_spirit(spirit)
             target.load_lazy_describer(spirit)
 
-            argparser = target.get_argparser()
-            rows = argparser.generate_command_rows(commandtail)
+            rows: List[TokenRow] = [] 
+
+            argparser: CommandParser = target.get_argparser()
+            tailrows = argparser.generate_command_rows(commandtail)
+            if tailrows:
+                rows.extend(tailrows)
+
+            if optioncompound:
+                # コマンド名に抱合されたオプションを前に挿入する
+                optrows = argparser.generate_command_rows(argparser.add_option_prefix(optioncompound))
+                newrows = []
+                for optrow in optrows:
+                    for row in rows:
+                        newrows.append([*optrow, PARSE_SEP, *row])
+                rows = newrows
+            
+            if not rows:
+                rows.append([]) # 空の列を入れる
+
             for cmdrow in rows:
-                entry = (target, spirit, cmdrow)
+                entry = PossibleCommandSyntaxItem(target, spirit, cmdrow)
                 possible_entries.append(entry)
         
         # 最も長く入力コマンドにマッチしている解釈の順に並べ直す
-        possible_entries.sort(key=lambda x:len(x[2]))
-        return [PossibleCommandSyntaxItem(targ, spi, cmdr) for targ, spi, cmdr in possible_entries]
+        possible_entries.sort(key=lambda x:len(x.command_row))
+        return possible_entries
         
     # ひとつを選択する
     def select_parsing_command(self, spirit, possible_entries: Sequence[PossibleCommandSyntaxItem]) -> Optional[PossibleCommandSyntaxItem]:
@@ -211,7 +231,11 @@ class CommandEngine:
             return possible_entries[0]
 
     # コマンド文字列を引数の集合に変換する
-    def parse_command(self, argparser, spirit, commandrow: List[str]) -> Optional[CommandParserResult]:
+    def parse_command(self, item: PossibleCommandSyntaxItem) -> Optional[CommandParserResult]:
+        argparser = item.target.get_argparser()
+        spirit = item.spirit
+        commandrow = item.command_row
+
         result = None
         self.parseerror = None
         

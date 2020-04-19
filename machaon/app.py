@@ -124,7 +124,7 @@ class AppRoot:
         entry = self.cmdengine.select_parsing_command(spirit, entries)
         if entry is not None:
             target, spirit = entry.target, entry.spirit
-            parsedcommand = self.cmdengine.parse_command(target.get_argparser(), spirit, entry.command_row)
+            parsedcommand = self.cmdengine.parse_command(entry)
         
         if parsedcommand is None:
             if entry is None:
