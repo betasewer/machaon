@@ -2,8 +2,9 @@
 # coding: utf-8
 import glob
 from collections import defaultdict
-from typing import List, Sequence, Optional, Any, Tuple, Dict, Union
-    
+from typing import List, Sequence, Optional, Any, Tuple, Dict, Union, Callable
+from inspect import signature
+
 #
 # ########################################################
 #  Command Parser
@@ -11,9 +12,8 @@ from typing import List, Sequence, Optional, Any, Tuple, Dict, Union
 SpecArgSig = "?"
 
 #
-OPT_ACCUMULATE = 0x0001
+OPT_POSITIONAL = 0x0001
 OPT_REMAINDER = 0x0002
-OPT_POSITIONAL = 0x0004
 OPT_NULLARY = 0x0010
 OPT_OPTIONAL_UNARY = 0x0020
 OPT_UNARY = 0x0040
@@ -50,6 +50,7 @@ class OptionContext():
         default: Any = None,
         dest: int = None,
         flags: int = 0,
+        accumulator: Any = None,
         help: str = "",
     ):
         self.longnames = longnames
@@ -60,6 +61,7 @@ class OptionContext():
         self.valuetype = valuetype
         self.flags = flags
         self.help = help
+        self.accumulator = accumulator
     
     def __repr__(self):
         return "<OptionContext '{}'>".format(self.get_name())
@@ -100,33 +102,32 @@ class OptionContext():
         return (self.flags & OPT_REMAINDER) > 0
     
     def is_accumulative(self):
-        return (self.flags & OPT_ACCUMULATE) > 0
+        return self.accumulator is not None
 
     def parse_arg(self, arg, outputs):
-        defval = None
-        use_defval = not arg
-        if use_defval:
-            if self.value is not None: # Noneは変換しない
-                defval = self.valuetype.convert(self.value) # valueがデフォルト値になる
-        
-        if hasattr(self.valuetype, "accumulate"):
-            if use_defval:
-                va = defval
-            else:
-                va = self.valuetype.convert(arg)
-            prevvalue = outputs.get(self.dest, None)
-            value = self.valuetype.accumulate(va, prevvalue)
+        use_defarg = not arg
+        if use_defarg:
+            if self.value is None:
+                value = None # Noneは変換しない
+            else: 
+                value = self.valuetype.convert(self.value)
         else:
-            if use_defval:
-                value = defval
+            value = self.valuetype.convert(arg) # 引数を変換
+
+        if self.is_accumulative():
+            if self.dest in outputs:
+                prevvalue = outputs[self.dest]
             else:
-                value = self.valuetype.convert(arg)
+                prevvalue = self.default() # デフォルト値から初期値を生成
+            value = self.accumulator(value, prevvalue, self)
 
         outputs[self.dest] = value
-        
+    
     def parse_default(self, outputs):
         if self.default is None:
             value = None # Noneは変換しない
+        elif self.is_accumulative():
+            value = self.default() # このデフォルト値は各試行ごとに生成する必要がある
         else:
             value = self.valuetype.convert(self.default)
         outputs[self.dest] = value
@@ -141,71 +142,116 @@ class OptionContext():
         return self.help
 
 #
+# #####################################################################
+#   文字列引数を好きな値に変えるクラス
+# #####################################################################
 #
 #
-class OptionValueType():
-    def __init__(self, valtype=None):
-        if valtype is None:
-            self.type = str
-        elif isinstance(valtype, type):
-            self.type = valtype
-        elif isinstance(valtype, str):
-            self.type = str
-            
-    def get_typename(self):
-        if isinstance(self.type, type):
-            return self.type.__name__
-        else:
-            return str(self.type)
+#
+class ArgType():
+    def __init__(self, converter, typename, args=(), kwargs={}):
+        self._converter = converter
+        self._typename = typename
+        self._args = args
+        self._kwargs = kwargs
     
-    def convert(self, v):
-        if not isinstance(v, self.type):
-            v = self.type(v)
-        return v
+    def rebind(self, args, kwargs):
+        return ArgType(self._converter, self._typename, args, kwargs)
 
-#
-class OptionValueList(OptionValueType):
-    def __init__(self, valtype):
-        super().__init__(valtype)
+    def get_typename(self):
+        return self._typename
     
     def convert(self, arg):
-        return arg.split()
+        return self._converter(arg, *self._args, **self._kwargs)
 
 #
-class OptionValueAccumulator(OptionValueType):
-    def __init__(self, valtype, listtype):
-        super().__init__(valtype)
-        self.listtype = listtype
+# 名前を登録して型を検索する
+#
+class ArgTypeLibrary:
+    def __init__(self):
+        self._types: Dict[str, ArgType] = {}
     
-    def convert(self, v):
-        if not v:
-            return self.listtype()
-        elif isinstance(v, self.listtype):
-            return v
+    def define(self, typename: str, converter: Any, *args, **kwargs) -> ArgType:
+        if typename in self._types:
+            raise ValueError("'{}' has already existed in ArgTypeLibrary".format(typename))
+        t = ArgType(converter, typename, args, kwargs)
+        self._types[typename] = t
+        return t
+        
+    def generate(self, typename: str, *args, **kwargs) -> ArgType:
+        if typename not in self._types:
+            raise ValueError("No match typename '{}'".format(typename))
+        if args or kwargs:
+            return self._types[typename].rebind(args, kwargs)
         else:
-            vc = super().convert(v)
-            return self.listtype((vc,))
-
-    def accumulate(self, arg, prev):
-        if prev is None:
-            return arg
-        else:
-            return prev + arg
+            return self._types[typename]
 
 #
+_argtypelib = ArgTypeLibrary()
+
+def def_argument_type(function_or_class, name = None, *args, **kwargs):
+    if name is None:
+        name = function_or_class.__name__
+    return _argtypelib.define(name, function_or_class)
+
+def argument_type(name = None, *args, **kwargs):
+    def _deco(target):
+        return def_argument_type(target, name, *args, **kwargs)
+    return _deco
+
+def typeof_argument(typecode: Union[None, str, type, ArgType] = None, *args, **kwargs) -> ArgType:
+    if typecode is None:
+        return _argtypelib.generate("str")
+    elif isinstance(typecode, str):
+        return _argtypelib.generate(typecode, *args, **kwargs)
+    elif isinstance(typecode, type):
+        return _argtypelib.generate(typecode.__name__, *args, **kwargs)
+    elif isinstance(typecode, ArgType):
+        return typecode
+    else:
+        raise ValueError("No match type exists with '{}'".format(typecode))
+
+# 基本型
+def_argument_type(str)
+def_argument_type(bool)
+def_argument_type(int)
+def_argument_type(float)
+def_argument_type(complex)
+
+# 区切られた値のリスト
+@argument_type(name="value-list")
+def value_list(arg, valuetype=None, *, sep=None, maxsplit=-1):
+    vtype = typeof_argument(valuetype)
+    spl = arg.split(sep=sep, maxsplit=maxsplit)
+    return [vtype.convert(x.strip()) for x in spl]
+
+#
+# accumulator
+#
+# リストに追加する
+def ArgAppender(value, prev, _cxt, *, initial=list):
+    prev.append(value)
+    return prev
+
+# 数を数える
+def ArgCounter(_value, prev, _cxt, *, initial=int):
+    return prev + 1
+
+#
+# #######################################################################
+#  パーサー
+# #######################################################################
 #
 Token = Union[str, int, OptionContext]
 TokenRow = List[Token]
 
 #
 #
-# argparseをラップする
-#
 #
 class CommandParser():
     __debugdisp__ = False
     #
-    # __init__(["targets"], ("--template","-t"), ...)
+    #
     #
     def __init__(self, *, description, prog, prefix_chars=("-",)):
         self.description = description
@@ -231,10 +277,9 @@ class CommandParser():
         defarg=None,
         arg=1,            # 引数の数 [1: 引数を1つ取る（デフォルト）, 0: 引数なし, ?: 1つ取るが省略可能（キー自体が存在する場合はvalueの値がデフォルト値になる）]
         remainder=False,  # 書式を無視して以降をすべて引数とする
-        accumulate=False, # 重複するオプションをリストに集積する
-        typespec=None,
-        default=None,
-        value=None,
+        accumulate=False, # オプションの重複を許し、値を集積する方法を指定する
+        default=None,     # キーが存在しない場合のデフォルト値
+        value=None,       # キーに対する引数のデフォルト値
         dest=None,
         methodtype=None,
         help=""
@@ -243,6 +288,8 @@ class CommandParser():
             raise ValueError("At least 1 name must be specified")
 
         flags = 0
+        typespec = None
+        accumulatespec = None
 
         if flag:
             const = True
@@ -264,13 +311,26 @@ class CommandParser():
             arg = "?"
             flags |= OPT_REMAINDER
             default = ""
-            typespec = OptionValueType(str)
+            typespec = typeof_argument("str")
         
         if accumulate:
-            flags |= OPT_ACCUMULATE
-            default = [] if default is None else default
-            typespec = OptionValueAccumulator(valuetype, type(default))
-        
+            if accumulate is True:
+                accumulatespec = ArgAppender
+            elif callable(accumulate):
+                accumulatespec = accumulate
+            elif accumulate == "count":
+                accumulatespec = ArgCounter
+                arg = 0 # 引数は無視される
+            else:
+                raise ValueError("Bad argument for 'accumulate': must be boolean or callable")
+            
+            if default is None:
+                sig = signature(accumulatespec)
+                if "initial" in sig.parameters:
+                    default = sig.parameters["initial"].default
+            elif not callable(default):
+                raise ValueError("Bad default value for 'accumulative' option: must be nullary callable")
+
         if arg == "?":
             flags |= OPT_OPTIONAL_UNARY
         elif arg == 0 or arg == "0":
@@ -281,7 +341,10 @@ class CommandParser():
             raise ValueError("bad arity '{}'".format(arg))
 
         if typespec is None:
-            typespec = OptionValueType(valuetype)
+            if isinstance(valuetype, ArgType):
+                typespec = valuetype
+            else:
+                typespec = typeof_argument(valuetype)
 
         if isinstance(methodtype, int):
             flags |= methodtype
@@ -291,7 +354,7 @@ class CommandParser():
             flags |= OPT_METHOD_TARGET
         elif methodtype == "exit":
             flags |= OPT_METHOD_EXIT
-            
+    
         longnames = []
         shortnames = []
         for name in names:
@@ -314,7 +377,7 @@ class CommandParser():
         #
         cxt = OptionContext(longnames, shortnames, 
             valuetype=typespec, value=value, default=default, 
-            dest=dest, flags=flags, 
+            dest=dest, flags=flags, accumulator=accumulatespec,
             help=help
         )
 

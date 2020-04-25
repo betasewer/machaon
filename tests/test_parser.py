@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP
+from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, typeof_argument
 
 def equal_contents(l, r):
     return set(map(frozenset, l)) == set(map(frozenset, r))
@@ -131,14 +131,21 @@ def test_remainder():
         'verbose' : False
     }
 
-def test_accumulate():    
+def test_accumulate():
     p = build_parser(
         option("name"),
         option("--page", "-p", accumulate=True, defarg=1),
+        option("--verbose", "-v", accumulate="count"),
     )
     assert p.do_parse_args(["watanabe", "mieko", "--page", "23", "--page", "3", "--page", "128", "--page"]) == {
         'name' : 'watanabe mieko',
-        'page' : [23, 3, 128, 1]
+        'page' : [23, 3, 128, 1],
+        'verbose' : 0,
+    }
+    assert p.do_parse_args(["watanabe", "mieko", "-v", "-v", "-v"]) == {
+        'name' : 'watanabe mieko',
+        'page' : [],
+        'verbose' : 3,
     }
     
 def test_defaults(): 
@@ -252,3 +259,18 @@ def test_compound_rows():
     assert parse_and_recompose("john -afzp 99") == [["john", "-a", "-f", "-zp", "99"]]
     assert parse_and_recompose("john -zpaf") == [["john", "-zp", "af"]]
     assert parse_and_recompose("john -ozp1") == [["john", "-o", "-zp", "1"]]
+
+#
+#
+#
+def test_listarg():
+    p = build_parser(
+        option("animal-names", valuetype=typeof_argument("value-list", sep=",")),
+        option("--rating", "-r", valuetype="float"),
+        option("--margin", "-m", valuetype=typeof_argument("value-list", "int"))
+    )
+    assert p.do_parse_args(["neko, inu, saru, azarashi", "-r", "1.2", "--margin", "1 -2 3 -4"]) == {
+        'animal-names' : ["neko", "inu", "saru", "azarashi"],
+        'rating' : 1.2,
+        'margin' : [1, -2, 3, -4]
+    }
