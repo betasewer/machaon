@@ -33,12 +33,6 @@ def OPT_METHOD(label):
     }.get(label, label)
 
 #
-ARG_TYPE_STRING = 1
-ARG_TYPE_FILEPATH = 2
-ARG_TYPE_DIRPATH = 3
-ARG_TYPE_COLORCODE = 4
-
-#
 PARSE_SEP = 0
 PARSE_END = 1
 
@@ -166,7 +160,7 @@ class OptionContext():
             else: 
                 value = self.valuetype.convert(self.value)
         else:
-            if self.valuetype.is_simplex():
+            if self.valuetype.is_simplex_type():
                 value = self.valuetype.convert(str(arg), spirit) # 引数を変換
             else:
                 value = self.valuetype.convert(arg, spirit)
@@ -208,7 +202,8 @@ class OptionContext():
 ArgTypePrompt = Callable[[str, Any], None]
 
 ARGTYPE_SIMPLEX = 0x01
-ARGTYPE_LISTLIKE = 0x02
+ARGTYPE_COMPLEX = 0x02
+ARGTYPE_SEQUENCE = ARGTYPE_COMPLEX | 0x04
 ARGTYPE_CONVKLASS = 0x10
 ARGTYPE_CONVWITHSPIRIT = 0x20
 
@@ -223,8 +218,17 @@ class ArgType():
         self.kwargs = kwargs
         self.flags = flags
     
-    def is_simplex(self):
-        return self.flags & ARGTYPE_SIMPLEX
+    def is_simplex_type(self):
+        return (self.flags & ARGTYPE_SIMPLEX) == ARGTYPE_SIMPLEX
+    
+    def is_compound_type(self):
+        return (self.flags & ARGTYPE_COMPLEX) == ARGTYPE_COMPLEX
+
+    def is_sequence_type(self):
+        return (self.flags & ARGTYPE_SEQUENCE) == ARGTYPE_SEQUENCE
+    
+    def is_foreach_default_type(self):
+        return True if self.is_sequence_type() else False
     
     def rebind(self, args, kwargs):
         return self.do_rebind(self.typename, self.description, args, kwargs, self.flags)
@@ -309,17 +313,24 @@ _argtypelib = ArgTypeLibrary()
 
 #
 class _ArgTypeDecolator():
+    def __init__(self):
+        self._type = ARGTYPE_SIMPLEX
+
     def define(self, function_or_class, name, description, args, kwargs, flags):
         if name is None:
             name = function_or_class.__name__
+        flags = self._type + (flags & 0xFFF0)
+
         _argtypelib.define(name, function_or_class, description, args, kwargs, flags)
+        
+        self._type = ARGTYPE_SIMPLEX
         return function_or_class
 
     def __call__(self,
         name = None, 
         description = "",
         args = (), kwargs = {},
-        flags = ARGTYPE_SIMPLEX,
+        flags = 0,
         converter = None,
     ):
         if converter is not None:
@@ -329,14 +340,17 @@ class _ArgTypeDecolator():
                 self.define(target, name, description, args, kwargs, flags)
                 return target
             return _deco
+    
+    @property
+    def compound(self):
+        self._type = ARGTYPE_COMPLEX
+        return self
 
-    def listlike(self,
-        name = None,
-        description = "",
-        args = (), kwargs = {},
-    ):
-        return self(name, description, args, kwargs, ARGTYPE_LISTLIKE)
-
+    @property
+    def sequence(self):
+        self._type = ARGTYPE_SEQUENCE
+        return self
+        
 argument_type = _ArgTypeDecolator()
 
 #
@@ -362,7 +376,7 @@ argument_type(converter=complex, description="複素数")
 #
 # 区切られた値のリスト
 #
-@argument_type.listlike(
+@argument_type.compound(
     name="value-list", 
     description="値のリスト",
 )
@@ -379,7 +393,7 @@ class ValueList():
 #
 # ファイルパス
 #
-@argument_type.listlike(
+@argument_type.sequence(
     name="filepath",
     description="ファイルパス",
 )
@@ -394,7 +408,7 @@ class Filepaths():
         pass
 
 #
-@argument_type.listlike(
+@argument_type.sequence(
     name="input-filepath",
     description="存在する入力ファイルのパス",
 )
@@ -476,7 +490,7 @@ class CommandParser():
         value=None,       # キーに対する引数のデフォルト値
         dest=None,
         methodtype=None,
-        foreach=False,   # OPT_FOREACHTARGETを付す
+        foreach=None,     # OPT_FOREACHTARGETを付すかトルか：valuetypeのデフォルト値を上書きする
         help=""
     ):
         if not names:
@@ -546,7 +560,7 @@ class CommandParser():
         else:
             flags |= OPT_METHOD_TARGET
         
-        if foreach:
+        if foreach or (foreach is None and typespec.is_foreach_default_type()):
             flags |= OPT_FOREACHTARGET
     
         longnames = []

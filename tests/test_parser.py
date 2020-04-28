@@ -126,30 +126,6 @@ def test_simple_posit():
         'strict' : True
     }
 
-def test_variable_posit():
-    p = build_parser(
-        option("name"),
-        option("--log", "-l", defarg="files.txt"),
-        option("--strict", flag=True)
-    )
-    assert p.do_parse_args(["watanabe", "input.txt", "output.txt", "-l"]) == {
-        'name' : 'watanabe input.txt output.txt',
-        'log' : 'files.txt',
-        'strict' : False
-    }
-
-def test_typespec():
-    p = build_parser(
-        option("name"),
-        option("--age", "-a", valuetype=int),
-        option("--offset", valuetype=int)
-    )
-    assert p.do_parse_args(["watanabe", "mieko", "--age", "23", "--offset", "-1"]) == {
-        'name' : 'watanabe mieko',
-        'age' : 23,
-        'offset' : -1,
-    }
-
 def test_remainder():
     p = build_parser(
         option("query", remainder=True),
@@ -175,6 +151,18 @@ def test_accumulate():
         'name' : 'watanabe mieko',
         'page' : [],
         'verbose' : 3,
+    }
+    
+def test_typespec():
+    p = build_parser(
+        option("name"),
+        option("--age", "-a", valuetype=int),
+        option("--offset", valuetype=int)
+    )
+    assert p.do_parse_args(["watanabe", "mieko", "--age", "23", "--offset", "-1"]) == {
+        'name' : 'watanabe mieko',
+        'age' : 23,
+        'offset' : -1,
     }
     
 def test_defaults(): 
@@ -207,6 +195,23 @@ def test_defaults():
 #
 # 位置引数の扱い
 #   
+def test_optional_posit():
+    p = build_parser(
+        option("name", arg="?"),
+        option("--log", "-l", defarg="files.txt"),
+        option("--strict", flag=True)
+    )
+    assert p.do_parse_args(["--strict", "-l", "log.txt"]) == {
+        'name' : None,
+        'log' : 'log.txt',
+        'strict' : True
+    }
+    assert p.do_parse_args(["watanabe", "input.txt", "output.txt", "-l"]) == {
+        'name' : 'watanabe input.txt output.txt',
+        'log' : 'files.txt',
+        'strict' : False
+    }
+
 @pytest.mark.xfail()
 def test_posit_missing():
     p = build_parser(
@@ -290,6 +295,27 @@ def test_compound_rows():
     assert parse_and_recompose("john -ozp1") == [["john", "-o", "-zp", "1"]]
 
 #
+# 引数型
+#
+def test_preset_types():
+    str_, int_, bool_, float_, complex_, valuelist, filepath = [
+        typeof_argument(x) for x in ("str", "int", "bool", "float", "complex", "value-list", "filepath")
+    ]
+    assert str_.is_simplex_type()
+    assert int_.is_simplex_type()
+    assert bool_.is_simplex_type()
+    assert float_.is_simplex_type()
+    assert complex_.is_simplex_type()
+
+    assert not valuelist.is_simplex_type()
+    assert valuelist.is_compound_type()
+    assert not valuelist.is_sequence_type()
+    
+    assert not filepath.is_simplex_type()
+    assert filepath.is_compound_type()
+    assert filepath.is_sequence_type()
+
+#
 #
 #
 def test_listarg():
@@ -334,18 +360,19 @@ def test_parser_result():
     ]
 
     p = build_parser(
-        option("files", valuetype="input-filepath", foreach=True),
+        option("files", valuetype="input-filepath"),
+        option("--margin", valuetype=typeof_argument("value-list", "int")),
     )
     spi = TempSpirit(cd = "c:\\Windows")
     assert len(list(p.parse_args(["System32/*.dll py.exe"], spi).prepare_arguments("target"))) > 2
 
     # 元のアイテムの区切り方が、空白によらず保存される
     assert list(
-        p.parse_args(["Program Files/folder1", "folder2", "folder3/【整理済】 原稿.docx"], spi)
+        p.parse_args(["Program Files/folder1", "folder2", "folder3/【整理済】 原稿.docx", "--margin", "10", "20"], spi)
         .prepare_arguments("target")
     ) == [
-        { 'files' : "c:\\Windows\\Program Files\\folder1" },
-        { 'files' : "c:\\Windows\\folder2" },
-        { 'files' : "c:\\Windows\\folder3\\【整理済】 原稿.docx" },
+        { 'files' : "c:\\Windows\\Program Files\\folder1", 'margin' : [10,20] },
+        { 'files' : "c:\\Windows\\folder2", 'margin' : [10,20] },
+        { 'files' : "c:\\Windows\\folder3\\【整理済】 原稿.docx", 'margin' : [10,20] },
     ]
 

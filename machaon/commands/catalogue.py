@@ -34,7 +34,7 @@ def app_commands():
             description="アプリのテーマを変更します。"
         )["target themename"](
             help="テーマ名",
-            defarg=None,
+            arg="?",
         )["target --alt"](
             help="設定項目を上書きする [config-name]=[config-value]",
             remainder=True,
@@ -151,7 +151,7 @@ def shell_commands():
             description="作業ディレクトリを変更します。", 
         )["target path"](
             help="移動先のパス",
-            defarg=None
+            arg="?",
         )["target -s --silent"](
             help="変更後lsを実行しない",
             flag=True
@@ -163,7 +163,7 @@ def shell_commands():
             description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
         )["target pattern"](
             help="表示するフォルダ・ファイルを絞り込む正規表現パターン（部分一致）",
-            defarg=None
+            arg="?",
         )["target -l --long"](
             help="詳しい情報を表示する",
             flag=True
