@@ -686,9 +686,10 @@ class Spirit():
 #
 #
 class TempSpirit(Spirit):
-    def __init__(self, app=None):
+    def __init__(self, app=None, cd=None):
         super().__init__(app, process=None)
         self.msgs = []
+        self.cd = cd
 
     def bind_process(self, p):
         pass
@@ -707,6 +708,28 @@ class TempSpirit(Spirit):
     
     def get(self):
         return self.msgs
+        
+    #
+    # カレントディレクトリ
+    #
+    def get_current_dir(self):
+        return self.cd
+
+    def change_current_dir(self, path):
+        if os.path.isdir(path):
+            self.cd = path
+            return True
+        else:
+            return False
+    
+    def abspath(self, path):
+        # 絶対パスにする
+        if not os.path.isabs(path):
+            cd = self.cd
+            if cd is None:
+                cd = os.getcwd()
+            path = os.path.normpath(os.path.join(cd, path))
+        return path
     
 #
 #  メッセージクラス

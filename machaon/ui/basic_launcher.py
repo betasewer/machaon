@@ -6,8 +6,6 @@ import datetime
 import traceback
 from typing import Tuple, Sequence, List
 
-from machaon.process import TempSpirit
-
 #
 #
 #

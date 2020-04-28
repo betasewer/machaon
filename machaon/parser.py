@@ -2,14 +2,14 @@
 # coding: utf-8
 import glob
 from collections import defaultdict
-from typing import List, Sequence, Optional, Any, Tuple, Dict, Union, Callable
+from typing import List, Sequence, Optional, Any, Tuple, Dict, Union, Callable, DefaultDict
 from inspect import signature
 
 #
 # ########################################################
 #  Command Parser
 # ########################################################
-SpecArgSig = "?"
+SpecialArgChar = "?"
 
 #
 OPT_POSITIONAL = 0x0001
@@ -17,12 +17,20 @@ OPT_REMAINDER = 0x0002
 OPT_NULLARY = 0x0010
 OPT_OPTIONAL_UNARY = 0x0020
 OPT_UNARY = 0x0040
+OPT_FOREACHTARGET = 0x0100
 
 #
 OPT_METHOD_TYPE = 0xF000
 OPT_METHOD_INIT = 0x1000
 OPT_METHOD_TARGET = 0x2000
 OPT_METHOD_EXIT = 0x4000
+
+def OPT_METHOD(label):
+    return {
+        "init":OPT_METHOD_INIT, 
+        "target":OPT_METHOD_TARGET, 
+        "exit":OPT_METHOD_EXIT
+    }.get(label, label)
 
 #
 ARG_TYPE_STRING = 1
@@ -39,29 +47,66 @@ class BadCommand(Exception):
     pass
 
 #
+# もともとの区切りを記録したオプション引数
+#
+class ArgString():
+    def __init__(self, argparts):
+        self.argparts = argparts
+    
+    def empty(self):
+        return not self.argparts
+    
+    def contains(self, ch):
+        return any(ch in x for x in self.argparts)
+    
+    def joined(self):
+        return " ".join(self.argparts)
+    
+    def __str__(self):
+        return self.joined()
+    
+    def split(self, explicit_sep=None, implicit_sep=None, maxsplit=-1):
+        if explicit_sep:
+            # 最優先される区切り
+            jo = self.joined()
+            if explicit_sep in jo:
+                return jo.split(sep=explicit_sep, maxsplit=maxsplit)
+        
+        if len(self.argparts) == 1:
+            # explicit_sepも改行区切りも無い場合に用いられる区切り
+            jo = self.joined()
+            return jo.split(sep=implicit_sep, maxsplit=maxsplit)
+        else:
+            # 改行区切り
+            if maxsplit > -1:
+                return [*self.argparts[:maxsplit], " ".join(self.argparts[maxsplit:])]
+            else:
+                return self.argparts
+
+#
 #
 #
 class OptionContext():
     def __init__(self, 
         longnames: Sequence[str],
         shortnames: Sequence[str],
-        valuetype: Any = None,
+        valuetype: Any,
+        dest: str,
         value: Any = None,
         default: Any = None,
-        dest: int = None,
         flags: int = 0,
         accumulator: Any = None,
         help: str = "",
     ):
-        self.longnames = longnames
-        self.shortnames = shortnames
-        self.dest = dest
-        self.value = value
-        self.default = default
-        self.valuetype = valuetype
-        self.flags = flags
-        self.help = help
-        self.accumulator = accumulator
+        self.longnames: Sequence[str] = longnames
+        self.shortnames: Sequence[str] = shortnames
+        self.valuetype: Any = valuetype
+        self.dest: str = dest
+        self.value: Any = value
+        self.default: Any = default
+        self.flags: int = flags
+        self.help: str = help
+        self.accumulator: Optional[Callable[[Any, Any, Any], Any]] = accumulator
     
     def __repr__(self):
         return "<OptionContext '{}'>".format(self.get_name())
@@ -72,12 +117,19 @@ class OptionContext():
     def match_name(self, key):
         return key in self.longnames or key in self.shortnames
     
-    def make_key(self, prefix=None):
-        return self.get_name() if not prefix else prefix*2 + self.longnames[0]
+    def make_key(self, prefix):
+        if self.is_positional():
+            return self.get_name()
+        else:
+            return prefix*2 + self.longnames[0]
     
-    def make_keys(self, prefix=None):
-        lk = [x if not prefix else prefix*2+x for x in self.longnames]
-        sk = [x if not prefix else prefix*1+x for x in self.shortnames]
+    def make_keys(self, prefix):
+        if self.is_positional():
+            lk = self.longnames
+            sk = self.shortnames
+        else:
+            lk = [prefix*2+x for x in self.longnames]
+            sk = [prefix*1+x for x in self.shortnames]
         return lk + sk
     
     def get_dest(self):
@@ -103,18 +155,23 @@ class OptionContext():
     
     def is_accumulative(self):
         return self.accumulator is not None
+    
+    def expands_foreach_target(self):
+        return (self.flags & OPT_FOREACHTARGET) > 0
 
-    def parse_arg(self, arg, outputs):
-        use_defarg = not arg
-        if use_defarg:
+    def parse_arg(self, arg: ArgString, outputs, spirit=None):
+        if arg.empty():
             if self.value is None:
                 value = None # Noneは変換しない
             else: 
                 value = self.valuetype.convert(self.value)
         else:
-            value = self.valuetype.convert(arg) # 引数を変換
+            if self.valuetype.is_simplex():
+                value = self.valuetype.convert(str(arg), spirit) # 引数を変換
+            else:
+                value = self.valuetype.convert(arg, spirit)
 
-        if self.is_accumulative():
+        if self.accumulator is not None:
             if self.dest in outputs:
                 prevvalue = outputs[self.dest]
             else:
@@ -122,6 +179,7 @@ class OptionContext():
             value = self.accumulator(value, prevvalue, self)
 
         outputs[self.dest] = value
+        return value
     
     def parse_default(self, outputs):
         if self.default is None:
@@ -131,12 +189,13 @@ class OptionContext():
         else:
             value = self.valuetype.convert(self.default)
         outputs[self.dest] = value
+        return value
 
     def get_value_type(self):
         return self.valuetype
 
     def get_value_typename(self):
-        return self.valuetype.get_typename()
+        return self.valuetype.typename
     
     def get_help(self):
         return self.help
@@ -146,23 +205,76 @@ class OptionContext():
 #   文字列引数を好きな値に変えるクラス
 # #####################################################################
 #
+ArgTypePrompt = Callable[[str, Any], None]
+
+ARGTYPE_SIMPLEX = 0x01
+ARGTYPE_LISTLIKE = 0x02
+ARGTYPE_CONVKLASS = 0x10
+ARGTYPE_CONVWITHSPIRIT = 0x20
+
+#
 #
 #
 class ArgType():
-    def __init__(self, converter, typename, args=(), kwargs={}):
-        self._converter = converter
-        self._typename = typename
-        self._args = args
-        self._kwargs = kwargs
+    def __init__(self, typename, description, args, kwargs, flags):
+        self.typename: str = typename
+        self.description: str = description
+        self.args = args
+        self.kwargs = kwargs
+        self.flags = flags
+    
+    def is_simplex(self):
+        return self.flags & ARGTYPE_SIMPLEX
     
     def rebind(self, args, kwargs):
-        return ArgType(self._converter, self._typename, args, kwargs)
-
-    def get_typename(self):
-        return self._typename
+        return self.do_rebind(self.typename, self.description, args, kwargs, self.flags)
     
-    def convert(self, arg):
-        return self._converter(arg, *self._args, **self._kwargs)
+    def do_rebind(self, *args):
+        raise NotImplementedError()
+
+    def convert(self, arg: Any, spirit=None):
+        raise NotImplementedError()
+
+#
+class ArgTypeKlass(ArgType):
+    def __init__(self, klass, typename, description, args, kwargs, flags):
+        super().__init__(typename, description, args, kwargs, flags)
+        self.klass = klass
+        if "spirit" in signature(self.klass.convert).parameters:
+            self.flags += ARGTYPE_CONVWITHSPIRIT
+            
+    def do_rebind(self, *args):
+        return ArgTypeKlass(self.klass, *args)
+    
+    def convert(self, arg: Any, spirit=None):
+        # クラス：インスタンスを生成してから実行
+        ins = self.klass(*self.args, **self.kwargs)
+        if self.flags & ARGTYPE_CONVWITHSPIRIT:
+            return ins.convert(arg, spirit)
+        else:
+            return ins.convert(arg)
+    
+    def create_prompt(self, arg, spirit):
+        # クラス：インスタンスを生成してから実行
+        ins = self.klass(*self.args, **self.kwargs)
+        ins.prompt(arg, spirit)
+
+#
+class ArgTypeCallable(ArgType):
+    def __init__(self, a_callable, typename, description, args, kwargs, flags):
+        super().__init__(typename, description, args, kwargs, flags)
+        self.fn = a_callable
+    
+    def do_rebind(self, *args):
+        return ArgTypeCallable(self.fn, *args)
+        
+    def convert(self, arg: Any, spirit=None):
+        # 関数：そのまま実行
+        return self.fn(arg, *self.args, **self.kwargs)
+    
+    def create_prompt(self, arg, spirit):
+        # 関数：デフォルトの入力欄を実行
+        return spirit.default_prompt_arg(arg)
 
 #
 # 名前を登録して型を検索する
@@ -171,14 +283,20 @@ class ArgTypeLibrary:
     def __init__(self):
         self._types: Dict[str, ArgType] = {}
     
-    def define(self, typename: str, converter: Any, *args, **kwargs) -> ArgType:
+    def define(self, typename: str, converter: Any, description: str, args, kwargs, flags: int) -> ArgType:
         if typename in self._types:
             raise ValueError("'{}' has already existed in ArgTypeLibrary".format(typename))
-        t = ArgType(converter, typename, args, kwargs)
+        t: Any = None
+        if hasattr(converter, "convert"):
+            t = ArgTypeKlass(converter, typename, description, args, kwargs, flags)
+        elif callable(converter):
+            t = ArgTypeCallable(converter, typename, description, args, kwargs, flags)
+        else:
+            raise ValueError("Bad converter: {}".format(converter))
         self._types[typename] = t
         return t
         
-    def generate(self, typename: str, *args, **kwargs) -> ArgType:
+    def generate(self, typename: str, args, kwargs) -> ArgType:
         if typename not in self._types:
             raise ValueError("No match typename '{}'".format(typename))
         if args or kwargs:
@@ -189,41 +307,117 @@ class ArgTypeLibrary:
 #
 _argtypelib = ArgTypeLibrary()
 
-def def_argument_type(function_or_class, name = None, *args, **kwargs):
-    if name is None:
-        name = function_or_class.__name__
-    return _argtypelib.define(name, function_or_class)
+#
+class _ArgTypeDecolator():
+    def define(self, function_or_class, name, description, args, kwargs, flags):
+        if name is None:
+            name = function_or_class.__name__
+        _argtypelib.define(name, function_or_class, description, args, kwargs, flags)
+        return function_or_class
 
-def argument_type(name = None, *args, **kwargs):
-    def _deco(target):
-        return def_argument_type(target, name, *args, **kwargs)
-    return _deco
+    def __call__(self,
+        name = None, 
+        description = "",
+        args = (), kwargs = {},
+        flags = ARGTYPE_SIMPLEX,
+        converter = None,
+    ):
+        if converter is not None:
+            self.define(converter, name, description, args, kwargs, flags)
+        else:
+            def _deco(target):
+                self.define(target, name, description, args, kwargs, flags)
+                return target
+            return _deco
 
+    def listlike(self,
+        name = None,
+        description = "",
+        args = (), kwargs = {},
+    ):
+        return self(name, description, args, kwargs, ARGTYPE_LISTLIKE)
+
+argument_type = _ArgTypeDecolator()
+
+#
 def typeof_argument(typecode: Union[None, str, type, ArgType] = None, *args, **kwargs) -> ArgType:
     if typecode is None:
-        return _argtypelib.generate("str")
+        return _argtypelib.generate("str", (), {})
     elif isinstance(typecode, str):
-        return _argtypelib.generate(typecode, *args, **kwargs)
+        return _argtypelib.generate(typecode, args, kwargs)
     elif isinstance(typecode, type):
-        return _argtypelib.generate(typecode.__name__, *args, **kwargs)
+        return _argtypelib.generate(typecode.__name__, args, kwargs)
     elif isinstance(typecode, ArgType):
         return typecode
     else:
         raise ValueError("No match type exists with '{}'".format(typecode))
 
 # 基本型
-def_argument_type(str)
-def_argument_type(bool)
-def_argument_type(int)
-def_argument_type(float)
-def_argument_type(complex)
+argument_type(converter=str, description="文字列")
+argument_type(converter=bool, description="True/False")
+argument_type(converter=int, description="整数")
+argument_type(converter=float, description="小数")
+argument_type(converter=complex, description="複素数")
 
+#
 # 区切られた値のリスト
-@argument_type(name="value-list")
-def value_list(arg, valuetype=None, *, sep=None, maxsplit=-1):
-    vtype = typeof_argument(valuetype)
-    spl = arg.split(sep=sep, maxsplit=maxsplit)
-    return [vtype.convert(x.strip()) for x in spl]
+#
+@argument_type.listlike(
+    name="value-list", 
+    description="値のリスト",
+)
+class ValueList():
+    def __init__(self, valuetype=None, *, sep=None, maxsplit=-1):
+        self.vtype = typeof_argument(valuetype)
+        self.sep = sep
+        self.maxsplit = maxsplit
+
+    def convert(self, arg):
+        spl = arg.split(implicit_sep=self.sep, maxsplit=self.maxsplit)
+        return [self.vtype.convert(x.strip()) for x in spl]
+
+#
+# ファイルパス
+#
+@argument_type.listlike(
+    name="filepath",
+    description="ファイルパス",
+)
+class Filepaths():
+    def convert(self, arg):
+        # パスの羅列を区切る
+        paths = arg.split(explicit_sep = "|")
+        return paths
+    
+    def prompt(self, spirit):
+        # ダイアログ
+        pass
+
+#
+@argument_type.listlike(
+    name="input-filepath",
+    description="存在する入力ファイルのパス",
+)
+class InputFilepaths(Filepaths):
+    def convert(self, arg, spirit):
+        # パスの羅列を区切る
+        patterns = super().convert(arg)
+
+        # ファイルパターンから対象となるすべてのファイルパスを展開する
+        paths = []
+        for fpath in patterns:
+            fpath = spirit.abspath(fpath) # カレントディレクトリを基準に絶対パスに直す
+            expanded = glob.glob(fpath)
+            if expanded:
+                paths.extend(expanded)
+            else:
+                paths.append(fpath)
+        return paths
+    
+    def prompt(self, spirit):
+        # ダイアログ
+        pass
+
 
 #
 # accumulator
@@ -282,6 +476,7 @@ class CommandParser():
         value=None,       # キーに対する引数のデフォルト値
         dest=None,
         methodtype=None,
+        foreach=False,   # OPT_FOREACHTARGETを付す
         help=""
     ):
         if not names:
@@ -346,14 +541,13 @@ class CommandParser():
             else:
                 typespec = typeof_argument(valuetype)
 
-        if isinstance(methodtype, int):
-            flags |= methodtype
-        elif methodtype == "init":
-            flags |= OPT_METHOD_INIT
-        elif methodtype == "target":
+        if methodtype is not None:
+            flags |= OPT_METHOD(methodtype)
+        else:
             flags |= OPT_METHOD_TARGET
-        elif methodtype == "exit":
-            flags |= OPT_METHOD_EXIT
+        
+        if foreach:
+            flags |= OPT_FOREACHTARGET
     
         longnames = []
         shortnames = []
@@ -384,7 +578,7 @@ class CommandParser():
         dest = cxt.get_dest()
         if cxt.is_positional():
             if self.positional is not None:
-                raise ValueError("positional argument has already existed")
+                raise ValueError("positional argument must be one")
             self.positional = cxt
             self.argnames[dest] = cxt
         else:
@@ -420,10 +614,10 @@ class CommandParser():
         splitting = True
         parts = []
         for ch in q:
-            # -- によるエスケープ
             if splitting and ch.isspace():
                 if len(parts)>0:
                     if parts[-1] == "--":
+                        # -- によるエスケープ
                         parts[-1] = ""
                         splitting = False
                     elif len(parts[-1])>0:
@@ -481,17 +675,16 @@ class CommandParser():
             command_rows = [commands]
         return command_rows
 
-    def parse_args(self, commandrow):
+    def parse_args(self, commandrow, spirit=None):
         # コマンドを解析し結果を作成する     
         try:
-            kwargs = self.do_parse_args(commandrow)
+            kwargs = self.do_parse_args(commandrow, spirit)
             res = self.build_parse_result(self.display_command_row(commandrow), kwargs)
         except BadCommand as e:
             raise e
         return res
     
-    #
-    def do_parse_args(self, args):        
+    def do_parse_args(self, args, spirit=None):        
         # 区切られた文字列のリストを解析する
         argstack = []
         curcxt = None 
@@ -584,15 +777,15 @@ class CommandParser():
                 contexts.append((self.positional, missing_posit_arg))
             elif not any(x is self.positional for x,_ in contexts):
                 # 位置引数が無い
-                raise BadCommand("位置引数<{}>に相当する引数がありません".format(self.positional.make_key()))
+                raise BadCommand("位置引数<{}>に相当する引数がありません".format(self.positional.get_name()))
 
         # 引数の文字列を値へと変換する
         kwargs = {}
         appeared = set()
         for cxt, stack in contexts:  
             # 値を生成する
-            argstring = " ".join(stack)
-            cxt.parse_arg(argstring, kwargs)
+            argstring = ArgString(stack)
+            cxt.parse_arg(argstring, kwargs, spirit)
             # 出現したコンテキストを記録する
             appeared.add(cxt.get_dest())
         
@@ -603,8 +796,8 @@ class CommandParser():
 
         return kwargs
         
-    #
     def build_parse_result(self, expanded_command, kwargs):
+        # パース済みの値を操作するクラスを作成
         res = CommandParserResult(expanded_command)
         for name, cxt in self.argnames.items():
             value = kwargs.get(name, None)
@@ -650,7 +843,6 @@ class CommandParser():
                     parts.append("|")
 
         return " ".join(parts).replace("\n", "<br>").strip()
-
     
     # 
     def get_description(self):
@@ -670,11 +862,10 @@ class CommandParser():
 #
 class CommandParserResult():
     def __init__(self, expandedcmd, *, messages=None):
-        self.expandedcmd = expandedcmd
-        self.messages = messages
-        self.argmap = defaultdict(dict)
-        self.specarg_descriptors = [] # (argtype, name, desc, descargs...)
-        self.target_filepath_arg = None
+        self.expandedcmd: str = expandedcmd
+        self.messages: List[str] = messages or []
+        self.argmap: DefaultDict[int, Dict[str, Tuple[OptionContext, str]]] = defaultdict(dict)
+        self.foreach_target_context: Optional[OptionContext] = None
     
     def get_expanded_command(self):
         return self.expandedcmd
@@ -684,125 +875,39 @@ class CommandParserResult():
         head = self.expandedcmd.split()[0]
         raise NotImplementedError()
 
-    def count_command_part(self):
-        return len(self.expandedcmd.split())
-    
     def has_exit_message(self):
         return True if self.messages else False
     
     def get_exit_messages(self):
         return self.messages
         
-    def add_arg(self, cxt, name, value):        
-        self.argmap[cxt.get_dest_method()][name] = value
-        """
-        if cxt.is_value_type(OPT_TYPE_FILEPATH):
-            self.target_filepath_arg = (argtype&0xF, name)
-
-        if isinstance(value, str) and value.startswith(SpecArgSig):
-            self.specarg_descriptors.append((argtype, name, value[1:]))
-        elif isinstance(value, list) and len(value)==1 and value[0].startswith(SpecArgSig):
-            self.specarg_descriptors.append((argtype, name, value[0][1:], "list"))
-        elif argtype & FilepathArg:
-            self.specarg_descriptors.append((argtype, name, "filename_pattern"))
-        
-        self.argmap[argtype&0xF][name] = value
-        """
+    def add_arg(self, cxt, name, value):
+        self.argmap[cxt.get_dest_method()][name] = (cxt, value)
+        if cxt.expands_foreach_target():
+            self.foreach_target_context = cxt
+    
+    def get_values(self, label = None, *, argmap = None):
+        if argmap is None:
+            argmap = self.argmap[OPT_METHOD(label)]
+        return {key:val for key,(_cxt,val) in argmap.items()}
 
     # 呼び出し引数を展開する
     def prepare_arguments(self, label):
-        at = {
-            "init":OPT_METHOD_INIT, 
-            "target":OPT_METHOD_TARGET, 
-            "exit":OPT_METHOD_EXIT
-        }[label]
-        targs = self.argmap[at]
+        at = OPT_METHOD(label)
+        argmap = self.argmap[at]
 
-        multitarget = None
-        if self.target_filepath_arg is not None:
-            tgat, name = self.target_filepath_arg
-            if tgat == at:
-                multitarget = self.argmap[tgat][name]
-        
-        if multitarget:
-            for a_target in multitarget:
-                targs["target"] = a_target
-                yield targs
+        foreach_targets = None
+        if self.foreach_target_context and self.foreach_target_context.get_dest_method() == at:
+            valuename = self.foreach_target_context.get_dest()
+            _, values = argmap[valuename]
+            foreach_targets = iter(values) # require Iterable value. If not, exception is raised here.
+
+        if foreach_targets is not None:
+            for a_target in foreach_targets:
+                argmap[valuename] = (self.foreach_target_context, a_target)
+                yield self.get_values(argmap=argmap)
         else:
-            yield targs
-
-    # パス引数を展開する
-    def expand_special_arguments(self, spirit):
-        for argtype, argname, descvalue, *islist in self.specarg_descriptors:
-            preexpand = self.argmap[argtype&0xF][argname]
-
-            expanded = None
-            if descvalue.startswith(SpecArgSig):
-                # エスケープ
-                expanded = descvalue[1:]
-
-            if descvalue == "":
-                # 現在選択中のデータから展開
-                expanded = self.expand_from_data_selection(spirit, islist)
-            
-            elif descvalue in ("dlg", "dialog"):
-                # タイプに沿ったダイアログボックスを表示する
-                if argtype & ARG_TYPE_COLORCODE:
-                    expanded = self.expand_from_colorpicker(spirit, argname)
-                elif argtype & ARG_TYPE_FILEPATH:
-                    expanded = self.expand_from_openfilename(spirit, argname, islist)
-                elif argtype & ARG_TYPE_DIRPATH:
-                    expanded = self.expand_from_opendirname(spirit, argname)
-            
-            elif descvalue == "filename_pattern":
-                # ファイルパターンから対象となるすべてのファイルパスを展開する
-                patterns = preexpand
-                paths = []
-                for fpath in patterns:
-                    fpath = spirit.abspath(fpath)
-                    globs = glob.glob(fpath)
-                    if len(globs)>0:
-                        paths.extend(globs)
-                    else:
-                        paths.append(fpath)
-                expanded = paths
-
-            else:
-                continue
-
-            self.argmap[argtype&0xF][argname] = expanded
-
-        self.specarg_descriptors = []
-    
-    #
-    def expand_from_data_selection(self, spi, islist):
-        item = None
-        chm = spi.select_process_chamber()
-        if chm:
-            data = chm.get_bound_data()
-            if data:
-                item = data.selection_item()
-                
-        if not item:
-            raise ValueError("no item selected")
-
-        if islist:
-            return [item.get_link()]
-        else:
-            return item.get_link()
-    
-    def expand_from_openfilename(self, spi, argname, islist):
-        if islist:            
-            paths = spi.ask_openfilename(title="ファイルを選択[{}]".format(argname), multiple=True)
-            return list(paths)
-        else:
-            return spi.ask_openfilename(title="ファイルを選択[{}]".format(argname))
-        
-    def expand_from_opendirname(self, spi, argname):
-        return spi.ask_opendirname(title="ディレクトリを選択[{}]".format(argname))
-
-    def expand_from_colorpicker(self, spi, argname):
-        return "<colorpicker-not-implemented-yet>"
+            yield self.get_values(argmap=argmap)
 
     #
     def preview_handlers(self):

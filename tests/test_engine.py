@@ -88,14 +88,18 @@ def test_engine_parsing(a_cmdset):
         cappa iwate-no-cappa
     """, spirit)
     argparser2 = entries["command"].target.argparser
+    alpha = argparser2.find_context("alpha")
+    beta = argparser2.find_context("beta")
+    cappa = argparser2.find_context("cappa")
     epsilon = argparser2.find_context("epsilon")
     rho = argparser2.find_context("rho")
+
     assert [x.command_row for x in cmdrows] == [
             ["targetname", "--beta", "lao gamma", "--cappa" ,"iwate-no-cappa"],
             [epsilon, rho, PARSE_SEP, "targetname", "--beta", "lao gamma", "--cappa", "iwate-no-cappa"],
         ]
 
-    assert eng.parse_command(cmdrows[0]).argmap[OPT_METHOD_TARGET] == {
+    assert eng.parse_command(cmdrows[0]).get_values(OPT_METHOD_TARGET) == {
         "a" : "targetname",
         "b" : "lao gamma",
         "c" : "iwate-no-cappa",

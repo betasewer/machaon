@@ -245,7 +245,7 @@ class CommandEngine:
 
         if not use_dialog:
             try:
-                result = argparser.parse_args(commandrow)
+                result = argparser.parse_args(commandrow, spirit)
             except BadCommand as e:
                 self.parseerror = e
                 use_dialog = True
@@ -263,7 +263,7 @@ class CommandEngine:
     def prompt_command_args(self, argparser, spirit):
         spirit.message("<argument fill prompt: under construction...>")
         for cxt in argparser.list_contexts():
-            line = "{} [{}]  {}".format(" ".join(cxt.get_keys()), cxt.get_value_typename(), cxt.get_help())
+            line = "{} [{}]  {}".format(" ".join(cxt.make_keys("-")), cxt.get_value_typename(), cxt.get_help())
             spirit.message(line)
         return None
 

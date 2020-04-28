@@ -98,3 +98,5 @@ class WinShellUI(ShellUI):
 
 # 環境で自動判別する
 # def ShellApp():
+
+

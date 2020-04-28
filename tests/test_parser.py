@@ -1,6 +1,7 @@
 import pytest
 
-from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, typeof_argument
+from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, typeof_argument, OptionContext, ArgString
+from machaon.process import TempSpirit
 
 def equal_contents(l, r):
     return set(map(frozenset, l)) == set(map(frozenset, r))
@@ -18,12 +19,13 @@ def build_parser(*options):
     return p
 
 #
-# add_arg
+# add_arg / OptionContext
 #
-def test_add_arg():
+def test_optioncontext():
     p = build_parser(
         option("target", methodtype="target"),
-        option("--strict", "-s", "-!", flag=True, methodtype="exit")
+        option("--strict", "-s", "-!", flag=True, methodtype="exit"),
+        option("--level", "-l", defarg="1", valuetype="int"),
     )
 
     a1 = p.positional
@@ -31,8 +33,17 @@ def test_add_arg():
     assert a1.is_positional()
     assert a1.get_dest_method() == OPT_METHOD_TARGET
     assert a1.get_dest() == "target"
+    assert a1.get_value_typename() == "str"
+    assert a1.default is None
+    assert a1.make_key("-") == "target"
+    assert a1.make_keys("-") == ["target"]
+    assert a1.match_name("target")
 
-    assert len(p.options) == 1
+    assert a1.parse_arg(ArgString(["filename"]), {}) == "filename"
+    assert a1.parse_default({}) is None
+
+    assert len(p.options) == 2
+
     a2 = p.options[0]
     assert a2.get_name() == "strict"
     assert a2.longnames == ["strict"]
@@ -40,8 +51,26 @@ def test_add_arg():
     assert not a2.is_positional()
     assert a2.get_dest_method() == OPT_METHOD_EXIT
     assert a2.get_dest() == "strict"
+    assert a2.make_key("-") == "--strict"
+    assert a2.make_keys("-") == ["--strict", "-s", "-!"]
+    
+    assert a2.parse_arg(ArgString([]), {}) is True
+    assert a2.parse_default({}) is False
 
-    assert list(p.argnames.keys()) == ["target", "strict"]
+    a3 = p.options[1]
+    assert a3.get_name() == "level"
+    assert a3.get_dest_method() == OPT_METHOD_TARGET
+    assert a3.get_value_typename() == "int"
+    assert a3.is_optional_unary()
+    assert not a3.is_nullary() and not a3.is_unary()
+    assert a3.value == "1"
+    assert a3.default is None
+
+    assert a3.parse_arg(ArgString(["10"]), {}) == 10
+    assert a3.parse_arg(ArgString([]), {}) == 1
+    assert a3.parse_default({}) is None
+
+    assert list(p.argnames.keys()) == ["target", "strict", "level"]
 
 #
 def inv(fn):
@@ -274,3 +303,49 @@ def test_listarg():
         'rating' : 1.2,
         'margin' : [1, -2, 3, -4]
     }
+
+#
+#
+#
+def test_filepath():
+    p = build_parser(
+        option("files", valuetype="filepath"),
+        option("--rating", "-r", valuetype="float"),
+    )
+    assert p.do_parse_args(["users/desktop/memo.txt bin/appli.exe", "-r", "1.2"]) == {
+        'files' : ["users/desktop/memo.txt", "bin/appli.exe"],
+        'rating' : 1.2,
+    }
+    
+#
+#
+#
+def test_parser_result():
+    p = build_parser(
+        option("files", valuetype="filepath", foreach=True),
+        option("--rating", "-r", valuetype="float"),
+    )
+    assert list(
+        p.parse_args(["users/desktop/memo.txt bin/appli.exe", "-r", "1.2"])
+        .prepare_arguments("target")
+    ) == [
+        { 'files' : "users/desktop/memo.txt", 'rating' : 1.2, },
+        { 'files' : "bin/appli.exe", 'rating' : 1.2, },
+    ]
+
+    p = build_parser(
+        option("files", valuetype="input-filepath", foreach=True),
+    )
+    spi = TempSpirit(cd = "c:\\Windows")
+    assert len(list(p.parse_args(["System32/*.dll py.exe"], spi).prepare_arguments("target"))) > 2
+
+    # 元のアイテムの区切り方が、空白によらず保存される
+    assert list(
+        p.parse_args(["Program Files/folder1", "folder2", "folder3/【整理済】 原稿.docx"], spi)
+        .prepare_arguments("target")
+    ) == [
+        { 'files' : "c:\\Windows\\Program Files\\folder1" },
+        { 'files' : "c:\\Windows\\folder2" },
+        { 'files' : "c:\\Windows\\folder3\\【整理済】 原稿.docx" },
+    ]
+

@@ -147,7 +147,7 @@ class AppRoot:
         result = None
         invocation = None
         try:
-            parsedcommand.expand_special_arguments(spirit)
+            #parsedcommand.expand_special_arguments(spirit)
             invocation = process.execute(target, spirit, parsedcommand)
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
