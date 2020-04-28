@@ -34,7 +34,7 @@ def app_commands():
             description="アプリのテーマを変更します。"
         )["target themename"](
             help="テーマ名",
-            optional=True
+            defarg=None,
         )["target --alt"](
             help="設定項目を上書きする [config-name]=[config-value]",
             remainder=True,
@@ -140,11 +140,9 @@ def shell_commands():
             "execprocess",
             from_module="machaon.commands.shell",
             description="シェルからコマンドを実行します。", 
-        )["target commandhead"](
+        )["target command"](
             help="実行するコマンド",
-        )["target commandstr"](
-            help="コマンド引数",
-            take_remainder=True
+            remainder=True
         )
     )["cd"](
         describe_command(
@@ -153,7 +151,7 @@ def shell_commands():
             description="作業ディレクトリを変更します。", 
         )["target path"](
             help="移動先のパス",
-            optional=True
+            defarg=None
         )["target -s --silent"](
             help="変更後lsを実行しない",
             flag=True
@@ -165,7 +163,7 @@ def shell_commands():
             description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
         )["target pattern"](
             help="表示するフォルダ・ファイルを絞り込む正規表現パターン（部分一致）",
-            optional=True
+            defarg=None
         )["target -l --long"](
             help="詳しい情報を表示する",
             flag=True
@@ -193,7 +191,7 @@ def shell_commands():
             description="ファイルの内容をテキストとして表示します。", 
         )["target target"](
             help="表示するファイル",
-            valuetype="filepath",
+            valuetype="input-filepath",
         )["target -e --encoding"](
             help="テキストエンコーディング [utf-8|utf-16|ascii|shift-jis]",
             default=None
@@ -218,7 +216,7 @@ def shell_commands():
             description="ファイルの内容をバイナリとして表示します。", 
         )["target target"](
             help="表示するファイル",
-            valuetype="filepath",
+            valuetype="input-filepath",
         )["target --size"](
             help="読み込むバイト数",
             valuetype=int,
@@ -235,7 +233,7 @@ def shell_commands():
             description="文字化けしたファイル名をエンコードしなおします。",
         )["target dirpath"](
             help="対象とするディレクトリ",
-            valuetype="dirpath"
+            valuetype="input-dirpath"
         )["target --current"](
             help="現在の誤ったエンコーディング",
             default="cp932"
@@ -250,9 +248,10 @@ def shell_commands():
             description="zipを解凍します。",
         )["target path"](
             help="ZIPのパス",
-            valuetype="dirpath"
+            valuetype="input-dirpath"
         )["target --out"](
             help="解凍ディレクトリ",
+            valuetype="dirpath"
         )["target --win -w"](
             help="UTF-8でエンコードされたファイル名をcp932に変換（Windows）",
         )

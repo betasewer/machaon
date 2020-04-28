@@ -242,6 +242,7 @@ class CommandEngine:
         use_dialog = False
         if commandrow and commandrow[0] == "?":
             use_dialog = True
+            self.parseerror = "<dialog under construction>"
 
         if not use_dialog:
             try:
@@ -255,7 +256,6 @@ class CommandEngine:
 
         if use_dialog:
             self.prompt_command_args(argparser, spirit)
-            self.parseerror = "<dialog under construction>"
 
         return result
     

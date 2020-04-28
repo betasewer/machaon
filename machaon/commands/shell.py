@@ -7,13 +7,17 @@ from collections import defaultdict
 
 from typing import Optional
 
-from machaon.cui import reencode
+from machaon.cui import reencode, fixsplit
 
 #
 #
 #
-def execprocess(spi, commandhead, commandstr):
+def execprocess(spi, command):
     cmds = []
+
+    commandhead, commandstr = fixsplit(command, maxsplit=1)
+    if not commandhead:
+        return
 
     cpath = spi.abspath(commandhead)
     if os.path.isfile(cpath):

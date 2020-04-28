@@ -224,7 +224,17 @@ class LinkProcess():
     def init_process(self):
         self.app.message("リンク作成を開始.")
     
-    def process_target(self, target, url):
+    def process_target(self, url):
+        spl = url.split(maxsplit=1)
+        if len(spl)==1:
+            url = spl[0]
+            target = url
+        elif len(spl)==2:
+            url = spl[0]
+            target = spl[1]
+        else:
+            raise ValueError("")
+
         self.app.hyperlink(target, link=url)
 
     def exit_process(self):
@@ -234,10 +244,9 @@ class LinkProcess():
     def describe(cls, cmd):
         cmd.describe(
             description = "リンクを貼ります。"
-        )["target target"](
-            help = "リンクの文字列"
-        )["target url"](
-            help = "リンク先URL"
+        )["target url_and_text"](
+            help = "リンクのURLと文字列",
+            dest = "url"
         )
     
 #
