@@ -27,12 +27,12 @@ COMMAND_TYPES = {
 class CommandEntry():
     def __init__(
         self, 
-        keywords,
-        prog=None, 
-        description="",
-        builder=None,
-        target=None,
-        commandtype=normal_command,
+        keywords: Sequence[str],
+        prog: Optional[str] = None, 
+        description: str = "",
+        builder: Any = None,
+        target: Optional[ProcessTarget] = None,
+        commandtype: int = normal_command,
     ):
         self.target = target
         self.keywords = keywords # 展開済みのキーワード
@@ -41,12 +41,12 @@ class CommandEntry():
         self.description = description
         self.commandtype = COMMAND_TYPES.get(commandtype, normal_command)
 
-    def load(self) -> ProcessTarget:
+    def load(self) -> Optional[ProcessTarget]:
         if self.target is None and self.builder:
             self.target = self.builder.build_target(self)
         return self.target
     
-    def match(self, target: str) -> bool:
+    def match(self, target: str) -> Tuple[bool, Optional[str]]:
         match_rests = []
         for keyword in self.keywords:
             if target.startswith(keyword):
@@ -184,6 +184,9 @@ class CommandEngine:
         possible_entries: List[PossibleCommandSyntaxItem] = []
         for commandentry, optioncompound in possible_commands:
             target = commandentry.load()
+            if target is None:
+                raise ValueError("CommandEntry '{}' の構築に失敗".format(commandentry.get_prog()))
+
             spirit = target.inherit_spirit(spirit)
             target.load_lazy_describer(spirit)
 
