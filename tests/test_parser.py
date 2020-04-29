@@ -359,6 +359,7 @@ def test_parser_result():
         { 'files' : "bin/appli.exe", 'rating' : 1.2, },
     ]
 
+    # input-filepath: globパターンを受け入れ、実在するパスを集める
     p = build_parser(
         option("files", valuetype="input-filepath"),
         option("--margin", valuetype=typeof_argument("value-list", "int")),
@@ -367,6 +368,7 @@ def test_parser_result():
     assert len(list(p.parse_args(["System32/*.dll py.exe"], spi).prepare_arguments("target"))) > 2
 
     # 元のアイテムの区切り方が、空白によらず保存される
+    # 型ごとにデフォルトでforeachかどうかが決まっている
     assert list(
         p.parse_args(["Program Files/folder1", "folder2", "folder3/【整理済】 原稿.docx", "--margin", "10", "20"], spi)
         .prepare_arguments("target")
@@ -376,3 +378,15 @@ def test_parser_result():
         { 'files' : "c:\\Windows\\folder3\\【整理済】 原稿.docx", 'margin' : [10,20] },
     ]
 
+    # 型のforeach設定をオーバーライド
+    p = build_parser(
+        option("--ids", valuetype=typeof_argument("value-list", "int"), foreach=True),
+    )
+    assert list(
+        p.parse_args(["--ids", "1001", "1002", "1003"], spi)
+        .prepare_arguments("target")
+    ) == [
+        { 'ids' : 1001 },
+        { 'ids' : 1002 },
+        { 'ids' : 1003 },
+    ]
