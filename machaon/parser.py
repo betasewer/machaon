@@ -681,7 +681,8 @@ class CommandParser():
                         for cmdrow in command_rows:
                             newrows.append(cmdrow + newrow)
                     if commands and not newrows:
-                        raise BadCommand("抱合オプション'{}'を解釈できません".format(command))
+                        #raise BadCommand("抱合オプション'{}'を解釈できません".format(command))
+                        continue
                     command_rows = newrows
                 else:
                     command_rows = [x+[command] for x in command_rows]

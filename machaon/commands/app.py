@@ -13,8 +13,8 @@ def command_syntax(spi, command_string):
     if not results:
         spi.message("[有効なコマンドではありません]")
     else:
-        for process, _spirit, result in results:
-            spi.message(process.get_prog()+" "+result.get_expanded_command())
+        for entry in results:
+            spi.message(entry.command_string())
 
 # 
 def command_interrupt(spi):  

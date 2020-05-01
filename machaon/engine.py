@@ -203,11 +203,10 @@ class CommandEngine:
                 newrows = []
                 for optrow in optrows:
                     for row in rows:
+                        if not optrow and not row:
+                            continue
                         newrows.append([*optrow, PARSE_SEP, *row])
                 rows = newrows
-            
-            if not rows:
-                rows.append([]) # 空の列を入れる
 
             for cmdrow in rows:
                 entry = PossibleCommandSyntaxItem(target, spirit, cmdrow)
