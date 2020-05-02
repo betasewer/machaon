@@ -34,6 +34,9 @@ def a_cmdset():
         "command" : CommandEntry(("cmd", "command"), prog="command", description="A Command.", builder=dummy_target),
         "ending" : CommandEntry(("en", "ending"), prog="ending", description="A Ending command.", builder=dummy_target),
         "commander" : CommandEntry(("commander",), prog="commander", description="A Commander command.", builder=dummy_target),
+        "commands" : CommandEntry(("commands",), prog="commands", description="Many Commands.", builder=dummy_target),
+        "commandc" : CommandEntry(("commandc",), prog="commandc", description="A Commit command.", builder=dummy_target),
+        "commandce" : CommandEntry(("commandce",), prog="commandce", description="A Celurian command.", builder=dummy_target),
     }
     cmdset = CommandSet("test", ("test","ts"), entries.values(), description="Test command set.")
     return cmdset, entries
@@ -114,5 +117,53 @@ def test_bad_compound_engine_parsing(a_cmdset):
     spirit = TempSpirit()
     assert eng.expand_parsing_command("tscommandxyz", spirit)
     # -xyzは解釈不能なので例外を投げる
+
+
+def test_candidates_engine_parsing(a_cmdset):
+    cmdset, entries = a_cmdset
+    eng = CommandEngine()
+    eng.install_commands(cmdset)
+
+    spirit = TempSpirit()
+
+    def tests(syntax_items, literals):
+        if len(syntax_items) != len(literals):
+            print("!not equal length:", len(syntax_items), "!=", len(literals))
+            return False
+        for item, lit in zip(syntax_items, literals):
+            if item.command_string() != lit:
+                print("!not equal:", item.command_string(), "!=", lit)
+                return False
+        return True
+
+    # 2つ
+    assert tests(
+        eng.expand_parsing_command("tscommander", spirit),
+        [ "commander", "command --epsilon --rho" ]
+    )
+
+    # 3つ
+    assert tests(
+        eng.expand_parsing_command("tscommandce", spirit),
+        [ "commandce", "commandc --epsilon", "command --cappa e" ]
+    )
+
+    # 1つ: command -s は存在しないので飛ばされる
+    assert tests(
+        eng.expand_parsing_command("tscommands", spirit),
+        [ "commands" ]
+    )
+    
+    # 候補なし
+    assert tests(
+        eng.expand_parsing_command("tscommandz", spirit),
+        []
+    )
+    assert tests(
+        eng.expand_parsing_command("", spirit),
+        []
+    )
+
+#pytest.main(["-k test_candidates_engine_parsing"])
 
 
