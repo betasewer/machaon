@@ -244,10 +244,22 @@ class Launcher():
         """ プロセス中断時 """
         spirit.message_em("中断しました")
     
-    def on_error_process(self, spirit, process, excep):
+    def on_error_process(self, spirit, process, excep, timing):
         """ プロセスのエラーによる終了時 """
-        spirit.error("失敗して中断しました。発生したエラーの詳細：")
-        spirit.message("".join(traceback.format_exception(type(excep), excep, excep.__traceback__)))
+        if timing == "argparse":
+            tim = "引数の解析中に"
+        elif timing == "executing":
+            tim = "プロセス実行の前後に"
+        elif timing == "execute":
+            tim = "プロセス内で"
+        else:
+            tim = "不明な時空間'{}'にて".format(timing)
+        spirit.error("{}エラーが発生し、失敗しました。".format(tim))
+        
+        details = traceback.format_exception(type(excep), excep, excep.__traceback__)
+        spirit.error(details[-1])
+        spirit.message_em("スタックトレース：")
+        spirit.message("".join(details[1:-1]))
 
     def on_exit_process(self, spirit, process, invocation):
         """ プロセスの正常終了時 """

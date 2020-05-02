@@ -120,11 +120,16 @@ class AppRoot:
         # コマンドを解析
         target = None
         parsedcommand = None
-        entries = self.cmdengine.expand_parsing_command(commandstr, spirit)
-        entry = self.cmdengine.select_parsing_command(spirit, entries)
-        if entry is not None:
-            target, spirit = entry.target, entry.spirit
-            parsedcommand = self.cmdengine.parse_command(entry)
+        try:
+            entries = self.cmdengine.expand_parsing_command(commandstr, spirit)
+            entry = self.cmdengine.select_parsing_command(spirit, entries)
+            if entry is not None:
+                target, spirit = entry.target, entry.spirit
+                parsedcommand = self.cmdengine.parse_command(entry)
+        except Exception as parseexcep:
+            # コマンド解析中の例外
+            self.ui.on_error_process(spirit, process, parseexcep, timing = "argparse")
+            return None
         
         if parsedcommand is None:
             if entry is None:
@@ -151,15 +156,17 @@ class AppRoot:
             invocation = process.execute(target, spirit, parsedcommand)
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
-        except Exception as appexcep:
-            # プロセス外のアプリコードからの例外
-            self.ui.on_error_process(spirit, process, appexcep)
+        except Exception as execexcep:
+            # アプリコードの外からの例外
+            self.ui.on_error_process(spirit, process, execexcep, timing = "executing")
+            return None
 
         if invocation:
             # エラーが発生しているか
             e = invocation.get_last_exception()
             if e:
-                self.ui.on_error_process(spirit, process, e)
+                # アプリコードからの例外
+                self.ui.on_error_process(spirit, process, e, timing = "execute")
             # 最後のtargetの返り値を返す
             result = invocation.get_last_result()
 
