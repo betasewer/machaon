@@ -83,7 +83,8 @@ class tkLauncher(Launcher):
         self.hyperlabels = []
         self.chambermenu_active = None
         self.focusbg = (None, None)
-        self.is_stick_bottom = tk.BooleanVar(value=True)
+        self.does_stick_bottom = tk.BooleanVar(value=False)
+        self.does_overflow_wrap = tk.BooleanVar(value=False)
 
     def openfilename_dialog(self, *, 
         filters=None, 
@@ -128,10 +129,6 @@ class tkLauncher(Launcher):
         # コマンド入力欄
         self.commandline = tk.Text(self.frame, relief="solid", height=4)
         self.commandline.focus_set()
-        #self.commandline.bind('<Return>', self.on_commandline_return)
-        #self.commandline.bind('<Shift-Return>', commandline_break)
-        #self.commandline.bind('<Shift-Up>', self.on_commandline_up)
-        #self.commandline.bind('<Shift-Down>', self.on_commandline_down)
         
         # ボタンパネル
         def addbutton(parent, **kwargs):
@@ -162,7 +159,11 @@ class tkLauncher(Launcher):
         
         # ログウィンドウ
         #self.log = tk.scrolledtext.ScrolledText(self.frame, wrap="word", font="TkFixedFont")
-        self.log = tk.Text(self.frame, wrap="word", font="TkFixedFont", relief="solid")
+        if self.does_overflow_wrap.get():
+            wrap_option = "word"
+        else:
+            wrap_option = "none"
+        self.log = tk.Text(self.frame, wrap=wrap_option, font="TkFixedFont", relief="solid")
         #self.log['font'] = ('consolas', '12')
         self.log.configure(state='disabled')
         self.log.tag_configure("hyperlink", underline=1)
@@ -180,22 +181,23 @@ class tkLauncher(Launcher):
         btnpanel = addframe(self.frame)
         #btnunredo = addframe(btnpanel)
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
-        # ----------------------
-        b = addcheckbox(btnpanel, text=u"末尾に追従", variable=self.is_stick_bottom, onvalue=True, offvalue=False)
-        b.pack(side=tk.RIGHT, padx=padx)
-        b = addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4)
-        b.pack(side=tk.RIGHT, padx=padx)
-        b = addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4)
-        b.pack(side=tk.RIGHT, padx=padx)        
-        b = addbutton(btnpanel, text=u"停止", command=lambda:self.app.interrupt_process(), width=4)
-        b.pack(side=tk.RIGHT, padx=padx)
-        # ----------------------
-        b = addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
-        b.pack(side=tk.LEFT, padx=padx)
-        b = addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog)
-        b.pack(side=tk.LEFT, padx=padx)
-        #b = tk.Button(btnpanel, text=u"テーマ", command=app.reset_screen, relief="groove")
-        #b.pack(side=tk.TOP, fill=tk.X, pady=2)
+        # ----------------------        
+        lefties = [
+            addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog),
+            addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
+        ]
+        for b in reversed(lefties):
+            b.pack(side=tk.LEFT, padx=padx)
+
+        righties = [
+            addbutton(btnpanel, text=u"停止", command=lambda:self.app.interrupt_process(), width=4),
+            addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4),
+            addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4),
+            addcheckbox(btnpanel, text=u"末尾に追従", variable=self.does_stick_bottom, onvalue=True, offvalue=False),
+            addcheckbox(btnpanel, text=u"折り返し", variable=self.does_overflow_wrap, onvalue=True, offvalue=False)
+        ]
+        for b in reversed(righties):
+            b.pack(side=tk.RIGHT, padx=padx)
     
         # メインウィジェットの配置
         self.commandline.grid(column=0, row=0, sticky="news", padx=padx, pady=pady)
@@ -262,6 +264,65 @@ class tkLauncher(Launcher):
             self.commandline.focus_set() # コマンド入力モードへ
             return None
             
+        # 全体
+        @bind_event(self.root, self.commandline, self.log)
+        def on_Shift_Up(e):
+            self.on_commandline_up()
+            return "break"
+
+        @bind_event(self.root, self.commandline, self.log)
+        def on_Shift_Down(e):
+            self.on_commandline_down()
+            return "break"
+
+        # ログスクロール
+        # コマンドモード
+        @bind_event(self.commandline)
+        def on_Control_Up(e):
+            self.scroll_page(-1)
+
+        @bind_event(self.commandline)
+        def on_Control_Down(e):
+            self.scroll_page(1)
+            
+        @bind_event(self.commandline)
+        def on_Control_Left(e):
+            self.scroll_horizon(-1)
+
+        @bind_event(self.commandline)
+        def on_Control_Right(e):
+            self.scroll_horizon(1)
+            
+        # ログ閲覧モード
+        @bind_event(self.log)
+        def on_Key_w(e):
+            self.scroll_vertical(-1)
+
+        @bind_event(self.log)
+        def on_Key_s(e):
+            self.scroll_vertical(1)
+            
+        @bind_event(self.log)
+        def on_Key_a(e):
+            self.scroll_horizon(-1)
+
+        @bind_event(self.log)
+        def on_Key_d(e):
+            self.scroll_horizon(1)
+            
+        @bind_event(self.log)
+        def on_Key_q(e):
+            self.scroll_page(-1)
+
+        @bind_event(self.log)
+        def on_Key_e(e):
+            self.scroll_page(1)
+
+        @bind_event(self.root, self.commandline, self.log)
+        def on_Control_c(e):
+            self.app.interrupt_process()
+            return "break"
+
         @bind_event(self.log)
         def log_on_Down(e):
             self.hyper_select_next()
@@ -270,30 +331,6 @@ class tkLauncher(Launcher):
         @bind_event(self.log)
         def log_on_Up(e):
             self.hyper_select_prev()
-            return "break"
-
-        # 全体
-        @bind_event(self.root)
-        def on_Shift_Up(e):
-            self.on_commandline_up()
-            return "break"
-
-        @bind_event(self.root)
-        def on_Shift_Down(e):
-            self.on_commandline_down()
-            return "break"
-
-        @bind_event(self.root)
-        def on_Control_Up(e):
-            self.scroll_page(-1)
-
-        @bind_event(self.root)
-        def on_Control_Down(e):
-            self.scroll_page(1)
-
-        @bind_event(self.root, self.commandline, self.log)
-        def on_Control_C(e):
-            self.app.interrupt_process()
             return "break"
 
         @bind_event(self.commandline, self.log)
@@ -323,7 +360,7 @@ class tkLauncher(Launcher):
 
         self.log.configure(state='disabled')
 
-        if self.is_stick_bottom.get():
+        if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
     
     def delete_screen_message(self, lineno=None, count=None):
@@ -344,7 +381,7 @@ class tkLauncher(Launcher):
         self.log.delete(*indices)
         self.log.configure(state='disabled')
         
-        if self.is_stick_bottom.get():
+        if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
 
     def replace_screen_message(self, msgs):
@@ -355,7 +392,7 @@ class tkLauncher(Launcher):
             self.message_handler(msg)
         self.log.configure(state='disabled')
 
-        if self.is_stick_bottom.get():
+        if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0) # ログ下端へスクロール
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
@@ -389,8 +426,14 @@ class tkLauncher(Launcher):
             print("stopped checking.")
     
     #
-    def scroll_page(self, delta):
-        self.log.yview_scroll(delta, "pages")
+    def scroll_vertical(self, sign):
+        self.log.yview_scroll(sign*2, "units")
+    
+    def scroll_page(self, sign):
+        self.log.yview_scroll(sign*1, "pages")
+    
+    def scroll_horizon(self, sign):
+        self.log.xview_scroll(sign*2, "units")
     
     #
     # key handler
