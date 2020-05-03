@@ -66,7 +66,7 @@ def dark_blue_theme():
 
 def grey_green_theme():
     return dark_classic_theme().extend({
-        "color.background" : "#EFEFEF",
+        "color.background" : "#E8FFE8",
         "color.insertmarker" : "#000000",
         "color.message" : "#000000",
         "color.message_em" : "#008000",
@@ -76,6 +76,7 @@ def grey_green_theme():
         "color.userinput" : "#00B070",
         "color.label" : "#000000",
         "color.highlight" : "#FFD0D0",
+        "color.sectionbackground" : "#EFEFEF",
     })
 
 def papilio_machaon_theme():
@@ -84,6 +85,8 @@ def papilio_machaon_theme():
         "color.message_em" : "#FFA500",
         "color.message" : "#000000",
         "color.highlight" : "#FFA500",
+        "color.sectionbackground" : "#B0FFB0",
+        "color.inactivesectionbackground" : "#EFEFEF",
     })
 
 

@@ -742,7 +742,8 @@ class tkLauncher(Launcher):
         highlight = theme.getval("color.highlight", msg_em)
         secbg = theme.getval("color.sectionbackground", bg)
 
-        self.focusbg = (secbg, bg)
+        insecbg = theme.getval("color.inactivesectionbackground", bg)
+        self.focusbg = (secbg, insecbg)
 
         style.configure("TButton", relief="flat", background=bg, foreground=msg)
         style.map("TButton", 
