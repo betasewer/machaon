@@ -6,6 +6,8 @@ import datetime
 import traceback
 from typing import Tuple, Sequence, List
 
+from machaon.cui import fixsplit
+
 #
 #
 #
@@ -141,11 +143,13 @@ class Launcher():
                     item = data.selection_item()
                     
             if item:
-                itemname = command[1:]
+                itemname, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
                 if not itemname:
                     value = item.get_link()
+                    if restcommand: value = value + " " + restcommand
                 elif hasattr(item, itemname):
                     value = getattr(item, itemname)()
+                    if restcommand: value = value + " " + restcommand
                 else:
                     value = "<選択アイテムに'{}'というプロパティはありません>".format(itemname)
             else:
