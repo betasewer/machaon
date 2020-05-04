@@ -123,11 +123,14 @@ class Launcher():
         if command.isdigit():
             # データのインデックスによる即時選択
             index = int(command)
-            self.select_dataview_item(index)
+            try:
+                self.select_dataview_item(index)
+            except IndexError:
+                self.replace_input_text("<その番号のデータは存在しません>")
             return True
 
         elif command.endswith("."):
-            # 接頭辞の設定
+            # コマンド接頭辞の設定
             prefix = command[1:].strip()
             self.app.set_command_prefix(prefix)
             self.replace_input_text("<コマンド接頭辞を設定しました>")

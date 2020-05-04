@@ -621,7 +621,7 @@ class tkLauncher(Launcher):
                     linkend = points[i+1]
                     break
         else:
-            raise ValueError("invalid dataview index")
+            raise IndexError("invalid dataview index")
         
         self.log_set_selection(linkbeg, linkend)
         self.select_screen_dataview_item(index, charindex=linkbeg)
