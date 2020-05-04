@@ -149,6 +149,8 @@ class PossibleCommandSyntaxItem():
 # 文字列から対応するコマンドを見つけ出す
 #
 class CommandEngine:
+    POSTFIX_SYNTAX_SEPARATOR = ">>"
+
     def __init__(self):
         self.commandsets = []
         self.parseerror = None
@@ -176,9 +178,8 @@ class CommandEngine:
 
     # コマンドを解析して候補を選ぶ
     def expand_parsing_command(self, commandstr: str, spirit: Spirit) -> List[PossibleCommandSyntaxItem]:
-        # コマンドを先頭の空白で区切る
-        commandhead, commandtail = fixsplit(commandstr, maxsplit=1, default="")
-
+        commandhead, commandargs = split_command(commandstr)
+        
         # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
         possible_commands = self.expand_parsing_command_head(commandhead) # コマンドエントリの解釈
         possible_entries: List[PossibleCommandSyntaxItem] = []
@@ -193,20 +194,15 @@ class CommandEngine:
             rows: List[TokenRow] = [] 
 
             argparser: CommandParser = target.get_argparser()
-            tailrows = argparser.generate_command_rows(commandtail)
+            tailrows = argparser.generate_parsing_candidates(commandargs)
             if tailrows:
                 rows.extend(tailrows)
 
             if optioncompound:
                 # コマンド名に抱合されたオプションを前に挿入する
-                optrows = argparser.generate_command_rows(argparser.add_option_prefix(optioncompound))
-                newrows = []
-                for optrow in optrows:
-                    for row in rows:
-                        if not optrow and not row:
-                            continue
-                        newrows.append([*optrow, PARSE_SEP, *row])
-                rows = newrows
+                optkey_part = [argparser.add_option_prefix(optioncompound)]
+                optrows = argparser.generate_parsing_candidates(optkey_part)
+                rows = product_candidates(optrows, (PARSE_SEP,), rows)
 
             for cmdrow in rows:
                 entry = PossibleCommandSyntaxItem(target, spirit, cmdrow)
@@ -279,4 +275,81 @@ class CommandEngine:
             if cmdset.match(commandhead):
                 return True
         return False
+
+#
+#
+#
+def product_candidates(head: Sequence[TokenRow], midvalues: Any, tail: Sequence[TokenRow]) -> List[TokenRow]:
+    newrows: List[TokenRow] = []
+    for headrow in head:
+        for tailrow in tail:
+            if not headrow and not tailrow:
+                continue
+            newrows.append([*headrow, *midvalues, *tailrow])
+    return newrows
+
+#
+#
+#
+def split_command(commandstr: str) -> Tuple[str, List[str]]:
+    # 複数行コマンドか
+    parts: List[str] = []
+    ismultiline = "\n" in commandstr
+    if ismultiline:
+        parts = split_command_by_line(commandstr)
+    else:
+        parts = split_command_by_space(commandstr)
+    
+    # 後置形式を通常の形式に直す
+    fixed_parts = []
+    for i, part in enumerate(parts):
+        seppos = part.find(CommandEngine.POSTFIX_SYNTAX_SEPARATOR)
+        if seppos == 0 or (seppos >= 2 and part[seppos-1].isspace()):
+            fixed_parts.append(parts[i+1]) # メインコマンド
+
+            if seppos > 1:
+                pre_option_key = part[:seppos-1].strip()
+                if pre_option_key:
+                    fixed_parts.append(pre_option_key)
+                    
+            fixed_parts.extend(parts[:i])
+            fixed_parts.extend(parts[i+2:])
+            break
+    else:
+        fixed_parts = parts
+
+    if fixed_parts:
+        return fixed_parts[0], fixed_parts[1:]
+    else:
+        return "", []
+
+#
+def split_command_by_space(q):
+    splitting = True
+    parts = []
+    for ch in q:
+        if splitting and ch.isspace():
+            if len(parts)>0:
+                if parts[-1] == "--":
+                    # -- によるエスケープ
+                    parts[-1] = ""
+                    splitting = False
+                elif len(parts[-1])>0:
+                    parts.append("")
+        else:
+            if len(parts)==0:
+                parts.append("")
+            parts[-1] += ch
+
+    if parts and not parts[-1]: # 空白で終わった場合、空文字列が残る
+        parts.pop(-1)
         
+    return parts
+
+def split_command_by_line(q):
+    parts = []
+    for line in q.splitlines():
+        line = line.strip()
+        if line:
+            parts.append(line)
+    return parts

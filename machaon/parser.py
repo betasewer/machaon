@@ -468,6 +468,7 @@ class CommandParser():
 
         self._optiontrie = CompoundOptions()
         self._optiontrie.add_option("h", None)
+
         self.enable_compound_options = True
 
         self.positional: Optional[OptionContext] = None
@@ -475,7 +476,17 @@ class CommandParser():
         self.argnames: Dict[str, OptionContext] = {} 
 
     #
-    # valuetype int []
+    def _prefix_length(self, command):
+        leng = 0
+        for ch in command:
+            if ch not in self.prefix_chars or leng>=2:
+                break
+            else:
+                leng += 1
+        return leng
+
+    #
+    #
     #
     def add_arg(self,
         *names, 
@@ -617,63 +628,13 @@ class CommandParser():
     
     #
     # 引数解析
-    #
-    def split_query(self, q):
-        if "\n" in q:
-            return self._multiline_query(q)
-        else:
-            return self._singleline_query(q)
-    
-    def _singleline_query(self, q):
-        splitting = True
-        parts = []
-        for ch in q:
-            if splitting and ch.isspace():
-                if len(parts)>0:
-                    if parts[-1] == "--":
-                        # -- によるエスケープ
-                        parts[-1] = ""
-                        splitting = False
-                    elif len(parts[-1])>0:
-                        parts.append("")
-            else:
-                if len(parts)==0:
-                    parts.append("")
-                parts[-1] += ch
-        return parts
-    
-    def _multiline_query(self, q):
-        parts = []
-        for i, line in enumerate(q.splitlines()):
-            if i == 0: # 先頭行はそのまま値とする
-                parts.append(line.strip())
-            else:
-                spl = line.split(maxsplit=1)
-                if not spl:
-                    continue
-                elif len(spl) == 2:
-                    option, value = spl
-                    if self._prefix_length(option) == 0:
-                        option = self.add_option_prefix(option, autolength=True) # オプション記号が一つもなければ着ける
-                    parts.extend([option, value]) # 先頭をオプションとみなし、一度だけ区切る
-                else:
-                    parts.append(spl[0])
-        return parts
-    
-    def _prefix_length(self, command):
-        leng = 0
-        for ch in command:
-            if ch not in self.prefix_chars or leng>=2:
-                break
-            else:
-                leng += 1
-        return leng
-    
-    def generate_command_rows(self, command: str) -> List[TokenRow]:
+    #    
+    def generate_parsing_candidates(self, commands: Sequence[str]) -> List[TokenRow]:
         # コマンド解釈の候補一覧を作成
         command_rows: List[TokenRow] = [[]]
-        commands = self.split_query(command)
+
         if self.enable_compound_options:
+            # 抱合オプションごとに可能な全ての解釈を展開する
             for command in commands:
                 if self._prefix_length(command) == 1:
                     newrows = []
@@ -681,13 +642,15 @@ class CommandParser():
                         for cmdrow in command_rows:
                             newrows.append(cmdrow + newrow)
                     if commands and not newrows:
-                        #raise BadCommand("抱合オプション'{}'を解釈できません".format(command))
+                        # オプションを解釈できなかった：何も表示せずスキップする
                         continue
                     command_rows = newrows
                 else:
                     command_rows = [x+[command] for x in command_rows]
-        else:
-            command_rows = [commands]
+        
+        if not command_rows:
+            command_rows = [[*commands]]
+        
         return command_rows
 
     def parse_args(self, commandrow, spirit=None):

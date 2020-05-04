@@ -8,6 +8,73 @@ import pytest
 def equal_contents(l, r):
     return set(map(frozenset, l)) == set(map(frozenset, r))
 
+#
+# command split
+#
+def test_split_syntax():
+    from machaon.engine import split_command
+    def conv_(s):
+        return split_command(s)
+        
+    assert (conv_("command file.txt --option1 --option2") 
+        == ("command", ["file.txt", "--option1", "--option2"]))
+
+    assert (conv_("command   file.txt    --option1    ") 
+        == ("command", ["file.txt", "--option1"]))
+
+    assert (conv_("""
+    command
+    file1.txt
+    file2.txt
+    --option1
+    arg1
+    """) 
+        == ("command", ["file1.txt", "file2.txt", "--option1", "arg1"]))
+
+
+# >> を使った後置記法
+def test_split_postfix_syntax():
+    from machaon.engine import split_command
+    def conv_(s):
+        return split_command(s)
+    
+    assert (conv_("file.txt >> command --option1 --option2") 
+        == ("command", ["file.txt", "--option1", "--option2"]))
+        
+    # strip
+    assert (conv_("  file.txt  >>   command") 
+        == ("command", ["file.txt"]))
+        
+    assert (conv_("""
+    file1.txt
+    >>
+    commander
+    """) 
+        == ("commander", ["file1.txt"]))
+
+    assert (conv_("""
+    file1.txt
+    file2.txt
+    file3.txt 
+    >>
+    command
+    --option1
+    arg1
+    """) 
+        == ("command", ["file1.txt", "file2.txt", "file3.txt", "--option1", "arg1"]))
+
+    assert (conv_("""
+    file1.txt
+    file2.txt
+    file3.txt 
+    --files >>
+    command
+    target
+    --option1
+    """) 
+        == ("command", ["--files", "file1.txt", "file2.txt", "file3.txt", "target", "--option1"]))
+
+
 @pytest.fixture
 def a_cmdset():
     dummy_target = describe_command(lambda a,b,c: print("a={}, b={}, c={}".format(a,b,c)),
@@ -69,6 +136,39 @@ def test_entryset(a_cmdset):
     assert cmdset.match("test.commander")[0] == (entries["command"], "er")
     assert cmdset.match("test.commander")[1] == (entries["commander"], "")
 
+#
+# クエリ区切りテスト
+#
+def test_split_query():
+    from machaon.engine import split_command_by_line, split_command_by_space
+    # 基本
+    assert split_command_by_space("aa bb cc dd") == ["aa", "bb", "cc", "dd"]
+    assert split_command_by_space("file1 --query where level == 1") == ["file1", "--query", "where", "level", "==", "1"]
+    # エスケープの--
+    assert split_command_by_space("file1 --query -- where level == 1") == ["file1", "--query", "where level == 1"]
+    assert split_command_by_space("file1 --query --") == ["file1", "--query", "--"]
+    assert split_command_by_space("file1 --query -- --") == ["file1", "--query", "--"]
+    # 改行区切り
+    assert split_command_by_line("""
+        file1
+        --query
+        where level == 1
+        """) == ["file1", "--query", "where level == 1"]
+    assert split_command_by_line("""
+        C:\\Program Files\\CompanyName\\Software\\Trojan.exe
+        --query 
+        where not-bad
+        --output
+        C:\\apps\\security\\log.txt
+        """) == [
+            "C:\\Program Files\\CompanyName\\Software\\Trojan.exe",
+            "--query",
+            "where not-bad", 
+            "--output", 
+            "C:\\apps\\security\\log.txt"
+        ]
+
+#
 def test_engine_parsing(a_cmdset):
     cmdset, entries = a_cmdset
     eng = CommandEngine()
@@ -86,9 +186,12 @@ def test_engine_parsing(a_cmdset):
     ]
 
     cmdrows = eng.expand_parsing_command("""
-        tscommander targetname
-        beta lao gamma
-        cappa iwate-no-cappa
+        tscommander 
+        targetname
+        --beta
+        lao gamma
+        --cappa
+        iwate-no-cappa
     """, spirit)
     argparser2 = entries["command"].target.argparser
     alpha = argparser2.find_context("alpha")
@@ -107,17 +210,16 @@ def test_engine_parsing(a_cmdset):
         "b" : "lao gamma",
         "c" : "iwate-no-cappa",
     }
-
-@pytest.mark.xfail()
-def test_bad_compound_engine_parsing(a_cmdset):
-    cmdset, entries = a_cmdset
-    eng = CommandEngine()
-    eng.install_commands(cmdset)
-
-    spirit = TempSpirit()
-    assert eng.expand_parsing_command("tscommandxyz", spirit)
-    # -xyzは解釈不能なので例外を投げる
-
+    
+def candidate_tests(syntax_items, literals):
+    if len(syntax_items) != len(literals):
+        print("!not equal length:", len(syntax_items), "!=", len(literals))
+        return False
+    for item, lit in zip(syntax_items, literals):
+        if item.command_string() != lit:
+            print("!not equal:", item.command_string(), "!=", lit)
+            return False
+    return True
 
 def test_candidates_engine_parsing(a_cmdset):
     cmdset, entries = a_cmdset
@@ -126,44 +228,63 @@ def test_candidates_engine_parsing(a_cmdset):
 
     spirit = TempSpirit()
 
-    def tests(syntax_items, literals):
-        if len(syntax_items) != len(literals):
-            print("!not equal length:", len(syntax_items), "!=", len(literals))
-            return False
-        for item, lit in zip(syntax_items, literals):
-            if item.command_string() != lit:
-                print("!not equal:", item.command_string(), "!=", lit)
-                return False
-        return True
-
     # 2つ
-    assert tests(
+    assert candidate_tests(
         eng.expand_parsing_command("tscommander", spirit),
         [ "commander", "command --epsilon --rho" ]
     )
 
     # 3つ
-    assert tests(
+    assert candidate_tests(
         eng.expand_parsing_command("tscommandce", spirit),
         [ "commandce", "commandc --epsilon", "command --cappa e" ]
     )
 
     # 1つ: command -s は存在しないので飛ばされる
-    assert tests(
+    assert candidate_tests(
         eng.expand_parsing_command("tscommands", spirit),
         [ "commands" ]
     )
     
     # 候補なし
-    assert tests(
+    assert candidate_tests(
         eng.expand_parsing_command("tscommandz", spirit),
         []
     )
-    assert tests(
+    assert candidate_tests(
         eng.expand_parsing_command("", spirit),
         []
     )
 
-#pytest.main(["-k test_candidates_engine_parsing"])
+#
+def test_postfix_syntax_engine_parsing(a_cmdset):
+    cmdset, entries = a_cmdset
+    eng = CommandEngine()
+    eng.install_commands(cmdset)
+
+    spirit = TempSpirit()
+
+    assert candidate_tests(
+        eng.expand_parsing_command("files.txt >> tscommand", spirit),
+        ["command files.txt"]
+    )
+    assert candidate_tests(
+        eng.expand_parsing_command("files.txt >> tscommandr -b 10", spirit),
+        ["command --rho | files.txt --beta 10"]
+    )
+    assert candidate_tests(
+        eng.expand_parsing_command("""files.txt
+            >>
+            tscommander
+            --cappa
+            20
+        """, spirit),
+        [
+            "commander files.txt --cappa 20", 
+            "command --epsilon --rho | files.txt --cappa 20"
+        ]
+    )
+
+pytest.main(["-k test_split_postfix_syntax"])
 
 

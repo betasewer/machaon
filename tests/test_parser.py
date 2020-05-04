@@ -77,36 +77,6 @@ def inv(fn):
     fn()
 
 #
-# クエリ区切りテスト
-#
-def test_split_query():
-    p = build_parser(
-        option("target"),
-        option("--query"),
-        option("--output", "-o"),
-    )
-    # 基本
-    assert p.split_query("aa bb cc dd") == ["aa", "bb", "cc", "dd"]
-    assert p.split_query("file1 --query where level == 1") == ["file1", "--query", "where", "level", "==", "1"]
-    # エスケープの--
-    assert p.split_query("file1 --query -- where level == 1") == ["file1", "--query", "where level == 1"]
-    assert p.split_query("file1 --query --") == ["file1", "--query", "--"]
-    assert p.split_query("file1 --query -- --") == ["file1", "--query", "--"]
-    # 改行区切り
-    assert p.split_query("""file1
-        query where level == 1""") == ["file1", "--query", "where level == 1"]
-    assert p.split_query("""C:\\Program Files\\CompanyName\\Software\\Trojan.exe
-        query where not-bad
-        o C:\\apps\\security\\log.txt
-        """) == [
-            "C:\\Program Files\\CompanyName\\Software\\Trojan.exe",
-            "--query",
-            "where not-bad", 
-            "-o", 
-            "C:\\apps\\security\\log.txt"
-        ]
-
-#
 # パーステスト : do_parse_args
 #
 def test_simple_posit():
@@ -267,9 +237,9 @@ def test_no_posit():
     }
 
 #
-# generate_command_rows
+# generate_parsing_candidates
 #
-def test_compound_rows():  
+def test_parsing_candidates():  
     p = build_parser(
         option("name"),
         option("--horizontal", "-h", flag=True),
@@ -282,17 +252,20 @@ def test_compound_rows():
     )
     def parse_and_recompose(cmd):
         rows = []
-        for cmdrow in p.generate_command_rows(cmd):
+        for cmdrow in p.generate_parsing_candidates(cmd):
             rows.append(["-"+x.shortnames[0] if not isinstance(x,str) else x for x in cmdrow])
         return rows
 
-    assert parse_and_recompose("john -afo") == [["john", "-a", "-f", "-o"]]
-    assert parse_and_recompose("-hov john -af") == [["-h", "-o", "-v", "john", "-a", "-f"]]
-    assert equal_contents(parse_and_recompose("john -hv"), [["john", "-h", "-v"], ["john", "-hv"]])
-    # 引数を取るオプションの混合
-    assert parse_and_recompose("john -afzp 99") == [["john", "-a", "-f", "-zp", "99"]]
-    assert parse_and_recompose("john -zpaf") == [["john", "-zp", "af"]]
-    assert parse_and_recompose("john -ozp1") == [["john", "-o", "-zp", "1"]]
+    # 抱合オプション
+    assert parse_and_recompose(["john", "-afo"]) == [["john", "-a", "-f", "-o"]]
+    assert parse_and_recompose(["-hov", "john", "-af"]) == [["-h", "-o", "-v", "john", "-a", "-f"]]
+    assert equal_contents(parse_and_recompose(["john", "-hv"]), [["john", "-h", "-v"], ["john", "-hv"]])
+
+    # 抱合オプション：引数を取るオプションの混合
+    assert parse_and_recompose(["john", "-afzp", "99"]) == [["john", "-a", "-f", "-zp", "99"]]
+    assert parse_and_recompose(["john", "-zpaf"]) == [["john", "-zp", "af"]]
+    assert parse_and_recompose(["john", "-ozp1"]) == [["john", "-o", "-zp", "1"]]
+
 
 #
 # 引数型
