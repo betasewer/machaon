@@ -161,6 +161,30 @@ def test_defaults():
         'zoo' : False,
         'depth' : 99
     }
+    
+def test_dest():
+    # 複数のオプションで同じdestに書き込む場合
+    p = build_parser(
+        option("name", arg="?"),
+        option("--preset-name", "-np", dest="name", const="Mike"),
+        option("--omakase-name", "-nh", dest="name", const="Kiji"),
+    )
+    
+    # const で指定可能
+    assert p.do_parse_args(["--preset-name"]) == {
+        'name' : "Mike"
+    }
+    
+    # 被った場合、コマンドの順序通りに書き込まれる
+    assert p.do_parse_args(["--preset-name", "Yoshio"]) == {
+        'name' : "Yoshio"
+    }
+    assert p.do_parse_args(["Yoshio", "--preset-name"]) == {
+        'name' : "Mike"
+    }
+    assert p.do_parse_args(["--preset-name", "--omakase-name"]) == {
+        'name' : "Kiji"
+    }
 
 #
 # 位置引数の扱い
@@ -363,3 +387,4 @@ def test_parser_result():
         { 'ids' : 1002 },
         { 'ids' : 1003 },
     ]
+

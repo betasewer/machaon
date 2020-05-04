@@ -704,42 +704,38 @@ class CommandParser():
                 # 終端まで来た
                 newcxt = "<end>"
                 
-            # 新たなオプションが開始した：前の引数を解決する
+            # 新たなオプションが開始した：前のコンテキストと引数を解決する
             if newcxt:
-                if curcxt is None:
-                    # 位置引数を解決する
+                if curcxt is None and argstack:
+                    # コマンドの先頭に置かれた引数
                     if self.positional is not None:
+                        # 位置引数とみなす
                         curcxt = self.positional
                     else:
-                        if argstack: # 位置引数が存在せず、かつ解決不能な引数が置かれている
-                            raise BadCommand("予期しない引数'{}'を解釈できません".format(arg))
-                        curcxt = newcxt
-                        continue
-                        
-                # 現在のコンテキストを終了し、新しいコンテキストを開始する
-                contexts.append((curcxt, argstack))
-                argstack = []
+                        # 位置引数が存在しないので、解決不能
+                        raise BadCommand("予期しない引数'{}'を解釈できません".format(arg))
+                
+                if curcxt is not None:
+                    # 現在のコンテキストを終了し、新しいコンテキストを開始する
+                    contexts.append((curcxt, argstack))
+                    argstack = []
+
                 curcxt = newcxt
 
         # 引数をチェックする
-        postposit = self.positional is not None
+        postposit = True
         missing_posit_arg = None
         for i, (cxt, stack) in enumerate(contexts):   
-            if self.positional is not None:     
-                # 一つ目は位置引数
-                if i == 0 and cxt is not self.positional:
-                    raise BadCommand("positional argument must come at first or last")
-
-                if cxt is self.positional:
-                    if cxt.is_unary() and not stack:
-                        # 中間に置かれていると考える
-                        continue
-                    postposit = False
+            if cxt is self.positional and self.positional is not None:
+                if cxt.is_unary() and not stack:
+                    # 中間に置かれていると考える
+                    continue
+                postposit = False
 
             if cxt.is_nullary() and stack:
                 # 引数が多すぎる
                 if i == len(contexts)-1 and postposit:
-                    missing_posit_arg = stack.copy() # 後置された位置引数と考える
+                    missing_posit_arg = stack.copy() # 後置された位置引数とみなし、移し返る
                     stack.clear()
                 else:
                     raise BadCommand("予期しない引数'{}'を解釈できません".format(arg))
@@ -748,13 +744,13 @@ class CommandParser():
                 # 引数が少なすぎる
                 raise BadCommand("オプション<{}>に必要な引数がありません".format(cxt.make_key(self.prefix_chars[0])))
 
-        if postposit:
+        if postposit and self.positional is not None:
             # 後置の位置引数
             contexts = [(x,a) for x,a in contexts if x is not self.positional]
             if missing_posit_arg:
                 contexts.append((self.positional, missing_posit_arg))
-            elif not any(x is self.positional for x,_ in contexts):
-                # 位置引数が無い
+            elif not any(x is self.positional for x,_ in contexts) and self.positional.is_unary():
+                # 必要な位置引数が無い
                 raise BadCommand("位置引数<{}>に相当する引数がありません".format(self.positional.get_name()))
 
         # 引数の文字列を値へと変換する
