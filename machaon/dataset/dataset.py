@@ -123,6 +123,9 @@ class DataView():
     
     def count(self):
         return len(self.rows)
+    
+    def nothing(self):
+        return not self.datas
 
     # 選択
     def select(self, index=None, *, advance=None):
@@ -175,6 +178,10 @@ class DataView():
     # べつのビューを作る
     #
     def create_view(self, viewtype, columns=None, filter=None, sortkey=None, *, trunc=True):
+        # 空のデータからは空のビューしか作られない
+        if not self.datas:
+            return DataView(self.ref, [])
+
         # 列を決定する
         if not columns:
             columns = self.ref.get_default_columns(viewtype)
@@ -295,7 +302,7 @@ class _DataViewFactory():
 
     def __call__(self, items, *command_args, **command_kwargs):
         if not items:
-            raise ValueError("Empty dataview cannot be generated")        
+            return DataView(None, []) # 空のビュー   
         firstitem = items[0]
         ref = self.get_reference(type(firstitem))
         dataview = DataView(ref, datas=items)

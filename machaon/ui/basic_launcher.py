@@ -41,7 +41,11 @@ class Launcher():
                 datas = self.app.get_active_chamber().get_bound_data(running=True)
                 if datas is None:
                     msg.tag = "message"
-                    msg.text = "<no dataset found>"
+                    msg.text = "データが作成されていません" + "\n"
+                    self.insert_screen_message(msg)
+                elif datas.nothing():
+                    msg.tag = "message"
+                    msg.text = "結果は0件です" + "\n"
                     self.insert_screen_message(msg)
                 else:
                     viewer = self.dataviewer(datas.get_viewtype())
