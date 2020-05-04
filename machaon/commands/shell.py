@@ -64,8 +64,8 @@ def currentdir(spi, path=None, silent=False):
     if path is not None:
         path = spi.abspath(path)
         if spi.change_current_dir(path):
-            spi.message("現在の作業ディレクトリ：" + spi.get_current_dir())
             if not silent:
+                spi.message("作業ディレクトリを変更しました")
                 filelist(spi)
         else:
             spi.error("'{}'は有効なパスではありません".format(path))
@@ -133,7 +133,7 @@ class FilePath():
 
 
 #
-def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1, view=None):
+def filelist(app, pattern=None, long=False, howsort=None, recurse=1, silent=False):
     # パスを集める
     paths = []
     def walk(dirpath, level):
@@ -147,80 +147,12 @@ def filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, re
     cd = app.get_current_dir()
     walk(cd, 1)
 
-    if not view:
-        view = ":table" if long else ":wide"
+    if not silent:
+        app.message(cd+"\n")
+
+    view = ":table" if long else ":wide"
     app.create_data(paths, view)
     app.dataview()
-
-#
-#
-#
-def _filelist(app, pattern=None, long=False, howsort=None, presetpattern=None, recurse=1):
-    if howsort == "t":
-        def sorter(path):
-            d = 1 if os.path.isdir(path) else 2
-            t = os.path.getmtime(path)
-            return (d, -t)
-    else:
-        def sorter(path):
-            return 1 if os.path.isdir(path) else 2
-
-    if presetpattern is not None: 
-        pattern = presetpattern
-    
-    paths = []
-    def walk(dirpath, level):
-        items = sorted([(x,os.path.join(dirpath,x)) for x in os.listdir(dirpath)], key=lambda x: sorter(x[1]))
-        for fname, fpath in items:
-            if pattern is None or re.search(pattern, fname):
-                paths.append(fpath)
-            if recurse>level and os.path.isdir(fpath):
-                walk(fpath, level+1)
-
-    cd = app.get_current_dir()
-    walk(cd, 1)
-
-    app.message_em("ディレクトリ：%1%\n", embed=[
-        app.hyperlink.msg(cd)
-    ])
-    if long:
-        app.message("種類  変更日時                    サイズ ファイル名")
-        app.message("-------------------------------------------------------")
-
-    for fpath in paths:
-        app.interruption_point()
-
-        ftext = os.path.normpath(os.path.relpath(fpath, cd))
-        isdir = os.path.isdir(fpath)
-        if isdir and not ftext.endswith(os.path.sep):
-            ftext += os.path.sep
-
-        if long:
-            if isdir:
-                fext = "ﾌｫﾙﾀﾞ"
-            else:
-                _, fext = os.path.splitext(fpath)
-                if fext!="":
-                    fext = fext[1:].upper()
-
-            mtime = time.localtime(os.path.getmtime(fpath))
-            wkday = {6:"日",0:"月",1:"火",2:"水",3:"木",4:"金",5:"土"}.get(mtime[6],"？")
-            ftime = "{:02}/{:02}/{:02}（{}）{:02}:{:02}.{:02}".format(
-                mtime[0] % 100, mtime[1], mtime[2], wkday, 
-                mtime[3], mtime[4], mtime[5])
-
-            if isdir:
-                fsize = "---"
-            else:
-                fsize = os.path.getsize(fpath)
-
-            app.message("{:<5} {}  {:>8} %1%".format(fext, ftime, fsize), embed=[
-                app.hyperlink.msg(ftext, link=fpath)
-            ])
-        else:
-            app.hyperlink(ftext, link=fpath)
-            
-    app.message("")
 
 #
 #

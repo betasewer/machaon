@@ -174,15 +174,15 @@ def shell_commands():
         )["target -o --opc"](
             help="OPCパッケージのみ表示する",
             const=r"\.(docx|doc|xlsx|xls|pptx|ppt)$",
-            dest="presetpattern"
+            dest="pattern"
         )["target -r --recurse"](
             help="配下のフォルダの中身も表示する[深度を指定：デフォルトは3]",
             valuetype=int,
             const=3,
             default=1,
-        )["target --view"](
-            help="データの表示方法",
-            remainder=True
+        )["target -s --silent"](
+            help="データのみを表示する",
+            flag=True
         )
     )["text xt"](
         describe_command(
