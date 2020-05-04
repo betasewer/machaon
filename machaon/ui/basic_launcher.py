@@ -99,18 +99,9 @@ class Launcher():
 
         # 特殊コマンド
         if command[0] == ":":
-            body = command[1:]
-            if body.isdigit():
-                # データのインデックスによる即時選択
-                index = int(body)
-                self.select_dataview_item(index)
+            if self.invoke_mini_command(command[1:]):
                 return
-            elif body.endswith("."):
-                prefix = command[2:].strip()
-                self.app.set_command_prefix(prefix)
-                #self.spirit.message_em("コマンド接頭辞'{}'を設定".format(prefix)) 
-                return
-            
+    
         chamber = self.app.run_process(command) # 実行
 
         self.update_active_chamber(chamber, updatemenu=False)
@@ -120,6 +111,47 @@ class Launcher():
         states = self.app.get_chambers_state()
         states["running"].append(chamber.get_index())
         self.watch_running_process(states)
+    
+    #
+    def invoke_mini_command(self, command):
+        if command.isdigit():
+            # データのインデックスによる即時選択
+            index = int(command)
+            self.select_dataview_item(index)
+            return True
+
+        elif command.endswith("."):
+            # 接頭辞の設定
+            prefix = command[1:].strip()
+            self.app.set_command_prefix(prefix)
+            self.replace_input_text("<コマンド接頭辞を設定しました>")
+            return True
+
+        elif command.startswith(">"):
+            # データビューの選択アイテムから文字列を展開する
+            item = None
+            chm = self.app.select_chamber()
+            if chm:
+                data = chm.get_bound_data()
+                if data:
+                    item = data.selection_item()
+                    
+            if item:
+                itemname = command[1:]
+                if not itemname:
+                    value = item.get_link()
+                elif hasattr(item, itemname):
+                    value = getattr(item, itemname)()
+                else:
+                    value = "<選択アイテムに'{}'というプロパティはありません>".format(itemname)
+            else:
+                value = "<何も選択されていません>"
+
+            # 入力欄を置き換える
+            self.replace_input_text(value)
+            return True
+        
+        return False
 
     # 入力を取得
     def get_input(self, spirit, instr):

@@ -216,6 +216,18 @@ class AppRoot:
             "running" : [x.get_index() for x in runs]
         }
         return report
+        
+    def select_chamber(self, index=None):
+        chm = None
+        if not index:
+            chm = self.get_active_chamber()
+        elif isinstance(index, str):
+            try:
+                process_index = int(index, 10)-1
+                chm = self.get_chamber(process_index)
+            except ValueError:
+                raise ValueError(str(process_index))
+        return chm
     
     # メインスレッド側から操作中断
     def interrupt_process(self):

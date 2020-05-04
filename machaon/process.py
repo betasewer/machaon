@@ -671,16 +671,7 @@ class Spirit():
 
     #
     def select_process_chamber(self, index=None):
-        chm = None
-        if not index:
-            chm = self.app.get_previous_active_chamber()
-        elif isinstance(index, str):
-            try:
-                process_index = int(index, 10)-1
-                chm = self.app.get_chamber(process_index)
-            except ValueError:
-                raise ValueError(str(process_index))
-        return chm
+        return self.app.select_chamber(index)
 
 #
 #
