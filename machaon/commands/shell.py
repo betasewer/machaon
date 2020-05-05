@@ -76,32 +76,32 @@ def currentdir(spi, path=None, silent=False):
 #
 class FilePath():
     def __init__(self, path):
-        self.path = path
+        self._path = path
         self._isdir = None
     
-    def get_link(self):
-        return self.path
+    def path(self):
+        return self._path
 
     @property
     def isdir(self):
         if self._isdir is None:
-            self._isdir = os.path.isdir(self.path)
+            self._isdir = os.path.isdir(self._path)
         return self._isdir
 
     def name(self):
-        return os.path.basename(self.path)
+        return os.path.basename(self._path)
     
     def ftype(self):
         if self.isdir:
             return "DIR"
         else:
-            _, fext = os.path.splitext(self.path)
+            _, fext = os.path.splitext(self._path)
             if fext!="":
                 fext = fext[1:].upper()
             return fext
     
     def modtime(self):
-        mtime = time.localtime(os.path.getmtime(self.path))
+        mtime = time.localtime(os.path.getmtime(self._path))
         wkday = {6:"日",0:"月",1:"火",2:"水",3:"木",4:"金",5:"土"}.get(mtime[6],"？")
         ftime = "{:02}/{:02}/{:02}（{}）{:02}:{:02}.{:02}".format(
             mtime[0] % 100, mtime[1], mtime[2], wkday, 
@@ -112,15 +112,18 @@ class FilePath():
         if self.isdir:
             return None
         else:
-            return os.path.getsize(self.path)
+            return os.path.getsize(self._path)
     
     @classmethod
     def describe(cls, ref):
         ref.default_columns(
             table = ("ftype", "modtime", "size", "name"),
             wide = ("name",),
+            link = "path"
         )["name n"](
             disp="ファイル名"
+        )["path p"](
+            disp="パス"
         )["ftype t"](
             disp="タイプ"
         )["modtime"](

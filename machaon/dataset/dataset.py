@@ -50,6 +50,13 @@ class DataReference():
         name, pred = self._predicates[self.firstpred]
         return name, pred
     
+    def get_link_pred(self):
+        if self.defcolumns["link"] in self._predicates:
+            _, pred = self._predicates[self.defcolumns["link"]]
+        else:
+            _, pred = self.get_first_pred()
+        return pred
+
     def get_all_preds(self) -> List[Tuple[Predicate, List[str]]]:
         predset: DefaultDict[Predicate, List[str]] = defaultdict(list)
         for key, (_topkey, pred) in self._predicates.items():
@@ -91,10 +98,11 @@ class DataReference():
             disp="", 
             type=None,
             value=None,
+            printer=False,
         ):
             if value is None:
                 value = getattr(self.itemclass, first_name, None)
-            p = Predicate(predtype=type, description=disp, value=value)
+            p = Predicate(predtype=type, description=disp, value=value, printer=printer)
             self.add_pred((first_name, *names), p)
             return self
         return _parameters
@@ -102,10 +110,12 @@ class DataReference():
     def default_columns(self, 
         table = None,
         wide = None,
+        link = None,
     ):
         self.defcolumns = {
             "table" : table,
             "wide" : wide,
+            "link" : link
         }
         return self
 

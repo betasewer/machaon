@@ -75,15 +75,20 @@ del _import_builtin_operators
 #
 #
 class Predicate():
+    class NOT_OPERATABLE():
+        pass
+
     def __init__(self, 
         predtype, 
         description,
-        value=None
+        value=None,
+        printer=False
     ):
         self.description = description
         self.predtype = predtype
         self.value = value
-    
+        self.printer = printer
+
     def get_description(self):
         return self.description
     
@@ -109,11 +114,18 @@ class Predicate():
         return vt
 
     def make_operator_lhs(self, item):
-        if self.value:
+        if self.printer:
+            return Predicate.NOT_OPERATABLE
+        elif self.value:
             return self.value(item)
         else:
             return item
     
+    def do_print(self, item, spirit):
+        if self.printer:
+            self.value(item, spirit)
+        else:
+            spirit.message(self.value(item))
 
 # (A and B) or (C and D)
 # A B and C D and or

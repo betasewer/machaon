@@ -7,6 +7,7 @@ import traceback
 from typing import Tuple, Sequence, List
 
 from machaon.cui import fixsplit
+from machaon.process import ProcessMessage
 
 #
 #
@@ -109,8 +110,8 @@ class Launcher():
 
         # 特殊コマンド
         if command[0] == ":":
-            if self.invoke_mini_command(command[1:]):
-                return
+            self.invoke_meta_command(command[1:])
+            return
     
         chamber = self.app.run_process(command) # 実行
 
@@ -123,94 +124,42 @@ class Launcher():
         self.watch_running_process(states)
     
     #
-    def invoke_mini_command(self, command):
+    def invoke_meta_command(self, command):
         if command.isdigit():
             # データのインデックスによる即時選択
             index = int(command)
-            try:
-                self.select_dataview_item(index)
-            except IndexError:
-                self.replace_input_text("<その番号のデータは存在しません>")
-            return True
+            msg = self.meta_command_select_dataview(index)
 
         elif command.endswith("."):
             # コマンド接頭辞の設定
             prefix = command[1:].strip()
-            self.app.set_command_prefix(prefix)
-            self.replace_input_text("<コマンド接頭辞を設定しました>")
-            return True
+            msg = self.meta_command_set_prefix(prefix)
 
         elif command.startswith(">"):
-            # データビューの選択アイテムから文字列を展開する
-            item = None
-            chm = self.app.select_chamber()
-            if chm:
-                data = chm.get_bound_data()
-                if data:
-                    item = data.selection_item()
-                    
-            if item:
-                itemname, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
-                if not itemname:
-                    value = item.get_link()
-                    if restcommand: value = value + " " + restcommand
-                elif hasattr(item, itemname):
-                    value = getattr(item, itemname)()
-                    if restcommand: value = value + " " + restcommand
-                else:
-                    value = "<選択アイテムに'{}'というプロパティはありません>".format(itemname)
-            else:
-                value = "<何も選択されていません>"
-
-            # 入力欄を置き換える
-            self.replace_input_text(value)
-            return True
+            # データビューの選択アイテムの値をコマンド欄に展開する
+            itemname, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
+            msg = self.meta_command_show_dataview_item(itemname, restcommand, toinput=True)
+        
+        elif command.startswith("="):
+            # データビューの選択アイテムの値を画面に展開する
+            itemname = command[1:].strip()
+            msg = self.meta_command_show_dataview_item(itemname, "", toinput=False)
         
         elif command.startswith("pred"):
             # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
             keyword = command[len("pred"):].strip()
-            
-            item = None
-            chm = self.app.select_chamber()
-            if chm:
-                data = chm.get_bound_data()
-                
-            if data:
-                lines = []
-                for pred, keys in data.get_all_predicates():
-                    if keyword and not any(x.startswith(keyword) for x in keys):
-                        continue
-                    lines.append((", ".join(keys), pred.get_description()))
-
-                if lines:                    
-                    self.insert_screen_appendix(lines, title="述語一覧")
-                    value = "<一覧を下に表示しました>"
-                else:
-                    value = "<該当する述語がありません>"
-            else:
-                value = "<対象となるデータがありません>"
-                
-            self.replace_input_text(value)
-            return True
+            msg = self.meta_command_show_predicates(keyword)
             
         elif command.startswith("?"):
             # 引数またはアクティブなコマンドのヘルプを末尾に表示する
             cmd = command[len("?"):].strip()
-            if cmd:
-                result = self.app.search_command(cmd)
-                if not result:
-                    self.replace_input_text("<該当するコマンドがありません>")
-                target = result[0].load_target()
-            else:
-                chm = self.app.select_chamber()
-                target = chm.get_process().get_target()
-
-            if target:
-                hlp = target.get_help()
-                self.insert_screen_appendix("\n".join(hlp), title="コマンド <{}> のヘルプ".format(target.get_prog()))
-            return True
+            msg = self.meta_command_show_help(cmd)
         
-        return False
+        else:
+            msg = "不明なメタコマンドです"
+        
+        if msg:
+            self.insert_screen_appendix(msg, "")
 
     # 入力を取得
     def get_input(self, spirit, instr):
@@ -403,3 +352,80 @@ class Launcher():
     def set_theme(self, theme):
         self.theme = theme
     
+
+    #
+    #
+    #
+    def meta_command_select_dataview(self, index):
+        try:
+            self.select_dataview_item(index)
+        except IndexError:
+            return "その番号のデータは存在しません"
+    
+    def meta_command_set_prefix(self, prefix):
+        self.app.set_command_prefix(prefix)
+        return "コマンド接頭辞を設定しました"
+
+    def meta_command_show_dataview_item(self, predicate, restcommand, toinput):
+        item = None
+        chm = self.app.select_chamber()
+        if chm:
+            data = chm.get_bound_data()
+            if data:
+                item = data.selection_item()
+                
+        if item:
+            if not predicate:
+                pred = data.ref.get_link_pred()
+            else:
+                pred = data.ref.find_pred(predicate)
+            
+            if pred:
+                if toinput:
+                    value = str(pred.make_operator_lhs(item))
+                    if restcommand:
+                        value = value + " " + restcommand
+                    self.replace_input_text(value)
+                else:
+                    spirit = chm.get_bound_spirit()
+                    spirit.message("<{}>".format(pred.get_description()))
+                    pred.do_print(item, spirit)
+                    self.handle_chamber_message(chm)
+                    self.insert_screen_appendix((), "")
+            else:
+                return "選択アイテムに'{}'という述語はありません".format(predicate)
+        else:
+            return "何も選択されていません"
+    
+    def meta_command_show_predicates(self, keyword):  
+        chm = self.app.select_chamber()
+        if chm:
+            data = chm.get_bound_data()
+            
+        if data:
+            lines = []
+            for pred, keys in data.get_all_predicates():
+                if keyword and not any(x.startswith(keyword) for x in keys):
+                    continue
+                lines.append((", ".join(keys), pred.get_description()))
+
+            if lines:                    
+                self.insert_screen_appendix(lines, title="述語一覧")
+            else:
+                return "該当する述語がありません"
+        else:
+            return "対象となるデータがありません"
+    
+    def meta_command_show_help(self, cmd):
+        if cmd:
+            result = self.app.search_command(cmd)
+            if not result:
+                return "該当するコマンドがありません"
+            target = result[0].load_target()
+        else:
+            chm = self.app.select_chamber()
+            target = chm.get_process().get_target()
+
+        if target:
+            hlp = target.get_help()
+            self.insert_screen_appendix("\n".join(hlp), title="コマンド <{}> のヘルプ".format(target.get_prog()))

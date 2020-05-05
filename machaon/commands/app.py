@@ -33,7 +33,7 @@ class HelpItem():
         self.cmdset = cmdset
         self.cmdentry = command_entry
         
-    def get_link(self):
+    def first_qual_keyword(self):
         return self.qual_keyword_list()[0]
     
     def keyword_list(self):
@@ -71,10 +71,13 @@ class HelpItem():
     def describe(cls, builder):
         builder.default_columns(
             table=("qual_keyword", "description", "setname"),
+            link="first_qual_keyword"
         )["keyword kwd"](
             disp="キーワード"
         )["qual_keyword qkwd"](
             disp="コマンド"
+        )["first_qual_keyword"](
+            disp="最初のコマンド"
         )["description desc"](
             disp="説明"
         )["setname"](
@@ -103,9 +106,6 @@ class ProcessListItem():
     def __init__(self, chamber):
         self.chamber = chamber
 
-    def get_link(self):
-        return self.chamber.get_index()
-    
     def id(self):
         return self.chamber.get_index()
 

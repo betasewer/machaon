@@ -631,17 +631,19 @@ class tkLauncher(Launcher):
     #
     #
     def insert_screen_appendix(self, valuelines, title):
-        self.insert_screen_message(ProcessMessage("\n>>> 【{}】".format(title)))
+        if title:
+            self.insert_screen_message(ProcessMessage("【{}】".format(title)))
 
         if isinstance(valuelines, str):
             self.insert_screen_message(ProcessMessage(valuelines))
         else:
-            maxspacing = max([len(x[0]) for x in valuelines])
+            maxspacing = max(*[len(x[0]) for x in valuelines], 0, 0)
             for value, desc in valuelines:
                 spacing = " " * (maxspacing - len(value) + 2)
                 for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message_em").expand():
                     self.insert_screen_message(msg)
 
+        self.insert_screen_message(ProcessMessage(""))
         self.log.yview_moveto(1.0)
 
     #
