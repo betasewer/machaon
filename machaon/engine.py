@@ -217,7 +217,7 @@ class CommandEngine:
         if not possible_entries:
             return None
         elif len(possible_entries) > 1:
-            if len(possible_entries[0].command_row()) == 0:
+            if len(possible_entries[0].command_row) == 0:
                 # 先頭コマンド全体でマッチしているならそれを優先
                 return possible_entries[0]
             # 一つ選択

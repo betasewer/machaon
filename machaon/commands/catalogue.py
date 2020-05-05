@@ -152,6 +152,7 @@ def shell_commands():
         )["target path"](
             help="移動先のパス",
             arg="?",
+            valuetype="input-dirpath",
         )["target -s --silent"](
             help="変更後lsを実行しない",
             flag=True
@@ -209,7 +210,7 @@ def shell_commands():
             help="全て表示",
             flag=True,
         )
-    )["hex"](
+    )["hex xe"](
         describe_command(
             "get_binary_content",
             from_module="machaon.commands.shell",
