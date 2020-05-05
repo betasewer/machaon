@@ -375,6 +375,11 @@ class Process:
         if self.spirit is None:
             raise ValueError("spirit is not set")
         return self.spirit
+        
+    def get_parsed_command(self):
+        if self.parsedcommand is None:
+            raise ValueError("parsed-command is not set")
+        return self.parsedcommand
     
     def get_command_args(self):
         return self.parsedcommand

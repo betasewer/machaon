@@ -228,7 +228,7 @@ class AppRoot:
                 process_index = int(index, 10)-1
                 chm = self.get_chamber(process_index)
             except ValueError:
-                raise ValueError(str(process_index))
+                raise ValueError(str(index))
         return chm
     
     # メインスレッド側から操作中断

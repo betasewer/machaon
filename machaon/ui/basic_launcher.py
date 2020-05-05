@@ -137,23 +137,35 @@ class Launcher():
 
         elif command.startswith(">"):
             # データビューの選択アイテムの値をコマンド欄に展開する
-            itemname, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
-            msg = self.meta_command_show_dataview_item(itemname, restcommand, toinput=True)
+            head, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
+            procindex, itemname = parse_procindex(head)
+            msg = self.meta_command_show_dataview_item(itemname, procindex, restcommand, toinput=True)
         
         elif command.startswith("="):
             # データビューの選択アイテムの値を画面に展開する
-            itemname = command[1:].strip()
-            msg = self.meta_command_show_dataview_item(itemname, "", toinput=False)
+            procindex, itemname = parse_procindex(command[1:])
+            msg = self.meta_command_show_dataview_item(itemname, procindex, "", toinput=False)
         
         elif command.startswith("pred"):
             # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
-            keyword = command[len("pred"):].strip()
-            msg = self.meta_command_show_predicates(keyword)
-            
+            procindex, keyword = parse_procindex(command[len("pred"):])
+            msg = self.meta_command_show_predicates(keyword, procindex)
+        
+        elif command.startswith("@"):
+            # アクティブなコマンドの引数をコマンド欄に展開する
+            head, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
+            procindex, argname = parse_procindex(head)
+            msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
+
         elif command.startswith("?"):
             # 引数またはアクティブなコマンドのヘルプを末尾に表示する
-            cmd = command[len("?"):].strip()
-            msg = self.meta_command_show_help(cmd)
+            procindex, cmd = parse_procindex(command[1:])
+            msg = self.meta_command_show_help(cmd, procindex)
+        
+        elif command.startswith("invocation"):
+            # 呼び出し引数と結果を詳細に表示する
+            procindex, _ = parse_procindex(command[len("invocation"):])
+            msg = self.meta_command_show_invocation(procindex)
         
         else:
             msg = "不明なメタコマンドです"
@@ -366,9 +378,9 @@ class Launcher():
         self.app.set_command_prefix(prefix)
         return "コマンド接頭辞を設定しました"
 
-    def meta_command_show_dataview_item(self, predicate, restcommand, toinput):
+    def meta_command_show_dataview_item(self, predicate, procindex, restcommand, toinput):
         item = None
-        chm = self.app.select_chamber()
+        chm = self.app.select_chamber(procindex)
         if chm:
             data = chm.get_bound_data()
             if data:
@@ -397,8 +409,8 @@ class Launcher():
         else:
             return "何も選択されていません"
     
-    def meta_command_show_predicates(self, keyword):  
-        chm = self.app.select_chamber()
+    def meta_command_show_predicates(self, keyword, procindex):  
+        chm = self.app.select_chamber(procindex)
         if chm:
             data = chm.get_bound_data()
             
@@ -415,17 +427,50 @@ class Launcher():
                 return "該当する述語がありません"
         else:
             return "対象となるデータがありません"
+        
+    def meta_command_reinput_process_arg(self, argname, procindex, restcommand):
+        chm = self.app.select_chamber(procindex)
+        if chm:
+            proc = chm.get_process()
+            value, _context = proc.get_parsed_command().reproduce_arg(argname)
+            if value is None:
+                return "該当する引数がありません"
+            if restcommand:
+                value = value + " " + restcommand
+            self.replace_input_text(value)
+        else:
+            return "対象となるデータがありません"
     
-    def meta_command_show_help(self, cmd):
+    def meta_command_show_help(self, cmd, procindex):
         if cmd:
             result = self.app.search_command(cmd)
             if not result:
                 return "該当するコマンドがありません"
             target = result[0].load_target()
         else:
-            chm = self.app.select_chamber()
+            chm = self.app.select_chamber(procindex)
             target = chm.get_process().get_target()
 
         if target:
             hlp = target.get_help()
             self.insert_screen_appendix("\n".join(hlp), title="コマンド <{}> のヘルプ".format(target.get_prog()))
+    
+    def meta_command_show_invocation(self, procindex):
+        chm = self.app.select_chamber(procindex)
+        if chm:
+            cmd = chm.get_process().get_parsed_command()
+            inv = chm.get_process().get_last_invocation()
+
+        else:
+            return "対象となるプロセスがありません"
+
+#
+def parse_procindex(expr):
+    argname = expr
+    procindex = None
+    if expr and expr[0] == "[":
+        end = expr.find("]")
+        if end > -1:
+            procindex = expr[1:end]
+            argname = expr[end+1:]
+    return procindex, argname.strip()
