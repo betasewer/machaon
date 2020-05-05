@@ -162,6 +162,11 @@ class Launcher():
             procindex, cmd = parse_procindex(command[1:])
             msg = self.meta_command_show_help(cmd, procindex)
         
+        elif command.startswith("/"):
+            # 文字列を解析し、コマンドとして可能な解釈をすべて示す
+            cmdstr = command[1:].strip()
+            msg = self.meta_command_show_syntax(cmdstr)
+
         elif command.startswith("invocation"):
             # 呼び出し引数と結果を詳細に表示する
             procindex, _ = parse_procindex(command[len("invocation"):])
@@ -455,6 +460,13 @@ class Launcher():
             hlp = target.get_help()
             self.insert_screen_appendix("\n".join(hlp), title="コマンド <{}> のヘルプ".format(target.get_prog()))
     
+    def meta_command_show_syntax(self, cmdstr):
+        entries = self.app.parse_possible_commands(cmdstr)
+        if not entries:
+            return "有効なコマンドではありません"
+        lines = "\n".join(["{}. {}".format(i+1,x.command_string()) for (i,x) in enumerate(entries)])
+        self.insert_screen_appendix(lines, title="コマンド <{}> の解釈".format(cmdstr))
+
     def meta_command_show_invocation(self, procindex):
         chm = self.app.select_chamber(procindex)
         if chm:

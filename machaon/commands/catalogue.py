@@ -10,14 +10,6 @@ def app_commands():
     return describe_command_package(
         "machaon.app",
         description="ターミナルを操作するコマンドです。",
-    )["syntax"](
-        describe_command(
-            appcmd.command_syntax,
-            description="コマンド文字列を解析し、可能な解釈をすべて示します。"
-        )["target command_string"](
-            help="コマンド文字列",
-            remainder=True
-        )
     )["help"](
         describe_command(
             appcmd.command_help,      
