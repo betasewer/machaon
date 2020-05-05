@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
+import os
 import glob
 from collections import defaultdict
 from typing import List, Sequence, Optional, Any, Tuple, Dict, Union, Callable, DefaultDict
@@ -41,6 +42,10 @@ class BadCommand(Exception):
     pass
 
 #
+class ARGSTRING_NO_SPLIT():
+    pass
+
+#
 # もともとの区切りを記録したオプション引数
 #
 class ArgString():
@@ -59,23 +64,23 @@ class ArgString():
     def __str__(self):
         return self.joined()
     
-    def split(self, explicit_sep=None, implicit_sep=None, maxsplit=-1):
-        if explicit_sep:
+    def split(self, explicit_sep=ARGSTRING_NO_SPLIT, implicit_sep=ARGSTRING_NO_SPLIT, maxsplit=-1):
+        if explicit_sep is not ARGSTRING_NO_SPLIT:
             # 最優先される区切り
             jo = self.joined()
             if explicit_sep in jo:
                 return jo.split(sep=explicit_sep, maxsplit=maxsplit)
         
-        if len(self.argparts) == 1:
+        if implicit_sep is not ARGSTRING_NO_SPLIT and len(self.argparts) == 1:
             # explicit_sepも改行区切りも無い場合に用いられる区切り
             jo = self.joined()
             return jo.split(sep=implicit_sep, maxsplit=maxsplit)
+
+        # 元の区切りそのまま
+        if maxsplit > -1:
+            return [*self.argparts[:maxsplit], " ".join(self.argparts[maxsplit:])]
         else:
-            # 改行区切り
-            if maxsplit > -1:
-                return [*self.argparts[:maxsplit], " ".join(self.argparts[maxsplit:])]
-            else:
-                return self.argparts
+            return self.argparts
 
 #
 #
@@ -398,9 +403,19 @@ class ValueList():
     description="ファイルパス",
 )
 class Filepaths():
-    def convert(self, arg):
+    def convert(self, arg, spirit):
         # パスの羅列を区切る
-        paths = arg.split(explicit_sep = "|")
+        paths = []
+        for fpath in arg.split(explicit_sep = "|"):
+            if not fpath:
+                continue
+            # ホームディレクトリを展開
+            fpath = os.path.expanduser(fpath)
+            # 環境変数を展開
+            fpath = os.path.expandvars(fpath)
+            # カレントディレクトリを基準に絶対パスに直す
+            fpath = spirit.abspath(fpath)
+            paths.append(fpath)
         return paths
     
     def prompt(self, spirit):
@@ -415,12 +430,11 @@ class Filepaths():
 class InputFilepaths(Filepaths):
     def convert(self, arg, spirit):
         # パスの羅列を区切る
-        patterns = super().convert(arg)
+        patterns = super().convert(arg, spirit)
 
         # ファイルパターンから対象となるすべてのファイルパスを展開する
         paths = []
         for fpath in patterns:
-            fpath = spirit.abspath(fpath) # カレントディレクトリを基準に絶対パスに直す
             expanded = glob.glob(fpath)
             if expanded:
                 paths.extend(expanded)
@@ -431,6 +445,23 @@ class InputFilepaths(Filepaths):
     def prompt(self, spirit):
         # ダイアログ
         pass
+
+#
+@argument_type.sequence(
+    name="dirpath",
+    description="ディレクトリのパス",
+)
+class Dirpaths(Filepaths):
+    def prompt(self, spirit):
+        # ダイアログ
+        pass
+
+@argument_type.sequence(
+    name="input-dirpath",
+    description="存在する入力ディレクトリのパス",
+)
+class InputDirpaths(Dirpaths, InputFilepaths):
+    pass
 
 
 #
@@ -862,6 +893,21 @@ class CommandParserResult():
         if cxt.expands_foreach_target():
             self.foreach_target_context = cxt
     
+    def reproduce_arg(self, name):
+        entry = None
+        for _destmethod, argmap in self.argmap.items():
+            if name in argmap:
+                entry = argmap[name]
+                break
+        else:
+            return None, None
+        
+        cxt, value = entry
+        if cxt.expands_foreach_target():
+            return "\n".join([str(x) for x in value]), cxt
+        else:
+            return str(value), cxt
+
     def get_values(self, label = None, *, argmap = None):
         if argmap is None:
             argmap = self.argmap[OPT_METHOD(label)]
@@ -870,7 +916,7 @@ class CommandParserResult():
     # 呼び出し引数を展開する
     def prepare_arguments(self, label):
         at = OPT_METHOD(label)
-        argmap = self.argmap[at]
+        argmap = self.argmap[at].copy()
 
         foreach_targets = None
         if self.foreach_target_context and self.foreach_target_context.get_dest_method() == at:
