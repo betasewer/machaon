@@ -12,6 +12,7 @@ import tkinter.ttk as ttk
 
 from machaon.ui.basic_launcher import Launcher
 from machaon.command import describe_command, describe_command_package
+from machaon.process import ProcessMessage
 from machaon.cui import collapse_text, get_text_width, ljust
 import machaon.platforms
 
@@ -625,6 +626,21 @@ class tkLauncher(Launcher):
         
         self.log_set_selection(linkbeg, linkend)
         self.select_screen_dataview_item(index, charindex=linkbeg)
+    
+    #
+    #
+    #
+    def insert_screen_appendix(self, valuelines, title):
+        self.insert_screen_message(ProcessMessage("\n>>> 【{}】".format(title)))
+
+        maxspacing = max([len(x[0]) for x in valuelines])
+
+        for value, desc in valuelines:
+            spacing = " " * (maxspacing - len(value) + 2)
+            for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message_em").expand():
+                self.insert_screen_message(msg)
+
+        self.log.yview_moveto(1.0)
 
     #
     # チャンバーメニューの操作

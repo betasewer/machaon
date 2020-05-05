@@ -729,7 +729,7 @@ class ProcessMessage():
     def __init__(self, text=None, tag="message", embed=None, **kwargs):
         self.text = text
         self.tag = tag
-        self.embed = embed
+        self.embed_ = embed or []
         self.kwargs = kwargs
 
     def argument(self, name, default=None):
@@ -751,7 +751,11 @@ class ProcessMessage():
         return self.kwargs.get("label")
     
     def is_embeded(self):
-        return self.embed is not None
+        return len(self.embed_) > 0
+    
+    def embed(self, *args, **kwargs):
+        self.embed_.append(ProcessMessage(*args, **kwargs))
+        return self
 
     def expand(self):
         if self.text is None:
@@ -778,7 +782,7 @@ class ProcessMessage():
                     lasttext += "%"
                     state = 0
                 elif state == 2:
-                    emsg = self.embed[int(lastkey)-1]
+                    emsg = self.embed_[int(lastkey)-1]
                     if emsg is not None:
                         expanded.append(partmsg(text=lasttext))
                         expanded.append(partmsg(emsg))

@@ -91,6 +91,10 @@ class Launcher():
         pass
     
     #
+    def insert_screen_appendix(self, values, title=""):
+        pass
+    
+    #
     # 入力欄の操作
     #    
     # コマンドを実行する
@@ -161,6 +165,35 @@ class Launcher():
             # 入力欄を置き換える
             self.replace_input_text(value)
             return True
+        
+        elif command.startswith("pred"):
+            # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
+            keyword = command[len("pred"):].strip()
+            
+            item = None
+            chm = self.app.select_chamber()
+            if chm:
+                data = chm.get_bound_data()
+                
+            if data:
+                lines = []
+                for pred, keys in data.get_all_predicates():
+                    if keyword and not any(x.startswith(keyword) for x in keys):
+                        continue
+                    lines.append((", ".join(keys), pred.get_description()))
+
+                if lines:                    
+                    self.insert_screen_appendix(lines, title="述語一覧")
+                    value = "<一覧を下に表示しました>"
+                else:
+                    value = "<該当する述語がありません>"
+            else:
+                value = "<対象となるデータがありません>"
+                
+            self.replace_input_text(value)
+            return True
+            
+            
         
         return False
 

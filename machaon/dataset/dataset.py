@@ -1,4 +1,5 @@
-from typing import Sequence, List, Any, Tuple, Dict
+from typing import Sequence, List, Any, Tuple, Dict, DefaultDict
+from collections import defaultdict
 
 from machaon.dataset.filter import Predicate, DataFilter
 from machaon.cui import get_text_width
@@ -48,6 +49,15 @@ class DataReference():
             raise ValueError("")
         name, pred = self._predicates[self.firstpred]
         return name, pred
+    
+    def get_all_preds(self) -> List[Tuple[Predicate, List[str]]]:
+        predset: DefaultDict[Predicate, List[str]] = defaultdict(list)
+        for key, (_topkey, pred) in self._predicates.items():
+            predset[pred].append(key)
+
+        entries = list(predset.items())
+        entries.sort(key=lambda e:e[1][0])
+        return entries
 
     def get_default_columns(self, viewtype):
         if viewtype in self.defcolumns:
@@ -158,6 +168,11 @@ class DataView():
     #
     def get_predicates(self):
         return self.viewpreds
+    
+    def get_all_predicates(self):
+        if self.ref is None:
+            return []
+        return self.ref.get_all_preds()
         
     #
     #
