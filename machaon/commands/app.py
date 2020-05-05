@@ -6,16 +6,6 @@ from machaon.cui import test_yesno, composit_text
 
 #
 # アプリ基本コマンド
-#
-#
-def command_syntax(spi, command_string):
-    results = spi.get_app().parse_possible_commands(command_string)
-    if not results:
-        spi.message("[有効なコマンドではありません]")
-    else:
-        for entry in results:
-            spi.message(entry.command_string())
-
 # 
 def command_interrupt(spi):  
     pass
