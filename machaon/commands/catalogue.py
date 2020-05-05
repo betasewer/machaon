@@ -45,18 +45,6 @@ def app_commands():
             help="対象データセットを指定",
             dest="dataset_index",
         )
-    )["calc"](
-        describe_command(
-            "calculator",
-            from_module="machaon.commands.shell",
-            description="任意の式を実行します。"
-        )["target -l --library"](
-            help="ライブラリをロード",
-            accumulate=True,
-        )["target expression"](
-            help="Pythonの式",
-            remainder=True
-        )
     )["exit"](
         describe_command(
             lambda: None, # 実際に呼び出されることはない

@@ -171,6 +171,11 @@ class Launcher():
             # 呼び出し引数と結果を詳細に表示する
             procindex, _ = parse_procindex(command[len("invocation"):])
             msg = self.meta_command_show_invocation(procindex)
+            
+        elif command.startswith("!"):
+            # Pythonの式を評価する
+            libnames, expr = parse_procindex(command[1:])
+            msg = self.meta_command_eval_py(expr, libnames.split())
         
         else:
             msg = "不明なメタコマンドです"
@@ -475,11 +480,33 @@ class Launcher():
 
         else:
             return "対象となるプロセスがありません"
+            
+    def meta_command_eval_py(self, expression, libnames):
+        if not expression:
+            return ""
+
+        # モジュールのロード
+        glo = {}
+        import math
+        glo["math"] = math # 数学モジュールはいつもロードする
+        if libnames:
+            import importlib
+            for libname in libnames:
+                glo[libname] = importlib.import_module(libname)
+
+        try:
+            val = eval(expression, glo, {})
+        except Exception as e:
+            v = str(e)
+        else:
+            v = str(val)
+            
+        self.insert_screen_appendix(v, title=expression.strip())
 
 #
 def parse_procindex(expr):
     argname = expr
-    procindex = None
+    procindex = ""
     if expr and expr[0] == "[":
         end = expr.find("]")
         if end > -1:

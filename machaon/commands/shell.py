@@ -258,25 +258,6 @@ def get_binary_content(app, target, size=128, width=16):
 #
 #
 #
-def calculator(app, expression, library):
-    expression = expression.strip()
-    if not expression:
-        raise TypeError("expression needed")
-
-    glo = {}
-    import math
-    glo["math"] = math
-    if library:
-        import importlib
-        for libname in library:
-            glo[libname] = importlib.import_module(libname)
-
-    val = eval(expression, glo, {})
-    app.message_em(val)
-
-#
-#
-#
 def unzip(app, path, out=None, win=False):
     path = app.abspath(path)
 
