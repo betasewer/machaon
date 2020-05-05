@@ -193,7 +193,22 @@ class Launcher():
             self.replace_input_text(value)
             return True
             
-            
+        elif command.startswith("?"):
+            # 引数またはアクティブなコマンドのヘルプを末尾に表示する
+            cmd = command[len("?"):].strip()
+            if cmd:
+                result = self.app.search_command(cmd)
+                if not result:
+                    self.replace_input_text("<該当するコマンドがありません>")
+                target = result[0].load_target()
+            else:
+                chm = self.app.select_chamber()
+                target = chm.get_process().get_target()
+
+            if target:
+                hlp = target.get_help()
+                self.insert_screen_appendix("\n".join(hlp), title="コマンド <{}> のヘルプ".format(target.get_prog()))
+            return True
         
         return False
 
@@ -358,7 +373,7 @@ class Launcher():
         #self.put_input_command(spirit, command)
         if process is None:
             spirit.error("'{}'は不明なコマンドです".format(command))
-            if self.app.test_valid_process("help"):
+            if self.app.search_command("help"):
                 spirit.message("'help'でコマンド一覧を表示できます")
         else:
             spirit.error("{}: コマンド引数が間違っています:".format(process.get_prog()))

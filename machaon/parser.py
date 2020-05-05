@@ -826,10 +826,12 @@ class CommandParser():
         return self.prog or ""
 
     def get_help(self):
-        #queue = self.new_parser_message_queue()
-        #self.argp.print_help()
-        #return queue
-        return ["<help>"]
+        # TODO: flagsで指定される属性も含めて、明記するよう、完成させること
+        lines = []
+        for cxt in self.list_contexts():
+            line = "{} [{}]  {}".format(" ".join(cxt.make_keys("-")), cxt.get_value_typename(), cxt.get_help())
+            lines.append(line)
+        return lines
 
 #
 #

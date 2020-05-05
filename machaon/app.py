@@ -8,9 +8,11 @@ import threading
 import traceback
 import subprocess
 
-from machaon.engine import CommandEngine 
+from typing import Optional, List, Any
+
+from machaon.engine import CommandEngine, CommandEntry
 from machaon.command import describe_command
-from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive
+from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
 from machaon.cui import test_yesno
 import machaon.platforms
 
@@ -173,14 +175,14 @@ class AppRoot:
         self.ui.on_exit_process(spirit, process, invocation)
         return result
     
-    # 有効なプロセスコマンドか調べる
-    def test_valid_process(self, processname):
-        return self.cmdengine.test_command_head(processname)
-    
     # 可能な構文解釈の一覧を提示する
     def parse_possible_commands(self, commandstr):
         spirit = Spirit(self, None) # processはもちろん関連付けられていない
         return self.cmdengine.expand_parsing_command(commandstr, spirit)
+    
+    # コマンドを検索する
+    def search_command(self, commandname) -> List[CommandEntry]:
+        return [entry for (entry, remained) in self.cmdengine.expand_parsing_command_head(commandname) if not remained]
     
     def get_command_sets(self):
         return self.cmdengine.command_sets()
@@ -217,7 +219,7 @@ class AppRoot:
         }
         return report
         
-    def select_chamber(self, index=None):
+    def select_chamber(self, index=None) -> Optional[ProcessChamber]:
         chm = None
         if not index:
             chm = self.get_active_chamber()

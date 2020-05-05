@@ -367,9 +367,13 @@ class Process:
         return invocation
     
     def get_target(self):
+        if self.target is None:
+            raise ValueError("target is not set")
         return self.target 
 
     def get_spirit(self):
+        if self.spirit is None:
+            raise ValueError("spirit is not set")
         return self.spirit
     
     def get_command_args(self):

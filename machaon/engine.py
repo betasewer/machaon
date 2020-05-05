@@ -41,7 +41,7 @@ class CommandEntry():
         self.description = description
         self.commandtype = COMMAND_TYPES.get(commandtype, normal_command)
 
-    def load(self) -> Optional[ProcessTarget]:
+    def load_target(self) -> Optional[ProcessTarget]:
         if self.target is None and self.builder:
             self.target = self.builder.build_target(self)
         return self.target
@@ -184,7 +184,7 @@ class CommandEngine:
         possible_commands = self.expand_parsing_command_head(commandhead) # コマンドエントリの解釈
         possible_entries: List[PossibleCommandSyntaxItem] = []
         for commandentry, optioncompound in possible_commands:
-            target = commandentry.load()
+            target = commandentry.load_target()
             if target is None:
                 raise ValueError("CommandEntry '{}' の構築に失敗".format(commandentry.get_prog()))
 
@@ -260,9 +260,6 @@ class CommandEngine:
     #
     def prompt_command_args(self, argparser, spirit):
         spirit.message("<argument fill prompt: under construction...>")
-        for cxt in argparser.list_contexts():
-            line = "{} [{}]  {}".format(" ".join(cxt.make_keys("-")), cxt.get_value_typename(), cxt.get_help())
-            spirit.message(line)
         return None
 
     # 
@@ -343,7 +340,7 @@ def split_command_by_space(q):
 
     if parts and not parts[-1]: # 空白で終わった場合、空文字列が残る
         parts.pop(-1)
-        
+
     return parts
 
 def split_command_by_line(q):
