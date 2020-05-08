@@ -167,7 +167,7 @@ class Launcher():
             cmdstr = command[1:].strip()
             msg = self.meta_command_show_syntax(cmdstr)
 
-        elif command.startswith("invocation"):
+        elif command.startswith("`"):
             # 呼び出し引数と結果を詳細に表示する
             procindex, _ = parse_procindex(command[len("invocation"):])
             msg = self.meta_command_show_invocation(procindex)
@@ -179,15 +179,15 @@ class Launcher():
         
         elif command.startswith("help"):
             values = [
-                ("(integer...)", "データアイテムの選択"),
+                ("(integer...)", "データビューでアイテムを選択"),
                 ("(string...).", "コマンド接頭辞の設定"),
-                (">", "選択アイテムを入力欄に展開"),
-                ("=", "選択アイテムを画面に展開"),
+                (">", "データビューの選択アイテムを入力欄に展開"),
+                ("=", "データビューの選択アイテムを画面に展開"),
                 ("pred", "データビューの述語の一覧を表示"),
                 ("@", "プロセスの引数を入力欄に展開"),
+                ("`", "プロセスの引数と実行結果を表示"),
                 ("?", "プロセスのヘルプを表示"),
                 ("/", "コマンドの可能な解釈を全て表示"),
-                ("invocation", "プロセスの引数・実行結果を表示"),
                 ("!", "Pythonの式を評価して結果を表示"),
                 ("help", "このヘルプを表示"),
             ]
@@ -497,9 +497,51 @@ class Launcher():
     def meta_command_show_invocation(self, procindex):
         chm = self.app.select_chamber(procindex)
         if chm:
+            lines = []
+            def addline(level, line):
+                lines.append("  "*(level-1) + line)
+
+            addline(1, "<コマンド>")
+            tg = chm.get_process().get_target()
+            typ, qualname, modname = tg.get_inspection()
+            addline(1, "{}: {}".format(typ, qualname))
+            addline(2, "{}で定義".format(modname))
+            addline(1, "")
+
+            labels = tg.get_valid_labels()
+
+            addline(1, "<引数>")
             cmd = chm.get_process().get_parsed_command()
+
+            for label in labels:
+                addline(1, "[{}]".format(label))
+                for argname, value in cmd.get_values(label).items():
+                    addline(2, "{} = {}".format(argname, value))
+            
+            addline(1, "")
+
+            addline(1, "<実行>")
             inv = chm.get_process().get_last_invocation()
 
+            for label in labels:
+                for i, entry in enumerate(inv.get_entries_of(label)):
+                    addline(1, "[{}][{}](".format(label, i))
+
+                    sig = []
+                    sig.extend(["{}".format(v) for v in entry.args])
+                    sig.extend(["{}={}".format(k,v) for (k,v) in entry.kwargs.items()])
+                    for a in sig:
+                        addline(2, "{},".format(a))
+                    addline(1, ")")
+
+                    if entry.exception:
+                        addline(1, "例外発生で中断:")
+                        for l in traceback.format_exception_only(type(entry.exception), entry.exception):
+                            addline(2, l)
+                    else:                    
+                        addline(2, "-> {}".format(entry.result))
+            
+            self.insert_screen_appendix("\n".join(lines), title="実行結果の調査")
         else:
             return "対象となるプロセスがありません"
             

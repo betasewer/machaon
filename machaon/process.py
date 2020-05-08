@@ -101,6 +101,17 @@ class ProcessTargetClass(ProcessTarget):
             self.exit_invoker = FunctionInvoker(klass.exit_process)
         else:
             self.exit_invoker = None
+    
+    def get_valid_labels(self):
+        labels = (
+            ("init", self.init_invoker), 
+            ("target", self.target_invoker),
+            ("exit", self.exit_invoker)
+        )
+        return [x for (x,inv) in labels if inv is not None]
+    
+    def get_inspection(self):
+        return "class", self.klass.__qualname__, self.klass.__module__
 
     # 
     def invoke(self, spirit, parsedcommand):
@@ -131,6 +142,12 @@ class ProcessTargetFunction(ProcessTarget):
         super().__init__(argp, spirittype, lazyargdescribe)
         self.args = args or ()
         self.target_invoker = FunctionInvoker(fn)
+    
+    def get_valid_labels(self):
+        return ["target"]
+        
+    def get_inspection(self):
+        return "function", self.target_invoker.fn.__qualname__, self.target_invoker.fn.__module__
 
     def invoke(self, spirit, parsedcommand):
         invocation = ProcessTargetInvocation()
@@ -305,9 +322,9 @@ class ProcessTargetInvocation:
             self.last_exception = ProcessInitFailed()
             return False
         return True
-    
-    def get_result_of(self, label, index=-1):
-        return self.entries[label][index].result
+        
+    def get_entries_of(self, label):
+        return self.entries[label]
     
     def get_last_result(self):
         if self.entries["target"]:
