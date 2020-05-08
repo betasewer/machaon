@@ -18,7 +18,9 @@ OPT_REMAINDER = 0x0002
 OPT_NULLARY = 0x0010
 OPT_OPTIONAL_UNARY = 0x0020
 OPT_UNARY = 0x0040
-OPT_FOREACHTARGET = 0x0100
+OPT_SEQUENCEFOREACH = 0x0100
+OPT_SEQUENCETOP = 0x0200
+OPT_SEQUENCEASVALUE = 0x0400
 
 #
 OPT_METHOD_TYPE = 0xF000
@@ -63,7 +65,10 @@ class ArgString():
     
     def __str__(self):
         return self.joined()
-    
+        
+    def __repr__(self):
+        return "<{}>".format(" ".join(["ArgString:", self.joined()]))
+
     def split(self, explicit_sep=ARGSTRING_NO_SPLIT, implicit_sep=ARGSTRING_NO_SPLIT, maxsplit=-1):
         if explicit_sep is not ARGSTRING_NO_SPLIT:
             # 最優先される区切り
@@ -155,15 +160,15 @@ class OptionContext():
     def is_accumulative(self):
         return self.accumulator is not None
     
-    def expands_foreach_target(self):
-        return (self.flags & OPT_FOREACHTARGET) > 0
+    def expands_foreach(self):
+        return (self.flags & OPT_SEQUENCEFOREACH) > 0
+    
+    def expands_top(self):
+        return (self.flags & OPT_SEQUENCETOP) > 0
 
     def parse_arg(self, arg: ArgString, outputs, spirit=None):
         if arg.empty():
-            if self.value is None:
-                value = None # Noneは変換しない
-            else: 
-                value = self.valuetype.convert(self.value)
+            value = self.make_default_value(self.value, spirit)
         else:
             if self.valuetype.is_simplex_type():
                 value = self.valuetype.convert(str(arg), spirit) # 引数を変換
@@ -172,23 +177,34 @@ class OptionContext():
 
         if self.accumulator is not None:
             if self.dest in outputs:
-                prevvalue = outputs[self.dest]
+                prevvalue = outputs[self.dest]  
             else:
-                prevvalue = self.default() # デフォルト値から初期値を生成
+                prevvalue = self.default() # このデフォルト値は各試行ごとに生成する必要がある
             value = self.accumulator(value, prevvalue, self)
 
         outputs[self.dest] = value
         return value
     
-    def parse_default(self, outputs):
-        if self.default is None:
-            value = None # Noneは変換しない
-        elif self.is_accumulative():
-            value = self.default() # このデフォルト値は各試行ごとに生成する必要がある
+    def parse_default(self, outputs, spirit=None):
+        if self.accumulator is not None:
+            value = self.default()
         else:
-            value = self.valuetype.convert(self.default)
+            value = self.make_default_value(self.default, spirit)
         outputs[self.dest] = value
         return value
+    
+    def make_default_value(self, value, spirit):
+        if value is None: 
+            # Noneは変換しない
+            if (self.flags & (OPT_SEQUENCEFOREACH|OPT_SEQUENCETOP))>0:
+                v = ()
+            else:
+                v = None
+        else:
+            if isinstance(value, str) and self.valuetype.is_compound_type():
+                value = ArgString([value])
+            v = self.valuetype.convert(value, spirit)
+        return v
 
     def get_value_type(self):
         return self.valuetype
@@ -231,9 +247,6 @@ class ArgType():
 
     def is_sequence_type(self):
         return (self.flags & ARGTYPE_SEQUENCE) == ARGTYPE_SEQUENCE
-    
-    def is_foreach_default_type(self):
-        return True if self.is_sequence_type() else False
     
     def rebind(self, args, kwargs):
         return self.do_rebind(self.typename, self.description, args, kwargs, self.flags)
@@ -392,6 +405,8 @@ class ValueList():
         self.maxsplit = maxsplit
 
     def convert(self, arg):
+        if isinstance(arg, list):
+            return arg
         spl = arg.split(implicit_sep=self.sep, maxsplit=self.maxsplit)
         return [self.vtype.convert(x.strip()) for x in spl]
 
@@ -404,6 +419,9 @@ class ValueList():
 )
 class Filepaths():
     def convert(self, arg, spirit):
+        if not arg:
+            return []
+
         # パスの羅列を区切る
         paths = []
         for fpath in arg.split(explicit_sep = "|"):
@@ -563,7 +581,7 @@ class CommandParser():
             flags |= OPT_REMAINDER
             default = ""
             typespec = typeof_argument("str")
-        
+            
         if accumulate:
             if accumulate is True:
                 accumulatespec = ArgAppender
@@ -602,9 +620,6 @@ class CommandParser():
         else:
             flags |= OPT_METHOD_TARGET
         
-        if foreach or (foreach is None and typespec.is_foreach_default_type()):
-            flags |= OPT_FOREACHTARGET
-    
         longnames = []
         shortnames = []
         for name in names:
@@ -624,6 +639,19 @@ class CommandParser():
         if dest is None:
             dest = longnames[0]
 
+        if typespec.is_sequence_type():
+            if foreach is None and (flags & OPT_POSITIONAL) > 0:
+                flags |= OPT_SEQUENCEFOREACH
+            elif foreach:
+                flags |= OPT_SEQUENCEFOREACH
+            elif not foreach:
+                flags |= OPT_SEQUENCETOP
+        elif typespec.is_compound_type():
+            if foreach:
+                flags |= OPT_SEQUENCEFOREACH
+            else:
+                flags |= OPT_SEQUENCEASVALUE
+    
         #
         cxt = OptionContext(longnames, shortnames, 
             valuetype=typespec, value=value, default=default, 
@@ -797,7 +825,7 @@ class CommandParser():
         # デフォルト引数で埋める
         for name, cxt in self.argnames.items():
             if name not in appeared:
-                cxt.parse_default(kwargs)
+                cxt.parse_default(kwargs, spirit)
 
         return kwargs
         
@@ -872,7 +900,7 @@ class CommandParserResult():
         self.expandedcmd: str = expandedcmd
         self.messages: List[str] = messages or []
         self.argmap: DefaultDict[int, Dict[str, Tuple[OptionContext, str]]] = defaultdict(dict)
-        self.foreach_target_context: Optional[OptionContext] = None
+        self.foreach_expands_context: Optional[OptionContext] = None
     
     def get_expanded_command(self):
         return self.expandedcmd
@@ -889,11 +917,16 @@ class CommandParserResult():
         return self.messages
         
     def add_arg(self, cxt, name, value):
-        self.argmap[cxt.get_dest_method()][name] = (cxt, value)
-        if cxt.expands_foreach_target():
-            if self.foreach_target_context is not None:
-                raise ValueError("foreach context must be one (for now)")
-            self.foreach_target_context = cxt
+        if cxt.expands_foreach():
+            if self.foreach_expands_context is None:
+                self.foreach_expands_context = cxt
+            else:
+                raise ValueError("argument foreach expansion is allowed only once (for now)")
+        elif cxt.expands_top():
+            value = next(iter(value), None)
+            
+        at = cxt.get_dest_method()
+        self.argmap[at][name] = (cxt, value)
     
     def reproduce_arg(self, name):
         entry = None
@@ -905,10 +938,13 @@ class CommandParserResult():
             return None, None
         
         cxt, value = entry
-        if cxt.expands_foreach_target():
-            return "\n".join([str(x) for x in value]), cxt
+        if cxt.expands_foreach() and cxt is self.foreach_expands_context:
+            v = "\n".join([str(x) for x in value])
+        elif cxt.expands_top():
+            v = next(iter(value), None)
         else:
-            return str(value), cxt
+            v = value
+        return str(v), cxt
 
     def get_values(self, label = None, *, argmap = None):
         if argmap is None:
@@ -920,15 +956,15 @@ class CommandParserResult():
         at = OPT_METHOD(label)
         argmap = self.argmap[at].copy()
 
-        foreach_targets = None
-        if self.foreach_target_context and self.foreach_target_context.get_dest_method() == at:
-            valuename = self.foreach_target_context.get_dest()
+        foreach_expansion = None
+        if self.foreach_expands_context and self.foreach_expands_context.get_dest_method() == at:
+            valuename = self.foreach_expands_context.get_dest()
             _, values = argmap[valuename]
-            foreach_targets = iter(values) # require Iterable value. If not, exception is raised here.
+            foreach_expansion = iter(values) # require Iterable value. If not, exception is raised here.
 
-        if foreach_targets is not None:
-            for a_target in foreach_targets:
-                argmap[valuename] = (self.foreach_target_context, a_target)
+        if foreach_expansion is not None:
+            for a_target in foreach_expansion:
+                argmap[valuename] = (self.foreach_expands_context, a_target)
                 yield self.get_values(argmap=argmap)
         else:
             yield self.get_values(argmap=argmap)

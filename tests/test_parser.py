@@ -335,8 +335,9 @@ def test_filepath():
         option("files", valuetype="filepath"),
         option("--rating", "-r", valuetype="float"),
     )
-    assert p.do_parse_args(["users/desktop/memo.txt bin/appli.exe", "-r", "1.2"]) == {
-        'files' : ["users/desktop/memo.txt", "bin/appli.exe"],
+    spirit = TempSpirit(cd="basic")
+    assert p.do_parse_args(["users/desktop/memo.txt", "bin/appli.exe", "-r", "1.2"], spirit) == {
+        'files' : ["basic\\users\\desktop\\memo.txt", "basic\\bin\\appli.exe"],
         'rating' : 1.2,
     }
     
@@ -348,12 +349,13 @@ def test_parser_result():
         option("files", valuetype="filepath", foreach=True),
         option("--rating", "-r", valuetype="float"),
     )
+    spi = TempSpirit(cd="/")
     assert list(
-        p.parse_args(["users/desktop/memo.txt bin/appli.exe", "-r", "1.2"])
+        p.parse_args(["users/desktop/memo.txt", "bin/appli.exe", "-r", "1.2"], spi)
         .prepare_arguments("target")
     ) == [
-        { 'files' : "users/desktop/memo.txt", 'rating' : 1.2, },
-        { 'files' : "bin/appli.exe", 'rating' : 1.2, },
+        { 'files' : "\\users\\desktop\\memo.txt", 'rating' : 1.2, },
+        { 'files' : "\\bin\\appli.exe", 'rating' : 1.2, },
     ]
 
     # input-filepath: globパターンを受け入れ、実在するパスを集める
@@ -362,7 +364,7 @@ def test_parser_result():
         option("--margin", valuetype=typeof_argument("value-list", "int")),
     )
     spi = TempSpirit(cd = "c:\\Windows")
-    assert len(list(p.parse_args(["System32/*.dll py.exe"], spi).prepare_arguments("target"))) > 2
+    assert len(list(p.parse_args(["System32/*.dll", "py.exe"], spi).prepare_arguments("target"))) > 2
 
     # 元のアイテムの区切り方が、空白によらず保存される
     # 型ごとにデフォルトでforeachかどうかが決まっている
@@ -377,14 +379,53 @@ def test_parser_result():
 
     # 型のforeach設定をオーバーライド
     p = build_parser(
+        option("path", valuetype="input-filepath", foreach=False),
         option("--ids", valuetype=typeof_argument("value-list", "int"), foreach=True),
     )
     assert list(
-        p.parse_args(["--ids", "1001", "1002", "1003"], spi)
+        p.parse_args(["memo.txt", "--ids", "1001", "1002", "1003"], spi)
         .prepare_arguments("target")
     ) == [
-        { 'ids' : 1001 },
-        { 'ids' : 1002 },
-        { 'ids' : 1003 },
+        { 'path' : "c:\\Windows\\memo.txt", 'ids' : 1001 },
+        { 'path' : "c:\\Windows\\memo.txt", 'ids' : 1002 },
+        { 'path' : "c:\\Windows\\memo.txt", 'ids' : 1003 },
     ]
 
+    # デフォルトでは、位置引数にはforeachが利き、オプション引数には利かない
+    p = build_parser(
+        option("path", valuetype="input-filepath"), # expands foreach
+        option("--out", valuetype="input-dirpath"), # as value
+    )
+    spi.change_current_dir("c:\\")
+    assert list(
+        p.parse_args(["data1.dat", "data2.dat", "data3.dat", "--out", "output.txt"], spi)
+        .prepare_arguments("target")
+    ) == [
+        { 'path' : "c:\\data1.dat", 'out' : "c:\\output.txt" },
+        { 'path' : "c:\\data2.dat", 'out' : "c:\\output.txt" },
+        { 'path' : "c:\\data3.dat", 'out' : "c:\\output.txt" },
+    ]
+
+    # foreach デフォルト値のテスト
+    p = build_parser(
+        option("--ids", valuetype=typeof_argument("value-list", "int"), foreach=True),     # OPT_SEQUENCEFOREACH
+        option("--aux", valuetype="input-filepath"),                                       # OPT_SEQUENCETOP
+        option("--out", valuetype="input-filepath", default="out.txt"),                    # OPT_SEQUENCETOP
+        option("--lis", valuetype=typeof_argument("value-list", "int"), default=[1,2,3]),  # OPT_SEQUENCEASVALUE
+    )
+
+    # OPT_SEQUENCEFOREACHのデフォルト値は空のシーケンスになる（全体が実行されない -> やっぱりオプションでの使用は禁じた方がよいかも...）
+    assert list(
+        p.parse_args(["--out", "basic/out"], spi)
+        .prepare_arguments("target")
+    ) == []
+
+    # OPT_SEQUENCETOP, OPT_SEQUENCEASVALUEのデフォルト値は、add_arg.defaultに従う
+    # デフォルト値は変換される
+    assert list(
+        p.parse_args(["--ids", "10", "20"], spi)
+        .prepare_arguments("target")
+    ) == [
+        { 'ids' : 10, 'aux' : None, 'out' : "c:\\out.txt", 'lis' : [1,2,3]},
+        { 'ids' : 20, 'aux' : None, 'out' : "c:\\out.txt", 'lis' : [1,2,3]}
+    ]
