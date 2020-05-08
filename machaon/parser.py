@@ -891,6 +891,8 @@ class CommandParserResult():
     def add_arg(self, cxt, name, value):
         self.argmap[cxt.get_dest_method()][name] = (cxt, value)
         if cxt.expands_foreach_target():
+            if self.foreach_target_context is not None:
+                raise ValueError("foreach context must be one (for now)")
             self.foreach_target_context = cxt
     
     def reproduce_arg(self, name):
