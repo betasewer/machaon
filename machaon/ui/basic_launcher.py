@@ -177,6 +177,24 @@ class Launcher():
             libnames, expr = parse_procindex(command[1:])
             msg = self.meta_command_eval_py(expr, libnames.split())
         
+        elif command.startswith("help"):
+            values = [
+                ("(integer...)", "データアイテムの選択"),
+                ("(string...).", "コマンド接頭辞の設定"),
+                (">", "選択アイテムを入力欄に展開"),
+                ("=", "選択アイテムを画面に展開"),
+                ("pred", "データビューの述語の一覧を表示"),
+                ("@", "プロセスの引数を入力欄に展開"),
+                ("?", "プロセスのヘルプを表示"),
+                ("/", "コマンドの可能な解釈を全て表示"),
+                ("invocation", "プロセスの引数・実行結果を表示"),
+                ("!", "Pythonの式を評価して結果を表示"),
+                ("help", "このヘルプを表示"),
+            ]
+            values = [(":"+x,y) for (x,y) in values]
+            self.insert_screen_appendix(values, title="メタコマンドの一覧")
+            msg = None
+        
         else:
             msg = "不明なメタコマンドです"
         
@@ -459,7 +477,10 @@ class Launcher():
             target = result[0].load_target()
         else:
             chm = self.app.select_chamber(procindex)
-            target = chm.get_process().get_target()
+            if chm:
+                target = chm.get_process().get_target()
+            else:
+                return "プロセスがありません"
 
         if target:
             hlp = target.get_help()
@@ -467,9 +488,10 @@ class Launcher():
     
     def meta_command_show_syntax(self, cmdstr):
         entries = self.app.parse_possible_commands(cmdstr)
-        if not entries:
-            return "有効なコマンドではありません"
-        lines = "\n".join(["{}. {}".format(i+1,x.command_string()) for (i,x) in enumerate(entries)])
+        if entries:
+            lines = "\n".join(["{}. {}".format(i+1,x.command_string()) for (i,x) in enumerate(entries)])
+        else:
+            lines = "有効なコマンドではありません"
         self.insert_screen_appendix(lines, title="コマンド <{}> の解釈".format(cmdstr))
 
     def meta_command_show_invocation(self, procindex):
@@ -500,7 +522,7 @@ class Launcher():
             v = str(e)
         else:
             v = str(val)
-            
+
         self.insert_screen_appendix(v, title=expression.strip())
 
 #

@@ -632,7 +632,7 @@ class tkLauncher(Launcher):
     #
     def insert_screen_appendix(self, valuelines, title):
         if title:
-            self.insert_screen_message(ProcessMessage("【{}】".format(title)))
+            self.insert_screen_message(ProcessMessage(">>> {}".format(title)))
 
         if isinstance(valuelines, str):
             self.insert_screen_message(ProcessMessage(valuelines))
