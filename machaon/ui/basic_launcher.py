@@ -555,8 +555,20 @@ class Launcher():
         glo["math"] = math # 数学モジュールはいつもロードする
         if libnames:
             import importlib
-            for libname in libnames:
-                glo[libname] = importlib.import_module(libname)
+            for libname in libnames: # module::member>name == from module import member as name
+                membername = None
+                if ">" in libname:
+                    libname, membername = libname.split(">")
+                if "::" in libname:
+                    modname, varname = libname.split("::")
+                    mod = importlib.import_module(modname)
+                    if membername is None:
+                        membername = varname
+                    glo[membername] = getattr(mod, varname)
+                else:
+                    if membername is None:
+                        membername = libname
+                    glo[membername] = importlib.import_module(libname)
 
         try:
             val = eval(expression, glo, {})
