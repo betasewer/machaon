@@ -158,6 +158,14 @@ def shell_commands():
             help="更新日時で降順に並び替える",
             const="t",
             dest="howsort"
+        )["target -d --dir"](
+            help="ディレクトリのみ表示する",
+            const=r"|d",
+            dest="pattern"
+        )["target -f --file"](
+            help="ファイルのみ表示する",
+            const=r"|f",
+            dest="pattern"
         )["target -o --opc"](
             help="OPCパッケージのみ表示する",
             const=r"\.(docx|doc|xlsx|xls|pptx|ppt)$",

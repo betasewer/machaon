@@ -142,8 +142,17 @@ def filelist(app, pattern=None, long=False, howsort=None, recurse=1, silent=Fals
     def walk(dirpath, level):
         items = [(x,os.path.join(dirpath,x)) for x in os.listdir(dirpath)]
         for fname, fpath in items:
-            if pattern is None or re.search(pattern, fname):
-                paths.append(FilePath(fpath))
+            # フィルタ
+            if pattern is not None:
+                if pattern == "|d" and not os.path.isdir(fpath):
+                    continue
+                elif pattern == "|f" and not os.path.isfile(fpath):
+                    continue
+                elif not re.search(pattern, fname):
+                    continue
+
+            paths.append(FilePath(fpath))
+            
             if recurse>level and os.path.isdir(fpath):
                 walk(fpath, level+1)
 
