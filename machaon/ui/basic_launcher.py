@@ -53,6 +53,8 @@ class Launcher():
                 else:
                     viewer = self.dataviewer(datas.get_viewtype())
                     self.insert_screen_dataview(msg, viewer, datas)
+            elif tag == "canvas":
+                self.insert_screen_canvas(msg)
             else:
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_message(msg)
@@ -93,6 +95,10 @@ class Launcher():
     
     #
     def insert_screen_appendix(self, values, title=""):
+        pass
+    
+    #
+    def insert_screen_canvas(self, canvas):
         pass
     
     #

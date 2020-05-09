@@ -77,6 +77,12 @@ def app_sample_commands():
             from_module="machaon.commands.app",
             description="プログレスバーのテスト"
         )
+    )["graphics"](
+        describe_command(
+            target="draw_graphic",
+            from_module="machaon.commands.app",
+            description="図形描画のテスト"
+        )
     )
 
 #

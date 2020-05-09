@@ -267,4 +267,19 @@ def progress_display(app):
     app.finish_progress_display(total=50)
 
     
+#
+def draw_graphic(app):
+    app.message_em("図形描画のテスト")
+
+    with app.canvas("cv", width=200, height=400) as cv:
+        cv.rectangle_frame(coord=(2,2,100,200), color="#00FF00")
+        cv.rectangle_frame(coord=(50,50,200,250), color="#FF0000", dash=",")
+        cv.rectangle_frame(coord=(10,100,90,300), color="#0000FF")
+    
+    with app.canvas("cv2", width=200, height=400) as cv:
+        cv.oval(coord=(10,10,200,400), color="#004444")
+        cv.rectangle(coord=(2,2,100,200), color="#00FF00")
+        cv.rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
+        cv.rectangle(coord=(10,100,90,300), color="#0000FF")
+
     

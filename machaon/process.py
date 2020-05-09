@@ -6,7 +6,7 @@ import inspect
 import threading
 import queue
 import time
-from typing import Sequence, Optional
+from typing import Sequence, Optional, List, Dict, Any, Tuple
 from collections import defaultdict
 
 from machaon.dataset import DataViewFactory
@@ -596,6 +596,9 @@ class Spirit():
     @_spirit_msgmethod
     def dataview(self):
         return ProcessMessage(tag="dataview")
+    
+    def canvas(self, name, width, height, color=None):
+        return ProcessScreenCanvas(self, name, width, height, color)
 
     # ファイル対象に使用するとよい...
     def print_target(self, target):
@@ -862,6 +865,44 @@ class ProcessMessageIO():
     
     def closed(self):
         return False
+
+#
+#
+#
+class ProcessScreenCanvas():
+    def __init__(self, spi, name, width, height, color=None):
+        self.spirit = spi
+        self.graphs = []
+        self.name = name
+        self.bg = color
+        self.width = width
+        self.height = height
+
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, et, ev, tb):
+        self.post()
+        return None
+    
+    def post(self):
+        self.spirit.post_message(ProcessMessage(tag="canvas", canvas=self))
+    
+    def get_graphs(self) -> List[Tuple[str, Dict[str, Any]]]:
+        return self.graphs
+    
+    def add_graph(self, typename, **kwargs):
+        self.graphs.append((typename, kwargs))
+        
+    def rectangle_frame(self, *, coord=None, width=None, color=None, dash=None, stipple=None):
+        self.add_graph("rectangle-frame", coord=coord, width=width, color=color, dash=dash, stipple=stipple)
+        
+    def rectangle(self, *, coord=None, color=None, dash=None, stipple=None):
+        self.add_graph("rectangle", coord=coord, color=color, dash=dash, stipple=stipple)
+
+    def oval(self, *, coord=None, color=None, dash=None, stipple=None):
+        self.add_graph("oval", coord=coord, color=color, dash=dash, stipple=stipple)
+
 
 #
 # #####################################################################

@@ -214,7 +214,7 @@ class tkLauncher(Launcher):
         #self.root.overrideredirect(True)
         from machaon.ui.theme import dark_classic_theme
         self.apply_theme(dark_classic_theme())
-        
+            
         # イベント
         def bind_event(*widgets):
             def _deco(fn):
@@ -397,6 +397,58 @@ class tkLauncher(Launcher):
             self.log.yview_moveto(1.0) # ログ下端へスクロール
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
+        
+    def insert_screen_canvas(self, msg):
+        """ ログ欄に図形を描画する """
+        self.log.configure(state='normal')
+        canvas_id = self.create_screen_canvas_script(msg.argument("canvas"))
+        self.log.window_create(tk.END, window=canvas_id)
+        self.log.insert(tk.END, "\n") # 
+        self.log.configure(state='disabled')
+        
+    def create_screen_canvas_script(self, canvas):
+        """ キャンバスを作成する """
+        bg = canvas.bg
+        if bg is None:
+            bg = self.theme.getval("color.background")
+
+        cv = tk.Canvas(
+            self.log,
+            width=canvas.width,
+            height=canvas.height,
+            bg=bg,
+            highlightbackground=bg,
+            highlightcolor=bg
+        )
+
+        for typ, args in canvas.get_graphs():
+            if args.get("coord") is None:
+                args["coord"] = (1, 1, canvas.width, canvas.height)
+
+            if args.get("color") is None:
+                args["color"] = self.theme.getval("color.message")
+
+            if args.get("width") is None:
+                args["width"] = 1
+               
+            if typ == "rectangle":
+                cv.create_rectangle(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
+            elif typ == "rectangle-frame":
+                coord = args["coord"]
+                coordlist = [
+                    coord[0], coord[1],
+                    coord[2], coord[1],
+                    coord[2], coord[3],
+                    coord[0], coord[3],
+                    coord[0], coord[1]
+                ]
+                cv.create_line(*coordlist, fill=args["color"], width=args["width"], dash=args["dash"])
+            elif typ == "oval":
+                cv.create_oval(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
+            else:
+                raise NotImplementedError()
+
+        return cv
         
     def watch_active_process(self):
         """ アクティブなプロセスの発するメッセージを読みに行く """
