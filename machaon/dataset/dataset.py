@@ -92,19 +92,30 @@ class DataReference():
         return preds, invalids
         
     #
-    def __getitem__(self, name_expr):
-        first_name, *names = name_expr.split()
+    def __getitem__(self, name_expr):        
+        if isinstance(name_expr, slice):
+            deftype = name_expr.stop
+            first_name, *names = name_expr.start.split()
+        else:
+            deftype = None
+            first_name, *names = name_expr.split()
+
         def _parameters(
             disp="", 
             type=None,
             value=None,
-            printer=False,
         ):
             if value is None:
-                value = getattr(self.itemclass, first_name, None)
-            p = Predicate(predtype=type, description=disp, value=value, printer=printer)
+                value = getattr(self.itemclass, first_name.replace("-","_"), None)
+            
+            if type is None and deftype is not None:
+                type = deftype
+
+            p = Predicate(predtype=type, description=disp, value=value)
+            
             self.add_pred((first_name, *names), p)
             return self
+
         return _parameters
     
     def default_columns(self, 

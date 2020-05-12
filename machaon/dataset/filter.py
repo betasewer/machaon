@@ -75,19 +75,19 @@ del _import_builtin_operators
 #
 #
 class Predicate():
-    class NOT_OPERATABLE():
+    class NOVALUE():
+        pass
+    class UNDEFINED():
         pass
 
     def __init__(self, 
         predtype, 
         description,
-        value=None,
-        printer=False
+        value,
     ):
         self.description = description
         self.predtype = predtype
-        self.value = value
-        self.printer = printer
+        self.value = value or Predicate.UNDEFINED
 
     def get_description(self):
         return self.description
@@ -97,6 +97,9 @@ class Predicate():
 
     def is_number(self):
         return self.predtype == "int" or self.predtype == "float"
+    
+    def is_printer(self):
+        return self.predtype == "printer"
     
     #
     def get_type_traits(self):        
@@ -110,22 +113,21 @@ class Predicate():
         elif pred_type == "float":
             vt = float_type
         else:
-            raise BadOperatorError("")
+            raise BadOperatorError(pred_type)
         return vt
 
     def make_operator_lhs(self, item):
-        if self.printer:
-            return Predicate.NOT_OPERATABLE
-        elif self.value:
-            return self.value(item)
+        if self.is_printer():
+            return Predicate.NOVALUE
         else:
-            return item
+            return self.value(item)
     
     def do_print(self, item, spirit):
-        if self.printer:
+        if self.is_printer():
             self.value(item, spirit)
         else:
-            spirit.message(self.value(item))
+            v = self.value(item)
+            spirit.message(v)
 
 # (A and B) or (C and D)
 # A B and C D and or
