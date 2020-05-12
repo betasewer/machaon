@@ -317,6 +317,9 @@ class ArgTypeLibrary:
             raise ValueError("Bad converter: {}".format(converter))
         self._types[typename] = t
         return t
+    
+    def exists(self, typename:str) -> bool:
+        return typename in self._types
         
     def generate(self, typename: str, args, kwargs) -> ArgType:
         if typename not in self._types:
@@ -378,7 +381,10 @@ def typeof_argument(typecode: Union[None, str, type, ArgType] = None, *args, **k
     elif isinstance(typecode, str):
         return _argtypelib.generate(typecode, args, kwargs)
     elif isinstance(typecode, type):
-        return _argtypelib.generate(typecode.__name__, args, kwargs)
+        if _argtypelib.exists(typecode.__name__):
+            return _argtypelib.generate(typecode.__name__, args, kwargs)
+        else:
+            return _argtypelib.generate("constant", (typecode,), {})
     elif isinstance(typecode, ArgType):
         return typecode
     else:
@@ -480,6 +486,20 @@ class Dirpaths(Filepaths):
 )
 class InputDirpaths(Dirpaths, InputFilepaths):
     pass
+
+#
+@argument_type(
+    name="constant",
+    description="定数でのみ利用可能な型"
+)
+class ConstantValue():
+    def __init__(self, type):
+        self.type = type
+        
+    def convert(self, arg):
+        if not isinstance(arg, self.type):
+            raise ValueError("Constant value cannot be parsed from another type '{}'".format(type(arg).__name__))
+        return arg
 
 
 #
