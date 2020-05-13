@@ -240,17 +240,19 @@ def test_candidates_engine_parsing(a_cmdset):
         [ "commandce", "commandc --epsilon", "command --cappa e" ]
     )
 
-    # 1つ: command -s は存在しないので飛ばされる
+    # 2つ: command -s は存在しないので引数として残される：そうしないとコマンドエラーの原因が分かりにくいであろう
     assert candidate_tests(
         eng.expand_parsing_command("tscommands", spirit),
-        [ "commands" ]
+        [ "commands", "command s" ]
     )
     
-    # 候補なし
+    # やはり、zが分離され、そして解釈できず残される
     assert candidate_tests(
         eng.expand_parsing_command("tscommandz", spirit),
-        []
+        [ "command z" ]
     )
+
+    # 空のコマンドには空で返す
     assert candidate_tests(
         eng.expand_parsing_command("", spirit),
         []
@@ -284,7 +286,5 @@ def test_postfix_syntax_engine_parsing(a_cmdset):
             "command --epsilon --rho | files.txt --cappa 20"
         ]
     )
-
-pytest.main(["-k test_split_postfix_syntax"])
 
 

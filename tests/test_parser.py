@@ -291,6 +291,7 @@ def test_parsing_candidates():
     assert parse_and_recompose(["john", "-ozp1"]) == [["john", "-o", "-zp", "1"]]
 
 
+
 #
 # 引数型
 #
@@ -429,3 +430,4 @@ def test_parser_result():
         { 'ids' : 10, 'aux' : None, 'out' : "c:\\out.txt", 'lis' : [1,2,3]},
         { 'ids' : 20, 'aux' : None, 'out' : "c:\\out.txt", 'lis' : [1,2,3]}
     ]
+

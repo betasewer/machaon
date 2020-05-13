@@ -1,7 +1,7 @@
 from typing import List, Sequence, Optional, Any, Tuple
 
 from machaon.cui import fixsplit
-from machaon.parser import BadCommand, CommandParser, CommandParserResult, PARSE_SEP, TokenRow
+from machaon.parser import BadCommand, CommandParser, CommandParserResult, PARSE_SEP, TokenRow, product_candidates
 from machaon.process import ProcessTarget, Spirit
 
 #
@@ -195,14 +195,15 @@ class CommandEngine:
 
             argparser: CommandParser = target.get_argparser()
             tailrows = argparser.generate_parsing_candidates(commandargs)
-            if tailrows:
-                rows.extend(tailrows)
+            rows.extend(tailrows)
 
             if optioncompound:
                 # コマンド名に抱合されたオプションを前に挿入する
-                optkey_part = [argparser.add_option_prefix(optioncompound)]
-                optrows = argparser.generate_parsing_candidates(optkey_part)
+                optrows = argparser.generate_parsing_candidates((optioncompound,), compound=True)
                 rows = product_candidates(optrows, (PARSE_SEP,), rows)
+            
+            if not rows:
+                rows.append([]) # 引数ゼロを示す
 
             for cmdrow in rows:
                 entry = PossibleCommandSyntaxItem(target, spirit, cmdrow)
@@ -272,18 +273,6 @@ class CommandEngine:
             if cmdset.match(commandhead):
                 return True
         return False
-
-#
-#
-#
-def product_candidates(head: Sequence[TokenRow], midvalues: Any, tail: Sequence[TokenRow]) -> List[TokenRow]:
-    newrows: List[TokenRow] = []
-    for headrow in head:
-        for tailrow in tail:
-            if not headrow and not tailrow:
-                continue
-            newrows.append([*headrow, *midvalues, *tailrow])
-    return newrows
 
 #
 #

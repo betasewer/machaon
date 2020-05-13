@@ -536,9 +536,6 @@ class CommandParser():
         self.prefix_chars = prefix_chars
 
         self._optiontrie = CompoundOptions()
-        self._optiontrie.add_option("h", None)
-
-        self.enable_compound_options = True
 
         self.positional: Optional[OptionContext] = None
         self.options: List[OptionContext] = []
@@ -708,27 +705,26 @@ class CommandParser():
     #
     # 引数解析
     #    
-    def generate_parsing_candidates(self, commands: Sequence[str]) -> List[TokenRow]:
-        # コマンド解釈の候補一覧を作成
-        command_rows: List[TokenRow] = [[]]
+    def generate_parsing_candidates(self, commands: Sequence[str], compound=False) -> List[TokenRow]:
+        # 可能な全てのコマンド解釈を展開する
+        command_rows: List[TokenRow] = []
 
-        if self.enable_compound_options:
-            # 抱合オプションごとに可能な全ての解釈を展開する
-            for command in commands:
-                if self._prefix_length(command) == 1:
-                    newrows = []
-                    for newrow in self._optiontrie.parse(command[1:]):
-                        for cmdrow in command_rows:
-                            newrows.append(cmdrow + newrow)
-                    if commands and not newrows:
-                        # オプションを解釈できなかった：何も表示せずスキップする
-                        continue
-                    command_rows = newrows
-                else:
-                    command_rows = [x+[command] for x in command_rows]
-        
-        if not command_rows:
-            command_rows = [[*commands]]
+        for command in commands:
+            if self._prefix_length(command) == 1:
+                addrows = self._optiontrie.parse(command[1:])
+                if not addrows:
+                    # オプションとして解釈できなくても、そのままにしておく
+                    addrows = [[command]]
+            elif compound:
+                addrows = self._optiontrie.parse(command)
+                if not addrows:
+                    # 抱合オプションが解釈できなかった場合、引数と考える
+                    addrows = [[command]]
+            else:
+                # 長いオプション名や値はそのまま追加する
+                addrows = [[command]]
+
+            command_rows = product_candidates(command_rows, (), addrows)
         
         return command_rows
 
@@ -752,10 +748,7 @@ class CommandParser():
             pfxlen = None
             if token == PARSE_SEP:
                 # コンテキストを即座に終了し、新しいコンテキストを開始する
-                contexts.append((curcxt, argstack))
-                argstack = []
-                curcxt = None
-                continue
+                newcxt = "<eval>"
 
             elif isinstance(token, OptionContext):
                 # 既に解析済みのオプション
@@ -781,7 +774,7 @@ class CommandParser():
             
             elif token == PARSE_END:
                 # 終端まで来た
-                newcxt = "<end>"
+                newcxt = "<eval>"
                 
             # 新たなオプションが開始した：前のコンテキストと引数を解決する
             if newcxt:
@@ -798,8 +791,11 @@ class CommandParser():
                     # 現在のコンテキストを終了し、新しいコンテキストを開始する
                     contexts.append((curcxt, argstack))
                     argstack = []
-
-                curcxt = newcxt
+                
+                if newcxt == "<eval>":
+                    curcxt = None
+                else:
+                    curcxt = newcxt
 
         # 引数をチェックする
         postposit = True
@@ -911,6 +907,14 @@ class CommandParser():
             line = "{} [{}]  {}".format(" ".join(cxt.make_keys("-")), cxt.get_value_typename(), cxt.get_help())
             lines.append(line)
         return lines
+
+#
+def product_candidates(head: Sequence[TokenRow], midvalues: Sequence[Token], tail: Sequence[TokenRow]) -> List[TokenRow]:
+    newrows: List[TokenRow] = []
+    for headrow in (head or [[]]):
+        for tailrow in (tail or [[]]):
+            newrows.append([*headrow, *midvalues, *tailrow])
+    return newrows
 
 #
 #
