@@ -6,13 +6,15 @@ import datetime
 import traceback
 from typing import Tuple, Sequence, List
 
-from machaon.cui import fixsplit
+from machaon.cui import fixsplit, composit_text
 from machaon.process import ProcessMessage
 
 #
 #
 #
 class Launcher():
+    wrap_width = 0xFFFFFF
+
     def __init__(self, title="", geometry=(900,400)):
         self.app = None
         self.screen_title = title
@@ -56,6 +58,10 @@ class Launcher():
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
             else:
+                # 適宜改行を入れる
+                if msg.argument("wrap", True):
+                    msg.text = composit_text(msg.text, type(self).wrap_width)
+
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_message(msg)
     

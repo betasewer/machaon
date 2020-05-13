@@ -70,6 +70,8 @@ class HYPERLABEL_DATAITEM:
 #
 #
 class tkLauncher(Launcher):
+    wrap_width = 72 
+
     def __init__(self, title="", geometry=(900,400)):
         super().__init__(title, geometry)
         # GUI
@@ -925,6 +927,17 @@ class DataTableView():
 #
 class DataWideView(DataTableView):
     pass
+
+#
+class DataListView():
+    @classmethod
+    def render(cls, ui, wnd, data):
+        pass
+    
+    #
+    @classmethod
+    def change_select(cls, ui, wnd, charindex):
+        pass
 
 #
 #

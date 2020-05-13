@@ -13,12 +13,20 @@ def reencode(s, encoding, errors="replace"):
 #
 #
 #
-def get_char_width(c, *, a=False):
+def get_char_width(c, *, a=False, tab_width=4):
+    if c == "\t":
+        return tab_width
+    
+    cat = unicodedata.category(c)
+    if cat == "Cc" or cat == "Cf":
+        return 0
+
     eaw = unicodedata.east_asian_width(c)
     if eaw in u"WF":
         return 2
     if a and eaw == u"A":
         return 2
+
     return 1
 
 def get_text_width(text, *, a=False):
@@ -38,7 +46,7 @@ def rjust(text, width, sep=" "):
 #
 # 指定の長さ以下は省略する
 #
-def collapse_text(text, width):
+def collapse_text(text, width, tab_width=4):
     results = []
     for s in text.splitlines():
         s_width = 0
@@ -47,7 +55,7 @@ def collapse_text(text, width):
             if c == "\n":
                 break
         
-            c_width = get_char_width(c, a=True)
+            c_width = get_char_width(c, a=True, tab_width=tab_width)
             if s_width + c_width > width:
                 s_res += "..."
                 break
@@ -63,26 +71,34 @@ def collapse_text(text, width):
 #
 #  max_width 全体の幅
 #  indent 全体の字下げ
-#  *first_indent 一行目の字下げ（絶対）
+#  *first_indent 一行目の字下げ（絶対的値）
 #
-def composit_text(s, max_width, indent, first_indent=None):
+def composit_text(s, max_width, *, indent=0, first_indent=None, tab_width=4):
     if first_indent is None:
         first_indent = indent
         
     text = " " * indent
-    line_width = 0
+    linewidth = 0
     for ch in s:
-        line_width += get_char_width(ch, a=True)
-        text += ch
-        
-        if line_width > max_width:
-            ch = "\n"
-            text += " " * indent
-            
         if ch == "\n":
-            text += " " * first_indent
-            line_width = 0
+            text += ch
+            linewidth = 0
+            continue
         
+        ind = None
+        if linewidth == 0:
+            ind = " " * first_indent
+        else:
+            ind = " " * indent
+        
+        newwidth = linewidth + get_char_width(ch, a=True, tab_width=tab_width)
+        if newwidth > max_width:
+            ch = "\n" + ch
+            newwidth -= linewidth
+
+        text = text + ind + ch
+        linewidth = newwidth
+
     return text
 
 #
