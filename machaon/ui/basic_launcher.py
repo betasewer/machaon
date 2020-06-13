@@ -10,6 +10,9 @@ from machaon.cui import fixsplit, composit_text
 from machaon.process import ProcessMessage
 
 #
+meta_command_sigil = "`"
+
+#
 #
 #
 class Launcher():
@@ -60,7 +63,7 @@ class Launcher():
             else:
                 # 適宜改行を入れる
                 if msg.argument("wrap", True):
-                    msg.text = composit_text(msg.text, type(self).wrap_width)
+                    msg.text = composit_text(msg.get_text(), type(self).wrap_width)
 
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_message(msg)
@@ -121,7 +124,7 @@ class Launcher():
             return
 
         # 特殊コマンド
-        if command[0] == ":":
+        if command[0] == meta_command_sigil:
             self.invoke_meta_command(command[1:])
             return
     
@@ -169,7 +172,7 @@ class Launcher():
             procindex, argname = parse_procindex(head)
             msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
 
-        elif command.startswith("?"):
+        elif command.startswith("arghelp"):
             # 引数またはアクティブなコマンドのヘルプを末尾に表示する
             procindex, cmd = parse_procindex(command[1:])
             msg = self.meta_command_show_help(cmd, procindex)
@@ -179,9 +182,9 @@ class Launcher():
             cmdstr = command[1:].strip()
             msg = self.meta_command_show_syntax(cmdstr)
 
-        elif command.startswith("`"):
+        elif command.startswith("invoked"):
             # 呼び出し引数と結果を詳細に表示する
-            procindex, _ = parse_procindex(command[len("invocation"):])
+            procindex, _ = parse_procindex(command[len("invoked"):])
             msg = self.meta_command_show_invocation(procindex)
             
         elif command.startswith("!"):
@@ -197,13 +200,13 @@ class Launcher():
                 ("=", "データビューの選択アイテムを画面に展開"),
                 ("pred", "データビューの述語の一覧を表示"),
                 ("@", "プロセスの引数を入力欄に展開"),
-                ("`", "プロセスの引数と実行結果を表示"),
-                ("?", "プロセスのヘルプを表示"),
+                ("invoked", "プロセスの引数と実行結果を表示"),
+                ("arghelp", "プロセスのヘルプを表示"),
                 ("/", "コマンドの可能な解釈を全て表示"),
                 ("!", "Pythonの式を評価して結果を表示"),
                 ("help", "このヘルプを表示"),
             ]
-            values = [(":"+x,y) for (x,y) in values]
+            values = [(meta_command_sigil+x,y) for (x,y) in values]
             self.insert_screen_appendix(values, title="メタコマンドの一覧")
             msg = None
         
