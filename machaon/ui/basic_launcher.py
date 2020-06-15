@@ -174,7 +174,7 @@ class Launcher():
 
         elif command.startswith("arghelp"):
             # 引数またはアクティブなコマンドのヘルプを末尾に表示する
-            procindex, cmd = parse_procindex(command[1:])
+            procindex, cmd = parse_procindex(command[len("arghelp"):])
             msg = self.meta_command_show_help(cmd, procindex)
         
         elif command.startswith("/"):
