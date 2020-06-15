@@ -12,7 +12,7 @@ from machaon.cui import reencode, fixsplit
 #
 #
 #
-def execprocess(spi, command):
+def execprocess(spi, command, split=False):
     cmds = []
 
     commandhead, commandstr = fixsplit(command, maxsplit=1)
@@ -24,9 +24,12 @@ def execprocess(spi, command):
         cmds.append(cpath)
     else:
         cmds.append(commandhead)
-    
+
     if commandstr:
-        cmds.append(commandstr)
+        if split:
+            cmds.extend(commandstr.split())
+        else:
+            cmds.append(commandstr)
     
     import machaon.platforms
     shell_encoding = machaon.platforms.current.shell_ui().encoding

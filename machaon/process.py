@@ -637,9 +637,7 @@ class Spirit():
     #
     # プロセススレッド側で中断指示を確認する
     def interruption_point(self, *, nowait=False, progress=None, noexception=False):
-        if self.process is None:
-            raise ValueError("no process attached")
-        if self.process.is_interrupted():
+        if self.process and self.process.is_interrupted():
             if not noexception:
                 raise ProcessInterrupted()
             return False
@@ -984,7 +982,7 @@ class ProcessHive:
         p = cha.get_process()
         app.execute_process(p)
 
-    def add(self, process):
+    def add_activate(self, process):
         newindex = len(self.chambers)
         scr = ProcessChamber(newindex, process)
         self.chambers.append(scr)

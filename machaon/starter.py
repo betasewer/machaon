@@ -1,24 +1,34 @@
 from machaon.app import AppRoot
 from machaon.platforms import current
+from machaon.command import CommandPackage
+from machaon.package.package import package
 
-
+#
+#
+#
 class Starter():
-    def __init__(self):
+    def __init__(self, ui, directory):
         self.root = AppRoot()
         self.root.set_current_dir_desktop()
-        self.sources = []
+        self.root.initialize(ui=ui, directory=directory)
 
     def set_cd(self, path):
         self.root.set_current_dir(path)
     
-    def install_commands(self, prefixes, package, *, pip_install=None, **kwargs):
-        source = None
-        if pip_install:
-            prefix = prefixes[0]
-            source = (prefix, "pip", pip_install)
-        if source is not None:
-            self.sources.append(source)
-        self.root.install_commands(prefixes, package, **kwargs)
+    def commandset(self, prefixes_or_package, cmdpackage=None, **packagekwargs):
+        if isinstance(prefixes_or_package, tuple):
+            raise TypeError("prefix must be a space-separated string, not tuple")
+        elif isinstance(prefixes_or_package, (CommandPackage,package)):
+            pkg = prefixes_or_package
+            prefixes = ()
+        elif isinstance(cmdpackage, CommandPackage):
+            pkg = cmdpackage
+            prefixes = prefixes_or_package.split()
+        else:
+            pkg = package(**packagekwargs)
+            prefixes = prefixes_or_package.split()
+        
+        self.root.setup_package(prefixes, pkg)
 
     def go(self):
         return self.root.run()
@@ -27,27 +37,24 @@ class Starter():
 #
 #
 class ShellStarter(Starter):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, directory):
         ui = current.shell_ui()
-        self.root.initialize(ui=ui)
+        super().__init__(ui, directory)
     
-    def install_syscommands(self):
+    def system_commandset(self):
         from machaon.commands.catalogue import app_commands
-        self.install_commands("", app_commands().excluded("interrupt"))
+        self.commandset(app_commands().exclude("interrupt", "theme"))
 
 #
 #
 #
 class TkStarter(Starter):
-    def __init__(self, *, title, geometry):
-        super().__init__()
+    def __init__(self, *, title, geometry, directory):
         from machaon.ui.tk import tkLauncher
         ui = tkLauncher(title, geometry)
-        self.root.initialize(ui=ui)
+        super().__init__(ui, directory)
     
-    def install_syscommands(self):
+    def system_commandset(self):
         from machaon.commands.catalogue import app_commands
-        pkg = app_commands().excluded("interrupt")
-        self.install_commands("", pkg)
+        self.commandset(app_commands().exclude("interrupt"))
 

@@ -2,21 +2,15 @@
 # coding: utf-8
 
 from machaon.cui import test_yesno, composit_text
-
+from machaon.engine import NotYetInstalledCommandSet
 
 #
-# アプリ基本コマンド
+# =================================================================
+#
+# アプリ基幹コマンド
 # 
-def command_interrupt(spi):  
-    pass
-"""  
-    if not app.is_process_running():
-        app.message("実行中のプロセスはありません")
-        return
-    app.message("プロセスを中断します")
-    app.interrupt_process()
-"""
-
+# =================================================================
+#
 #
 class HelpItem():
     def __init__(self, cmdset, command_entry):
@@ -35,7 +29,7 @@ class HelpItem():
     def qual_keyword_list(self):
         pfx = self.cmdset.get_prefixes()
         heads = []
-        for i, kwd in enumerate(self.cmdentry.keywords):
+        for i, kwd in enumerate(self.keyword_list()):
             if i == 0 and pfx:
                 qualkwd = "{}.{}".format(pfx[0], kwd)
             elif pfx:
@@ -76,16 +70,36 @@ class HelpItem():
             disp="コマンドセットの説明"
         )
 
+# 
+class NotYetInstalledItem(HelpItem):
+    def __init__(self, cmdset):
+        super().__init__(cmdset, None)
+    
+    def keyword_list(self):
+        return ["***"]
+        
+    def description(self):
+        return "<インストールされていません>"
+    
+    def setname(self):
+        return "<パッケージ {}>".format(self.cmdset.get_name())
+
+    def setdescription(self):
+        return ""
+
 #
-def command_help(spi):
+def command_commandlist(spi):
     spi.message("<< コマンド一覧 >>")
     spi.message("各コマンドの詳細は <command> --help で")
     spi.message("")
     
     items = []
     for cmdset in spi.get_app().get_command_sets():
-        for entry in cmdset.display_entries():
-            items.append(HelpItem(cmdset, entry))
+        if isinstance(cmdset, NotYetInstalledCommandSet):
+            items.append(NotYetInstalledItem(cmdset))
+        else:
+            for entry in cmdset.display_commands():
+                items.append(HelpItem(cmdset, entry))
 
     spi.create_data(items, ":table")
     spi.dataview()
@@ -139,7 +153,6 @@ class ProcessListItem():
         )["handler"](
             disp="ハンドラ呼び出し"
         )
-
 
 #
 def command_processlist(spi):

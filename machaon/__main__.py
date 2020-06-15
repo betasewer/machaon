@@ -4,7 +4,7 @@
 #
 #
 #
-def launch_sample_app(default_choice=None):
+def launch_sample_app(default_choice=None, directory=None):
     import sys
     import argparse
     import machaon.starter
@@ -16,19 +16,31 @@ def launch_sample_app(default_choice=None):
     p.add_argument("--tk", action="store_const", const="tk", dest="apptype")
     args = p.parse_args()
 
+    if directory is None:
+        directory = "C:\\codes\\machaon\\"
+
     apptype = args.apptype or default_choice
     if apptype is None or apptype == "cui":
-        boo = machaon.starter.ShellStarter()
+        boo = machaon.starter.ShellStarter(directory=directory)
     elif apptype == "tk":
-        boo = machaon.starter.TkStarter(title="machaon sample app", geometry=(900,500))
+        boo = machaon.starter.TkStarter(title="machaon sample app", geometry=(900,500), directory=directory)
     else:
         p.print_help()
         sys.exit()
 
     import machaon.commands.catalogue as catalogue
-    boo.install_commands("", catalogue.app_sample_commands().annexed(catalogue.unicode_commands()))
-    boo.install_commands("", catalogue.shell_commands())
-    boo.install_syscommands()
+    
+    from machaon.package.repository import bitbucket_rep
+    from machaon.package.auth import basic_auth
+    boo.commandset("test", 
+        name="test_module", 
+        source=bitbucket_rep("betasewer/test_module", credential=basic_auth("qaraqalpaq0", True)), 
+        package="hello",
+        separate=True
+    )
+    boo.commandset(catalogue.app_sample_commands().annex(catalogue.unicode_commands()))
+    boo.commandset(catalogue.shell_commands())
+    boo.system_commandset()
 
     boo.go()
 

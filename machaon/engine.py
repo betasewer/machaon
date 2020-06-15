@@ -76,6 +76,8 @@ class CommandSet:
         self.entries = entries
         self.prefixes = prefixes
         self.description = description
+        if isinstance(self.prefixes, str):
+            raise TypeError("'prefixes' must be sequence of str, not str")
         
     def match(self, target):
         m = []
@@ -111,13 +113,39 @@ class CommandSet:
     def get_entries(self):
         return self.entries
     
-    def display_entries(self, *, forcehidden=False):
+    def display_commands(self, *, forcehidden=False):
         entries = []
         for x in sorted(self.entries, key=lambda x: x.commandtype):
             if not forcehidden and x.is_hidden():
                 continue
             entries.append(x)
         return entries
+
+#
+#
+#
+class NotYetInstalledCommandSet():
+    def __init__(self, package_name, prefixes):
+        self.name = package_name
+        self.prefixes = prefixes
+    
+    def match(self, target):
+        return ()
+    
+    def get_name(self):
+        return self.name
+    
+    def get_description(self):
+        raise ValueError("Undefined: Not yet installed")
+    
+    def get_prefixes(self):
+        return self.prefixes
+    
+    def get_entries(self):
+        raise ValueError("Undefined: Not yet installed")
+    
+    def display_commands(self, *a, **kw):
+        return []
 
 #
 # コマンド解釈の候補
@@ -158,6 +186,12 @@ class CommandEngine:
         
     def install_commands(self, commandset):
         self.commandsets.append(commandset)
+    
+    def get_command_set(self, index):
+        return self.commandsets[index]
+    
+    def replace_command_set(self, index, cmdset):
+        self.commandsets[index] = cmdset
     
     def command_sets(self):
         return self.commandsets

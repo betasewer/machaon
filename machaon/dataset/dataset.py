@@ -27,6 +27,17 @@ class InvalidColumnNames(Exception):
 #
 #
 #
+class DataMethod():
+    def __init__(self, name):
+        self.name = name
+
+    def __call__(self, item):
+        p = getattr(item, self.name)
+        return p()
+
+#
+#
+#
 class DataReference():
     def __init__(self, *, itemclass):
         self._predicates: Dict[str, Tuple[str, Predicate]] = {}
@@ -106,7 +117,7 @@ class DataReference():
             value=None,
         ):
             if value is None:
-                value = getattr(self.itemclass, first_name.replace("-","_"), None)
+                value = DataMethod(first_name.replace("-","_"))
             
             if type is None and deftype is not None:
                 type = deftype

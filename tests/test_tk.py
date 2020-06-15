@@ -18,7 +18,7 @@ def getlasttag(log):
 def approot():
     app = AppRoot()
     wnd = tkLauncher("test")
-    app.initialize(ui=wnd)
+    app.initialize(ui=wnd, directory="")
     return app
 
 def test_message_window(approot):

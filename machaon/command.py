@@ -75,12 +75,12 @@ class CommandBuilder():
     #
     #
     #
-    def create_entry(self, keywords, setname=None):
+    def create_entry(self, keywords, setkeyword=None):
         firstkwd, *_kwds = keywords
 
         prog = self.prog
         if prog is None:
-            prog = "{}.{}".format(setname, firstkwd) if setname else firstkwd
+            prog = "{}.{}".format(setkeyword, firstkwd) if setkeyword else firstkwd
 
         return CommandEntry(
             keywords,
@@ -104,7 +104,7 @@ class CommandBuilder():
                 mod = importlib.import_module(self.frommodule)
                 member = getattr(mod, target, None)
                 if member is None:
-                    raise ValueError("コマンド'{}'のターゲット'{}'が見つかりません".format(prog, target))
+                    raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(prog, target))
                 target = member
             
         # コマンド自体に定義された初期化処理があれば呼ぶ
@@ -175,21 +175,21 @@ class CommandPackage():
     #
     def create_commands(self, app, command_prefixes):
         if not command_prefixes:
-            setname = None
+            setkwd = None
         else:
-            setname = command_prefixes[0]
+            setkwd = command_prefixes[0]
 
         entries = []
         for cmds, builder in self.builders:
             if len(cmds)==0:
                 continue
-            entry = builder.create_entry(cmds, setname)
+            entry = builder.create_entry(cmds, setkwd)
             entries.append(entry)
         
         return CommandSet(self.name, command_prefixes, entries, description=self.desc)
     
     # パッケージをまとめて新しいパッケージに
-    def annexed(self, *others):
+    def annex(self, *others):
         p = CommandPackage(self.name, description=self.desc, spirit=self.spirit)
         p.builders = self.builders
         for other in others:
@@ -197,7 +197,7 @@ class CommandPackage():
         return p
     
     # コマンドを除外して新しいパッケージに
-    def excluded(self, *excludenames):
+    def exclude(self, *excludenames):
         p = CommandPackage(self.name, description=self.desc, spirit=self.spirit)
         for cmds, builder in self.builders:
             if cmds[0] in excludenames:

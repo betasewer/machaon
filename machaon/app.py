@@ -10,10 +10,12 @@ import subprocess
 
 from typing import Optional, List, Any
 
-from machaon.engine import CommandEngine, CommandEntry
-from machaon.command import describe_command
+from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet
+from machaon.command import describe_command, CommandPackage
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
+from machaon.package.package import package_manager
 from machaon.cui import test_yesno
+from machaon.milestone import milestone, milestone_msg
 import machaon.platforms
 
 #
@@ -29,13 +31,17 @@ class AppRoot:
         self.cmdengine = None 
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
+        self.pkgmanager = None
+        self.cmdpackages = []
 
-    def initialize(self, *, ui):
+    def initialize(self, *, ui, directory):
         self.ui = ui
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
         self.processhive = ProcessHive()
         self.cmdengine = CommandEngine()
+        self.pkgmanager = package_manager(directory)
+        self.pkgmanager.add_to_import_path()
     
     def get_ui(self):
         return self.ui
@@ -43,10 +49,72 @@ class AppRoot:
     #
     # コマンドの追加
     #
-    # コマンドパッケージを導入
-    def install_commands(self, prefixes, package):
-        cmdset = package.create_commands(self, prefixes)
+    # パッケージを導入
+    def setup_package(self, prefixes, package):
+        # コマンドセットを構築して追加する
+        if isinstance(package, CommandPackage):
+            cmdset = package.create_commands(self, prefixes)
+            package = None
+        else:
+            if not package.is_installed_module():
+                # ダミーのコマンドセットを設置
+                cmdset = NotYetInstalledCommandSet(package.name, prefixes)
+            else:
+                cmdbuilder = package.load_command_builder()
+                cmdset = cmdbuilder.create_commands(self, prefixes)
+
         self.cmdengine.install_commands(cmdset)
+
+        # パッケージ／コマンドビルダを格納する
+        self.cmdpackages.append(package)
+    
+    # パッケージとコマンドセットの組を取得する
+    def get_package_and_commandset(self, package_index):
+        # パッケージを取得
+        if package_index < 0 or len(self.cmdpackages) <= package_index:
+            raise IndexError("package_index") 
+        package = self.cmdpackages[package_index]
+        # コマンドセット
+        cmdset = self.cmdengine.get_command_set(package_index)
+        return package, cmdset
+
+    # パッケージにアップデートが必要か
+    def get_package_status(self, package):
+        self.pkgmanager.load_database()
+        if not self.pkgmanager.is_installed(package):
+            return "none"
+        elif self.pkgmanager.to_be_updated(package):
+            return "old"
+        else:
+            return "latest"
+            
+    # パッケージをローカルに展開する
+    def operate_package(self, package, install=False, uninstall=False, update=False):
+        self.pkgmanager.load_database()
+        if install:
+            yield from self.pkgmanager.install(package)
+        elif uninstall:
+            yield from self.pkgmanager.uninstall(package)
+        elif update:
+            yield from self.pkgmanager.update(package)
+    
+    def count_package(self):
+        return len(self.cmdpackages)
+    
+    # パッケージからコマンドセットを構築し、差し替える
+    def build_commandset(self, package_index, package):
+        oldcmdset = self.cmdengine.get_command_set(package_index)
+        cmdbuilder = package.load_command_builder()
+        newcmdset = cmdbuilder.create_commands(self, oldcmdset.prefixes)
+        self.cmdengine.replace_command_set(package_index, newcmdset)
+        return newcmdset
+    
+    # コマンドセットを未インストール状態に差し替える
+    def disable_commandset(self, package_index, package):
+        oldcmdset = self.cmdengine.get_command_set(package_index)
+        dumbcmdset = NotYetInstalledCommandSet(package.name, oldcmdset.prefixes)
+        self.cmdengine.replace_command_set(package_index, dumbcmdset)
+        return dumbcmdset
 
     #
     # アプリの実行
@@ -55,7 +123,7 @@ class AppRoot:
         if self.ui is None:
             raise ValueError("App UI must be initialized")
         if self.cmdengine is None:
-            raise ValueError("App launcher must be initialized")
+            raise ValueError("App command engine must be initialized")
         self.mainloop()
 
     def exit(self):
@@ -84,7 +152,7 @@ class AppRoot:
     # プロセスをスレッドで実行しアクティブにする
     def run_process(self, commandstr):
         process = Process(commandstr)
-        chamber = self.processhive.add(process)
+        chamber = self.processhive.add_activate(process)
         self.processhive.run(self)
         return chamber
     

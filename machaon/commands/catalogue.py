@@ -6,23 +6,43 @@ from machaon.command import describe_command, describe_command_package
 #
 #
 def app_commands():
-    import machaon.commands.app as appcmd
+    import machaon.commands.app
+    import machaon.commands.package
     return describe_command_package(
         "machaon.app",
         description="ターミナルを操作するコマンドです。",
-    )["help"](
+    )["program-list prog"](
         describe_command(
-            appcmd.command_help,      
-            description="ヘルプを表示します。",
+            machaon.commands.app.command_commandlist,
+            description="コマンドの一覧を表示します。",
         )
-    )["process_list"](
+    )["process-list proc"](
         describe_command(
-            appcmd.command_processlist,
-            description="プロセスの一覧を表示します。"
+            machaon.commands.app.command_processlist,
+            description="起動されたプロセスの一覧を表示します。"
+        )
+    )["package"](
+        describe_command(
+            machaon.commands.package.command_package,
+            description="コマンドパッケージを管理します。",
+        )["target -u --update"](
+            help="ローカルのパッケージを更新する",
+            dest="action",
+            const="update",
+        )["target -r --remove"](
+            help="ローカルからパッケージを取り除く",
+            dest="action",
+            const="remove",
+        )["target --forceupdate"](
+            help="変更が無くてもアップデートを行う",
+            flag=True
+        )["target --index"](
+            help="序数で対象コマンドパッケージを指定する",
+            valuetype="int"
         )
     )["theme"](
         describe_command(
-            appcmd.command_ui_theme,
+            machaon.commands.app.command_ui_theme,
             description="アプリのテーマを変更します。"
         )["target themename"](
             help="テーマ名",
@@ -129,6 +149,9 @@ def shell_commands():
         )["target command"](
             help="実行するコマンド",
             remainder=True
+        )["target --split"](
+            help="引数を空白で区切って渡す",
+            flag=True
         )
     )["cd"](
         describe_command(
