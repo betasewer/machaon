@@ -70,7 +70,7 @@ class HYPERLABEL_DATAITEM:
 #
 #
 class tkLauncher(Launcher):
-    wrap_width = 72 
+    wrap_width = 144
 
     def __init__(self, title="", geometry=(900,400)):
         super().__init__(title, geometry)
