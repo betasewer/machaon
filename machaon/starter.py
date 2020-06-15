@@ -31,6 +31,13 @@ class Starter():
             prefixes = prefixes_or_package.split()
         
         self.root.setup_package(prefixes, pkg)
+    
+    # インストール済みパッケージのコマンドエントリをこの場で読み込む
+    def commandset_entry(self, package_name, entrypoint=None):
+        tmppkg = package(source=None, name=package_name, package=package_name, entrypoint=entrypoint)
+        if not tmppkg.is_installed_module():
+            raise ValueError("指定のモジュールはインストールされていません")
+        return tmppkg.load_command_builder()
 
     def go(self):
         return self.root.run()
