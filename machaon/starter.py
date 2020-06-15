@@ -25,6 +25,8 @@ class Starter():
             pkg = cmdpackage
             prefixes = prefixes_or_package.split()
         else:
+            if "package_name" in packagekwargs:
+                packagekwargs["name"] = packagekwargs["package_name"]
             pkg = package(**packagekwargs)
             prefixes = prefixes_or_package.split()
         

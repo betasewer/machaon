@@ -10,31 +10,28 @@ from typing import Optional
 from machaon.cui import reencode, fixsplit
 
 #
-#
-#
-def execprocess(spi, command, split=False):
-    cmds = []
-
-    commandhead, commandstr = fixsplit(command, maxsplit=1)
-    if not commandhead:
-        return
-
-    cpath = spi.abspath(commandhead)
-    if os.path.isfile(cpath):
-        cmds.append(cpath)
-    else:
-        cmds.append(commandhead)
-
-    if commandstr:
-        if split:
-            cmds.extend(commandstr.split())
-        else:
-            cmds.append(commandstr)
-    
+def popen_capture_output(cmds):
     import machaon.platforms
     shell_encoding = machaon.platforms.current.shell_ui().encoding
 
-    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    while True:
+        # バッファから1行読み込む.
+        bline = proc.stdout.readline()
+        line = bline.decode(shell_encoding)
+        kill = yield line.rstrip() # 改行を落とす
+        #sys.stdout.write(line)
+        
+        # 中止する
+        if kill:
+            proc.kill()
+            yield "<StopIteration>" # send用に吐く最後のメッセージ
+
+        # バッファが空 + プロセス終了.
+        if not line and proc.poll() is not None:
+            break
+
+    """
     out = None
     err = None
     while True:
@@ -58,8 +55,39 @@ def execprocess(spi, command, split=False):
         o = out.decode(shell_encoding)
         for line in o.splitlines():
             spi.message(line)
-    
+    """
 
+#
+#
+#
+def execprocess(spi, command, split=False):
+    cmds = []
+
+    commandhead, commandstr = fixsplit(command, maxsplit=1)
+    if not commandhead:
+        return
+
+    cpath = spi.abspath(commandhead)
+    if os.path.isfile(cpath):
+        cmds.append(cpath)
+    else:
+        cmds.append(commandhead)
+
+    if commandstr:
+        if split:
+            cmds.extend(commandstr.split())
+        else:
+            cmds.append(commandstr)
+    
+    proc = popen_capture_output(cmds)
+    for msg in proc:
+        if not spi.interruption_point(noexception=True):
+            proc.send(True)
+            spi.warn("実行中のプロセスを強制終了しました")
+            spi.raise_interruption()
+        
+        spi.message(msg)
+        
 #
 #
 #

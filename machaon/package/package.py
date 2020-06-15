@@ -37,7 +37,9 @@ class _internal_entrypoint:
 #
 #
 class package():
-    def __init__(self, name, source, package=None, entrypoint=None, separate=True, hashval=None):
+    def __init__(self, source, name=None, package=None, entrypoint=None, separate=True, hashval=None):
+        if not name:
+            name = source.name
         self.name = name
         self.source = source
         self.separate = separate
@@ -305,21 +307,11 @@ def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=
     if options:
         cmd.extend(options)
 
-    import machaon.platforms
-    shell_encoding = machaon.platforms.current.shell_ui().encoding
-
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
-    while True:
-        # バッファから1行読み込む.
-        bline = proc.stdout.readline()
-        line = bline.decode(shell_encoding)
+    from machaon.commands.shell import popen_capture_output
+    proc = popen_capture_output(cmd)
+    for line in proc:
         if line:
-            yield package_manager.PIP_MSG.bind(msg=line.rstrip()) # 改行を落とす
-        #sys.stdout.write(line)
-
-        # バッファが空 + プロセス終了.
-        if not line and proc.poll() is not None:
-            break
+            yield package_manager.PIP_MSG.bind(msg=line)
         
 
 #

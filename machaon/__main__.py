@@ -32,8 +32,7 @@ def launch_sample_app(default_choice=None, directory=None):
     
     from machaon.package.repository import bitbucket_rep
     from machaon.package.auth import basic_auth
-    boo.commandset("test", 
-        name="test_module", 
+    boo.commandset("test",  
         source=bitbucket_rep("betasewer/test_module", credential=basic_auth("qaraqalpaq0", True)), 
         package="hello",
         separate=True
