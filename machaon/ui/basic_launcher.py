@@ -140,41 +140,46 @@ class Launcher():
     
     #
     def invoke_meta_command(self, command):
-        if command.isdigit():
-            # データのインデックスによる即時選択
-            index = int(command)
-            msg = self.meta_command_select_dataview(index)
+        commandhead, commandtail = fixsplit(command, maxsplit=1)
+        if not commandhead:
+            msg = None
 
-        elif command.endswith("."):
+        elif commandhead[0].isdigit():
+            # データのインデックスによる即時選択
+            procindex, itemindex = parse_procindex(commandhead)
+            index = int(itemindex)
+            msg = self.meta_command_select_dataview(index, procindex)
+            if commandtail:
+                msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
+
+        elif commandhead.endswith("."):
             # コマンド接頭辞の設定
-            prefix = command[1:].strip()
+            prefix = commandhead[1:].strip()
             msg = self.meta_command_set_prefix(prefix)
 
-        elif command.startswith(">"):
-            # データビューの選択アイテムの値をコマンド欄に展開する
-            head, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
-            procindex, itemname = parse_procindex(head)
-            msg = self.meta_command_show_dataview_item(itemname, procindex, restcommand, toinput=True)
-        
-        elif command.startswith("="):
+        elif commandhead.startswith(">>"):
             # データビューの選択アイテムの値を画面に展開する
-            procindex, itemname = parse_procindex(command[1:])
+            procindex, itemname = parse_procindex(commandhead[2:])
             msg = self.meta_command_show_dataview_item(itemname, procindex, "", toinput=False)
         
-        elif command.startswith("pred"):
+        elif commandhead.startswith(">"):
+            # データビューの選択アイテムの値をコマンド欄に展開する
+            procindex, itemname = parse_procindex(commandhead[1:])
+            msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
+        
+        elif commandhead.startswith("pred"):
             # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
             procindex, keyword = parse_procindex(command[len("pred"):])
             msg = self.meta_command_show_predicates(keyword, procindex)
         
-        elif command.startswith("@"):
+        elif commandhead.startswith("arg"):
             # アクティブなコマンドの引数をコマンド欄に展開する
-            head, restcommand = fixsplit(command[1:], sep=" ", maxsplit=1)
-            procindex, argname = parse_procindex(head)
-            msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
+            procindex, argname = parse_procindex(commandhead[len("arg"):])
+            msg = self.meta_command_reinput_process_arg(argname, procindex, commandtail)
 
-        elif command.startswith("arghelp"):
+        elif commandhead.startswith("arghelp"):
             # 引数またはアクティブなコマンドのヘルプを末尾に表示する
-            procindex, cmd = parse_procindex(command[len("arghelp"):])
+            procindex, cmd = parse_procindex(commandhead[len("arghelp"):])
             msg = self.meta_command_show_help(cmd, procindex)
         
         elif command.startswith("/"):
@@ -182,9 +187,9 @@ class Launcher():
             cmdstr = command[1:].strip()
             msg = self.meta_command_show_syntax(cmdstr)
 
-        elif command.startswith("invoked"):
+        elif command.startswith("invoke"):
             # 呼び出し引数と結果を詳細に表示する
-            procindex, _ = parse_procindex(command[len("invoked"):])
+            procindex, _ = parse_procindex(command[len("invoke"):])
             msg = self.meta_command_show_invocation(procindex)
             
         elif command.startswith("!"):
@@ -194,13 +199,13 @@ class Launcher():
         
         elif command.startswith("help"):
             values = [
-                ("(integer...)", "データビューでアイテムを選択"),
+                ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
                 ("(string...).", "コマンド接頭辞の設定"),
-                (">", "データビューの選択アイテムを入力欄に展開"),
-                ("=", "データビューの選択アイテムを画面に展開"),
+                (">", "現在の選択アイテムを入力欄に展開"),
+                (">>", "現在の選択アイテムを画面に展開"),
                 ("pred", "データビューの述語の一覧を表示"),
-                ("@", "プロセスの引数を入力欄に展開"),
-                ("invoked", "プロセスの引数と実行結果を表示"),
+                ("arg", "プロセスの引数を入力欄に展開"),
+                ("invoke", "プロセスの引数と実行結果を表示"),
                 ("arghelp", "プロセスのヘルプを表示"),
                 ("/", "コマンドの可能な解釈を全て表示"),
                 ("!", "Pythonの式を評価して結果を表示"),
@@ -211,7 +216,7 @@ class Launcher():
             msg = None
         
         else:
-            msg = "不明なメタコマンドです"
+            msg = "メタコマンド'{}'を解釈できません".format(command)
         
         if msg:
             self.insert_screen_appendix(msg, "")
@@ -270,23 +275,23 @@ class Launcher():
         states["running"].append(chamber.get_index())
         self.watch_running_process(states)
 
-    def shift_active_chamber(self, d):
+    def shift_active_chamber(self, delta):
         index = self.app.get_active_chamber_index()
         if index is None:
             return
-        newindex = index - d
+        newindex = index - delta
         if newindex<0:
             # 先頭を超えた場合は変化なし
             return
-        if not self.app.set_active_chamber_index(newindex):
+        chm = self.app.select_chamber(newindex, activate=True)
+        if chm is None:
             return
-        self.update_active_chamber(self.app.get_active_chamber())
-        
+        self.update_active_chamber(chm)
+
     def update_active_chamber(self, chamber, updatemenu=True):
         msgs = chamber.get_message()
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
         self.watch_active_process()
-
         if updatemenu:
             self.update_chamber_menu(active=chamber.get_index())
 
@@ -411,7 +416,11 @@ class Launcher():
     #
     #
     #
-    def meta_command_select_dataview(self, index):
+    def meta_command_select_dataview(self, index, procindex):
+        if procindex:
+            chm = self.app.select_chamber(procindex, activate=True)
+            if chm: 
+                self.update_active_chamber(chm, updatemenu=True)
         try:
             self.select_dataview_item(index)
         except IndexError:
@@ -419,7 +428,7 @@ class Launcher():
     
     def meta_command_set_prefix(self, prefix):
         self.app.set_command_prefix(prefix)
-        return "コマンド接頭辞を設定しました"
+        return "コマンド接頭辞を設定しました ==> '{}'".format(prefix)
 
     def meta_command_show_dataview_item(self, predicate, procindex, restcommand, toinput):
         item = None

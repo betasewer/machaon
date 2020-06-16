@@ -982,13 +982,20 @@ class ProcessHive:
         p = cha.get_process()
         app.execute_process(p)
 
-    def add_activate(self, process):
+    # 新しいチャンバーを作成し、アクティブにして返す
+    def new_activate(self, process):
         newindex = len(self.chambers)
         scr = ProcessChamber(newindex, process)
         self.chambers.append(scr)
         self.set_active_index(newindex) # アクティブにする
         return scr
     
+    # 既存のチャンバーをアクティブにして返す
+    def activate(self, index):
+        if self.set_active_index(index):
+            return self.chambers[index]
+        return None
+
     def count(self):
         return len(self.chambers)
     

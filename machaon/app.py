@@ -152,33 +152,9 @@ class AppRoot:
     # プロセスをスレッドで実行しアクティブにする
     def run_process(self, commandstr):
         process = Process(commandstr)
-        chamber = self.processhive.add_activate(process)
+        chamber = self.processhive.new_activate(process)
         self.processhive.run(self)
         return chamber
-    
-    # プロセスを即時実行する
-    # メッセージ出力を処理しない
-    def execute_instant(self, target, argument="", *, spirit=True, args=None, custom_command_parser=None, prog=None):        
-        # コマンドエントリの構築
-        d = describe_command(target, spirit=spirit, args=args, custom_command_parser=custom_command_parser)
-        prog = prog or getattr(target, "__name__") or "$"
-        entry = d.create_entry((prog,))
-
-        # 実行
-        process_target = entry.load()
-        process_spirit = process_target.invoke_spirit(self)
-        possible_syntaxes = process_target.run_argparser(process_spirit, argument, "")
-        if not possible_syntaxes:
-            return None
-
-        parseresult = possible_syntaxes[0]
-        if parseresult.has_exit_message():
-            return None
-
-        process = Process(process_target, process_spirit, parseresult)
-        cha = self.processhive.add(process, process.get_full_command())
-        result = self.execute_process(process)
-        return result, cha.handle_message()
     
     # プロセスの実行フロー
     def execute_process(self, process):
@@ -243,6 +219,39 @@ class AppRoot:
         self.ui.on_exit_process(spirit, process, invocation)
         return result
     
+    # プロセスを即時実行する
+    # メッセージ出力を処理しない
+    def execute_instant(self, target, argument="", *, spirit=True, args=None, custom_command_parser=None, prog=None):        
+        # コマンドエントリの構築
+        d = describe_command(target, spirit=spirit, args=args, custom_command_parser=custom_command_parser)
+        prog = prog or getattr(target, "__name__") or "$"
+        entry = d.create_entry((prog,))
+
+        # 引数の解析
+        argentries = self.cmdengine.expand_parsing_command(argument, spirit)
+        if not argentries:
+            return None
+        parsedcommand = self.cmdengine.parse_command(argentries[0])
+        if parsedcommand is None:
+            return None
+
+        if parsedcommand.has_exit_message():
+            return None
+            
+        # 実行
+        process_target = entry.load_target()
+        process_spirit = process_target.inherit_spirit(self)
+        dummyproc = Process((prog + " " + argument).strip())
+        process_spirit.bind_process(dummyproc)
+
+        invocation = None
+        try:
+            invocation = process_target.invoke(process_spirit, parsedcommand)
+        except Exception:
+            return None
+
+        return invocation, dummyproc.handle_post_message()
+    
     # 可能な構文解釈の一覧を提示する
     def parse_possible_commands(self, commandstr):
         spirit = Spirit(self, None) # processはもちろん関連付けられていない
@@ -268,14 +277,14 @@ class AppRoot:
     def get_active_chamber_index(self):
         return self.processhive.get_active_index()
 
-    def set_active_chamber_index(self, index):
-        return self.processhive.set_active_index(index)
-    
     def get_previous_active_chamber(self):
         return self.processhive.get_previous_active()
     
-    def get_chamber(self, index):
-        return self.processhive.get(index)
+    def get_chamber(self, index, *, activate=False):
+        if activate:
+            return self.processhive.activate(index)
+        else:
+            return self.processhive.get(index)
 
     def get_chambers(self):
         return self.processhive.get_chambers()
@@ -287,16 +296,18 @@ class AppRoot:
         }
         return report
         
-    def select_chamber(self, index=None) -> Optional[ProcessChamber]:
+    def select_chamber(self, index=None, *, activate=False) -> Optional[ProcessChamber]:
         chm = None
-        if not index:
+        if index is None or index == "":
             chm = self.get_active_chamber()
         elif isinstance(index, str):
             try:
-                process_index = int(index, 10)-1
-                chm = self.get_chamber(process_index)
+                index = int(index, 10)-1
             except ValueError:
                 raise ValueError(str(index))
+            chm = self.get_chamber(index, activate=activate)
+        elif isinstance(index, int):
+            chm = self.get_chamber(index, activate=activate)
         return chm
     
     # メインスレッド側から操作中断

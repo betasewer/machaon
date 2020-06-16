@@ -758,8 +758,7 @@ class tkLauncher(Launcher):
         line, _ = coord.split(".")
         index = int(line)-1
         if index != self.app.get_active_chamber_index():
-            self.app.set_active_chamber_index(index)
-            self.update_active_chamber(self.app.get_active_chamber())
+            self.update_active_chamber(self.app.select_chamber(index, activate=True))
 
     #
     # 入力欄
