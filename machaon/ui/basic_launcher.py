@@ -147,10 +147,14 @@ class Launcher():
         elif commandhead[0].isdigit():
             # データのインデックスによる即時選択
             procindex, itemindex = parse_procindex(commandhead)
-            index = int(itemindex)
-            msg = self.meta_command_select_dataview(index, procindex)
-            if commandtail:
-                msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
+            try:
+                index = int(itemindex)
+            except ValueError as e:
+                msg = str(e)
+            else:
+                msg = self.meta_command_select_dataview(index, procindex)
+                if commandtail:
+                    msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
 
         elif commandhead.endswith("."):
             # コマンド接頭辞の設定
