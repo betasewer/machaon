@@ -176,16 +176,17 @@ class Launcher():
             procindex, keyword = parse_procindex(command[len("pred"):])
             msg = self.meta_command_show_predicates(keyword, procindex)
         
-        elif commandhead.startswith("arg"):
-            # アクティブなコマンドの引数をコマンド欄に展開する
-            procindex, argname = parse_procindex(commandhead[len("arg"):])
-            msg = self.meta_command_reinput_process_arg(argname, procindex, commandtail)
-
         elif commandhead.startswith("arghelp"):
             # 引数またはアクティブなコマンドのヘルプを末尾に表示する
-            procindex, cmd = parse_procindex(commandhead[len("arghelp"):])
-            msg = self.meta_command_show_help(cmd, procindex)
+            procindex, _ = parse_procindex(commandhead[len("arghelp"):])
+            msg = self.meta_command_show_help(commandtail, procindex)
         
+        elif commandhead.startswith("arg"):
+            # アクティブなコマンドの引数をコマンド欄に展開する
+            procindex, _ = parse_procindex(commandhead[len("arg"):])
+            argname, restcommand = fixsplit(commandtail, maxsplit=1)
+            msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
+
         elif command.startswith("/"):
             # 文字列を解析し、コマンドとして可能な解釈をすべて示す
             cmdstr = command[1:].strip()
