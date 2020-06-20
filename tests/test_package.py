@@ -25,8 +25,8 @@ def test_cmdset_setup(approot):
 
 def test_package_setup(approot):
     approot.setup_package(("test",), 
-        package("test_module", 
-            source=bitbucket_rep("betasewer/test_module", credential=basic_auth("qaraqalpaq0", True)), 
+        package(
+            source=bitbucket_rep("betasewer/test_module"), 
             package="hello",
             separate=True
         )

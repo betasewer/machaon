@@ -1,5 +1,5 @@
 from machaon.package.package import package_manager
-from machaon.engine import NotYetInstalledCommandSet
+from machaon.engine import NotAvailableCommandSet
 
 #
 #
@@ -12,7 +12,7 @@ def package_install(app, package_index, forceupdate=False):
     if package is None:
         return
 
-    newinstall = isinstance(oldcmdset, NotYetInstalledCommandSet)
+    newinstall = isinstance(oldcmdset, NotAvailableCommandSet)
     
     app.message_em("パッケージ'{}'".format(package.name))
     rep = package.get_repository()
@@ -38,11 +38,7 @@ def package_install(app, package_index, forceupdate=False):
     for state in approot.operate_package(package, install=newinstall, update=not newinstall):
         # 中断
         if state == package_manager.ALREADY_INSTALLED:
-            app.error("すでにインストールされています")
-            return
-        elif state == package_manager.NOT_INSTALLED:
-            app.error("まだインストールされていません")
-            return
+            app.warn("インストールされた記録がありますが、ファイルを上書きします")
         
         # ダウンロード中
         elif state == package_manager.DOWNLOAD_START:
@@ -57,6 +53,15 @@ def package_install(app, package_index, forceupdate=False):
             app.message("pipを呼び出し")
         elif state == package_manager.PIP_MSG:
             app.message("> " + state.msg)
+        elif state == package_manager.PIP_END:
+            if state.returncode == 0:
+                app.message("pipによるインストールが成功し、終了しました")
+            elif state.returncode is None:
+                pass
+            else:
+                app.error("pipによるインストールが失敗しました コード={}".format(state.returncode))
+                return
+
         elif state == package_manager.PRIVATE_REQUIREMENTS:
             app.warn("後ほど、依存する非公開パッケージを手動でインストールする必要があります：")
             for name in state.names:
@@ -81,16 +86,14 @@ def package_uninstall(app, package_index):
     package, cmdset = approot.get_package_and_commandset(package_index)
     if package is None:
         return
-    if isinstance(cmdset, NotYetInstalledCommandSet):
-        return
-    
+        
     app.message_em("パッケージをアンインストールします")
     app.message("コマンドセット'{}'は削除されます".format(cmdset.name))
 
     for state in approot.operate_package(package, uninstall=True):
         if state == package_manager.NOT_INSTALLED:
-            app.error("インストールされていません")
-            return
+            app.warn("インストールされた記録がありませんが、ファイルを削除します")
+
         elif state == package_manager.UNINSTALLING:
             app.message("ファイルを削除")
         elif state == package_manager.PIP_UNINSTALLING:

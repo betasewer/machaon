@@ -25,11 +25,19 @@ def popen_capture_output(cmds):
         # 中止する
         if kill:
             proc.kill()
-            yield "<StopIteration>" # send用に吐く最後のメッセージ
+            yield PopenEnd(None) # send用に吐く最後のメッセージ
+            break
 
         # バッファが空 + プロセス終了.
-        if not line and proc.poll() is not None:
+        returncode = proc.poll()
+        if not line and returncode is not None:
+            yield PopenEnd(returncode)
             break
+
+#
+class PopenEnd:
+    def __init__(self, returncode):
+        self.returncode = returncode
 
     """
     out = None

@@ -90,17 +90,21 @@ class package():
     def load_command_builder(self):
         spec = importlib.util.find_spec(self.entrymodule)
         mod = importlib.util.module_from_spec(spec)
-        
         entrypoint = _internal_entrypoint()
         setattr(mod, "commands", entrypoint)
 
         try:
             spec.loader.exec_module(mod)
         except Exception as e:
-            raise e
+            raise PackageEntryLoadError(e)
         
         return entrypoint.get()
     
+#
+class PackageEntryLoadError(Exception):
+    def get_basic(self):
+        return super().args[0]
+
 #
 #
 #
@@ -116,6 +120,7 @@ class package_manager():
     PIP_INSTALLING = milestone()
     PIP_UNINSTALLING = milestone()
     PIP_MSG = milestone_msg("msg")
+    PIP_END = milestone_msg("returncode")
 
     def __init__(self, directory, database="packages.ini"):
         self.dir = directory
@@ -194,7 +199,6 @@ class package_manager():
     def install(self, pkg: package):
         if self.is_installed(pkg.name):
             yield package_manager.ALREADY_INSTALLED
-            return
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # ローカルに展開する
@@ -229,7 +233,6 @@ class package_manager():
     def uninstall(self, pkg):
         if not self.is_installed(pkg.name):
             yield package_manager.NOT_INSTALLED
-            return
         
         separate = self.database.getboolean(pkg.name, "separate", fallback=False)
         if separate:
@@ -307,10 +310,12 @@ def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=
     if options:
         cmd.extend(options)
 
-    from machaon.commands.shell import popen_capture_output
+    from machaon.commands.shell import popen_capture_output, PopenEnd
     proc = popen_capture_output(cmd)
     for line in proc:
-        if line:
+        if isinstance(line, PopenEnd):
+            yield package_manager.PIP_END.bind(returncode=line.returncode)
+        elif line:
             yield package_manager.PIP_MSG.bind(msg=line)
         
 
@@ -327,7 +332,7 @@ def _read_pip_dist_info(directory, pkg_name):
             infodir = d
             break
     else:
-        raise ValueError("pip dist-info not found")
+        raise PipDistInfoNotFound()
     
     distinfo["infodir"] = infodir
     
@@ -338,9 +343,13 @@ def _read_pip_dist_info(directory, pkg_name):
     return distinfo
 
 #
+class PipDistInfoNotFound(Exception):
+    pass
+
+#
 def _read_private_requirements(localdir):
     if localdir:
-        reqs = os.path.join(localdir, "PRIVATE-REQUIREMENTS")
+        reqs = os.path.join(localdir, "PRIVATE-REQUIREMENTS.txt")
         if os.path.isfile(reqs):
             lines = []
             with open(reqs, "r", encoding="utf-8") as reqsf:

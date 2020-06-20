@@ -2,7 +2,7 @@
 # coding: utf-8
 
 from machaon.cui import test_yesno, composit_text
-from machaon.engine import NotYetInstalledCommandSet
+from machaon.engine import NotYetInstalledCommandSet, LoadFailedCommandSet
 
 #
 # =================================================================
@@ -71,15 +71,16 @@ class HelpItem():
         )
 
 # 
-class NotYetInstalledItem(HelpItem):
-    def __init__(self, cmdset):
+class NotAvailableItem(HelpItem):
+    def __init__(self, cmdset, description):
         super().__init__(cmdset, None)
+        self._desc = description
     
     def keyword_list(self):
         return ["***"]
         
     def description(self):
-        return "<インストールされていません>"
+        return "<{}>".format(self._desc)
     
     def setname(self):
         return "<パッケージ {}>".format(self.cmdset.get_name())
@@ -96,7 +97,9 @@ def command_commandlist(spi):
     items = []
     for cmdset in spi.get_app().get_command_sets():
         if isinstance(cmdset, NotYetInstalledCommandSet):
-            items.append(NotYetInstalledItem(cmdset))
+            items.append(NotAvailableItem(cmdset, "インストールされていません"))
+        elif isinstance(cmdset, LoadFailedCommandSet):
+            items.append(NotAvailableItem(cmdset, "ロードに失敗：" + cmdset.error))
         else:
             for entry in cmdset.display_commands():
                 items.append(HelpItem(cmdset, entry))

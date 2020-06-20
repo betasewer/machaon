@@ -124,7 +124,7 @@ class CommandSet:
 #
 #
 #
-class NotYetInstalledCommandSet():
+class NotAvailableCommandSet():
     def __init__(self, package_name, prefixes):
         self.name = package_name
         self.prefixes = prefixes
@@ -136,16 +136,26 @@ class NotYetInstalledCommandSet():
         return self.name
     
     def get_description(self):
-        raise ValueError("Undefined: Not yet installed")
+        raise ValueError("Undefined: Not available command set")
     
     def get_prefixes(self):
         return self.prefixes
     
     def get_entries(self):
-        raise ValueError("Undefined: Not yet installed")
+        raise ValueError("Undefined: Not available command set")
     
     def display_commands(self, *a, **kw):
         return []
+
+#
+class NotYetInstalledCommandSet(NotAvailableCommandSet):
+    pass
+
+#
+class LoadFailedCommandSet(NotAvailableCommandSet):
+    def __init__(self, package_name, prefixes, *, error=None):
+        super().__init__(package_name, prefixes)
+        self.error = "'{}' {}".format(type(error).__name__, error) or ""
 
 #
 # コマンド解釈の候補

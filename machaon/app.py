@@ -10,10 +10,10 @@ import subprocess
 
 from typing import Optional, List, Any
 
-from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet
+from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet, LoadFailedCommandSet
 from machaon.command import describe_command, CommandPackage
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
-from machaon.package.package import package_manager
+from machaon.package.package import package_manager, PackageEntryLoadError
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
 import machaon.platforms
@@ -60,8 +60,12 @@ class AppRoot:
                 # ダミーのコマンドセットを設置
                 cmdset = NotYetInstalledCommandSet(package.name, prefixes)
             else:
-                cmdbuilder = package.load_command_builder()
-                cmdset = cmdbuilder.create_commands(self, prefixes)
+                try:
+                    cmdbuilder = package.load_command_builder()
+                except PackageEntryLoadError as e:
+                    cmdset = LoadFailedCommandSet(package.name, prefixes, error=e.get_basic())
+                else:
+                    cmdset = cmdbuilder.create_commands(self, prefixes)
 
         self.cmdengine.install_commands(cmdset)
 
