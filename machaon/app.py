@@ -108,8 +108,12 @@ class AppRoot:
     # パッケージからコマンドセットを構築し、差し替える
     def build_commandset(self, package_index, package):
         oldcmdset = self.cmdengine.get_command_set(package_index)
-        cmdbuilder = package.load_command_builder()
-        newcmdset = cmdbuilder.create_commands(self, oldcmdset.prefixes)
+        try:        
+            cmdbuilder = package.load_command_builder()
+        except PackageEntryLoadError as e:
+            newcmdset = LoadFailedCommandSet(package.name, oldcmdset.prefixes, error=e.get_basic())
+        else:
+            newcmdset = cmdbuilder.create_commands(self, oldcmdset.prefixes)
         self.cmdengine.replace_command_set(package_index, newcmdset)
         return newcmdset
     

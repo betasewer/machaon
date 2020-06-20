@@ -63,9 +63,9 @@ def package_install(app, package_index, forceupdate=False):
                 return
 
         elif state == package_manager.PRIVATE_REQUIREMENTS:
-            app.warn("後ほど、依存する非公開パッケージを手動でインストールする必要があります：")
+            app.warn("次の依存パッケージを後で手動でインストールする必要があります：")
             for name in state.names:
-                app.message(name)
+                app.message("  " + name)
 
     # コマンドエンジンの更新
     newcmdset = approot.build_commandset(package_index, package)

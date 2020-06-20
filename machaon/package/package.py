@@ -326,7 +326,7 @@ def _read_pip_dist_info(directory, pkg_name):
     """ pipがdist-infoフォルダに収めたパッケージの情報を読みとる """
     distinfo = {}
     infodir = None
-    infodirname = re.compile(r"{}-([\d\.]+)\.dist-info".format(pkg_name))
+    infodirname = re.compile(r"{}-([\d\.]+)\.(dist-info|egg-info)".format(pkg_name))
     for d in os.listdir(directory):
         if infodirname.match(d):
             infodir = d

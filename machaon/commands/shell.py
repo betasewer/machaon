@@ -10,11 +10,11 @@ from typing import Optional
 from machaon.cui import reencode, fixsplit
 
 #
-def popen_capture_output(cmds):
+def popen_capture_output(cmds, shell=False):
     import machaon.platforms
     shell_encoding = machaon.platforms.current.shell_ui().encoding
 
-    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=shell)
     while True:
         # バッファから1行読み込む.
         bline = proc.stdout.readline()
@@ -87,7 +87,7 @@ def execprocess(spi, command, split=False):
         else:
             cmds.append(commandstr)
     
-    proc = popen_capture_output(cmds)
+    proc = popen_capture_output(cmds, shell=True)
     for msg in proc:
         if not spi.interruption_point(noexception=True):
             proc.send(True)
