@@ -27,8 +27,7 @@ def test_package_setup(approot):
     approot.setup_package(("test",), 
         package(
             source=bitbucket_rep("betasewer/test_module"), 
-            package="hello",
-            separate=True
+            entrypoint="hello"
         )
     )
     assert len(approot.cmdengine.commandsets) == 1

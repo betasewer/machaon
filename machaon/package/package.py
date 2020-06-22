@@ -9,8 +9,8 @@ import importlib
 from typing import Dict, Any, Union, List, Optional
 
 from machaon.milestone import milestone, milestone_msg
-from machaon.command import describe_command_package, describe_command
-from machaon.package.repository import rep_archive
+from machaon.command import describe_command_package, describe_command, CommandPackage
+from machaon.package.repository import RepositoryURLError
 
 #
 class DatabaseNotLoadedError(Exception):
@@ -37,20 +37,33 @@ class _internal_entrypoint:
 #
 #
 class package():
-    def __init__(self, source, name=None, package=None, entrypoint=None, separate=True, hashval=None):
+    COMMANDSET_MODULE = 1
+    DEPENDENCY_MODULE = 2
+    DATASTORE = 3
+
+    def __init__(self, source, name=None, entrypoint=None, std=False, hashval=None, dependency=False, datastore=False):
         if not name:
             name = source.name
         self.name = name
         self.source = source
-        self.separate = separate
+        self.separate = not std
+        
+        self._type = package.COMMANDSET_MODULE
+        if dependency:
+            self._type = package.DEPENDENCY_MODULE
+        if datastore:
+            self._type = package.DATASTORE
 
         # エントリポイントとなるモジュールを探す
-        if not package and not entrypoint:
-            package = name
-        if package and not entrypoint:
-            entrypoint = package + ".__commands__"
-        self.entrymodule = entrypoint 
+        if self._type == package.COMMANDSET_MODULE:
+            if not entrypoint:
+                entrypoint = name
+            entrypoint += ".__commands__"
+            self.entrymodule = entrypoint
+        else:
+            self.entrymodule = None
 
+        self._icmdset = None
         self._hash = hashval
     
     @property
@@ -69,15 +82,33 @@ class package():
     def get_repository(self):
         return self.source
 
-    def is_installation_separated(self):
+    def is_installation_separated(self) -> bool:
         return self.separate
     
-    def load_hash(self) -> str:
+    def load_hash(self) -> Optional[str]:
         if self._hash is None:
-            self._hash = self.source.query_hash()
+            try:
+                self._hash = self.source.query_hash()
+            except RepositoryURLError:
+                return None
         return self._hash
+
+    def is_commandset(self) -> bool:
+        return self._type == package.COMMANDSET_MODULE
     
-    def is_installed_module(self):
+    def attach_commandset(self, index):
+        if self._type != package.COMMANDSET_MODULE:
+            raise ValueError("Not a commandset module package")
+        if self._icmdset is not None:
+            raise ValueError("Commandset has been attached already")
+        self._icmdset = index
+    
+    def get_attached_commandset(self) -> Optional[int]:
+        return self._icmdset
+    
+    def is_installed_module(self) -> bool:
+        if self._type == package.DATASTORE:
+            return False
         # 親モジュールから順に確認する
         mparts = self.entrymodule.split(".")
         for i in range(len(mparts)):
@@ -87,8 +118,10 @@ class package():
                 return False
         return True
 
-    def load_command_builder(self):
+    def load_command_builder(self) -> CommandPackage:
         spec = importlib.util.find_spec(self.entrymodule)
+        if spec is None:
+            raise ModuleNotFoundError(self.entrymodule)
         mod = importlib.util.module_from_spec(spec)
         entrypoint = _internal_entrypoint()
         setattr(mod, "commands", entrypoint)
@@ -113,6 +146,7 @@ class package_manager():
     DOWNLOAD_START = milestone_msg("total")
     DOWNLOADING = milestone_msg("size")
     DOWNLOAD_END = milestone_msg("total")
+    DOWNLOAD_ERROR = milestone_msg("error")
     EXTRACTED_FILES = milestone_msg("path")
     PRIVATE_REQUIREMENTS = milestone_msg("names")
     NOT_INSTALLED = milestone()
@@ -178,13 +212,18 @@ class package_manager():
             raise DatabaseNotLoadedError()
                 
     def download_repository(self, rep, directory):
-        total = rep.query_download_size()
-        yield package_manager.DOWNLOAD_START.bind(total=total)
+        try:
+            total = rep.query_download_size()
+            yield package_manager.DOWNLOAD_START.bind(total=total)
 
-        for size in rep.download_iter(directory):
-            yield package_manager.DOWNLOADING.bind(size=size, total=total)
-            
-        yield package_manager.DOWNLOAD_END.bind(total=total)
+            for size in rep.download_iter(directory):
+                yield package_manager.DOWNLOADING.bind(size=size, total=total)
+                
+            yield package_manager.DOWNLOAD_END.bind(total=total)
+
+        except RepositoryURLError as e:
+            yield package_manager.DOWNLOAD_ERROR.bind(error=e.get_basic())
+            return
         
         # 解凍する
         with rep.open_archive(directory):
@@ -192,8 +231,10 @@ class package_manager():
         path = os.path.join(directory, rep.get_member_root())
         yield package_manager.EXTRACTED_FILES.bind(path=path)
     
-    def is_installed(self, pkg_name):
+    def is_installed(self, pkg_name: str):
         self.check_database()
+        if not isinstance(pkg_name, str):
+            raise TypeError("pkg_name")
         return pkg_name in self.database
                 
     def install(self, pkg: package):
@@ -208,7 +249,11 @@ class package_manager():
                 for stat in self.download_repository(rep, tmpdir):
                     if stat == package_manager.EXTRACTED_FILES:
                         localdir = stat.path
-                    yield stat
+                    elif stat == package_manager.DOWNLOAD_ERROR:
+                        yield stat
+                        return
+                    else:
+                        yield stat
             
             # pipにインストールさせる
             yield package_manager.PIP_INSTALLING
@@ -219,6 +264,7 @@ class package_manager():
             
             # 非公開の依存パッケージを表示
             private_reqs = _read_private_requirements(localdir)
+            private_reqs = [name for name in private_reqs if not self.is_installed(name)]
             if private_reqs:
                 yield package_manager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
             
@@ -251,15 +297,18 @@ class package_manager():
             
         self.remove_database(pkg.name)
             
-    def to_be_updated(self, pkg):
+    def get_update_status(self, pkg) -> str:
         if not self.is_installed(pkg.name):
-            return True
+            return "none"
         # hashを比較して変更を検知する
         entry = self.database[pkg.name]
         hash_ = pkg.load_hash()
-        if entry["hash"] != hash_:
-            return True
-        return False
+        if hash_ is None:
+            return "unknown"
+        if entry["hash"] == hash_:
+            return "latest"
+        else:
+            return "old"
     
     def update(self, pkg):
         self.check_database()
@@ -276,7 +325,11 @@ class package_manager():
                 for stat in self.download_repository(rep, tmpdir):
                     if stat == package_manager.EXTRACTED_FILES:
                         localdir = stat.path
-                    yield stat
+                    elif stat == package_manager.DOWNLOAD_ERROR:
+                        yield stat
+                        return
+                    else:
+                        yield stat
 
             # pipにインストールさせる
             yield package_manager.PIP_INSTALLING
@@ -348,13 +401,12 @@ class PipDistInfoNotFound(Exception):
 
 #
 def _read_private_requirements(localdir):
+    lines = []
     if localdir:
         reqs = os.path.join(localdir, "PRIVATE-REQUIREMENTS.txt")
         if os.path.isfile(reqs):
-            lines = []
             with open(reqs, "r", encoding="utf-8") as reqsf:
                 for line in reqsf:
                     lines.append(line)
-            return lines
-    return None
+    return lines
 

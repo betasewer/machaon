@@ -67,9 +67,13 @@ class AppRoot:
                 else:
                     cmdset = cmdbuilder.create_commands(self, prefixes)
 
-        self.cmdengine.install_commands(cmdset)
-
         # パッケージ／コマンドビルダを格納する
+        cmdset_index = self.cmdengine.add_command_set(cmdset)
+        if package:
+            package.attach_commandset(cmdset_index)
+            self.cmdpackages.append(package)
+    
+    def setup_dependency_package(self, package):
         self.cmdpackages.append(package)
     
     # パッケージとコマンドセットの組を取得する
@@ -79,18 +83,17 @@ class AppRoot:
             raise IndexError("package_index") 
         package = self.cmdpackages[package_index]
         # コマンドセット
-        cmdset = self.cmdengine.get_command_set(package_index)
-        return package, cmdset
+        cmdset_index = package.get_attached_commandset()
+        if cmdset_index is None:
+            return package, None
+        else:
+            cmdset = self.cmdengine.get_command_set(cmdset_index)
+            return package, cmdset
 
     # パッケージにアップデートが必要か
     def get_package_status(self, package):
         self.pkgmanager.load_database()
-        if not self.pkgmanager.is_installed(package):
-            return "none"
-        elif self.pkgmanager.to_be_updated(package):
-            return "old"
-        else:
-            return "latest"
+        return self.pkgmanager.get_update_status(package)
             
     # パッケージをローカルに展開する
     def operate_package(self, package, install=False, uninstall=False, update=False):
@@ -106,22 +109,24 @@ class AppRoot:
         return len(self.cmdpackages)
     
     # パッケージからコマンドセットを構築し、差し替える
-    def build_commandset(self, package_index, package):
-        oldcmdset = self.cmdengine.get_command_set(package_index)
+    def build_commandset(self, package):
+        cmdset_index = package.get_attached_commandset()
+        oldcmdset = self.cmdengine.get_command_set(cmdset_index)
         try:        
             cmdbuilder = package.load_command_builder()
         except PackageEntryLoadError as e:
             newcmdset = LoadFailedCommandSet(package.name, oldcmdset.prefixes, error=e.get_basic())
         else:
             newcmdset = cmdbuilder.create_commands(self, oldcmdset.prefixes)
-        self.cmdengine.replace_command_set(package_index, newcmdset)
+        self.cmdengine.replace_command_set(cmdset_index, newcmdset)
         return newcmdset
     
     # コマンドセットを未インストール状態に差し替える
-    def disable_commandset(self, package_index, package):
-        oldcmdset = self.cmdengine.get_command_set(package_index)
+    def disable_commandset(self, package):
+        cmdset_index = package.get_attached_commandset()
+        oldcmdset = self.cmdengine.get_command_set(cmdset_index)
         dumbcmdset = NotYetInstalledCommandSet(package.name, oldcmdset.prefixes)
-        self.cmdengine.replace_command_set(package_index, dumbcmdset)
+        self.cmdengine.replace_command_set(cmdset_index, dumbcmdset)
         return dumbcmdset
 
     #

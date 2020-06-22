@@ -172,7 +172,7 @@ def test_split_query():
 def test_engine_parsing(a_cmdset):
     cmdset, entries = a_cmdset
     eng = CommandEngine()
-    eng.install_commands(cmdset)
+    eng.add_command_set(cmdset)
 
     assert eng.expand_parsing_command_head("tscommander") == [
         (entries["command"], "er"),
@@ -224,7 +224,7 @@ def candidate_tests(syntax_items, literals):
 def test_candidates_engine_parsing(a_cmdset):
     cmdset, entries = a_cmdset
     eng = CommandEngine()
-    eng.install_commands(cmdset)
+    eng.add_command_set(cmdset)
 
     spirit = TempSpirit()
 
@@ -262,7 +262,7 @@ def test_candidates_engine_parsing(a_cmdset):
 def test_postfix_syntax_engine_parsing(a_cmdset):
     cmdset, entries = a_cmdset
     eng = CommandEngine()
-    eng.install_commands(cmdset)
+    eng.add_command_set(cmdset)
 
     spirit = TempSpirit()
 

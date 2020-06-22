@@ -12,26 +12,25 @@ def package_install(app, package_index, forceupdate=False):
     if package is None:
         return
 
-    newinstall = isinstance(oldcmdset, NotAvailableCommandSet)
-    
-    app.message_em("パッケージ'{}'".format(package.name))
+    app.message_em(" ====== パッケージ'{}'のインストール ====== ".format(package.name))
     rep = package.get_repository()
     if rep:
-        app.message("  ソース：{}".format(rep.get_repository_url()))
+        app.message("  --> {}".format(rep.get_repository_url()))
     
-    if newinstall:
+    newinstall = False
+    status = approot.get_package_status(package)
+    if status == "none":
         app.message_em("インストールします")
-    else:
-        status = approot.get_package_status(package)
-        if status == "none":
-            app.message_em("インストールします")
-            newinstall = True
-        elif status == "old":
-            app.message("より新しいバージョンが存在します")
-        elif status == "latest":
-            app.message("最新の状態です")
-            if not forceupdate:
-                return
+        newinstall = True
+    elif status == "old":
+        app.message("より新しいバージョンが存在します")
+    elif status == "latest":
+        app.message("最新の状態です")
+        if not forceupdate:
+            return
+    elif status == "unknown":
+        app.error("接続エラー：最新版の取得に失敗")
+        return
 
     # ダウンロード・インストール処理
     app.message("パッケージの取得を開始")
@@ -47,6 +46,10 @@ def package_install(app, package_index, forceupdate=False):
             app.interruption_point(progress=state.size)
         elif state == package_manager.DOWNLOAD_END:
             app.finish_progress_display(total=state.total)
+        elif state == package_manager.DOWNLOAD_ERROR:
+            app.error("ダウンロードでエラー発生：{}".format(state.error))
+            app.error("インストール失敗")
+            return
 
         # インストール処理
         elif state == package_manager.PIP_INSTALLING:
@@ -68,14 +71,17 @@ def package_install(app, package_index, forceupdate=False):
                 app.message("  " + name)
 
     # コマンドエンジンの更新
-    newcmdset = approot.build_commandset(package_index, package)
-    if newinstall:
-        app.message_em("コマンドセット'{}'のインストールが完了".format(newcmdset.name))
-    else:
-        if oldcmdset.name != newcmdset.name:
-            app.message_em("コマンドセット'{}' --> '{}'の更新が完了".format(oldcmdset.name, newcmdset.name))
+    if package.is_commandset():
+        newcmdset = approot.build_commandset(package)
+        if newinstall:
+            app.message_em("コマンドセット'{}'のインストールが完了".format(newcmdset.name))
         else:
-            app.message_em("コマンドセット'{}'の更新が完了".format(newcmdset.name))
+            if oldcmdset.name != newcmdset.name:
+                app.message_em("コマンドセット'{}' --> '{}'の更新が完了".format(oldcmdset.name, newcmdset.name))
+            else:
+                app.message_em("コマンドセット'{}'の更新が完了".format(newcmdset.name))
+    else:
+        app.message_em("パッケージ'{}'のインストールが完了".format(package.name))
 
 #
 #
@@ -87,22 +93,25 @@ def package_uninstall(app, package_index):
     if package is None:
         return
         
-    app.message_em("パッケージをアンインストールします")
-    app.message("コマンドセット'{}'は削除されます".format(cmdset.name))
+    app.message_em(" ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
+    if package.is_commandset():
+        app.message("  コマンドセット'{}' --> 削除".format(cmdset.name))
 
     for state in approot.operate_package(package, uninstall=True):
         if state == package_manager.NOT_INSTALLED:
-            app.warn("インストールされた記録がありませんが、ファイルを削除します")
+            app.warn("インストールされた記録がありませんが、残ったファイルを削除します")
 
         elif state == package_manager.UNINSTALLING:
             app.message("ファイルを削除")
         elif state == package_manager.PIP_UNINSTALLING:
             app.message("pipを呼び出し")
         elif state == package_manager.PIP_MSG:
-            app.message("> " + state.msg)
+            app.message("  " + state.msg)
 
-    app.message("コマンドエンジンから取り除きます")
-    approot.disable_commandset(package_index, package)
+    if package.is_commandset():
+        app.message("コマンドエンジンから取り除きます")
+        approot.disable_commandset(package)
+
     app.message("削除完了")
 
 #

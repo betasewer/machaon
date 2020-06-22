@@ -8,12 +8,16 @@ import json
 class ArchiveNotOpenedError(Exception):
     pass
 
+class RepositoryURLError(Exception):
+    def get_basic(self):
+        return super().args[0]
 
 #
 #
 #
 class rep_archive:
-    download_chunk_size = 1024
+    download_chunk_size = 20 * 1024 # 20kb
+    download_timeout = 15 # 秒
     root_level = 1
     
     def __init__(self, name, username=None, filename=None, credential=None):
@@ -154,8 +158,11 @@ class rep_archive:
             req = self.credential.build_request(self, url, **kwargs)
         else:
             req = urllib.request.Request(url=url, **kwargs)
-        return urllib.request.urlopen(req)
-    
+        try:
+            return urllib.request.urlopen(req, timeout=type(self).download_timeout)
+        except urllib.error.URLError as e:
+            raise RepositoryURLError(e)
+
     #
     # 展開
     #

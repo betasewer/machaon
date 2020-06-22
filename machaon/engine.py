@@ -157,6 +157,7 @@ class LoadFailedCommandSet(NotAvailableCommandSet):
         super().__init__(package_name, prefixes)
         self.error = "'{}' {}".format(type(error).__name__, error) or ""
 
+
 #
 # コマンド解釈の候補
 #
@@ -194,8 +195,9 @@ class CommandEngine:
         self.parseerror = None
         self.prefix = ""
         
-    def install_commands(self, commandset):
+    def add_command_set(self, commandset) -> int:
         self.commandsets.append(commandset)
+        return len(self.commandsets)-1
     
     def get_command_set(self, index):
         return self.commandsets[index]
