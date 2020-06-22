@@ -15,7 +15,7 @@ def package_install(app, package_index, forceupdate=False):
     app.message_em(" ====== パッケージ'{}'のインストール ====== ".format(package.name))
     rep = package.get_repository()
     if rep:
-        app.message("  --> {}".format(rep.get_repository_url()))
+        app.message("  --> {}".format(rep.get_source()))
     
     newinstall = False
     status = approot.get_package_status(package)
@@ -35,12 +35,8 @@ def package_install(app, package_index, forceupdate=False):
     # ダウンロード・インストール処理
     app.message("パッケージの取得を開始")
     for state in approot.operate_package(package, install=newinstall, update=not newinstall):
-        # 中断
-        if state == package_manager.ALREADY_INSTALLED:
-            app.warn("インストールされた記録がありますが、ファイルを上書きします")
-        
         # ダウンロード中
-        elif state == package_manager.DOWNLOAD_START:
+        if state == package_manager.DOWNLOAD_START:
             app.start_progress_display(total=state.total)
         elif state == package_manager.DOWNLOADING:
             app.interruption_point(progress=state.size)
@@ -98,10 +94,7 @@ def package_uninstall(app, package_index):
         app.message("  コマンドセット'{}' --> 削除".format(cmdset.name))
 
     for state in approot.operate_package(package, uninstall=True):
-        if state == package_manager.NOT_INSTALLED:
-            app.warn("インストールされた記録がありませんが、残ったファイルを削除します")
-
-        elif state == package_manager.UNINSTALLING:
+        if state == package_manager.UNINSTALLING:
             app.message("ファイルを削除")
         elif state == package_manager.PIP_UNINSTALLING:
             app.message("pipを呼び出し")

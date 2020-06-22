@@ -6,6 +6,7 @@ from machaon.commands.catalogue import shell_commands
 from machaon.package.package import package
 from machaon.package.repository import bitbucket_rep
 from machaon.package.auth import basic_auth
+from machaon.package.archive import local_archive
 from machaon.engine import NotYetInstalledCommandSet
 from machaon.process import TempSpirit
 from machaon.commands.package import package_install, command_package
@@ -26,7 +27,8 @@ def test_cmdset_setup(approot):
 def test_package_setup(approot):
     approot.setup_package(("test",), 
         package(
-            source=bitbucket_rep("betasewer/test_module"), 
+            source=local_archive("C:\\codes\\python\\machaon\\tests\\sample\\pkg\\betasewer-test_module.zip", name="test_module"), 
+            #source=bitbucket_rep("betasewer/test_module"), 
             entrypoint="hello"
         )
     )

@@ -70,14 +70,8 @@ class package():
     def dist_package_name(self):
         return self.source.name
     
-    def get_host(self) -> str:
-        return self.source.get_host()
-
-    def get_id(self) -> str:
-        return self.source.get_id()
-        
-    def get_signature(self) -> str:
-        return "{}/{}:{}".format(self.source.get_host(), self.source.get_id(), self._hash)
+    def get_source_signature(self) -> str:
+        return self.source.get_source()
     
     def get_repository(self):
         return self.source
@@ -88,9 +82,10 @@ class package():
     def load_hash(self) -> Optional[str]:
         if self._hash is None:
             try:
-                self._hash = self.source.query_hash()
+                _hash = self.source.query_hash()
             except RepositoryURLError:
-                return None
+                _hash = None 
+            self._hash = "" if _hash is None else _hash
         return self._hash
 
     def is_commandset(self) -> bool:
@@ -182,8 +177,7 @@ class package_manager():
         if pkg.name not in self.database:
             self.database[pkg.name] = {}
         
-        self.database.set(pkg.name, "host", pkg.get_host())
-        self.database.set(pkg.name, "id", pkg.get_id())
+        self.database.set(pkg.name, "source", pkg.get_source_signature())
         self.database.set(pkg.name, "hash", pkg.load_hash())
         
         separated = pkg.is_installation_separated()
@@ -210,76 +204,99 @@ class package_manager():
     def check_database(self):
         if self.database is None:
             raise DatabaseNotLoadedError()
-                
-    def download_repository(self, rep, directory):
-        try:
-            total = rep.query_download_size()
-            yield package_manager.DOWNLOAD_START.bind(total=total)
-
-            for size in rep.download_iter(directory):
-                yield package_manager.DOWNLOADING.bind(size=size, total=total)
-                
-            yield package_manager.DOWNLOAD_END.bind(total=total)
-
-        except RepositoryURLError as e:
-            yield package_manager.DOWNLOAD_ERROR.bind(error=e.get_basic())
-            return
-        
-        # 解凍する
-        with rep.open_archive(directory):
-            rep.extract(directory)
-        path = os.path.join(directory, rep.get_member_root())
-        yield package_manager.EXTRACTED_FILES.bind(path=path)
-    
+             
     def is_installed(self, pkg_name: str):
         self.check_database()
         if not isinstance(pkg_name, str):
             raise TypeError("pkg_name")
         return pkg_name in self.database
                 
-    def install(self, pkg: package):
-        if self.is_installed(pkg.name):
-            yield package_manager.ALREADY_INSTALLED
+    #
+    def install(self, pkg: package, newinstall: bool):
+        rep = pkg.get_repository()
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir = ''
+        def cleanup_tmpdir(d):
+            shutil.rmtree(d)
+            return ''
+
+        if rep.is_remote:
+            # ダウンロードする
+            if not tmpdir: tmpdir = tempfile.mkdtemp()
+            try:
+                total = rep.query_download_size()
+                yield package_manager.DOWNLOAD_START.bind(total=total)
+
+                arcfilepath = rep.get_arcfilepath(tmpdir)
+                for size in rep.download_iter(arcfilepath):
+                    yield package_manager.DOWNLOADING.bind(size=size, total=total)
+                    
+                yield package_manager.DOWNLOAD_END.bind(total=total)
+
+            except RepositoryURLError as e:
+                yield package_manager.DOWNLOAD_ERROR.bind(error=e.get_basic())
+                tmpdir = cleanup_tmpdir(tmpdir)
+                return
+            except Exception:
+                tmpdir = cleanup_tmpdir(tmpdir)
+                return
+
+        localpath = None
+        if rep.is_archive:
             # ローカルに展開する
-            localdir = None
-            rep = pkg.get_repository()
-            if rep:
-                for stat in self.download_repository(rep, tmpdir):
-                    if stat == package_manager.EXTRACTED_FILES:
-                        localdir = stat.path
-                    elif stat == package_manager.DOWNLOAD_ERROR:
-                        yield stat
-                        return
-                    else:
-                        yield stat
+            if not tmpdir: tmpdir = tempfile.mkdtemp()
+            try:
+                arcfilepath = rep.get_arcfilepath(tmpdir)
+                out = os.path.join(tmpdir, "content")
+                os.mkdir(out)
+                localpath = rep.extract(arcfilepath, out)
+            except Exception:
+                cleanup_tmpdir(tmpdir)
+                return
+        else:
+            # 単にパスを取得する
+            localpath = rep.get_local_path()
             
-            # pipにインストールさせる
-            yield package_manager.PIP_INSTALLING
-            yield from _run_pip(
-                installtarget=localdir, 
-                installdir=self.dir if pkg.is_installation_separated() else None
-            )
+        # pipにインストールさせる
+        yield package_manager.PIP_INSTALLING
+        try:
+            if newinstall:
+                yield from _run_pip(
+                    installtarget=localpath, 
+                    installdir=self.dir if pkg.is_installation_separated() else None
+                )
+
+                # 非公開の依存パッケージを表示
+                if os.path.isdir(localpath): # アーカイブの直接のインストールの場合は見に行かない
+                    private_reqs = _read_private_requirements(localpath)
+                    private_reqs = [name for name in private_reqs if not self.is_installed(name)]
+                    if private_reqs:
+                        yield package_manager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
+                
+                # pipが作成したデータを見に行く
+                distinfo: Dict[str, str] = {}
+                if pkg.is_installation_separated():
+                    distinfo = _read_pip_dist_info(self.dir, pkg.dist_package_name)
             
-            # 非公開の依存パッケージを表示
-            private_reqs = _read_private_requirements(localdir)
-            private_reqs = [name for name in private_reqs if not self.is_installed(name)]
-            if private_reqs:
-                yield package_manager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
-            
-        # pipが作成したデータを見に行く
-        distinfo: Dict[str, str] = {}
-        if pkg.is_installation_separated():
-            distinfo = _read_pip_dist_info(self.dir, pkg.dist_package_name)
+                # データベースに書き込む
+                self.add_database(pkg, **distinfo)
+
+            else:
+                isseparate = self.database.getboolean(pkg.name, "separate", fallback=False)   
+                yield from _run_pip(
+                    installtarget=localpath, 
+                    installdir=self.dir if isseparate else None,
+                    options=["--upgrade"]
+                )
+
+                # データベースに書き込む
+                self.add_database(pkg)
         
-        # データベースに書き込む
-        self.add_database(pkg, **distinfo)
+        finally:
+            tmpdir = cleanup_tmpdir(tmpdir)
         
+    #
     def uninstall(self, pkg):
-        if not self.is_installed(pkg.name):
-            yield package_manager.NOT_INSTALLED
-        
         separate = self.database.getboolean(pkg.name, "separate", fallback=False)
         if separate:
             # 手動でディレクトリを削除する
@@ -292,7 +309,8 @@ class package_manager():
             # pipにアンインストールさせる
             yield package_manager.PIP_UNINSTALLING
             yield from _run_pip(
-                uninstalltarget=pkg.name
+                uninstalltarget=pkg.name,
+                options=["--yes"]
             )
             
         self.remove_database(pkg.name)
@@ -309,37 +327,6 @@ class package_manager():
             return "latest"
         else:
             return "old"
-    
-    def update(self, pkg):
-        self.check_database()
-        if pkg.name not in self.database:
-            yield package_manager.NOT_INSTALLED
-            return
-            
-        separate = self.database.getboolean(pkg.name, "separate", fallback=False)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            # レポジトリを展開
-            localdir = None
-            rep = pkg.get_repository()
-            if rep:
-                for stat in self.download_repository(rep, tmpdir):
-                    if stat == package_manager.EXTRACTED_FILES:
-                        localdir = stat.path
-                    elif stat == package_manager.DOWNLOAD_ERROR:
-                        yield stat
-                        return
-                    else:
-                        yield stat
-
-            # pipにインストールさせる
-            yield package_manager.PIP_INSTALLING
-            yield from _run_pip(
-                installtarget=localdir, 
-                installdir=self.dir if separate else None,
-                options=["--upgrade"]
-            )
-        
-        self.add_database(pkg)
     
     def add_to_import_path(self):
         if self.dir not in sys.path:

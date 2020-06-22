@@ -20,7 +20,7 @@ class Launcher():
 
     def __init__(self, title="", geometry=(900,400)):
         self.app = None
-        self.screen_title = title
+        self.screen_title = title or "Machaon Terminal"
         self.screen_geo = geometry
         self.theme = None
         

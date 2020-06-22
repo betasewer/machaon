@@ -52,8 +52,7 @@ class Starter():
     # コマンドを提供しない、依存のみのパッケージをインストール
     def dependency(self, pkg=None, **packagekwargs):
         if pkg is None:
-            pkg = package(**packagekwargs)
-        pkg._type = package.DEPENDENCY_MODULE
+            pkg = package(**packagekwargs, dependency=True)
         self.root.setup_dependency_package(pkg)
 
     def go(self):
@@ -75,7 +74,7 @@ class ShellStarter(Starter):
 #
 #
 class TkStarter(Starter):
-    def __init__(self, *, title, geometry, directory):
+    def __init__(self, *, directory, title=None, geometry=None):
         from machaon.ui.tk import tkLauncher
         ui = tkLauncher(title, geometry)
         super().__init__(ui, directory)

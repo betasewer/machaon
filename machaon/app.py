@@ -99,11 +99,11 @@ class AppRoot:
     def operate_package(self, package, install=False, uninstall=False, update=False):
         self.pkgmanager.load_database()
         if install:
-            yield from self.pkgmanager.install(package)
+            yield from self.pkgmanager.install(package, newinstall=True)
         elif uninstall:
             yield from self.pkgmanager.uninstall(package)
         elif update:
-            yield from self.pkgmanager.update(package)
+            yield from self.pkgmanager.install(package, newinstall=False)
     
     def count_package(self):
         return len(self.cmdpackages)
@@ -140,7 +140,6 @@ class AppRoot:
         self.mainloop()
 
     def exit(self):
-        self.to_be_exit = True
         self.processhive.stop()
         self.ui.on_exit()
     
