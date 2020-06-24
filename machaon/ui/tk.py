@@ -451,6 +451,10 @@ class tkLauncher(Launcher):
                 raise NotImplementedError()
 
         return cv
+    
+    def get_screen_texts(self):
+        """ プレーンテキストに変換 """
+        return self.log.get(1.0, tk.END)
         
     def watch_active_process(self):
         """ アクティブなプロセスの発するメッセージを読みに行く """

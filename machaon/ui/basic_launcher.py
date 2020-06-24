@@ -110,6 +110,10 @@ class Launcher():
     def insert_screen_canvas(self, canvas):
         pass
     
+    # ログ保存用にテキストのみを取得する
+    def get_screen_texts(self):
+        pass
+    
     #
     # 入力欄の操作
     #    
@@ -196,6 +200,9 @@ class Launcher():
             # 呼び出し引数と結果を詳細に表示する
             procindex, _ = parse_procindex(command[len("invoke"):])
             msg = self.meta_command_show_invocation(procindex)
+        
+        elif command.startswith("savelog"):
+            msg = self.meta_command_savelog(command[len("savelog"):].strip())
             
         elif command.startswith("!"):
             # Pythonの式を評価する
@@ -212,6 +219,7 @@ class Launcher():
                 ("arg", "プロセスの引数を入力欄に展開"),
                 ("invoke", "プロセスの引数と実行結果を表示"),
                 ("arghelp", "プロセスのヘルプを表示"),
+                ("savelog", "プロセスのログを保存する"),
                 ("/", "コマンドの可能な解釈を全て表示"),
                 ("!", "Pythonの式を評価して結果を表示"),
                 ("help", "このヘルプを表示"),
@@ -573,6 +581,22 @@ class Launcher():
             self.insert_screen_appendix("\n".join(lines), title="実行結果の調査")
         else:
             return "対象となるプロセスがありません"
+    
+    def meta_command_savelog(self, path):
+        texts = self.get_screen_texts()
+        if not texts:
+            return "ログの保存が実装されていません"
+
+        if not path:
+            path = "log.txt"
+        p = os.path.join(self.app.get_current_dir(), path)
+        try:
+            with open(p, "w", encoding="utf-8") as fo:
+                for line in texts.splitlines():
+                    fo.write(line+"\n")
+            return "保存 --> {}".format(p)
+        except Exception as e:
+            return "エラー：{}".format(e)
             
     def meta_command_eval_py(self, expression, libnames):
         if not expression:

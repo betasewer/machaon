@@ -192,7 +192,7 @@ def command_ui_theme(spi, themename=None, alt="", show=False):
 # 立ち上げスクリプトのひな形を吐き出す
 def command_bootstrap(app, tk=True):
     pass
-    
+
 #
 # クラスサンプル用コマンド
 #
