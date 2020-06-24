@@ -31,3 +31,15 @@ def test_composit():
     assert composit_text("1234567890\nABCDE", 10, indent=0) == "1234567890\nABCDE"
     assert composit_text("あいうえおかきくけこやゆよ\nらりるれろ", 11, indent=0) == "あいうえお\nかきくけこ\nやゆよ\nらりるれろ"
     assert composit_text("あいうえお\nかきくけこ\nやゆよ\nらりるれろ\n", 11, indent=0) == "あいうえお\nかきくけこ\nやゆよ\nらりるれろ\n"
+
+def test_parserecord():
+    from machaon.cui import parserecord
+    assert parserecord("Name : package-name", ":", length=2) == ["Name", "package-name"]
+    assert parserecord("", ":", length=2) == ["", ""]
+    assert parserecord("mat, neko", ",", length=3, default=("", "", None)) == ["mat", "neko", None]
+    assert parserecord("", ",", length=3, default=("", "", None)) == ["", "", None]
+    assert parserecord("Name : package-name, waon", (":", ",")) == ["Name", "package-name", "waon"]
+    assert parserecord("Name : package-name, waon", ("@", "@")) == ["Name : package-name, waon", "", ""]
+    assert parserecord("Name : package-name, waon", ("@", ",")) == ["Name : package-name, waon", "", ""]
+
+

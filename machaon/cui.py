@@ -137,6 +137,42 @@ def fixsplit(s, sep=None, *, maxsplit, default=""):
     return spl
 
 #
+def parserecord(s, sep=None, *, length=None, default="", nostrip=False):
+    if isinstance(sep, str):
+        if length is None:
+            raise TypeError("specify record length")
+        if sep is None:
+            sep = ' '
+        sep = tuple(sep for x in range(length-1))
+
+    length = len(sep)+1
+
+    spl = []
+    parting = s
+    for asep in sep:
+        value, separator, parting = parting.partition(asep)
+        spl.append(value)
+        if not separator: # 区切れなかった
+            break
+
+    if parting:
+        spl.append(parting)
+
+    if not nostrip:
+        spl = [x.strip() for x in spl]
+
+    if isinstance(default, tuple):
+        if len(default) < length:
+            raise ValueError("Too short default sequence is specified")
+        for i in range(length):
+            if i >= len(spl):
+                spl.append(default[i])
+    else:
+        spl.extend([default for _ in range(length-len(spl))])
+
+    return spl
+
+#
 #
 #
 class MiniProgressDisplay:
