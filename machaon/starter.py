@@ -55,8 +55,20 @@ class Starter():
             pkg = package(**packagekwargs, dependency=True)
         self.root.setup_dependency_package(pkg)
 
+    # プリセットコマンドを実装
+    def shell_commandset(self):
+        from machaon.commands.catalogue import shell_commands
+        self.commandset(shell_commands())
+        self.system_commandset()
+    
+    def system_commandset(self):
+        from machaon.commands.catalogue import app_commands
+        self.commandset(app_commands())
+
+    # アプリを開始する
     def go(self):
         return self.root.run()
+    
 
 #
 #

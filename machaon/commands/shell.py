@@ -94,7 +94,10 @@ def execprocess(spi, command, split=False):
             spi.warn("実行中のプロセスを強制終了しました")
             spi.raise_interruption()
         
-        spi.message(msg)
+        if isinstance(msg, PopenEnd):
+            spi.message_em("プロセスはコード={}で終了しました".format(msg.returncode))
+        else:    
+            spi.message(msg)
         
 #
 #

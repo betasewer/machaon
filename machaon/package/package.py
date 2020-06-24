@@ -364,16 +364,36 @@ def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=
 #
 def _read_pip_dist_info(directory, pkg_name):
     """ pipがdist-infoフォルダに収めたパッケージの情報を読みとる """
-    distinfo = {}
+    pkg_name = canonicalize_package_name(pkg_name)
     infodir = None
-    infodirname = re.compile(r"{}-([\d\.]+)\.(dist-info|egg-info)".format(pkg_name))
     for d in os.listdir(directory):
-        if infodirname.match(d):
+        if d.endswith(".dist-info"):
+            p = os.path.join(directory, d, "METADATA")
+        elif d.endswith(".egg-info"):
+            p = os.path.join(directory, d, "PKG-INFO")
+        else:
+            continue
+        
+        if not os.path.isfile(p):
+            continue
+        
+        namedata = None
+        for l in _readfilelines(p):
+            key, _, value = [x.strip() for x in l.partition(":")]
+            if key == "Name":
+                namedata = value
+                break
+        else:
+            continue
+
+        if namedata and canonicalize_package_name(namedata) == pkg_name:
             infodir = d
             break
     else:
-        raise PipDistInfoNotFound()
+        raise PipDistInfoFolderNotFound()
     
+    #
+    distinfo = {}
     distinfo["infodir"] = infodir
     
     p = os.path.join(directory, infodir, "top_level.txt")
@@ -383,7 +403,12 @@ def _read_pip_dist_info(directory, pkg_name):
     return distinfo
 
 #
-class PipDistInfoNotFound(Exception):
+pep_503_normalization = re.compile(r"[-_.]+")
+def canonicalize_package_name(name):
+    return pep_503_normalization.sub("-", name).lower()
+
+#
+class PipDistInfoFolderNotFound(Exception):
     pass
 
 #
@@ -392,8 +417,13 @@ def _read_private_requirements(localdir):
     if localdir:
         reqs = os.path.join(localdir, "PRIVATE-REQUIREMENTS.txt")
         if os.path.isfile(reqs):
-            with open(reqs, "r", encoding="utf-8") as reqsf:
-                for line in reqsf:
-                    lines.append(line)
+            lines = [l for l in _readfilelines(reqs)]
     return lines
+
+#
+def _readfilelines(p):
+    with open(p, "r", encoding="utf-8") as fi:
+        for l in fi:
+            yield l
+
 

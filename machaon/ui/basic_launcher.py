@@ -18,10 +18,10 @@ meta_command_sigil = "`"
 class Launcher():
     wrap_width = 0xFFFFFF
 
-    def __init__(self, title="", geometry=(900,400)):
+    def __init__(self, title="", geometry=None):
         self.app = None
         self.screen_title = title or "Machaon Terminal"
-        self.screen_geo = geometry
+        self.screen_geo = geometry or (900,400)
         self.theme = None
         
     def init_with_app(self, app):
