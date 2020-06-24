@@ -10,7 +10,7 @@ from machaon.cui import fixsplit, composit_text
 from machaon.process import ProcessMessage
 
 #
-meta_command_sigil = "`"
+meta_command_sigil = "/"
 
 #
 #
@@ -165,12 +165,12 @@ class Launcher():
             prefix = commandhead[1:].strip()
             msg = self.meta_command_set_prefix(prefix)
 
-        elif commandhead.startswith(">>"):
+        elif commandhead.startswith("put"):
             # データビューの選択アイテムの値を画面に展開する
-            procindex, itemname = parse_procindex(commandhead[2:])
+            procindex, itemname = parse_procindex(commandhead[len("put"):])
             msg = self.meta_command_show_dataview_item(itemname, procindex, "", toinput=False)
         
-        elif commandhead.startswith(">"):
+        elif commandhead.startswith("="):
             # データビューの選択アイテムの値をコマンド欄に展開する
             procindex, itemname = parse_procindex(commandhead[1:])
             msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
@@ -191,7 +191,7 @@ class Launcher():
             argname, restcommand = fixsplit(commandtail, maxsplit=1)
             msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
 
-        elif command.startswith("/"):
+        elif command.startswith("?"):
             # 文字列を解析し、コマンドとして可能な解釈をすべて示す
             cmdstr = command[1:].strip()
             msg = self.meta_command_show_syntax(cmdstr)
