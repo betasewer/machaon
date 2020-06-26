@@ -185,15 +185,15 @@ class Launcher():
             procindex, _ = parse_procindex(commandhead[len("arghelp"):])
             msg = self.meta_command_show_help(commandtail, procindex)
         
-        elif commandhead.startswith("arg"):
+        elif commandhead.startswith("a"):
             # アクティブなコマンドの引数をコマンド欄に展開する
-            procindex, _ = parse_procindex(commandhead[len("arg"):])
+            procindex, _ = parse_procindex(commandhead[len("a"):])
             argname, restcommand = fixsplit(commandtail, maxsplit=1)
             msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
 
-        elif command.startswith("?"):
+        elif command.startswith("what"):
             # 文字列を解析し、コマンドとして可能な解釈をすべて示す
-            cmdstr = command[1:].strip()
+            cmdstr = command[len("what"):].strip()
             msg = self.meta_command_show_syntax(cmdstr)
 
         elif command.startswith("invoke"):
@@ -214,13 +214,13 @@ class Launcher():
                 ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
                 ("(string...).", "コマンド接頭辞の設定"),
                 (">", "現在の選択アイテムを入力欄に展開"),
-                (">>", "現在の選択アイテムを画面に展開"),
+                ("put", "現在の選択アイテムを画面に展開"),
                 ("pred", "データビューの述語の一覧を表示"),
-                ("arg", "プロセスの引数を入力欄に展開"),
-                ("invoke", "プロセスの引数と実行結果を表示"),
-                ("arghelp", "プロセスのヘルプを表示"),
+                ("a", "プロセスの実引数を入力欄に展開"),
+                ("invoke", "プロセスの実引数と実行結果を表示"),
+                ("arghelp", "プロセスの引数ヘルプを表示"),
                 ("savelog", "プロセスのログを保存する"),
-                ("/", "コマンドの可能な解釈を全て表示"),
+                ("what", "コマンドの可能な解釈を全て表示"),
                 ("!", "Pythonの式を評価して結果を表示"),
                 ("help", "このヘルプを表示"),
             ]
