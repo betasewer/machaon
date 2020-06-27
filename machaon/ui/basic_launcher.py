@@ -314,10 +314,22 @@ class Launcher():
         if updatemenu:
             self.update_chamber_menu(active=chamber.get_index())
 
+    def close_active_chamber(self):
+        self.app.remove_active_chamber()
+        chm = self.app.get_active_chamber()
+        if chm:
+            self.update_active_chamber(chm)
+            self.remove_chamber_menu(chm)
+        else:
+            raise ValueError("No chamber to activate exists")
+            
     def add_chamber_menu(self, chamber):
         pass
 
     def update_chamber_menu(self, **kwargs):
+        pass
+    
+    def remove_chamber_menu(self, chamber):
         pass
 
     #
@@ -358,6 +370,7 @@ class Launcher():
     def on_exec_process(self, spirit, process):
         """ プロセス実行時 """
         #self.put_input_command(spirit, process.get_full_command())
+        pass
     
     def on_interrupt_process(self, spirit, process):
         """ プロセス中断時 """

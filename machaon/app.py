@@ -325,6 +325,9 @@ class AppRoot:
             chm = self.get_chamber(index, activate=activate)
         return chm
     
+    def remove_active_chamber(self, index=None):
+        self.processhive.remove(index)
+    
     # メインスレッド側から操作中断
     def interrupt_process(self):
         scr = self.processhive.get_active()

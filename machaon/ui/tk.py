@@ -335,6 +335,11 @@ class tkLauncher(Launcher):
         def log_on_Up(e):
             self.hyper_select_prev()
             return "break"
+            
+        @bind_event(self.commandline, self.log)
+        def on_Alt_c(e):
+            self.close_active_chamber()
+            return "break"
 
         @bind_event(self.commandline, self.log)
         def on_FocusIn(e):
@@ -757,6 +762,9 @@ class tkLauncher(Launcher):
                 update_tag(ceased, "failed", True)
 
         self.chambermenu.configure(state='disable')
+    
+    def remove_chamber_menu(self, chm):
+        pass
 
     def chamber_menu_click(self, e):
         coord = self.chambermenu.index(tk.CURRENT)
