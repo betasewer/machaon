@@ -7,7 +7,7 @@ import traceback
 from typing import Tuple, Sequence, List
 
 from machaon.cui import composit_text
-from machaon.process import ProcessMessage
+from machaon.process import ProcessMessage, NotExecutedYet
 
 #
 meta_command_sigil = "/"
@@ -232,7 +232,7 @@ class Launcher():
             msg = "メタコマンド'{}'を解釈できません".format(command)
         
         if msg:
-            self.insert_screen_appendix(msg, "")
+            self.insert_screen_appendix(msg, title=command)
 
     # 入力を取得
     def get_input(self, spirit, instr):
@@ -390,17 +390,18 @@ class Launcher():
                     for name in unuseds:
                         spirit.warn("  {}".format(name))
     
-    def on_bad_command(self, spirit, process, command, error):
+    def on_bad_command(self, spirit, process, excep):
         """ 不明なコマンド """
-        #self.put_input_command(spirit, command)
-        if process is None:
+        command = process.get_command_string()
+        target = excep.get_target()
+        if target is None:
             spirit.error("'{}'は不明なコマンドです".format(command))
-            if self.app.search_command("help"):
-                spirit.message("'help'でコマンド一覧を表示できます")
+            if self.app.search_command("prog"):
+                spirit.message("'prog'でコマンド一覧を表示できます")
         else:
-            spirit.error("{}: コマンド引数が間違っています:".format(process.get_prog()))
-            spirit.error(error)
-            for line in process.get_help():
+            spirit.error("{}: コマンド引数が間違っています:".format(target.get_prog()))
+            spirit.error(excep.get_reason())
+            for line in target.get_help():
                 spirit.message(line)
     
     def on_exit(self):
@@ -539,22 +540,29 @@ class Launcher():
                 lines.append("  "*(level-1) + line)
 
             addline(1, "<コマンド>")
-            tg = chm.get_process().get_target()
-            typ, qualname, modname = tg.get_inspection()
-            addline(1, "{}: {}".format(typ, qualname))
-            addline(2, "{}で定義".format(modname))
-            addline(1, "")
 
-            labels = tg.get_valid_labels()
+            try:
+                tg = chm.get_process().get_target()
+                typ, qualname, modname = tg.get_inspection()
+                addline(1, "{}: {}".format(typ, qualname))
+                addline(2, "{}で定義".format(modname))
+                addline(1, "")
 
-            addline(1, "<引数>")
-            cmd = chm.get_process().get_parsed_command()
+                labels = tg.get_valid_labels()
 
-            for label in labels:
-                addline(1, "[{}]".format(label))
-                for argname, value in cmd.get_values(label).items():
-                    addline(2, "{} = {}".format(argname, value))
-            
+                addline(1, "<引数>")
+                cmd = chm.get_process().get_parsed_command()
+
+                for label in labels:
+                    addline(1, "[{}]".format(label))
+                    for argname, value in cmd.get_values(label).items():
+                        addline(2, "{} = {}".format(argname, value))
+                
+            except NotExecutedYet:
+                addline(1, "'{}'".format(chm.get_process().get_command_string()))
+                addline(2, "プロセスは実行されていない")
+                labels = ("init",) # 初期化エラーが記録されているかもしれない
+
             addline(1, "")
 
             addline(1, "<実行>")
@@ -577,7 +585,7 @@ class Launcher():
                             addline(2, l)
                     else:                    
                         addline(2, "-> {}".format(entry.result))
-            
+
             self.insert_screen_appendix("\n".join(lines), title="実行結果の調査")
         else:
             return "対象となるプロセスがありません"

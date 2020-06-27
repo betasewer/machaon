@@ -71,7 +71,7 @@ class ProcessTarget():
         return sp
         
     #
-    def invoke(self, spirit, parsedcommand):
+    def invoke(self, spirit, parsedcommand, invocation):
         raise NotImplementedError()
 
     #
@@ -114,9 +114,7 @@ class ProcessTargetClass(ProcessTarget):
         return "class", self.klass.__qualname__, self.klass.__module__
 
     # 
-    def invoke(self, spirit, parsedcommand):
-        invocation = ProcessTargetInvocation()
-
+    def invoke(self, spirit, parsedcommand, invocation):
         # プロセスを生成
         proc = self.klass(spirit)
         if self.init_invoker:
@@ -149,9 +147,7 @@ class ProcessTargetFunction(ProcessTarget):
     def get_inspection(self):
         return "function", self.target_invoker.fn.__qualname__, self.target_invoker.fn.__module__
 
-    def invoke(self, spirit, parsedcommand):
-        invocation = ProcessTargetInvocation()
-
+    def invoke(self, spirit, parsedcommand, invocation):
         # 束縛引数
         preargs = []
         if self.spirittype is not None:
@@ -308,21 +304,26 @@ class InvocationEntry():
 #
 #
 #
-class ProcessTargetInvocation:
+class ProcessInvocation:
     def __init__(self):
         self.entries = defaultdict(list)
         self.last_exception = None
     
-    def continue_(self, label, invocation):
-        self.entries[label].append(invocation)
-        if invocation.is_failed():
-            self.last_exception = invocation.exception
+    def continue_(self, label: str, entry: InvocationEntry):
+        self.entries[label].append(entry)
+        if entry.is_failed():
+            self.last_exception = entry.exception
             return False
-        if label == "init" and invocation.is_init_failed():
+        if label == "init" and entry.is_init_failed():
             self.last_exception = ProcessInitFailed()
             return False
         return True
-        
+    
+    def initerror(self, excep: BaseException):
+        entry = InvocationEntry((), {})
+        entry.set_result(None, excep)
+        self.continue_("init", entry)
+
     def get_entries_of(self, label):
         return self.entries[label]
     
@@ -340,6 +341,7 @@ class ProcessTargetInvocation:
 
     def get_last_exception(self):
         return self.last_exception
+
 
 #
 # ######################################################################
@@ -379,23 +381,24 @@ class Process:
         self.parsedcommand = parsedcommand
 
         # 操作を実行する
-        invocation = target.invoke(spirit, parsedcommand)
+        invocation = ProcessInvocation()
+        target.invoke(spirit, parsedcommand, invocation)
         self.last_invocation = invocation
         return invocation
     
     def get_target(self):
         if self.target is None:
-            raise ValueError("target is not set")
+            raise NotExecutedYet()
         return self.target 
 
     def get_spirit(self):
         if self.spirit is None:
-            raise ValueError("spirit is not set")
+            raise NotExecutedYet()
         return self.spirit
         
     def get_parsed_command(self):
         if self.parsedcommand is None:
-            raise ValueError("parsed-command is not set")
+            raise NotExecutedYet()
         return self.parsedcommand
     
     def get_command_args(self):
@@ -411,14 +414,20 @@ class Process:
 
     def get_last_invocation(self):
         if self.is_running():
-            raise Exception("")
+            raise StillExecuting()
         return self.last_invocation
     
     def is_failed(self):
-        if self.last_invocation:
-            e = self.last_invocation.get_last_exception()
-            return e is not None
-        return False
+        if self.last_invocation is None:
+            raise NotExecutedYet()
+        e = self.last_invocation.get_last_exception()
+        return e is not None
+    
+    def failed_before_execution(self, excep):
+        # 実行前に起きたエラーを記録する
+        invocation = ProcessInvocation()
+        invocation.initerror(excep)
+        self.last_invocation = invocation
 
     #
     # スレッド
@@ -499,6 +508,28 @@ class Process:
 #
 class ProcessInterrupted(Exception):
     pass
+
+#
+# プロセスのメソッド呼び出しで起こるエラー
+#
+class NotExecutedYet(Exception):
+    pass
+
+class StillExecuting(Exception):
+    pass
+
+#
+# プロセス実行前に設定されうるエラー
+#
+class ProcessBadCommand(Exception):
+    def __init__(self, target, reason):
+        super().__init__(target, reason)
+
+    def get_target(self):
+        return super().args[0]
+    
+    def get_reason(self):
+        return super().args[1]
 
 #
 # ###################################################################

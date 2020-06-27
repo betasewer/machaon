@@ -695,6 +695,7 @@ class tkLauncher(Launcher):
         if isinstance(valuelines, str):
             self.insert_screen_message(ProcessMessage(valuelines))
         else:
+            # シーケンスが渡されたなら、簡単な表形式にする
             maxspacing = max(*[len(x[0]) for x in valuelines], 0, 0)
             for value, desc in valuelines:
                 spacing = " " * (maxspacing - len(value) + 2)

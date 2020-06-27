@@ -12,7 +12,7 @@ from typing import Optional, List, Any
 
 from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet, LoadFailedCommandSet
 from machaon.command import describe_command, CommandPackage
-from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
+from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber, ProcessBadCommand
 from machaon.package.package import package_manager, PackageEntryLoadError
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
@@ -162,14 +162,14 @@ class AppRoot:
     # コマンド処理の流れ
     #
     # プロセスをスレッドで実行しアクティブにする
-    def run_process(self, commandstr):
+    def run_process(self, commandstr: str):
         process = Process(commandstr)
         chamber = self.processhive.new_activate(process)
         self.processhive.run(self)
         return chamber
     
     # プロセスの実行フロー
-    def execute_process(self, process):
+    def execute_process(self, process: Process):
         commandstr = process.get_command_string()
 
         # メインスレッドへの伝達者
@@ -185,16 +185,19 @@ class AppRoot:
                 target, spirit = entry.target, entry.spirit
                 parsedcommand = self.cmdengine.parse_command(entry)
         except Exception as parseexcep:
-            # コマンド解析中の例外
+            # コマンド解析中の例外（コマンド解析エラーではなく）
+            process.failed_before_execution(parseexcep)
             self.ui.on_error_process(spirit, process, parseexcep, timing = "argparse")
             return None
         
         if parsedcommand is None:
             if entry is None:
-                failtarget, failreason = None, "合致するコマンドが無かった"
+                error = ProcessBadCommand(target=None, reason="合致するコマンドが無かった")
             else:
-                failtarget, failreason = entry.target, self.cmdengine.get_last_parse_error()
-            self.ui.on_bad_command(spirit, failtarget, commandstr, failreason)
+                error = ProcessBadCommand(target=entry.target, reason=self.cmdengine.get_last_parse_error())
+
+            process.failed_before_execution(error)
+            self.ui.on_bad_command(spirit, process, error)
             return None
 
         # 実行開始！
