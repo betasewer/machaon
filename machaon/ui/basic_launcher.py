@@ -145,91 +145,97 @@ class Launcher():
     #
     def invoke_meta_command(self, command):
         commandhead, _, commandtail = [x.strip() for x in command.partition(" ")]
-        if not commandhead:
-            msg = None
-
-        elif commandhead[0].isdigit():
-            # データのインデックスによる即時選択
-            procindex, itemindex = parse_procindex(commandhead)
-            try:
-                index = int(itemindex)
-            except ValueError as e:
-                msg = str(e)
-            else:
-                msg = self.meta_command_select_dataview(index, procindex)
-                if commandtail:
-                    msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
-
-        elif commandhead.endswith("."):
-            # コマンド接頭辞の設定
-            prefix = commandhead[1:].strip()
-            msg = self.meta_command_set_prefix(prefix)
-
-        elif commandhead.startswith("put"):
-            # データビューの選択アイテムの値を画面に展開する
-            procindex, itemname = parse_procindex(commandhead[len("put"):])
-            msg = self.meta_command_show_dataview_item(itemname, procindex, "", toinput=False)
         
-        elif commandhead.startswith("="):
-            # データビューの選択アイテムの値をコマンド欄に展開する
-            procindex, itemname = parse_procindex(commandhead[1:])
-            msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
-        
-        elif commandhead.startswith("pred"):
-            # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
-            procindex, keyword = parse_procindex(command[len("pred"):])
-            msg = self.meta_command_show_predicates(keyword, procindex)
-        
-        elif commandhead.startswith("arghelp"):
-            # 引数またはアクティブなコマンドのヘルプを末尾に表示する
-            procindex, _ = parse_procindex(commandhead[len("arghelp"):])
-            msg = self.meta_command_show_help(commandtail, procindex)
-        
-        elif commandhead.startswith("a"):
-            # アクティブなコマンドの引数をコマンド欄に展開する
-            procindex, _ = parse_procindex(commandhead[len("a"):])
-            argname, _, restcommand = commandtail.partition(" ")
-            msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
+        try:
+            if not commandhead:
+                msg = None
 
-        elif command.startswith("what"):
-            # 文字列を解析し、コマンドとして可能な解釈をすべて示す
-            cmdstr = command[len("what"):].strip()
-            msg = self.meta_command_show_syntax(cmdstr)
+            elif commandhead[0].isdigit():
+                # データのインデックスによる即時選択
+                procindex, itemindex = parse_procindex(commandhead)
+                try:
+                    index = int(itemindex)
+                except ValueError as e:
+                    msg = str(e)
+                else:
+                    msg = self.meta_command_select_dataview(index, procindex)
+                    if commandtail:
+                        msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
 
-        elif command.startswith("invoke"):
-            # 呼び出し引数と結果を詳細に表示する
-            procindex, _ = parse_procindex(command[len("invoke"):])
-            msg = self.meta_command_show_invocation(procindex)
-        
-        elif command.startswith("savelog"):
-            msg = self.meta_command_savelog(command[len("savelog"):].strip())
+            elif commandhead.endswith("."):
+                # コマンド接頭辞の設定
+                prefix = commandhead[1:].strip()
+                msg = self.meta_command_set_prefix(prefix)
+
+            elif commandhead.startswith("put"):
+                # データビューの選択アイテムの値を画面に展開する
+                procindex, itemname = parse_procindex(commandhead[len("put"):])
+                msg = self.meta_command_show_dataview_item(itemname, procindex, "", toinput=False)
             
-        elif command.startswith("!"):
-            # Pythonの式を評価する
-            libnames, expr = parse_procindex(command[1:])
-            msg = self.meta_command_eval_py(expr, libnames.split())
+            elif commandhead.startswith("="):
+                # データビューの選択アイテムの値をコマンド欄に展開する
+                procindex, itemname = parse_procindex(commandhead[1:])
+                msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
+            
+            elif commandhead.startswith("pred"):
+                # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
+                procindex, keyword = parse_procindex(command[len("pred"):])
+                msg = self.meta_command_show_predicates(keyword, procindex)
+            
+            elif commandhead.startswith("arghelp"):
+                # 引数またはアクティブなコマンドのヘルプを末尾に表示する
+                procindex, _ = parse_procindex(commandhead[len("arghelp"):])
+                msg = self.meta_command_show_help(commandtail, procindex)
+            
+            elif commandhead.startswith("a"):
+                # アクティブなコマンドの引数をコマンド欄に展開する
+                procindex, _ = parse_procindex(commandhead[len("a"):])
+                argname, _, restcommand = commandtail.partition(" ")
+                msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
+
+            elif command.startswith("what"):
+                # 文字列を解析し、コマンドとして可能な解釈をすべて示す
+                cmdstr = command[len("what"):].strip()
+                msg = self.meta_command_show_syntax(cmdstr)
+
+            elif command.startswith("invoke"):
+                # 呼び出し引数と結果を詳細に表示する
+                procindex, _ = parse_procindex(command[len("invoke"):])
+                msg = self.meta_command_show_invocation(procindex)
+            
+            elif command.startswith("savelog"):
+                msg = self.meta_command_savelog(command[len("savelog"):].strip())
+                
+            elif command.startswith("!"):
+                # Pythonの式を評価する
+                libnames, expr = parse_procindex(command[1:])
+                msg = self.meta_command_eval_py(expr, libnames.split())
+            
+            elif command.startswith("help"):
+                values = [
+                    ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
+                    ("(string...).", "コマンド接頭辞の設定"),
+                    (">", "現在の選択アイテムを入力欄に展開"),
+                    ("put", "現在の選択アイテムを画面に展開"),
+                    ("pred", "データビューの述語の一覧を表示"),
+                    ("a", "プロセスの実引数を入力欄に展開"),
+                    ("invoke", "プロセスの実引数と実行結果を表示"),
+                    ("arghelp", "プロセスの引数ヘルプを表示"),
+                    ("savelog", "プロセスのログを保存する"),
+                    ("what", "コマンドの可能な解釈を全て表示"),
+                    ("!", "Pythonの式を評価して結果を表示"),
+                    ("help", "このヘルプを表示"),
+                ]
+                values = [(meta_command_sigil+x,y) for (x,y) in values]
+                self.insert_screen_appendix(values, title="メタコマンドの一覧")
+                msg = None
+            
+            else:
+                msg = "メタコマンド'{}'を解釈できません".format(command)
         
-        elif command.startswith("help"):
-            values = [
-                ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
-                ("(string...).", "コマンド接頭辞の設定"),
-                (">", "現在の選択アイテムを入力欄に展開"),
-                ("put", "現在の選択アイテムを画面に展開"),
-                ("pred", "データビューの述語の一覧を表示"),
-                ("a", "プロセスの実引数を入力欄に展開"),
-                ("invoke", "プロセスの実引数と実行結果を表示"),
-                ("arghelp", "プロセスの引数ヘルプを表示"),
-                ("savelog", "プロセスのログを保存する"),
-                ("what", "コマンドの可能な解釈を全て表示"),
-                ("!", "Pythonの式を評価して結果を表示"),
-                ("help", "このヘルプを表示"),
-            ]
-            values = [(meta_command_sigil+x,y) for (x,y) in values]
-            self.insert_screen_appendix(values, title="メタコマンドの一覧")
-            msg = None
-        
-        else:
-            msg = "メタコマンド'{}'を解釈できません".format(command)
+        except Exception as e:
+            msg = "エラー発生："
+            msg += "\n".join(traceback.format_exception_only(type(e), e))
         
         if msg:
             self.insert_screen_appendix(msg, title=command)
