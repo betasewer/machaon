@@ -6,7 +6,7 @@ import datetime
 import traceback
 from typing import Tuple, Sequence, List
 
-from machaon.cui import fixsplit, composit_text
+from machaon.cui import composit_text
 from machaon.process import ProcessMessage
 
 #
@@ -78,41 +78,41 @@ class Launcher():
     # メッセージウィンドウの操作
     #
     def insert_screen_message(self, msg):
-        pass
+        raise NotImplementedError()
 
     def delete_screen_message(self, lineno, count):
-        pass
+        raise NotImplementedError()
 
     def replace_screen_message(self, msgs):
-        pass
+        raise NotImplementedError()
 
     #
     # プロセスの情報を更新するために監視
     #
     def watch_active_process(self):
-        pass
+        raise NotImplementedError()
 
     def watch_running_process(self, states):
-        pass
+        raise NotImplementedError()
         
     # 
     def dataviewer(self, viewtype):
-        return None
+        raise NotImplementedError()
 
     def insert_screen_dataview(self, msg, viewer, data):
-        pass
+        raise NotImplementedError()
     
     #
     def insert_screen_appendix(self, values, title=""):
-        pass
+        raise NotImplementedError()
     
     #
     def insert_screen_canvas(self, canvas):
-        pass
+        raise NotImplementedError()
     
     # ログ保存用にテキストのみを取得する
-    def get_screen_texts(self):
-        pass
+    def get_screen_texts(self) -> str:
+        raise NotImplementedError()
     
     #
     # 入力欄の操作
@@ -144,7 +144,7 @@ class Launcher():
     
     #
     def invoke_meta_command(self, command):
-        commandhead, commandtail = fixsplit(command, maxsplit=1)
+        commandhead, _, commandtail = [x.strip() for x in command.partition(" ")]
         if not commandhead:
             msg = None
 
@@ -188,7 +188,7 @@ class Launcher():
         elif commandhead.startswith("a"):
             # アクティブなコマンドの引数をコマンド欄に展開する
             procindex, _ = parse_procindex(commandhead[len("a"):])
-            argname, restcommand = fixsplit(commandtail, maxsplit=1)
+            argname, _, restcommand = commandtail.partition(" ")
             msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
 
         elif command.startswith("what"):
