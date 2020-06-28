@@ -312,7 +312,7 @@ class Launcher():
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
         self.watch_active_process()
         if updatemenu:
-            self.update_chamber_menu(active=chamber.get_index())
+            self.update_chamber_menu(active=chamber)
 
     def close_active_chamber(self):
         self.app.remove_active_chamber()

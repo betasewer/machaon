@@ -304,6 +304,9 @@ class AppRoot:
     def get_chambers(self):
         return self.processhive.get_chambers()
     
+    def count_chamber(self):
+        return self.processhive.count()
+    
     def get_chambers_state(self):
         runs = self.processhive.get_runnings()
         report = {
