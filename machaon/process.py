@@ -405,6 +405,8 @@ class Process:
         return self.parsedcommand
     
     def build_command_string(self):
+        if self.target is None or self.parsedcommand is None:
+            raise NotExecutedYet()
         prog = self.target.get_prog()
         exp = self.parsedcommand.get_expanded_command()
         return " ".join(x for x in [prog, exp] if x)
@@ -417,9 +419,12 @@ class Process:
             raise StillExecuting()
         return self.last_invocation
     
+    def is_executed(self):
+        return self.target is not None and self.parsedcommand is not None
+    
     def is_failed(self):
         if self.last_invocation is None:
-            raise NotExecutedYet()
+            raise ValueError("Neither executed nor pre-execution-failed")
         e = self.last_invocation.get_last_exception()
         return e is not None
     
@@ -581,6 +586,9 @@ class Spirit():
     
     def bind_process(self, process):
         self.process = process
+    
+    def get_process(self):
+        return self.process
 
     #
     # メッセージ出力

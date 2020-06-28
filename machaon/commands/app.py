@@ -120,8 +120,12 @@ class ProcessListItem():
         return self.chamber.get_command()
     
     def full_command(self):
-        return self.chamber.get_process().build_command_string()
-        
+        p = self.chamber.get_process()
+        if p.is_executed():
+            return p.build_command_string()
+        else:
+            return p.get_command_string()
+            
     def handler(self):
         parsedcommand = self.chamber.get_process().get_command_args()
         return " / ".join(parsedcommand.preview_handlers())
@@ -160,7 +164,11 @@ class ProcessListItem():
 #
 def command_processlist(spi):
     spi.message("<< プロセス一覧 >>")
-    items = [ProcessListItem(x) for x in spi.get_app().get_chambers()]
+    items = [] 
+    for chm in spi.get_app().get_chambers():
+        if chm.get_process() is spi.get_process():
+            continue
+        items.append(ProcessListItem(chm))
     spi.create_data(items, ":table")
     spi.dataview()
 
