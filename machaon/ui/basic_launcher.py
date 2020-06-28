@@ -295,14 +295,7 @@ class Launcher():
         self.watch_running_process(states)
 
     def shift_active_chamber(self, delta):
-        index = self.app.get_active_chamber_index()
-        if index is None:
-            return
-        newindex = index - delta
-        if newindex<0:
-            # 先頭を超えた場合は変化なし
-            return
-        chm = self.app.select_chamber(newindex, activate=True)
+        chm = self.app.shift_active_chamber(delta)
         if chm is None:
             return
         self.update_active_chamber(chm)

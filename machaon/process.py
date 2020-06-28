@@ -6,7 +6,7 @@ import inspect
 import threading
 import queue
 import time
-from typing import Sequence, Optional, List, Dict, Any, Tuple, Set
+from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator
 from collections import defaultdict
 
 from machaon.dataset import DataViewFactory
@@ -1001,7 +1001,7 @@ class ProcessHive:
     def __init__(self):
         self.chambers: Dict[int, ProcessChamber] = {}
         self._allhistory: List[int] = []
-        self._remhistory: Set[int] = set()
+        self._nextindex: int = 0
         
     def run(self, app):
         cha = self.get_active()
@@ -1013,28 +1013,23 @@ class ProcessHive:
         p = cha.get_process()
         app.execute_process(p)
 
-    # 新しいチャンバーを作成し、アクティブにして返す
-    def new_activate(self, process: Process) -> ProcessChamber:
-        newindex = len(self.chambers) + len(self._remhistory)
+    # 新しいチャンバーを作成して返す
+    def new(self, process: Process) -> ProcessChamber:
+        newindex = self._nextindex
+        self._nextindex += 1
         scr = ProcessChamber(newindex, process)
         self.chambers[newindex] = scr
-        self.set_active_index(newindex) # アクティブにする
         return scr
     
-    # 既存のチャンバーをアクティブにして返す
-    def activate(self, index: int) -> Optional[ProcessChamber]:
-        if self.set_active_index(index):
-            return self.chambers[index]
-        return None
-
-    def set_active_index(self, index: int) -> bool:
+    # 既存のチャンバーをアクティブにする
+    def activate(self, index: int) -> bool:
         if index in self.chambers:
             self._allhistory.append(index)
             return True
         return False
     
     def rhistory(self):
-        return (x for x in reversed(self._allhistory) if x not in self._remhistory)
+        return (i for i in reversed(self._allhistory) if i in self.chambers)
 
     def get_active_index(self):
         return next(self.rhistory(), None)
@@ -1058,7 +1053,7 @@ class ProcessHive:
         return len(self.chambers)
     
     def get(self, index):
-        return self.chambers[index]
+        return self.chambers.get(index)
     
     def get_chambers(self):
         return self.chambers.values()
@@ -1070,8 +1065,27 @@ class ProcessHive:
         if index not in self.chambers:
             raise KeyError(index)
         
-        self._remhistory.add(index)
         del self.chambers[index]
+    
+    # 隣接する有効なチャンバーのインデックス
+    def next_indices(self, start:int=None, d:int=1) -> Generator[int, None, None]:
+        beg = self.get_active_index() if start is None else start
+        i = beg
+        imax = max([*self.chambers.keys(), 0])
+        while True:
+            while i == beg or i not in self.chambers:
+                i += d
+                if i<0 or imax<i:
+                    return None
+            yield i
+            beg = i
+        
+    def get_next_index(self, index=None, *, delta=1) -> Optional[int]:
+        g = self.next_indices(index, +1 if delta>=0 else -1)
+        i = None
+        for _ in range(abs(delta)):
+            i = next(g, None)
+        return i
 
     #
     #
