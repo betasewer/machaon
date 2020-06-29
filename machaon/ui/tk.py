@@ -266,35 +266,38 @@ class tkLauncher(Launcher):
             self.log_set_selection() # 項目選択を外す
             self.commandline.focus_set() # コマンド入力モードへ
             return None
-            
-        # 全体
-        @bind_event(self.root, self.commandline, self.log)
-        def on_Shift_Up(e):
-            self.on_commandline_up()
-            return "break"
-
-        @bind_event(self.root, self.commandline, self.log)
-        def on_Shift_Down(e):
-            self.on_commandline_down()
-            return "break"
 
         # ログスクロール
         # コマンドモード
         @bind_event(self.commandline)
         def on_Control_Up(e):
             self.scroll_page(-1)
+            return "break"
 
         @bind_event(self.commandline)
         def on_Control_Down(e):
             self.scroll_page(1)
-            
-        @bind_event(self.commandline)
-        def on_Control_Left(e):
-            self.scroll_horizon(-1)
+            return "break"
 
         @bind_event(self.commandline)
-        def on_Control_Right(e):
+        def on_Control_Shift_Left(e):
+            self.scroll_horizon(-1)
+            return "break"
+
+        @bind_event(self.commandline)
+        def on_Control_Shift_Right(e):
             self.scroll_horizon(1)
+            return "break"
+            
+        @bind_event(self.commandline, self.log, self.root)
+        def on_Control_Left(e):
+            self.on_commandline_up()
+            return "break"
+
+        @bind_event(self.commandline, self.log, self.root)
+        def on_Control_Right(e):
+            self.on_commandline_down()
+            return "break"
             
         # ログ閲覧モード
         @bind_event(self.log)
