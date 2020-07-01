@@ -320,12 +320,12 @@ class tkLauncher(Launcher):
             
         @bind_event(self.commandline, self.log, self.root)
         def on_Control_Left(e):
-            self.on_commandline_up()
+            self.on_commandline_down()
             return "break"
 
         @bind_event(self.commandline, self.log, self.root)
         def on_Control_Right(e):
-            self.on_commandline_down()
+            self.on_commandline_up()
             return "break"
             
         # ログ閲覧モード
