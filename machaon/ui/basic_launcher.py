@@ -295,14 +295,7 @@ class Launcher():
         self.watch_running_process(states)
 
     def shift_active_chamber(self, delta):
-        index = self.app.get_active_chamber_index()
-        if index is None:
-            return
-        newindex = index - delta
-        if newindex<0:
-            # 先頭を超えた場合は変化なし
-            return
-        chm = self.app.select_chamber(newindex, activate=True)
+        chm = self.app.shift_active_chamber(delta)
         if chm is None:
             return
         self.update_active_chamber(chm)
@@ -312,12 +305,25 @@ class Launcher():
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
         self.watch_active_process()
         if updatemenu:
-            self.update_chamber_menu(active=chamber.get_index())
+            self.update_chamber_menu(active=chamber)
 
+    def close_active_chamber(self):
+        self.remove_chamber_menu(self.app.get_active_chamber())
+        self.app.remove_active_chamber()
+        # 隣のチャンバーに移る
+        chm = self.app.get_active_chamber()
+        if chm:
+            self.update_active_chamber(chm)
+        else:
+            self.replace_screen_message([])
+            
     def add_chamber_menu(self, chamber):
         pass
 
-    def update_chamber_menu(self, **kwargs):
+    def update_chamber_menu(self, *, active=None, ceased=None):
+        pass
+    
+    def remove_chamber_menu(self, chamber):
         pass
 
     #
@@ -358,6 +364,7 @@ class Launcher():
     def on_exec_process(self, spirit, process):
         """ プロセス実行時 """
         #self.put_input_command(spirit, process.get_full_command())
+        pass
     
     def on_interrupt_process(self, spirit, process):
         """ プロセス中断時 """
@@ -440,7 +447,7 @@ class Launcher():
         if procindex:
             chm = self.app.select_chamber(procindex, activate=True)
             if chm: 
-                self.update_active_chamber(chm, updatemenu=True)
+                self.update_active_chamber(chm)
         try:
             self.select_dataview_item(index)
         except IndexError:

@@ -6,7 +6,7 @@ import inspect
 import threading
 import queue
 import time
-from typing import Sequence, Optional, List, Dict, Any, Tuple
+from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator
 from collections import defaultdict
 
 from machaon.dataset import DataViewFactory
@@ -999,10 +999,10 @@ class ProcessChamber:
 #
 class ProcessHive:
     def __init__(self):
-        self.chambers = []
-        self.active = None
-        self.prevactive = None
-    
+        self.chambers: Dict[int, ProcessChamber] = {}
+        self._allhistory: List[int] = []
+        self._nextindex: int = 0
+        
     def run(self, app):
         cha = self.get_active()
         p = cha.get_process()
@@ -1013,52 +1013,85 @@ class ProcessHive:
         p = cha.get_process()
         app.execute_process(p)
 
-    # 新しいチャンバーを作成し、アクティブにして返す
-    def new_activate(self, process):
-        newindex = len(self.chambers)
+    # 新しいチャンバーを作成して返す
+    def new(self, process: Process) -> ProcessChamber:
+        newindex = self._nextindex
+        self._nextindex += 1
         scr = ProcessChamber(newindex, process)
-        self.chambers.append(scr)
-        self.set_active_index(newindex) # アクティブにする
+        self.chambers[newindex] = scr
         return scr
     
-    # 既存のチャンバーをアクティブにして返す
-    def activate(self, index):
-        if self.set_active_index(index):
-            return self.chambers[index]
+    # 既存のチャンバーをアクティブにする
+    def activate(self, index: int) -> bool:
+        if index in self.chambers:
+            self._allhistory.append(index)
+            return True
+        return False
+    
+    def rhistory(self):
+        return (i for i in reversed(self._allhistory) if i in self.chambers)
+
+    def get_active_index(self):
+        return next(self.rhistory(), None)
+
+    def get_active(self):
+        ac = next(self.rhistory(), None)
+        if ac is not None:
+            return self.chambers[ac]
+        return None
+    
+    def get_previous_active(self):
+        vs = self.rhistory()
+        next(vs, None)
+        ac = next(vs, None)
+        if ac is not None:
+            return self.chambers[ac]
         return None
 
+    #
     def count(self):
         return len(self.chambers)
     
     def get(self, index):
-        return self.chambers[index]
+        return self.chambers.get(index)
     
-    def set_active_index(self, index):
-        if 0<=index and index<len(self.chambers):
-            self.prevactive = self.active
-            self.active = index
-            return True
-        return False
-
-    def get_active_index(self):
-        return self.active
-
-    def get_active(self):
-        if self.active is not None:
-            return self.chambers[self.active]
-    
-    def get_previous_active(self):
-        if self.prevactive is not None:
-            return self.chambers[self.prevactive]
-
     def get_chambers(self):
-        return self.chambers
+        return self.chambers.values()
+
+    def remove(self, index=None):
+        if index is None: 
+            index = self.get_active_index()
+
+        if index not in self.chambers:
+            raise KeyError(index)
+        
+        del self.chambers[index]
+    
+    # 隣接する有効なチャンバーのインデックス
+    def next_indices(self, start:int=None, d:int=1) -> Generator[int, None, None]:
+        beg = self.get_active_index() if start is None else start
+        i = beg
+        imax = max([*self.chambers.keys(), 0])
+        while True:
+            while i == beg or i not in self.chambers:
+                i += d
+                if i<0 or imax<i:
+                    return None
+            yield i
+            beg = i
+        
+    def get_next_index(self, index=None, *, delta=1) -> Optional[int]:
+        g = self.next_indices(index, +1 if delta>=0 else -1)
+        i = None
+        for _ in range(abs(delta)):
+            i = next(g, None)
+        return i
 
     #
     #
     #
     def get_runnings(self):
-        return [x for x in self.chambers if x.is_running()]
+        return [x for x in self.chambers.values() if x.is_running()]
 
     def stop(self):
         for cha in self.get_runnings():

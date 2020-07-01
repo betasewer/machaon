@@ -164,7 +164,8 @@ class AppRoot:
     # プロセスをスレッドで実行しアクティブにする
     def run_process(self, commandstr: str):
         process = Process(commandstr)
-        chamber = self.processhive.new_activate(process)
+        chamber = self.processhive.new(process)
+        self.processhive.activate(chamber.get_index())
         self.processhive.run(self)
         return chamber
     
@@ -296,13 +297,16 @@ class AppRoot:
         return self.processhive.get_previous_active()
     
     def get_chamber(self, index, *, activate=False):
+        chm = self.processhive.get(index)
         if activate:
-            return self.processhive.activate(index)
-        else:
-            return self.processhive.get(index)
+            self.processhive.activate(index)
+        return chm
 
     def get_chambers(self):
         return self.processhive.get_chambers()
+    
+    def count_chamber(self):
+        return self.processhive.count()
     
     def get_chambers_state(self):
         runs = self.processhive.get_runnings()
@@ -324,6 +328,17 @@ class AppRoot:
         elif isinstance(index, int):
             chm = self.get_chamber(index, activate=activate)
         return chm
+    
+    # 隣接するチャンバーをアクティブにする
+    def shift_active_chamber(self, delta: int) -> Optional[ProcessChamber]:
+        i = self.processhive.get_next_index(delta=delta)
+        if i is not None:
+            self.processhive.activate(i)
+            return self.processhive.get(i)
+        return None
+    
+    def remove_active_chamber(self, index=None):
+        self.processhive.remove(index)
     
     # メインスレッド側から操作中断
     def interrupt_process(self):
