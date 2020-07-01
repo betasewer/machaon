@@ -308,18 +308,19 @@ class Launcher():
             self.update_chamber_menu(active=chamber)
 
     def close_active_chamber(self):
+        self.remove_chamber_menu(self.app.get_active_chamber())
         self.app.remove_active_chamber()
+        # 隣のチャンバーに移る
         chm = self.app.get_active_chamber()
         if chm:
             self.update_active_chamber(chm)
-            self.remove_chamber_menu(chm)
         else:
-            raise ValueError("No chamber to activate exists")
+            self.replace_screen_message([])
             
     def add_chamber_menu(self, chamber):
         pass
 
-    def update_chamber_menu(self, **kwargs):
+    def update_chamber_menu(self, *, active=None, ceased=None):
         pass
     
     def remove_chamber_menu(self, chamber):
@@ -446,7 +447,7 @@ class Launcher():
         if procindex:
             chm = self.app.select_chamber(procindex, activate=True)
             if chm: 
-                self.update_active_chamber(chm, updatemenu=True)
+                self.update_active_chamber(chm)
         try:
             self.select_dataview_item(index)
         except IndexError:

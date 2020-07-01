@@ -799,7 +799,18 @@ class tkLauncher(Launcher):
         self.chambermenu.configure(state='disable')
     
     def remove_chamber_menu(self, chm: ProcessChamber):
-        pass
+        index = chm.get_index()
+        keytag = menukeytag(index)
+        menubeg, menuend = text_get_first_tag_range(self.chambermenu, keytag)
+        if menubeg is not None:
+            self.chambermenu.configure(state='normal')
+            self.chambermenu.delete(menubeg, menuend)
+            # セパレータの削除
+            if textindex(menubeg).char == 0:
+                self.chambermenu.delete(1.0, 1.3) 
+            else:
+                self.chambermenu.delete(textindex(menubeg).shift(char=-3).string(), menubeg) 
+            self.chambermenu.configure(state='disable')
 
     def chamber_menu_click(self, e):
         chmindex = None
