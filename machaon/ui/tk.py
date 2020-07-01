@@ -3,7 +3,7 @@
 
 import os
 from datetime import datetime
-from typing import Tuple, Sequence, List
+from typing import Tuple, Sequence, List, Optional, Any, Generator
 
 import tkinter as tk
 import tkinter.filedialog
@@ -12,7 +12,7 @@ import tkinter.ttk as ttk
 
 from machaon.ui.basic_launcher import Launcher
 from machaon.command import describe_command, describe_command_package
-from machaon.process import ProcessMessage
+from machaon.process import ProcessMessage, ProcessChamber
 from machaon.cui import collapse_text, get_text_width, ljust
 import machaon.platforms
 
@@ -44,6 +44,16 @@ class textindex():
     def __str__(self):
         return "{}.{}".format(self.line, self.char)
     
+    def string(self):
+        return str(self)
+
+    def shift(self, *, line=None, char=None):
+        if line is not None:
+            self.line += line
+        if char is not None:
+            self.char += char
+        return self
+    
     def compare(self, right):
         left = self
         if left.line < right.line:
@@ -63,8 +73,30 @@ class textindex():
         return beg.compare(point) >= 0 and point.compare(end) > 0
 
 #
+# tk.Text helper function
+#
+#
+def text_get_first_tag_range(wid, tag) -> Tuple[Optional[str], Optional[str]]:
+    selpoints = wid.tag_ranges(tag)
+    if not selpoints:
+        return None, None
+    return selpoints[0], selpoints[1]
+
+#
+def text_get_tag_ranges(wid, tag) -> Generator[Tuple[Optional[str], Optional[str]], None, None]:
+    points = wid.tag_ranges(tag)
+    if len(points)%2 == 1:
+        raise ValueError("Number of the tag ranges is odd")
+    for i in range(0, len(points), 2):
+        yield points[i], points[i+1]
+
+#
 class HYPERLABEL_DATAITEM:
     pass
+
+#
+def menukeytag(index):
+    return "chm{}".format(index)
 
 #
 #
@@ -130,7 +162,7 @@ class tkLauncher(Launcher):
         self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
 
         # コマンド入力欄
-        self.commandline = tk.Text(self.frame, relief="solid", height=4)
+        self.commandline = tk.Text(self.frame, relief="solid", height=1)
         self.commandline.focus_set()
         
         # ボタンパネル
@@ -149,14 +181,11 @@ class tkLauncher(Launcher):
             self.tkwidgets.append(("frame", f))
             return f
         
-        histlist = tk.Text(self.frame, relief="solid", height=4, width=45)
-        histlist.tag_configure("link")
-        histlist.tag_bind("link", "<Enter>", lambda e: histlist.config(cursor="hand2"))
-        histlist.tag_bind("link", "<Leave>", lambda e: histlist.config(cursor=""))
-        histlist.tag_bind("link", "<Button-1>", self.chamber_menu_click)
-        histlist.tag_configure("chamber", foreground="#000000")
-        histlist.tag_configure("running", foreground="#00A000")
-        histlist.tag_configure("failed", foreground="#F00000")
+        histlist = tk.Text(self.frame, relief="solid", height=1)
+        histlist.tag_configure("chamberlink")
+        histlist.tag_bind("chamberlink", "<Enter>", lambda e: histlist.config(cursor="hand2"))
+        histlist.tag_bind("chamberlink", "<Leave>", lambda e: histlist.config(cursor=""))
+        histlist.tag_bind("chamberlink", "<Button-1>", self.chamber_menu_click)
         histlist.mark_unset("insert")
         self.chambermenu = histlist
         
@@ -204,13 +233,13 @@ class tkLauncher(Launcher):
     
         # メインウィジェットの配置
         self.commandline.grid(column=0, row=0, sticky="news", padx=padx, pady=pady)
-        self.chambermenu.grid(column=1, row=0, sticky="news", padx=0, pady=pady)
-        self.log.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
-        btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
+        self.chambermenu.grid(column=0, row=1, sticky="news", padx=padx, pady=pady)
+        self.log.grid(column=0, row=2, columnspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
     
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
-        tk.Grid.rowconfigure(self.frame, 1, weight=1)
-        tk.Grid.rowconfigure(self.frame, 2, weight=0)
+        tk.Grid.rowconfigure(self.frame, 2, weight=1)
+        tk.Grid.rowconfigure(self.frame, 3, weight=0)
 
         # フレームを除去       
         #self.root.overrideredirect(True)
@@ -261,7 +290,7 @@ class tkLauncher(Launcher):
             self.commandline.focus_set()
             return "break"
     
-        @bind_event(self.log)
+        @bind_event(self.log, self.chambermenu)
         def log_on_Escape(e):
             self.log_set_selection() # 項目選択を外す
             self.commandline.focus_set() # コマンド入力モードへ
@@ -337,6 +366,11 @@ class tkLauncher(Launcher):
         @bind_event(self.log)
         def log_on_Up(e):
             self.hyper_select_prev()
+            return "break"
+            
+        @bind_event(self.commandline, self.log)
+        def on_Alt_c(e):
+            self.close_active_chamber()
             return "break"
 
         @bind_event(self.commandline, self.log)
@@ -478,7 +512,7 @@ class tkLauncher(Launcher):
         # 停止したプロセスを調べる
         for wasrunning in states["running"]:
             if wasrunning not in curstates["running"]:
-                self.update_chamber_menu(ceased=wasrunning)
+                self.update_chamber_menu(ceased=self.app.get_chamber(wasrunning))
                 procchamber = self.app.get_chamber(wasrunning)
                 print("[{}] finished.".format(procchamber.get_command()))
         
@@ -574,7 +608,7 @@ class tkLauncher(Launcher):
         self.hyper_select_dataview_item(beg)
 
     def hyper_select_next(self):
-        _beg, end = self.log_get_selection()
+        _beg, end = text_get_first_tag_range(self.log, "log-selection")
         if end is None:
             end = 1.0
         points = self.log.tag_nextrange("hyperlink", end)
@@ -588,7 +622,7 @@ class tkLauncher(Launcher):
         self.log.see(points[1])
     
     def hyper_select_prev(self):
-        beg, _end = self.log_get_selection()
+        beg, _end = text_get_first_tag_range(self.log, "log-selection")
         if beg is None:
             beg = tk.END
         points = self.log.tag_prevrange("hyperlink", beg)
@@ -604,15 +638,9 @@ class tkLauncher(Launcher):
     #
     # 選択
     #
-    def log_get_selection(self):
-        selpoints = self.log.tag_ranges("log-selection")
-        if not selpoints:
-            return None, None
-        return selpoints[0], selpoints[1]
-    
     def log_set_selection(self, beg=None, end=None):
         # 現在の選択を取り除く
-        oldbeg, oldend = self.log_get_selection()
+        oldbeg, oldend = text_get_first_tag_range(self.log, "log-selection")
         if oldbeg is not None:
             self.log.tag_remove("log-selection", oldbeg, oldend)
 
@@ -622,7 +650,7 @@ class tkLauncher(Launcher):
     
     def log_input_selection(self):
         # 選択位置を取得
-        beg, _end = self.log_get_selection()
+        beg, _end = text_get_first_tag_range(self.log, "log-selection")
         if beg is None:
             return None
 
@@ -673,18 +701,15 @@ class tkLauncher(Launcher):
 
     def select_dataview_item(self, index):
         # リンクの場所を探す
-        points = self.log.tag_ranges("hyperlink")
-        for i in range(0, len(points), 2):
-            link, label = self.hyper_resolve_link(points[i])
+        for linkbeg, linkend in text_get_tag_ranges(self.log, "hyperlink"):
+            link, label = self.hyper_resolve_link(linkbeg)
             if label is HYPERLABEL_DATAITEM:
                 itemindex = int(link)
                 if itemindex == index:
-                    linkbeg = points[i]
-                    linkend = points[i+1]
                     break
         else:
             raise IndexError("invalid dataview index")
-        
+
         self.log_set_selection(linkbeg, linkend)
         self.select_screen_dataview_item(index, charindex=linkbeg)
     
@@ -711,62 +736,100 @@ class tkLauncher(Launcher):
     #
     # チャンバーメニューの操作
     #
-    def add_chamber_menu(self, chamber):
-        #sign = datetime.now().strftime("%Y-%m-%d %H:%M.%S")
-        line = collapse_text(" ".join(chamber.get_command().splitlines()), 30)
-        line = "[{}]".format(chamber.get_index()+1).ljust(6) + " " + line
-        self.chambermenu.configure(state='normal')
-        self.chambermenu.insert(tk.END, "  ", ("chamber,"))
-        self.chambermenu.insert(tk.END, line + "\n", ("running", "link", "chamber",))
-        self.chambermenu.yview_moveto(1.0)
-        self.chambermenu.configure(state='disable')
-        if chamber.is_running():
-            self.update_chamber_menu(active=chamber.get_index())
+    def add_chamber_menu(self, chamber: ProcessChamber):
+        # メニュータイトルの作成
+        target = chamber.get_process().target
+        if target is not None:
+            title = target.get_prog()
         else:
-            self.update_chamber_menu(active=chamber.get_index(), ceased=chamber.get_index())
+            title = collapse_text(chamber.get_command().partition(" ")[0], 15)
+        title = " {}. {} ".format(chamber.get_index()+1, title)
+
+        # 表示の末尾に追加
+        keytag = menukeytag(chamber.get_index())
+        self.chambermenu.configure(state='normal')
+        if self.app.count_chamber() > 1:
+            self.chambermenu.insert(tk.END, " | ", ("chamber",))
+        self.chambermenu.insert(tk.END, title, ("running", "chamberlink", "chamber", keytag))
+        self.chambermenu.configure(state='disable')
+
+        # プロセスの状態を反映する
+        if chamber.is_running():
+            self.update_chamber_menu(active=chamber)
+        else:
+            self.update_chamber_menu(active=chamber, ceased=chamber)
     
-    def update_chamber_menu(self, *, active=None, ceased=None):
-        def update_prefix(index, prefix):
-            begin = "{}.0".format(index+1)
-            end = "{}.{}".format(index+1, len(prefix))
-            if self.chambermenu.get(begin, end):
-                self.chambermenu.replace(begin, end, prefix, ("chamber",))
+    def update_chamber_menu(self, *, active: ProcessChamber = None, ceased: ProcessChamber = None):
+        def update_prefix(index, prefixes):
+            keytag = menukeytag(index)
+            menubeg, menuend = text_get_first_tag_range(self.chambermenu, keytag)
+            if menubeg is not None:
+                leftinside = textindex(menubeg).shift(char=1).string()
+                self.chambermenu.replace(menubeg, leftinside, prefixes[0], ("chamber", keytag))
+                rightinside = textindex(menuend).shift(char=-1).string()
+                self.chambermenu.replace(rightinside, menuend, prefixes[1], ("chamber", keytag))
 
         def update_tag(index, tag, on):
-            begin = "{}.0".format(index+1)
-            end = "{}.end".format(index+1)
-            if self.chambermenu.get(begin, end):
+            keytag = menukeytag(index)
+            menubeg, menuend = text_get_first_tag_range(self.chambermenu, keytag)
+            if menubeg is not None:
                 if on:
-                    self.chambermenu.tag_add(tag, begin, end)
+                    self.chambermenu.tag_add(tag, menubeg, menuend)
                 else:
-                    self.chambermenu.tag_remove(tag, begin, end)
+                    self.chambermenu.tag_remove(tag, menubeg, menuend)
 
         self.chambermenu.configure(state='normal')
 
         if active is not None:
+            iactive = active.get_index()
             # 以前のアクティブチャンバー
             if self.chambermenu_active is not None:
                 update_prefix(self.chambermenu_active, "  ")
+                update_tag(self.chambermenu_active, "active", False)
             # 新たなアクティブチャン
-            update_prefix(active, "> ")
-            self.chambermenu_active = active
+            update_prefix(iactive, "[]")
+            update_tag(iactive, "active", True)
+            self.chambermenu_active = iactive
             # 必要ならスクロールする
-            self.chambermenu.see("{}.0".format(self.chambermenu_active))
+            # self.chambermenu.see("{}.0".format(self.chambermenu_active))
 
         if ceased is not None:
-            update_tag(ceased, "running", False)
-            chm = self.app.get_chamber(ceased)
-            if chm.is_failed():
-                update_tag(ceased, "failed", True)
+            iceased = ceased.get_index()
+            update_tag(iceased, "running", False)
+            if ceased.is_failed():
+                update_tag(iceased, "failed", True)
 
         self.chambermenu.configure(state='disable')
+    
+    def remove_chamber_menu(self, chm: ProcessChamber):
+        index = chm.get_index()
+        keytag = menukeytag(index)
+        menubeg, menuend = text_get_first_tag_range(self.chambermenu, keytag)
+        if menubeg is not None:
+            self.chambermenu.configure(state='normal')
+            self.chambermenu.delete(menubeg, menuend)
+            # セパレータの削除
+            if textindex(menubeg).char == 0:
+                self.chambermenu.delete(1.0, 1.3) 
+            else:
+                self.chambermenu.delete(textindex(menubeg).shift(char=-3).string(), menubeg) 
+            self.chambermenu.configure(state='disable')
 
     def chamber_menu_click(self, e):
+        chmindex = None
+
         coord = self.chambermenu.index(tk.CURRENT)
-        line, _ = coord.split(".")
-        index = int(line)-1
-        if index != self.app.get_active_chamber_index():
-            self.update_active_chamber(self.app.select_chamber(index, activate=True))
+        taghead = menukeytag("")
+        for tag in self.chambermenu.tag_names(coord):
+            if tag.startswith(taghead):
+                idx = tag[len(taghead):]
+                if not idx:
+                    continue
+                chmindex = int(idx)
+
+        if chmindex is not None and chmindex != self.app.get_active_chamber_index():
+            chm = self.app.select_chamber(chmindex, activate=True)
+            self.update_active_chamber(chm)
 
     #
     # 入力欄
@@ -853,7 +916,7 @@ class tkLauncher(Launcher):
         logfont = theme.getfont("logfont")
 
         self.commandline.configure(background=secbg, foreground=msg, insertbackground=insmark, font=commandfont, borderwidth=1)
-        
+
         self.log.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.log.tag_configure("message", foreground=msg)
         self.log.tag_configure("message_em", foreground=msg_em)
@@ -864,10 +927,11 @@ class tkLauncher(Launcher):
         self.log.tag_configure("log-selection", background=highlight, foreground=msg)
         self.log.tag_configure("log-item-selection", foreground=msg_em)
 
-        self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
+        self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
         self.chambermenu.tag_configure("chamber", foreground=msg)
         self.chambermenu.tag_configure("running", foreground=msg_inp)
-        self.chambermenu.tag_configure("header", foreground=msg_em)
+        self.chambermenu.tag_configure("active", foreground=msg_em)
+        self.chambermenu.tag_configure("failed", foreground=msg_err)
 
         self.set_theme(theme)
 
