@@ -257,8 +257,7 @@ class tkLauncher(Launcher):
                 for w in widgets:
                     w.bind(sequence, fn)
             return _deco
-
-        # コマンド入力
+        
         @bind_event(self.commandline)
         def cmdline_on_Return(e):
             self.on_commandline_return()        
@@ -716,7 +715,7 @@ class tkLauncher(Launcher):
     #
     #
     #
-    def insert_screen_appendix(self, valuelines, title):
+    def insert_screen_appendix(self, valuelines, title=""):
         if title:
             self.insert_screen_message(ProcessMessage(">>> {}".format(title)))
 
@@ -777,6 +776,8 @@ class tkLauncher(Launcher):
                     self.chambermenu.tag_add(tag, menubeg, menuend)
                 else:
                     self.chambermenu.tag_remove(tag, menubeg, menuend)
+            if tag=="active" and on:
+                self.chambermenu.tag_lower(tag, "running")
 
         self.chambermenu.configure(state='normal')
 
@@ -786,7 +787,7 @@ class tkLauncher(Launcher):
             if self.chambermenu_active is not None:
                 update_prefix(self.chambermenu_active, "  ")
                 update_tag(self.chambermenu_active, "active", False)
-            # 新たなアクティブチャン
+            # 新たなアクティブチャンバー
             update_prefix(iactive, "[]")
             update_tag(iactive, "active", True)
             self.chambermenu_active = iactive
