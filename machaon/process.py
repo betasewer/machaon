@@ -371,7 +371,7 @@ class Process:
         self.bound_data = None
         
     def run(self, app):
-        self.thread = threading.Thread(target=app.execute_process, args=(self,))
+        self.thread = threading.Thread(target=app.execute_process, args=(self,), daemon=True)
         self.stop_flag = False
         self.thread.start()
     
@@ -440,9 +440,9 @@ class Process:
     def is_running(self):
         return self.thread and self.thread.is_alive()
 
-    def join(self):
+    def join(self, timeout=None):
         if self.is_running():
-            self.thread.join()
+            self.thread.join(timeout=timeout)
     
     def tell_interruption(self):
         self.stop_flag = True
@@ -960,8 +960,8 @@ class ProcessChamber:
     def is_running(self):
         return self.process.is_running()
     
-    def join(self):
-        self.process.join()
+    def join(self, timeout):
+        self.process.join(timeout=timeout)
     
     def is_interrupted(self):
         return self.process.stop_flag
@@ -1101,8 +1101,6 @@ class ProcessHive:
     def get_runnings(self):
         return [x for x in self.chambers.values() if x.is_running()]
 
-    def stop(self):
+    def interrupt_all(self):
         for cha in self.get_runnings():
             cha.interrupt()
-        for cha in self.get_runnings():
-            cha.join()

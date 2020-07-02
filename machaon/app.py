@@ -140,7 +140,17 @@ class AppRoot:
         self.mainloop()
 
     def exit(self):
-        self.processhive.stop()
+        self.processhive.interrupt_all()
+
+        # まだ走っているプロセスがあれば、強制終了する
+        runs = self.processhive.get_runnings()
+        if runs:
+            # 待ってみる
+            for r in runs:
+                r.join(timeout=0.1)
+            # 確認のダイアログをいれたい
+            # return
+
         self.ui.on_exit()
     
     def mainloop(self):
@@ -337,13 +347,15 @@ class AppRoot:
             return self.processhive.get(i)
         return None
     
-    def remove_active_chamber(self, index=None):
+    def remove_chamber(self, index=None):
         self.processhive.remove(index)
-    
-    # メインスレッド側から操作中断
-    def interrupt_process(self):
-        scr = self.processhive.get_active()
-        if scr is not None:
-            proc = scr.get_process()
-            proc.tell_interruption()
 
+    def stop_chamber(self, index=None, timeout=None):
+        if index is None:
+            chm = self.get_active_chamber()
+        else:
+            chm = self.get_chamber(index)
+        if chm:
+            chm.interrupt()
+            chm.join(timeout=timeout)
+        return chm

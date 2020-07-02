@@ -222,7 +222,7 @@ class tkLauncher(Launcher):
             b.pack(side=tk.LEFT, padx=padx)
 
         righties = [
-            addbutton(btnpanel, text=u"停止", command=lambda:self.app.interrupt_process(), width=4),
+            addbutton(btnpanel, text=u"停止", command=lambda:self.break_chamber_process(), width=4),
             addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4),
             addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4),
             addcheckbox(btnpanel, text=u"末尾に追従", variable=self.does_stick_bottom, onvalue=True, offvalue=False),

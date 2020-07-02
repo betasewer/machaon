@@ -4,6 +4,7 @@
 import os
 import datetime
 import traceback
+import threading
 from typing import Tuple, Sequence, List
 
 from machaon.cui import composit_text
@@ -308,14 +309,49 @@ class Launcher():
             self.update_chamber_menu(active=chamber)
 
     def close_active_chamber(self):
-        self.remove_chamber_menu(self.app.get_active_chamber())
-        self.app.remove_active_chamber()
-        # 隣のチャンバーに移る
+        # アクティブなプロセスを停止する
+        
+        def remove_and_flip(chm):
+            # 消去
+            self.remove_chamber_menu(chm)
+            self.app.remove_chamber(chm.get_index())
+            
+            # 隣のチャンバーに移る
+            nchm = self.app.get_active_chamber() # 新たなチャンバー
+            if nchm:
+                self.update_active_chamber(nchm)
+            else:
+                self.replace_screen_message([])
+
+        # 停止処理
         chm = self.app.get_active_chamber()
-        if chm:
-            self.update_active_chamber(chm)
+        if chm.is_running():
+            self.break_chamber_process(timeout=10, after=remove_and_flip)
         else:
-            self.replace_screen_message([])
+            remove_and_flip(chm)
+    
+    #
+    def break_chamber_process(self, timeout=10, after=None):
+        chm = self.app.get_active_chamber()
+        if not chm.is_running():
+            return
+        if chm.is_interrupted():
+            return # 既に別箇所で中断が試みられている
+        chm.interrupt()
+
+        self.insert_screen_appendix("プロセス[{}]の中断を試みます...({}秒)".format(chm.get_index(), timeout))
+        def watcher():
+            for _ in range(timeout):
+                if not chm.is_running():
+                    if after:
+                        after(chm)
+                    break
+                chm.join(timeout=1)
+            else:
+                self.insert_screen_appendix("プロセス[{}]を終了できません".format(chm.get_index()))
+
+        wch = threading.Thread(None, watcher, daemon=True)
+        wch.start() # 終了しなかったので、見張りを開始する
             
     def add_chamber_menu(self, chamber):
         pass
