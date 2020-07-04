@@ -22,7 +22,7 @@ def test_cmdset_setup(approot):
     approot.setup_package(("shell",), shell_commands())
     assert len(approot.cmdengine.commandsets) == 1
     assert approot.cmdengine.commandsets[0].get_prefixes() == ("shell",)
-    assert len(approot.cmdengine.commandsets[0].match("shell.ls")) == 1
+    assert len(approot.cmdengine.commandsets[0].match("ls")) == 1
 
 @pytest.mark.skipif(True, reason="package-setup flag is not set")
 def test_package_setup(approot):

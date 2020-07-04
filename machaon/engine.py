@@ -23,6 +23,8 @@ COMMAND_TYPES = {
     "hidden" : hidden_command
 }
 
+cmdsetspec_sigil = '::'
+
 # process + command keyword
 class CommandEntry():
     def __init__(
@@ -79,26 +81,22 @@ class CommandSet:
         if isinstance(self.prefixes, str):
             raise TypeError("'prefixes' must be sequence of str, not str")
         
-    def match(self, target):
+    def match(self, target, cmdsetspec=None): 
         m = []
-        if self.prefixes:
-            hit = None
-            for pfx in self.prefixes:
-                if target.startswith(pfx):
-                    hit = pfx
-                    break
-            if hit is None:
-                return m
-                
-            target = target[len(pfx):]
-            if target.startswith("."):
-                target = target[1:]
+        if cmdsetspec is not None:
+            if self.prefixes:   
+                if not any(cmdsetspec == x for x in self.prefixes):
+                    return []
+            else:
+                if cmdsetspec != "": # cmdsetspec="" で名前なしのコマンドセットを指名できる
+                    return []
         
         for e in self.entries:
             success, rest = e.match(target)
             if not success:
                 continue
             m.append((e, rest))
+        
         return m
     
     def get_name(self):
@@ -214,12 +212,15 @@ class CommandEngine:
     # 先頭文字列が示すコマンドエントリを選び出す
     def expand_parsing_command_head(self, commandhead) -> List[Tuple[CommandEntry, str]]: # [(entry, optioncompound)...]
         possible_commands: List[Tuple[CommandEntry, str]] = []
+
+        cmdtarget = commandhead
+        cmdsetspec = None
+        if cmdsetspec_sigil in commandhead:
+            cmdtarget, _, cmdsetspec = [x.strip() for x in commandhead.partition(cmdsetspec_sigil)]
+
         for cmdset in self.commandsets:
-            matches = cmdset.match(commandhead)
+            matches = cmdset.match(cmdtarget, cmdsetspec)
             possible_commands.extend(matches)
-            if self.prefix:
-                matches = cmdset.match(self.prefix + commandhead)
-                possible_commands.extend(matches)
         return possible_commands
 
     # コマンドを解析して候補を選ぶ

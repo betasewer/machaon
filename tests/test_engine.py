@@ -120,21 +120,21 @@ def test_entry():
 def test_entryset(a_cmdset):
     cmdset, entries = a_cmdset
     
-    assert len(cmdset.match("test.cmd")) == 1
-    assert cmdset.match("test.cmd")[0] == (entries["command"], "")
+    assert len(cmdset.match("cmd")) == 1
+    assert cmdset.match("cmd")[0] == (entries["command"], "")
 
-    assert len(cmdset.match("test.ending")) == 1
-    assert cmdset.match("test.ending")[0] == (entries["ending"], "")
+    assert len(cmdset.match("ending")) == 1
+    assert cmdset.match("ending")[0] == (entries["ending"], "")
 
-    assert len(cmdset.match("test.cmdla")) == 1
-    assert cmdset.match("test.cmdla")[0] == (entries["command"], "la")
+    assert len(cmdset.match("cmdla")) == 1
+    assert cmdset.match("cmdla")[0] == (entries["command"], "la")
 
-    assert len(cmdset.match("tsen")) == 1
-    assert cmdset.match("tsen")[0] == (entries["ending"], "")
+    assert len(cmdset.match("en")) == 1
+    assert cmdset.match("en")[0] == (entries["ending"], "")
     
-    assert len(cmdset.match("test.commander")) == 2
-    assert cmdset.match("test.commander")[0] == (entries["command"], "er")
-    assert cmdset.match("test.commander")[1] == (entries["commander"], "")
+    assert len(cmdset.match("commander")) == 2
+    assert cmdset.match("commander")[0] == (entries["command"], "er")
+    assert cmdset.match("commander")[1] == (entries["commander"], "")
 
 #
 # クエリ区切りテスト
@@ -174,19 +174,19 @@ def test_engine_parsing(a_cmdset):
     eng = CommandEngine()
     eng.add_command_set(cmdset)
 
-    assert eng.expand_parsing_command_head("tscommander") == [
+    assert eng.expand_parsing_command_head("commander") == [
         (entries["command"], "er"),
         (entries["commander"], "")
     ]
 
     spirit = TempSpirit()
-    assert [x.command_string() for x in eng.expand_parsing_command("tscommander targetname", spirit)] == [
+    assert [x.command_string() for x in eng.expand_parsing_command("commander targetname", spirit)] == [
         "commander targetname",
         "command --epsilon --rho | targetname",
     ]
 
     cmdrows = eng.expand_parsing_command("""
-        tscommander 
+        commander 
         targetname
         --beta
         lao gamma
@@ -230,25 +230,25 @@ def test_candidates_engine_parsing(a_cmdset):
 
     # 2つ
     assert candidate_tests(
-        eng.expand_parsing_command("tscommander", spirit),
+        eng.expand_parsing_command("commander", spirit),
         [ "commander", "command --epsilon --rho" ]
     )
 
     # 3つ
     assert candidate_tests(
-        eng.expand_parsing_command("tscommandce", spirit),
+        eng.expand_parsing_command("commandce", spirit),
         [ "commandce", "commandc --epsilon", "command --cappa e" ]
     )
 
     # 2つ: command -s は存在しないので引数として残される：そうしないとコマンドエラーの原因が分かりにくいであろう
     assert candidate_tests(
-        eng.expand_parsing_command("tscommands", spirit),
+        eng.expand_parsing_command("commands", spirit),
         [ "commands", "command s" ]
     )
     
     # やはり、zが分離され、そして解釈できず残される
     assert candidate_tests(
-        eng.expand_parsing_command("tscommandz", spirit),
+        eng.expand_parsing_command("commandz", spirit),
         [ "command z" ]
     )
 
@@ -267,17 +267,17 @@ def test_postfix_syntax_engine_parsing(a_cmdset):
     spirit = TempSpirit()
 
     assert candidate_tests(
-        eng.expand_parsing_command("files.txt >> tscommand", spirit),
+        eng.expand_parsing_command("files.txt >> command", spirit),
         ["command files.txt"]
     )
     assert candidate_tests(
-        eng.expand_parsing_command("files.txt >> tscommandr -b 10", spirit),
+        eng.expand_parsing_command("files.txt >> commandr -b 10", spirit),
         ["command --rho | files.txt --beta 10"]
     )
     assert candidate_tests(
         eng.expand_parsing_command("""files.txt
             >>
-            tscommander
+            commander
             --cappa
             20
         """, spirit),
@@ -286,5 +286,21 @@ def test_postfix_syntax_engine_parsing(a_cmdset):
             "command --epsilon --rho | files.txt --cappa 20"
         ]
     )
+
+
+def test_engine_cmdsetspec(a_cmdset):
+    cmdset, entries = a_cmdset
+    cmdset0 = CommandSet("plain", (), entries.values(), description="Test command set. no prefix")
+    cmdset2 = CommandSet("beast", ("beast","be"), entries.values(), description="Test command set. beast")
+    eng = CommandEngine()
+    eng.add_command_set(cmdset)
+    eng.add_command_set(cmdset0)
+    eng.add_command_set(cmdset2)
+
+    assert len(eng.expand_parsing_command_head("command")) == 3
+    assert len(eng.expand_parsing_command_head("command::beast")) == 1
+    assert len(eng.expand_parsing_command_head("command::test")) == 1
+    assert len(eng.expand_parsing_command_head("command::")) == 1
+
 
 
