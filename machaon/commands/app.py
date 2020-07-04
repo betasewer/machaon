@@ -31,9 +31,9 @@ class HelpItem():
         heads = []
         for i, kwd in enumerate(self.keyword_list()):
             if i == 0 and pfx:
-                qualkwd = "{}.{}".format(pfx[0], kwd)
+                qualkwd = "{}::{}".format(kwd, pfx[0])
             elif pfx:
-                qualkwd = "{}{}".format(pfx[1 if len(pfx)>=1 else 0], kwd)
+                qualkwd = "{}::{}".format(kwd, pfx[1 if len(pfx)>=1 else 0])
             else:
                 qualkwd = kwd
             heads.append(qualkwd)
@@ -45,6 +45,9 @@ class HelpItem():
     def description(self):
         return self.cmdentry.get_description()
     
+    def setprefix(self):
+        return ", ".join(self.cmdset.prefixes)
+    
     def setname(self):
         return self.cmdset.get_name()
 
@@ -54,7 +57,7 @@ class HelpItem():
     @classmethod
     def describe(cls, builder):
         builder.default_columns(
-            table=("qual_keyword", "description", "setname"),
+            table=("keyword", "setprefix", "description", "setname"),
             link="first_qual_keyword"
         )["keyword kwd"](
             disp="キーワード"
@@ -66,6 +69,8 @@ class HelpItem():
             disp="説明"
         )["setname"](
             disp="コマンドセット"
+        )["setprefix"](
+            disp="コマンドセット指定子"
         )["setdescription setdesc"](
             disp="コマンドセットの説明"
         )
