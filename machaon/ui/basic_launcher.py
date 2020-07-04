@@ -5,6 +5,8 @@ import os
 import datetime
 import traceback
 import threading
+import pprint
+
 from typing import Tuple, Sequence, List
 
 from machaon.cui import composit_text
@@ -31,6 +33,10 @@ class Launcher():
     
     def init_screen(self):
         pass
+    
+    def prettyformat(self, value):
+        pp = pprint.PrettyPrinter(width=type(self).wrap_width)
+        return pp.pformat(value)
 
     #
     #
@@ -685,7 +691,7 @@ class Launcher():
         except Exception as e:
             v = str(e)
         else:
-            v = str(val)
+            v = self.prettyformat(val)
 
         self.insert_screen_appendix(v, title=expression.strip())
 
