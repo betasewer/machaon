@@ -3,75 +3,21 @@ import shutil
 import re
 import time
 import subprocess
+import threading
+import queue
 from collections import defaultdict
 
 from typing import Optional
 
-from machaon.cui import reencode, fixsplit
-
-#
-def popen_capture_output(cmds, shell=False):
-    import machaon.platforms
-    shell_encoding = machaon.platforms.current.shell_ui().encoding
-
-    proc = subprocess.Popen(cmds, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=shell)
-    while True:
-        # バッファから1行読み込む.
-        bline = proc.stdout.readline()
-        line = bline.decode(shell_encoding)
-        kill = yield line.rstrip() # 改行を落とす
-        #sys.stdout.write(line)
-        
-        # 中止する
-        if kill:
-            proc.kill()
-            yield PopenEnd(None) # send用に吐く最後のメッセージ
-            break
-
-        # バッファが空 + プロセス終了.
-        returncode = proc.poll()
-        if not line and returncode is not None:
-            yield PopenEnd(returncode)
-            break
-
-#
-class PopenEnd:
-    def __init__(self, returncode):
-        self.returncode = returncode
-
-    """
-    out = None
-    err = None
-    while True:
-        if not spi.interruption_point(noexception=True):
-            proc.kill()
-            spi.warn("実行中のプロセスを強制終了しました")
-            spi.raise_interruption()
-        
-        try:
-            out, err = proc.communicate(timeout=1)
-        except subprocess.TimeoutExpired:
-            continue
-        
-        break
-
-    if err:
-        e = err.decode(shell_encoding)
-        for line in e.splitlines():
-            spi.error(line)
-    if out:
-        o = out.decode(shell_encoding)
-        for line in o.splitlines():
-            spi.message(line)
-    """
+from machaon.commands.shellpopen import popen_capture
 
 #
 #
 #
-def execprocess(spi, command, split=False):
+def execprocess(spi, target, split=False, shell=False):
     cmds = []
 
-    commandhead, commandstr = fixsplit(command, maxsplit=1)
+    commandhead, _, commandstr = [x.strip() for x in target.partition(' ')]
     if not commandhead:
         return
 
@@ -87,17 +33,27 @@ def execprocess(spi, command, split=False):
         else:
             cmds.append(commandstr)
     
-    proc = popen_capture_output(cmds, shell=True)
+    proc = popen_capture(cmds, shell=shell)
     for msg in proc:
-        if not spi.interruption_point(noexception=True):
-            proc.send(True)
-            spi.warn("実行中のプロセスを強制終了しました")
-            spi.raise_interruption()
+        if msg.is_waiting_input():
+            if not spi.interruption_point(noexception=True):
+                msg.send_kill(proc)
+                spi.warn("実行中のプロセスを強制終了しました")
+                spi.raise_interruption()
+            continue
+            #inp = spi.get_input()
+            #if inp == 'q':
+            #    msg.end_input(proc)
+            #elif inp:
+            #    msg.send_input(proc, inp)
+            #else:
+            #    msg.skip_input(proc)
         
-        if isinstance(msg, PopenEnd):
+        if msg.is_output():
+            spi.message(msg.text)
+        
+        if msg.is_finished():
             spi.message_em("プロセスはコード={}で終了しました".format(msg.returncode))
-        else:    
-            spi.message(msg)
         
 #
 #

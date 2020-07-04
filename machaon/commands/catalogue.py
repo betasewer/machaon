@@ -145,12 +145,15 @@ def shell_commands():
         describe_command(
             "execprocess",
             from_module="machaon.commands.shell",
-            description="シェルからコマンドを実行します。", 
-        )["target command"](
-            help="実行するコマンド",
+            description="ファイルを実行します。", 
+        )["target target"](
+            help="実行するファイル",
             remainder=True
-        )["target --split"](
+        )["target -l --split"](
             help="引数を空白で区切って渡す",
+            flag=True
+        )["target -s --shell"](
+            help="シェルのコマンドとして実行する",
             flag=True
         )
     )["cd"](
