@@ -169,10 +169,9 @@ class Launcher():
                     if commandtail:
                         msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
 
-            elif commandhead.endswith("."):
-                # コマンド接頭辞の設定
-                prefix = commandhead[1:].strip()
-                msg = self.meta_command_set_prefix(prefix)
+            elif commandhead.endswith("v"):
+                # データビューのフィルター・ソートの指定
+                msg = self.meta_command_dataview_operation(commandtail.strip())
 
             elif commandhead.startswith("put"):
                 # データビューの選択アイテムの値を画面に展開する
@@ -221,9 +220,9 @@ class Launcher():
             elif command.startswith("help"):
                 values = [
                     ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
-                    ("(string...).", "コマンド接頭辞の設定"),
                     ("=", "現在の選択アイテムを入力欄に展開"),
                     ("put", "現在の選択アイテムを画面に展開"),
+                    ("v", "データビューのフィルター・ソートの指定"),
                     ("pred", "データビューの述語の一覧を表示"),
                     ("a", "プロセスの実引数を入力欄に展開"),
                     ("invoke", "プロセスの実引数と実行結果を表示"),
@@ -494,10 +493,6 @@ class Launcher():
             self.select_dataview_item(index)
         except IndexError:
             return "その番号のデータは存在しません"
-    
-    def meta_command_set_prefix(self, prefix):
-        self.app.set_command_prefix(prefix)
-        return "コマンド接頭辞を設定しました ==> '{}'".format(prefix)
 
     def meta_command_show_dataview_item(self, predicate, procindex, restcommand, toinput):
         item = None
@@ -515,7 +510,7 @@ class Launcher():
             
             if pred:
                 if toinput:
-                    value = str(pred.make_operator_lhs(item))
+                    value = pred.value_to_string(pred.get_value(item))
                     if restcommand:
                         value = value + " " + restcommand
                     self.replace_input_text(value)
@@ -529,23 +524,32 @@ class Launcher():
                 return "選択アイテムに'{}'という述語はありません".format(predicate)
         else:
             return "何も選択されていません"
+        
+    def meta_command_dataview_operation(self, expression):  
+        chm = self.app.select_chamber()
+        if chm:
+            data = chm.get_bound_data()
+            if data:
+                data.assign(data.command_create_view(expression))
+                # メッセージを再描画
+                self.replace_screen_message([])
+                self.update_active_chamber(chm)
     
     def meta_command_show_predicates(self, keyword, procindex):  
         chm = self.app.select_chamber(procindex)
         if chm:
             data = chm.get_bound_data()
-            
-        if data:
-            lines = []
-            for pred, keys in data.get_all_predicates():
-                if keyword and not any(x.startswith(keyword) for x in keys):
-                    continue
-                lines.append((", ".join(keys), pred.get_description()))
+            if data:
+                lines = []
+                for pred, keys in data.get_all_predicates():
+                    if keyword and not any(x.startswith(keyword) for x in keys):
+                        continue
+                    lines.append((", ".join(keys), pred.get_description()))
 
-            if lines:                    
-                self.insert_screen_appendix(lines, title="述語一覧")
-            else:
-                return "該当する述語がありません"
+                if lines:                    
+                    self.insert_screen_appendix(lines, title="述語一覧")
+                else:
+                    return "該当する述語がありません"
         else:
             return "対象となるデータがありません"
         

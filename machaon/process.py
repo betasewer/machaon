@@ -734,7 +734,7 @@ class Spirit():
         dataview = DataViewFactory(datas, *command_args, **command_kwargs)
         self.bind_data(dataview)
         return dataview
-
+    
     #
     def select_process_chamber(self, index=None):
         return self.app.select_chamber(index)

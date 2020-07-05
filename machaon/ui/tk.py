@@ -942,7 +942,7 @@ class tkLauncher(Launcher):
 class DataTableView():    
     @classmethod
     def render(cls, ui, wnd, data):
-        rows, colwidth = data.to_string_table()
+        rows, colwidth = data.rows_to_string_table()
         
         columns = [x.get_description() for x in data.get_predicates()]
         colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colwidth)]

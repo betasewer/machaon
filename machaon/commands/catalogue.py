@@ -247,21 +247,6 @@ def shell_commands():
             valuetype=int,
             default=16
         )
-    )["reencfname"](
-        describe_command(
-            "reencode_filename",
-            from_module="machaon.commands.shell",
-            description="文字化けしたファイル名をエンコードしなおします。",
-        )["target dirpath"](
-            help="対象とするディレクトリ",
-            valuetype="input-dirpath"
-        )["target --current"](
-            help="現在の誤ったエンコーディング",
-            default="cp932"
-        )["target --original"](
-            help="本来のエンコーディング",
-            default="utf-8"
-        )
     )["unzip"](
         describe_command(
             "unzip",

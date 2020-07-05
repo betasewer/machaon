@@ -1,133 +1,5 @@
 from typing import Sequence, List, Any, Tuple
-
-#
-#
-#
-operators_map = {
-    "==" : "equal",
-    "!=" : "not-equal",
-    "<=" : "less-equal",
-    "<" : "less",
-    ">=" : "greater-equal",
-    ">" : "greater",
-    "}" : "contain",
-    "{" : "be-contained",
-    "in" : "be-contained",
-}
-
-#
-def _import_builtin_operators(t, *names):
-    tbl = {
-        "equal" : "__eq__",
-        "not-equal" : "__ne__",
-        "less" : "__lt__",
-        "less-equal" : "__le__",
-        "greater" : "__gt__",
-        "greater-equal" : "__ge__",
-    }
-    def _deco(cls):
-        for name in names:
-            spmethod = getattr(t, tbl[name])
-            setattr(cls, name.replace("-","_"), spmethod)
-        return cls
-    return _deco
-
-#
-#
-#
-@_import_builtin_operators(int, "equal", "not-equal", "less", "less-equal", "greater", "greater-equal")
-class int_type():
-    @staticmethod
-    def from_string(s):
-        return int(s)
-
-@_import_builtin_operators(float, "equal", "not-equal", "less", "less-equal", "greater", "greater-equal")
-class float_type():
-    @staticmethod
-    def from_string(s):
-        return float(s)
-
-@_import_builtin_operators(str, "equal", "not-equal")
-class string_type():
-    @staticmethod
-    def from_string(s):
-        return s
-    
-    @staticmethod
-    def contain(left, right):
-        return right in left
-    
-    @staticmethod
-    def be_contained(left, right):
-        return left in right
-    
-    @staticmethod
-    def startswith(left, right):
-        return left.startswith(right)
-
-    @staticmethod
-    def endswith(left, right):
-        return left.endswith(right)
-
-del _import_builtin_operators
-
-#
-#
-#
-class Predicate():
-    class NOVALUE():
-        pass
-    class UNDEFINED():
-        pass
-
-    def __init__(self, 
-        predtype, 
-        description,
-        value,
-    ):
-        self.description = description
-        self.predtype = predtype
-        self.value = value or Predicate.UNDEFINED
-
-    def get_description(self):
-        return self.description
-    
-    def get_pred_type(self):
-        return self.predtype
-
-    def is_number(self):
-        return self.predtype == "int" or self.predtype == "float"
-    
-    def is_printer(self):
-        return self.predtype == "printer"
-    
-    #
-    def get_type_traits(self):        
-        pred_type = self.predtype
-        if isinstance(pred_type, type):
-            vt = pred_type
-        elif not pred_type or pred_type == "str":
-            vt = string_type
-        elif pred_type == "int":
-            vt = int_type
-        elif pred_type == "float":
-            vt = float_type
-        else:
-            raise BadOperatorError(pred_type)
-        return vt
-
-    def make_operator_lhs(self, item):
-        if self.is_printer():
-            return Predicate.NOVALUE
-        else:
-            return self.value(item)
-    
-    def do_print(self, item, spirit):
-        if self.is_printer():
-            self.value(item, spirit)
-        else:
-            v = self.value(item)
-            spirit.message(v)
+from machaon.dataset.predicate import Predicate, parse_operator_operation, BadOperatorError, BadPredicateError
 
 # (A and B) or (C and D)
 # A B and C D and or
@@ -178,19 +50,6 @@ class CondOrClause():
 #
 #
 #
-class BadPredicateError(Exception):
-    def __init__(self, pred):
-        self.pred = pred
-    def __str__(self):
-        return "'{}'は不明な述語です".format(self.pred)
-        
-class BadOperatorError(Exception):
-    def __init__(self, pred):
-        self.pred = pred
-    def __str__(self):
-        return "'{}'は不明な演算子です".format(self.pred)
-
-
 class FilterConditionParseError(Exception):
     pass
 
@@ -253,19 +112,11 @@ class _OperationStack():
             else:
                 self.related_columns.append(colname)
                 colindex = len(self.related_columns)-1
-            operator, args = self.make_operation(pred, opr, args)
-            return CondOperation(colindex, colname, operator, *args, notbit=notbit)
-        return None
 
-    #
-    def make_operation(self, pred, expression, args):
-        traits = pred.get_type_traits()
-        operator_name = operators_map.get(expression, expression).replace("-","_")
-        fn = getattr(traits, operator_name, None)
-        if fn is None:
-            raise BadOperatorError(expression)
-        fnargs = [traits.from_string(x) for x in args]
-        return fn, fnargs
+            operator = pred.parse_operation(opr)
+            operands = pred.parse_operands(args)
+            return CondOperation(colindex, colname, operator, *operands, notbit=notbit)
+        return None
 
 #
 # トークンの解析

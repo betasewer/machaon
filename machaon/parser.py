@@ -290,7 +290,7 @@ class ArgTypeCallable(ArgType):
     def do_rebind(self, *args):
         return ArgTypeCallable(self.fn, *args)
         
-    def convert(self, arg: Any, spirit=None):
+    def convert(self, arg: Any, _spirit=None):
         # 関数：そのまま実行
         return self.fn(arg, *self.args, **self.kwargs)
     

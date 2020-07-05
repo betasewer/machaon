@@ -28,7 +28,7 @@ def test():
         "? name } ke || (name == yuuji && length == 5) || name { ko"
     )
     assert view.count() == 2
-    assert view.to_string_table() == ([["ken","3"], ["yuuji","5"]], [5, 1])
+    assert view.rows_to_string_table() == ([["ken","3"], ["yuuji","5"]], [5, 1])
     view.select(1)
     assert view.selection() == 1
     assert view.row(view.selection()) == ["yuuji",5]

@@ -1,7 +1,8 @@
-from typing import Sequence, List, Any, Tuple, Dict, DefaultDict
+from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional
 from collections import defaultdict
 
-from machaon.dataset.filter import Predicate, DataFilter
+from machaon.dataset.filter import DataFilter
+from machaon.dataset.predicate import Predicate
 from machaon.cui import get_text_width
 
 #
@@ -150,10 +151,20 @@ class DataView():
         self.datas = datas
         self.rows = rows or []
         # 
-        self.viewpreds = viewpreds
-        self.viewtype = viewtype
-        self.selecting = None
+        self.viewpreds: List[Predicate] = viewpreds or []
+        self.viewtype: str = viewtype
+        self.selecting: Optional[int] = None
     
+    def assign(self, otherview):
+        r = otherview
+        self.ref = r.ref
+        self.datas = r.datas
+        self.rows = r.rows
+        self.viewpreds = r.viewpreds
+        self.viewtype = r.viewtype
+        self.selecting = r.selecting
+        return self
+
     # アクセス
     def row(self, i):
         return self.rows[i]
@@ -209,13 +220,23 @@ class DataView():
     #
     #
     #
-    def to_string_table(self):
+    def expand_item_to_rows(self, predicates):
+        rows = []
+        for item in self.datas:
+            row = []
+            for pred in predicates:
+                lhs = pred.get_value(item)
+                row.append(lhs)
+            rows.append(row)
+        return rows
+
+    def rows_to_string_table(self):
         colwidth = [0 for _ in self.viewpreds]
         srows = []
         for row in self.rows:
             srow = []
             for i in range(len(self.viewpreds)):
-                s = str(row[i])
+                s = self.viewpreds[i].value_to_string(row[i])
                 colwidth[i] = max(colwidth[i], get_text_width(s))
                 srow.append(s)
             srows.append(srow)
@@ -258,13 +279,7 @@ class DataView():
         
         # データを展開する
         if trunc:
-            rows = []
-            for item in self.datas:
-                row = []
-                for pred in predicates:
-                    lhs = pred.make_operator_lhs(item)
-                    row.append(lhs)
-                rows.append(row)
+            rows = self.expand_item_to_rows(predicates)
         else:
             rows = self.rows
         
@@ -279,7 +294,7 @@ class DataView():
         #viewpreds =  predicates[0:len(columns)-1]
         return DataView(self.ref, self.datas, rows, viewtype, predicates)
     
-    #
+    # /v >list name path date >where date within 2015y 2017y >sortby date
     # コマンドからビューを作成する
     #
     # syntax:
@@ -301,7 +316,7 @@ class DataView():
                     viewtype_part = 0
                     column_part = 1
                 elif filter_part is None and part.startswith("?"):
-                    filter_part = i                
+                    filter_part = i
                 elif sorter_part is None and part.startswith("@"):
                     sorter_part = i
 
