@@ -1,10 +1,9 @@
 import os
 import shutil
+import stat
 import re
 import time
-import subprocess
-import threading
-import queue
+import math
 from collections import defaultdict
 
 from typing import Optional
@@ -76,18 +75,30 @@ class FilePath():
     def __init__(self, path):
         self._path = path
         self._isdir = None
+        self._stat = None
     
-    def path(self):
-        return self._path
-
     @property
     def isdir(self):
         if self._isdir is None:
             self._isdir = os.path.isdir(self._path)
         return self._isdir
+    
+    @property
+    def stat(self):
+        if self._stat is None:
+            self._stat = os.stat(self._path)
+        return self._stat
+
+    #
+    def path(self):
+        return self._path
 
     def name(self):
         return os.path.basename(self._path)
+    
+    def nxname(self):
+        n, _ext = os.path.splitext(os.path.basename(self._path))
+        return n
     
     def ftype(self):
         if self.isdir:
@@ -110,26 +121,39 @@ class FilePath():
         if self.isdir:
             return None
         else:
-            return os.path.getsize(self._path)
+            size_bytes = os.path.getsize(self._path)
+            if size_bytes == 0:
+                return "0B"
+            i = int(math.floor(math.log(size_bytes, 1024)))
+            p = math.pow(1024, i)
+            s = round(size_bytes / p, 2)
+            size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+            return "{:.0F} {}".format(s, size_name[i])
+    
+    def mode(self):
+        return stat.filemode(self.stat.st_mode)
     
     @classmethod
     def describe(cls, ref):
         ref.default_columns(
-            table = ("ftype", "modtime", "size", "name"),
-            wide = ("name",),
+            table = ("mode", "ftype", "modtime", "size", "name"),
+            wide = ("ftype", "name",),
             link = "path"
         )["name n"](
             disp="ファイル名"
+        )["nxname nx"](
+            disp="拡張子無しのファイル名"
         )["path p"](
             disp="パス"
         )["ftype t"](
             disp="タイプ"
         )["modtime"](
-            disp="更新日時", 
+            disp="更新日時",
             type="datetime"
         )["size"](
-            disp="サイズ", 
-            type="int"
+            disp="サイズ"
+        )["mode"](
+            disp="ファイルモード"
         )
 
 
