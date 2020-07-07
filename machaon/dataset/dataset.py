@@ -2,7 +2,8 @@ from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional
 from collections import defaultdict
 
 from machaon.dataset.filter import DataFilter
-from machaon.dataset.predicate import Predicate
+from machaon.dataset.sort import DataSortKey
+from machaon.dataset.predicate import Predicate, BadPredicateError
 from machaon.cui import get_text_width
 
 #
@@ -56,15 +57,21 @@ class DataReference():
         for name in names:
             self._predicates[name] = (kwd, p)
     
+    def get_pred(self, key) -> Tuple[str, Predicate]:
+        try:
+            return self._predicates[key]
+        except KeyError:
+            raise BadPredicateError(key)
+    
     def get_first_pred(self):
         if not self.firstpred:
-            raise ValueError("")
-        name, pred = self._predicates[self.firstpred]
+            raise BadPredicateError("<no first predicate specified>")
+        name, pred = self.get_pred(self.firstpred)
         return name, pred
     
     def get_link_pred(self):
         if self.defcolumns["link"] in self._predicates:
-            _, pred = self._predicates[self.defcolumns["link"]]
+            _, pred = self.get_pred(self.defcolumns["link"])
         else:
             _, pred = self.get_first_pred()
         return pred
@@ -84,11 +91,11 @@ class DataReference():
         else:
             return [self.firstpred] # 先頭カラム
     
-    def normalize_column(self, name):
-        return self._predicates[name][0]
+    def normalize_column(self, name) -> str:
+        return self.get_pred(name)[0]
 
     def find_pred(self, column_name):
-        entry = self._predicates.get(column_name)
+        entry = self._predicates.get(column_name, None)
         if entry:
             return entry[1]
         return None
@@ -98,7 +105,7 @@ class DataReference():
         invalids = []
         for column_name in column_names:
             if column_name in self._predicates:
-                preds.append(self._predicates[column_name][1])
+                preds.append(self.get_pred(column_name)[1])
             else:
                 invalids.append(column_name)
         return preds, invalids
@@ -146,13 +153,13 @@ class DataReference():
 #
 #
 class DataView():
-    def __init__(self, ref, datas, rows=None, viewtype="table", viewpreds=None):
+    def __init__(self, ref, datas, rows=None, viewtype=None, viewpreds=None):
         self.ref = ref
         self.datas = datas
         self.rows = rows or []
         # 
         self.viewpreds: List[Predicate] = viewpreds or []
-        self.viewtype: str = viewtype
+        self.viewtype: str = viewtype or "table"
         self.selecting: Optional[int] = None
     
     def assign(self, otherview):
@@ -285,16 +292,18 @@ class DataView():
         
         # 関数を適用する
         if filter:
+            # 関連するカラムの値をリストで渡し、判定
             rows = [row for row in rows if filter([row[i] for i in filter_indices])]
         if sortkey:
             def key(row):
+                # 同じく、関連するカラムの値をリストで渡し、判定
                 return sortkey([row[i] for i in sort_indices])
             rows.sort(key=key)
 
         #viewpreds =  predicates[0:len(columns)-1]
         return DataView(self.ref, self.datas, rows, viewtype, predicates)
     
-    # /v >list name path date >where date within 2015y 2017y >sortby date
+    # /v name path date /where date within 2015y 2017y /sortby ~date name /list
     # コマンドからビューを作成する
     #
     # syntax:
@@ -304,46 +313,57 @@ class DataView():
         dispmode = False
 
         # コマンド文字列を解析する
-        column_part = 0
+        column_part = None
         viewtype_part = None
         filter_part = None
         sorter_part = None
         parts = []
         if expression:
-            parts = expression.split()
+            parts = expression.split("/")
             for i, part in enumerate(parts):
-                if i == 0 and part.startswith(":"):
-                    viewtype_part = 0
-                    column_part = 1
-                elif filter_part is None and part.startswith("?"):
-                    filter_part = i
-                elif sorter_part is None and part.startswith("@"):
-                    sorter_part = i
-
+                if part.startswith("where"):
+                    filter_part = part[len("where"):].strip()
+                elif part.startswith("sortby"):
+                    sorter_part = part[len("sortby"):].strip()
+                elif part.startswith("pred"):
+                    column_part = part[len("pred"):].strip()
+                elif i == 0:
+                    column_part = part.strip()
+                elif part and not part.startswith(" "):
+                    viewtype_part = part.strip()
+        
+        # 表の表示形式
         if viewtype_part is not None:
-            viewtype = parts[viewtype_part][1:]
+            viewtype = viewtype_part
             if viewtype == "disp":
                 dispmode = True
                 viewtype = self.viewtype
         else:
             viewtype = self.viewtype
-        
-        columns = parts[column_part:filter_part]
 
+        # 述語リスト
+        if column_part is not None:
+            columns = column_part.split()
+        else:
+            columns = [] # デフォルトのカラムになる
+
+        # フィルタ指示
         filter_ = None
         if filter_part is not None:
-            filter_query = " ".join(parts[filter_part:sorter_part])[1:] # ? を落とす
+            filter_query = filter_part
         if filter_query:
             filter_ = DataFilter(self.ref, filter_query, dispmode)
             if filter_.failure:
                 raise filter_.failure
 
+        # ソート指示
         sortkey = None
         if sorter_part is not None:
-            sort_query = " ".join(parts[sorter_part:])[1:] # @ を落とす
+            sort_query = sorter_part # /sortby を落とす
         if sort_query:
-            raise NotImplementedError("sort expression")
-            
+            sortkey = DataSortKey(self.ref, sort_query, dispmode)
+
+        # 新たなビューを構築する
         return self.create_view(viewtype, columns, filter_, sortkey, trunc=trunc)
 
 #

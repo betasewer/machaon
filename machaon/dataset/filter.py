@@ -1,5 +1,5 @@
 from typing import Sequence, List, Any, Tuple
-from machaon.dataset.predicate import Predicate, parse_operator_operation, BadOperatorError, BadPredicateError
+from machaon.dataset.predicate import Predicate, BadOperatorError, BadPredicateError
 
 # (A and B) or (C and D)
 # A B and C D and or

@@ -109,7 +109,7 @@ def command_commandlist(spi):
             for entry in cmdset.display_commands():
                 items.append(HelpItem(cmdset, entry))
 
-    spi.create_data(items, ":table")
+    spi.create_data(items)
     spi.dataview()
 
 
@@ -174,7 +174,7 @@ def command_processlist(spi):
         if chm.get_process() is spi.get_process():
             continue
         items.append(ProcessListItem(chm))
-    spi.create_data(items, ":table")
+    spi.create_data(items)
     spi.dataview()
 
 # テーマの選択
@@ -182,7 +182,7 @@ def command_ui_theme(spi, themename=None, alt="", show=False):
     from machaon.ui.theme import theme_dict, ShellThemeItem
     if themename is None and not alt:
         theme_items = [ShellThemeItem(k,fn()) for (k,fn) in theme_dict.items()]
-        spi.create_data(theme_items, ":table")
+        spi.create_data(theme_items)
         spi.dataview()
     else:
         root = spi.get_app()

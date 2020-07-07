@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+import sys
 import datetime
 import traceback
 import threading
@@ -169,10 +170,22 @@ class Launcher():
                     if commandtail:
                         msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
 
-            elif commandhead.endswith("v"):
+            elif command.startswith("v"):
                 # データビューのフィルター・ソートの指定
-                msg = self.meta_command_dataview_operation(commandtail.strip())
+                expr = command[1:]
+                msg = self.meta_command_dataview_operation(expr.strip())
+                
+            elif commandhead.startswith("a"):
+                # アクティブなコマンドの引数をコマンド欄に展開する
+                procindex, _ = parse_procindex(commandhead[len("a"):])
+                argname, _, restcommand = commandtail.partition(" ")
+                msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
 
+            elif command.startswith("!"):
+                # Pythonの式を評価する
+                libnames, expr = parse_procindex(command[1:])
+                msg = self.meta_command_eval_py(expr, libnames.split())
+            
             elif commandhead.startswith("put"):
                 # データビューの選択アイテムの値を画面に展開する
                 procindex, itemname = parse_procindex(commandhead[len("put"):])
@@ -183,6 +196,16 @@ class Launcher():
                 procindex, itemname = parse_procindex(commandhead[1:])
                 msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
             
+            elif command.startswith("sort"):
+                # データビューのフィルター・ソートの指定
+                expr = "/sortby " + command[len("sort"):]
+                msg = self.meta_command_dataview_operation(expr.strip())
+                
+            elif command.startswith("where"):
+                # データビューのフィルター・ソートの指定
+                expr = "/where " + command[len("where"):]
+                msg = self.meta_command_dataview_operation(expr.strip())
+
             elif commandhead.startswith("pred"):
                 # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
                 procindex, keyword = parse_procindex(command[len("pred"):])
@@ -193,12 +216,6 @@ class Launcher():
                 procindex, _ = parse_procindex(commandhead[len("arghelp"):])
                 msg = self.meta_command_show_help(commandtail, procindex)
             
-            elif commandhead.startswith("a"):
-                # アクティブなコマンドの引数をコマンド欄に展開する
-                procindex, _ = parse_procindex(commandhead[len("a"):])
-                argname, _, restcommand = commandtail.partition(" ")
-                msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
-
             elif command.startswith("what"):
                 # 文字列を解析し、コマンドとして可能な解釈をすべて示す
                 cmdstr = command[len("what"):].strip()
@@ -212,17 +229,14 @@ class Launcher():
             elif command.startswith("savelog"):
                 msg = self.meta_command_savelog(command[len("savelog"):].strip())
                 
-            elif command.startswith("!"):
-                # Pythonの式を評価する
-                libnames, expr = parse_procindex(command[1:])
-                msg = self.meta_command_eval_py(expr, libnames.split())
-            
             elif command.startswith("help"):
                 values = [
                     ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
                     ("=", "現在の選択アイテムを入力欄に展開"),
                     ("put", "現在の選択アイテムを画面に展開"),
                     ("v", "データビューのフィルター・ソートの指定"),
+                    ("sort", "データビューのソートの指定"),
+                    ("where", "データビューのフィルタの指定"),
                     ("pred", "データビューの述語の一覧を表示"),
                     ("a", "プロセスの実引数を入力欄に展開"),
                     ("invoke", "プロセスの実引数と実行結果を表示"),
@@ -241,7 +255,8 @@ class Launcher():
         
         except Exception as e:
             msg = "エラー発生："
-            msg += "\n".join(traceback.format_exception_only(type(e), e))
+            tb = sys.exc_info()[2]
+            msg += "".join(traceback.format_exception(type(e), e, tb))
         
         if msg:
             self.insert_screen_appendix(msg, title=command)

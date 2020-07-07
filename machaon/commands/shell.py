@@ -184,7 +184,7 @@ def filelist(app, pattern=None, long=False, howsort=None, recurse=1, silent=Fals
     if not silent:
         app.message(cd+"\n")
 
-    view = ":table" if long else ":wide"
+    view = "/table" if long else "/wide"
     app.create_data(paths, view)
     app.dataview()
 
