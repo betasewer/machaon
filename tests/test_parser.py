@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, typeof_argument, OptionContext, ArgString
+from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, OptionContext, ArgString
 from machaon.process import TempSpirit
 
 def equal_contents(l, r):
@@ -295,6 +295,7 @@ def test_parsing_candidates():
 #
 # 引数型
 #
+@pytest.mark.skip(True)
 def test_preset_types():
     str_, int_, bool_, float_, complex_, valuelist, filepath = [
         typeof_argument(x) for x in ("str", "int", "bool", "float", "complex", "value-list", "filepath")
@@ -316,6 +317,7 @@ def test_preset_types():
 #
 #
 #
+@pytest.mark.skip(True)
 def test_listarg():
     p = build_parser(
         option("animal-names", valuetype=typeof_argument("value-list", sep=",")),
@@ -345,6 +347,7 @@ def test_filepath():
 #
 #
 #
+@pytest.mark.skip(True)
 def test_parser_result():
     p = build_parser(
         option("files", valuetype="filepath", foreach=True),

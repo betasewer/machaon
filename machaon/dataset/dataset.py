@@ -51,29 +51,19 @@ class DataReference():
     # 検索述語
     #
     def add_pred(self, names, p):
-        kwd = names[0]
-        if not self._predicates:
-            self.firstpred = kwd
-        for name in names:
-            self._predicates[name] = (kwd, p)
-    
-    def get_pred(self, key) -> Tuple[str, Predicate]:
-        try:
-            return self._predicates[key]
-        except KeyError:
-            raise BadPredicateError(key)
+        self._predlib.add(names, p)
+        
+    def get_pred(self, name):
+        return self._predlib.get_entry(name)
     
     def get_first_pred(self):
-        if not self.firstpred:
-            raise BadPredicateError("<no first predicate specified>")
-        name, pred = self.get_pred(self.firstpred)
-        return name, pred
+        return self._predlib.get_top_entry()
     
     def get_link_pred(self):
         if self.defcolumns["link"] in self._predicates:
-            _, pred = self.get_pred(self.defcolumns["link"])
+            _, pred = self._predlib.get_pred(self.defcolumns["link"])
         else:
-            _, pred = self.get_first_pred()
+            _, pred = self._predlib.get_top_entry()
         return pred
 
     def get_all_preds(self) -> List[Tuple[Predicate, List[str]]]:

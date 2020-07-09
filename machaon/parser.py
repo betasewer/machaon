@@ -215,6 +215,7 @@ class OptionContext():
     def get_help(self):
         return self.help
 
+# ----------------------------------------------------------------------------
 #
 # #####################################################################
 #   文字列引数を好きな値に変えるクラス
@@ -501,6 +502,7 @@ class ConstantValue():
             raise ValueError("Constant value cannot be parsed from another type '{}'".format(type(arg).__name__))
         return arg
 
+# ----------------------------------------------------------------------------
 
 #
 # accumulator
