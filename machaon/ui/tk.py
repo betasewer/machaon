@@ -944,7 +944,7 @@ class DataTableView():
     def render(cls, ui, wnd, data):
         rows, colwidth = data.rows_to_string_table()
         
-        columns = [x.get_description() for x in data.get_predicates()]
+        columns = [x.get_description() for x in data.get_current_columns()]
         colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colwidth)]
 
         # ヘッダー

@@ -27,6 +27,7 @@ class ADataClass():
 #
 #
 #
+@pytest.mark.skip(True)
 def test_clause():
     view = DataViewFactory(
         [ADataClass(x) for x in ("ken", "yuuji", "kokons")], 

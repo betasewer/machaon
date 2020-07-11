@@ -83,7 +83,7 @@ class _OperationStack():
             if term == "_":
                 term, pred = self.ref.get_first_pred()
             else:
-                pred = self.ref.find_pred(term)
+                pred = self.ref.columns.get(term)
             if pred is None:
                 raise BadPredicateError(term)
             self.col = (term, pred)

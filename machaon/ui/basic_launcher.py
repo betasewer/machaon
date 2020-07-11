@@ -519,9 +519,9 @@ class Launcher():
                 
         if item:
             if not predicate:
-                pred = data.ref.get_link_pred()
+                pred = data.get_link_column()
             else:
-                pred = data.ref.find_pred(predicate)
+                pred = data.find_column(predicate)
             
             if pred:
                 if toinput:
@@ -556,7 +556,7 @@ class Launcher():
             data = chm.get_bound_data()
             if data:
                 lines = []
-                for pred, keys in data.get_all_predicates():
+                for pred, keys in data.get_all_columns():
                     if keyword and not any(x.startswith(keyword) for x in keys):
                         continue
                     lines.append((", ".join(keys), pred.get_description()))

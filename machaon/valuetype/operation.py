@@ -1,9 +1,10 @@
 import ast
+from typing import Dict, Any, List, Sequence
 
-from machaon.valuetype.predicate import predicate
+from machaon.valuetype.variable import variable, variable_defs
 
 #
-class BadExpression(Exception):
+class BadExpressionError(Exception):
     pass
 
 #
@@ -50,7 +51,7 @@ def build_ast(cxt, tokens):
 
         elif token == TOKEN_BLOCK_END:
             if not blockstack:
-                raise BadExpression("Could not find beginning of block")
+                raise BadExpressionError("Could not find beginning of block")
 
             newblock = blockstack.pop()
 
@@ -66,19 +67,23 @@ def build_ast(cxt, tokens):
         else:
             # 文字部分を解析する
             if not blockstack:
-                raise BadExpression("Could not find beginning of block")
+                raise BadExpressionError("Could not find beginning of block")
 
             blockstack[-1].append(token)
     
-    raise BadExpression("Could not find end of block")
+    raise BadExpressionError("Could not find end of block")
 
 #
 # 2-1. 式を解析する
 #
-class expression_context:
-    def __init__(self, typelib=None, predicatelib=None):
+class parser_context:
+    def __init__(self, 
+            typelib=None, 
+            variablelib=None
+        ):
         self.typelib = typelib
-        self.predlib = predicatelib
+        self.varlib: variable_defs = variablelib
+        self.related_vars = []
 
     # 2-1. 式の解析
     def parse(self, *tokens):
@@ -90,7 +95,7 @@ class expression_context:
                 if len(operands)>=2: # LEFT OP >RIGHT<
                     operands.append(token)
                 else:
-                    toks = token.split(maxsplit=2-len(operands))
+                    toks = token.split()
                     operands.extend(toks)
         
         if len(operands) == 1:
@@ -103,10 +108,11 @@ class expression_context:
             args = [operands[0], *operands[2:]]
             opr = operands[1]
         else:
-            raise BadExpression("empty expression")
+            raise BadExpressionError("empty expression")
 
         if opr is not None:
-            opr = self.parse_operator(opr, args[0])    
+            opr = self.parse_operator(opr, args[0])
+
         args = [self.parse_literal(x) for x in args]
         return expression(opr, args)
 
@@ -119,10 +125,13 @@ class expression_context:
             pass
         
         # 2. 述語とみなす
-        if self.predlib is not None:
-            pred = self.predlib.find_pred(s)
-            if pred is not None:
-                return pred
+        if self.varlib is not None:
+            va = self.varlib.get(s)
+            if va is not None:
+                self.related_vars.append(va.name)
+                return va
+
+        # 3. 型定義リテラル
     
         # 10. 文字列とみなす
         return s
@@ -131,30 +140,28 @@ class expression_context:
     def parse_operator(self, name, left):
         # 左辺値の型に定義された演算子
         mood = None # type_traits
-        if isinstance(left, predicate):
+        if isinstance(left, variable):
             mood = left.get_type()
-        else:
+        elif self.typelib is not None:
             typename = str(left)
-            mood = self.typelib.generate(typename)
+            mood = self.typelib.get(typename)
         
-        if mood is not None:
-            opr = mood.get_operator(name)
-            if opr is not None:
-                return opr
-        
-        # 標準の演算子
-        import operator
-        opr = getattr(operator, name, None)
-        if opr is not None:
-            return opr
-        
-        # 左辺値に定義されたメソッドを呼び出す
-        def lhs_operation(left, *args):
-            if not hasattr(left, name):
-                raise BadExpression("value '{}' has no method like '{}'".format(left, name))
-            return getattr(left, name)(*args)
-        return lhs_operation
+        # オペレータ名を取り出す
+        name, modbits = parse_operator_name(name)
+
+        # 関数を取得する
+        opr = resolve_operator(mood, name)
+        if opr is None:
+            opr = lhs_method(name)
+
+        # 修飾語を適用する
+        opr = modify_operator(opr, modbits)
+        return opr
     
+    #
+    def get_related_variables(self):
+        return self.related_vars
+
 #
 #
 #
@@ -163,15 +170,260 @@ class expression():
         self.opr = opr
         self.args = args
     
-    def S(self):
+    def eval(self, evalcontext):
+        args = []
+        for a in self.args:
+            if isinstance(a, expression):
+                ev = a.eval(evalcontext)
+            elif isinstance(a, variable):
+                ev = evalcontext.eval_variable(a)
+            else:
+                ev = a
+            args.append(ev)
+
+        ret = self.opr(*args)
+        return ret
+    
+    def S(self, *, debug_operator=False):
+        # for debug purpose
         args = []
         for x in self.args:
             if isinstance(x, expression):
-                args.append(x.S())
+                args.append(x.S(debug_operator=debug_operator))
             elif isinstance(x, str):
                 args.append("'{}'".format(x))
             else:
                 args.append(str(x))
-        return "({})".format(" ".join([self.opr, *args]))
+        
+        if debug_operator:
+            opr = detailed_operator_name(self.opr)
+        elif hasattr(self.opr, "__name__"):
+            opr = self.opr.__name__
+        else:
+            opr = str(self.opr)
+        return "({})".format(" ".join([opr, *args]))
 
+#
+#
+#
+OPERATION_REVERSE = 0x1
+OPERATION_NEGATE = 0x2
+
+# Python標準のオーバーロード可能な演算子
+std_operator_names = {
+    "==" : "eq",
+    "!=" : "ne",
+    "<=" : "le",
+    "<" : "lt",
+    ">=" : "ge",
+    ">" : "gt",
+    "in" : "~contains",
+    "+" : "add",
+    "-" : "sub",
+    "*" : "mul",
+    "**" : "pow",
+    "/" : "truediv",
+    "%" : "mod",
+    "&" : "and_",
+    "^" : "xor_",
+    "|" : "or_",
+    ">>" : "rshift",
+    "<<" : "lshift",
+    "~" : "invert",
+}
+# オーバーロード不可能な演算子や、その他の組み込み関数を提供
+def logical_and(l, r):
+    return l and r
+
+def logical_or(l, r):
+    return l or r
+
+def string_slice(s, b=None, e=None):
+    return s[b:e]
+
+builtin_operators = {
+    "&&" : logical_and,
+    "and" : logical_and,
+    "||" : logical_or,
+    "or" : logical_or,
+    "length" : len,
+    "slice" : string_slice,
+}
+
+#
+def parse_operator_name(expression):
+    bits = 0
+
+    if len(expression)>1:
+        if expression.startswith("~"):
+            bits |= OPERATION_REVERSE
+            expression = expression[1:]
+        
+        if expression.startswith("!"):
+            bits |= OPERATION_NEGATE
+            expression = expression[1:]
+
+    operator_name = expression
+
+    if expression in std_operator_names:
+        operator_name = std_operator_names[expression]
     
+    operator_name = operator_name.replace("-","_")
+    return operator_name, bits
+
+#
+def modify_operator(operator, bits):
+    opr = operator
+
+    if bits & OPERATION_REVERSE:
+        def rev(fn):
+            def _rev(*a):
+                return fn(*reversed(a))
+            return _rev
+        opr = rev(opr)
+
+    if bits & OPERATION_NEGATE:
+        def neg(fn):
+            def _neg(*a):
+                return not fn(*a)
+            return _neg
+        opr = neg(opr)
+    
+    return opr
+
+#
+def resolve_operator(mood, name):
+    # 組み込みの演算子
+    if name in builtin_operators:
+        return builtin_operators[name]
+
+    # 型に定義された演算子
+    if mood is not None:
+        opr = mood.get_operator(name)
+        if opr is not None:
+            return opr
+    
+    # 標準の演算子
+    import operator
+    opr = getattr(operator, name, None)
+    if opr is not None:
+        return opr
+    opr = getattr(operator, name+"_", None) # "is" で "is_" にマッチさせる
+    if opr is not None:
+        return opr
+    
+    return None
+
+# 左辺値に定義されたメソッドを呼び出す
+class lhs_method:
+    def __init__(self, name):
+        self.name = name
+
+    def __str__(self):
+        return "<lhs_method '{}'>".format(self.name)
+
+    def __call__(self, left, *args):
+        if not hasattr(left, self.name):
+            raise BadExpressionError("value '{}' has no method like '{}'".format(left, self.name))
+        return getattr(left, self.name)(*args)
+
+# デバッグ用に演算子の名前を表示する
+def detailed_operator_name(opr):
+    if isinstance(opr, lhs_method):
+        return ".".join(["lhs_method", opr.name])
+
+    mod = opr.__module__
+    if mod == "_operator":
+        mod = "operator"
+    elif not mod:
+        mod = "builtin"
+    elif mod.startswith("machaon.valuetype.operation"):
+        mod = "mbuiltin"
+
+    return ".".join([mod, opr.__name__])
+    
+#
+#
+#
+class eval_context():
+    def eval_variable(self, va: variable):
+        raise NotImplementedError()
+
+# 変数を参照されるたびに計算する
+class item_eval_context(eval_context):
+    def __init__(self, item):
+        self.item = item
+    
+    def eval_variable(self, va: variable):
+        value = va.predicate.get_value(self.item)
+        return value
+
+# あらかじめ計算された値を取り出す
+class valuemap_eval_context(eval_context):
+    def __init__(self, valuemap: Dict[str, Any]):
+        self.valuemap = valuemap
+    
+    def eval_variable(self, va: variable):
+        if va.name in self.valuemap:
+            return self.valuemap[va.name]
+        raise BadExpressionError("述語'{}'に対する値がありません".format(va.name))
+
+#
+# エントリクラス・関数
+#
+class operation():
+    def __init__(self, expr, related_variables):
+        self.expr = expr
+        self.related_variables = related_variables
+    
+    def get_related_variables(self):
+        return self.related_variables
+
+    def __call__(self, evalcontext: eval_context):
+        return self.expr.eval(evalcontext)
+
+# 式からパースする
+def parse_operation(expr: str, type_lib, variable_lib) -> operation:
+    tokens = tokenize(expr)
+    cxt = parser_context(type_lib, variable_lib)
+    expr = build_ast(cxt, tokens)
+    return operation(expr, cxt.get_related_variables())
+
+# 実行コンテキストをつくる
+class variable_valuerow:
+    #
+    class indices():
+        def __init__(self, indicemap):
+            self.indicemap = indicemap
+        
+        def make_context(self, values: List[Any]) -> eval_context:
+            valuemap = {k:values[i] for k,i in self.indicemap.items()}
+            return valuemap_eval_context(valuemap)
+
+    def __init__(self):
+        self.variables = []
+    
+    # 登録し、キャッシュのインデックスを返す
+    def register_variables(self, vas: Sequence[variable]):
+        indicemap: Dict[str, int] = {}
+        for va in vas:
+            for i, x in enumerate(self.variables):
+                if va.name == x.name:
+                    index = i
+                    break
+            else:
+                self.variables.append(va)
+                index = len(self.variables)-1
+
+            indicemap[va.name] = index
+
+        return variable_valuerow.indices(indicemap)
+
+    # 値を計算する
+    def make_valuerow(self, item) -> List[Any]:
+        row: List[Any] = []
+        for va in self.variables:
+            value = va.make_value(item)
+            row.append(value)
+        return row
+

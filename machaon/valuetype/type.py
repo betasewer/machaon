@@ -83,8 +83,10 @@ class type_traits_delegation(type_traits):
             except Exception as e:
                 raise type_traits_delegation.InstantiateError(self.typename, e)
         
-        fn = getattr(self._inst, fnname)
-        if spirit and self.flags & TYPE_CONVWITHSPIRIT:
+        fn = getattr(self._inst, fnname, None)
+        if fn is None:
+            return getattr(super(), fnname)(*fnargs)
+        elif spirit and self.flags & TYPE_CONVWITHSPIRIT:
             return fn(*fnargs, spirit)
         else:
             return fn(*fnargs)
@@ -192,24 +194,27 @@ class type_define_decolator():
 #
 # 型名から型定義を取得する
 #
-class type_generate():
+class type_generator():
     def __init__(self, typelib):
-        self.typelib: type_traits_library = typelib
+        self._typelib: type_traits_library = typelib
 
     def __call__(self, typecode: Union[None, str, type, type_traits] = None, *args, **kwargs) -> type_traits:
         if typecode is None:
-            return self.typelib.generate("str", (), {})
+            return self._typelib.generate("str", (), {})
         elif isinstance(typecode, str):
-            return self.typelib.generate(typecode, args, kwargs)
+            return self._typelib.generate(typecode, args, kwargs)
         elif isinstance(typecode, type):
-            if self.typelib.exists(typecode.__name__):
-                return self.typelib.generate(typecode.__name__, args, kwargs)
+            if self._typelib.exists(typecode.__name__):
+                return self._typelib.generate(typecode.__name__, args, kwargs)
             else:
-                return self.typelib.generate("constant", (typecode,), {})
+                return self._typelib.generate("constant", (typecode,), {})
         elif isinstance(typecode, type_traits):
             return typecode
         else:
             raise ValueError("No match type exists with '{}'".format(typecode))
+
+    def __getattr__(self, name) -> type_traits:
+        return self(name)
 
 #
 # 演算子の列挙

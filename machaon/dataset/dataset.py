@@ -1,6 +1,7 @@
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional
 from collections import defaultdict
 
+#from machaon.valuetype.predicate import predicate, predicate_defs
 from machaon.dataset.filter import DataFilter
 from machaon.dataset.sort import DataSortKey
 from machaon.dataset.predicate import Predicate, BadPredicateError
@@ -42,102 +43,54 @@ class DataMethod():
 #
 class DataReference():
     def __init__(self, *, itemclass):
-        self._predicates: Dict[str, Tuple[str, Predicate]] = {}
-        self.firstpred: str = None
+        self.columns = variable_defs()
         self.itemclass: Any = itemclass
-        self.defcolumns: Dict[str, Tuple[str]] = {}
-    
-    #
-    # 検索述語
-    #
-    def add_pred(self, names, p):
-        self._predlib.add(names, p)
-        
-    def get_pred(self, name):
-        return self._predlib.get_entry(name)
-    
-    def get_first_pred(self):
-        return self._predlib.get_top_entry()
-    
-    def get_link_pred(self):
-        if self.defcolumns["link"] in self._predicates:
-            _, pred = self._predlib.get_pred(self.defcolumns["link"])
-        else:
-            _, pred = self._predlib.get_top_entry()
-        return pred
 
-    def get_all_preds(self) -> List[Tuple[Predicate, List[str]]]:
-        predset: DefaultDict[Predicate, List[str]] = defaultdict(list)
-        for key, (_topkey, pred) in self._predicates.items():
-            predset[pred].append(key)
+        self.defaultcolumns = {
+            "table" : "long",
+            "wide" : "short",
+            "link" : "short",
+        }
+        self.columns.set_alias("long", "_top")
+        self.columns.set_alias("short", "_top")
 
-        entries = list(predset.items())
-        entries.sort(key=lambda e:e[1][0])
-        return entries
-
-    def get_default_columns(self, viewtype):
-        if viewtype in self.defcolumns:
-            return self.defcolumns[viewtype]
-        else:
-            return [self.firstpred] # 先頭カラム
-    
-    def normalize_column(self, name) -> str:
-        return self.get_pred(name)[0]
-
-    def find_pred(self, column_name):
-        entry = self._predicates.get(column_name, None)
-        if entry:
-            return entry[1]
-        return None
-    
-    def select_preds(self, column_names):
-        preds = []
-        invalids = []
-        for column_name in column_names:
-            if column_name in self._predicates:
-                preds.append(self.get_pred(column_name)[1])
-            else:
-                invalids.append(column_name)
-        return preds, invalids
-        
-    #
+    # データアイテムのインターフェースを定義する構文
     def __getitem__(self, name_expr):        
         if isinstance(name_expr, slice):
             deftype = name_expr.stop
-            first_name, *names = name_expr.start.split()
+            names = name_expr.start.split()
         else:
             deftype = None
-            first_name, *names = name_expr.split()
+            names = name_expr.split()
+        first_name = names[0]
 
-        def _parameters(
+        def parameters(
             disp="", 
             type=None,
             value=None,
+            alias=None,
         ):
+            if alias is not None:
+                for n in names:
+                    self.columns.set_alias(n, alias)
+                return
+
             if value is None:
-                value = DataMethod(first_name.replace("-","_"))
+                method_name = first_name.replace("-","_")
+                value = DataMethod(method_name)
+            elif isinstance(value, str):
+                method_name = value
+                value = DataMethod(method_name)
+            elif not callable(value):
+                raise ValueError("DataReference.parameters.value")
             
             if type is None and deftype is not None:
                 type = deftype
 
-            p = Predicate(predtype=type, description=disp, value=value)
-            
-            self.add_pred((first_name, *names), p)
+            self.columns.new(names, type, description=disp, value=value)
             return self
 
-        return _parameters
-    
-    def default_columns(self, 
-        table = None,
-        wide = None,
-        link = None,
-    ):
-        self.defcolumns = {
-            "table" : table,
-            "wide" : wide,
-            "link" : link
-        }
-        return self
+        return parameters
 
 #
 #
@@ -148,7 +101,7 @@ class DataView():
         self.datas = datas
         self.rows = rows or []
         # 
-        self.viewpreds: List[Predicate] = viewpreds or []
+        self.viewpreds: List[predicate] = viewpreds or []
         self.viewtype: str = viewtype or "table"
         self.selecting: Optional[int] = None
     
@@ -186,7 +139,7 @@ class DataView():
             raise ResultIndexError(len(self.rows))
         else:
             self.selecting = index
-        
+
     def deselect(self):
         self.selecting = None
 
@@ -206,14 +159,37 @@ class DataView():
         self.viewtype = viewtype
     
     #
-    def get_predicates(self):
+    def get_current_columns(self):
         return self.viewpreds
     
-    def get_all_predicates(self):
+    def get_all_columns(self):
         if self.ref is None:
             return []
-        return self.ref.get_all_preds()
-        
+        return self.ref.columns.getall()
+    
+    def find_column(self, name):
+        return self.ref.columns.find(name)
+    
+    def get_first_column(self):
+        e = self.ref.columns.top_entry()
+        if e is None:
+            raise ValueError("No column")
+        return e[0]
+    
+    def get_link_column(self):
+        e = self.ref.columns.selectone("link")
+        if e:
+            return e
+        return self.get_first_column()
+
+    def get_default_columns(self):
+        c = self.ref.get_default_columnname(self.viewtype)
+        es, _ = self.ref.columns.select(c)
+        if es:
+            return es
+        else:
+            return [self.ref.columns.get_first_column()] # 先頭カラム
+
     #
     #
     #
@@ -249,15 +225,14 @@ class DataView():
 
         # 列を決定する
         if not columns:
-            columns = self.ref.get_default_columns(viewtype)
+            columns = self.get_default_columns()
 
         total_columns = []
-        total_columns.extend([self.ref.normalize_column(x) for x in columns])
+        total_columns.extend(self.ref.columns.normalize_names(columns))
 
         def add_related_columns(total, targets):
             indices = []
-            for target in targets:
-                column = self.ref.normalize_column(target)
+            for column in self.ref.columns.normalize_names(targets):
                 if column not in total:
                     total.append(column)
                     indices.append(len(total)-1)
@@ -266,11 +241,11 @@ class DataView():
             return indices
 
         if filter:
-            filter_indices = add_related_columns(total_columns, filter.get_related_columns())
+            filter_indices = add_related_columns(total_columns, filter.get_related_variables())
         if sortkey:
-            sort_indices = add_related_columns(total_columns, sortkey.get_related_columns())
+            sort_indices = add_related_columns(total_columns, sortkey.get_related_variables())
 
-        predicates, invalids = self.ref.select_preds(total_columns)
+        predicates, invalids = self.ref.columns.select(total_columns)
         if invalids:
             raise InvalidColumnNames(invalids)
         
