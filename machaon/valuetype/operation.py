@@ -390,7 +390,7 @@ def parse_operation(expr: str, type_lib, variable_lib) -> operation:
     return operation(expr, cxt.get_related_variables())
 
 # 実行コンテキストをつくる
-class variable_valuerow:
+class variable_valuerow_def:
     #
     class indices():
         def __init__(self, indicemap):
@@ -400,11 +400,12 @@ class variable_valuerow:
             valuemap = {k:values[i] for k,i in self.indicemap.items()}
             return valuemap_eval_context(valuemap)
 
-    def __init__(self):
-        self.variables = []
+    def __init__(self, variables: Sequence[variable]):
+        self.variables: List[variable] = []
+        self.variables.extend(variables)
     
     # 登録し、キャッシュのインデックスを返す
-    def register_variables(self, vas: Sequence[variable]):
+    def register_variables(self, vas): # type: (Sequence[variable]) -> variable_valuerow_def.indices
         indicemap: Dict[str, int] = {}
         for va in vas:
             for i, x in enumerate(self.variables):
@@ -417,7 +418,7 @@ class variable_valuerow:
 
             indicemap[va.name] = index
 
-        return variable_valuerow.indices(indicemap)
+        return variable_valuerow_def.indices(indicemap)
 
     # 値を計算する
     def make_valuerow(self, item) -> List[Any]:
@@ -426,4 +427,7 @@ class variable_valuerow:
             value = va.make_value(item)
             row.append(value)
         return row
+    
+    def get_variables(self):
+        return self.variables
 

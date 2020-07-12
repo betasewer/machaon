@@ -956,20 +956,21 @@ class DataTableView():
         wnd.insert("end", line+"\n", ("message_em",))
 
         # 値
-        for i, row in enumerate(rows):
+        for i, (itemindex, row) in enumerate(rows):
             line = " | "
             for s, width in zip(row, colwidths):
                 line += ljust(s, width)
 
             index = str(i)
+            itemkey = str(itemindex)
             if i == data.selection():
                 head = ">> " + " "*(2-len(index))
                 tags = ("message", "log-item-selection")
-                linktags = ui.new_hyper_tags(index, HYPERLABEL_DATAITEM) + ("log-selection",)
+                linktags = ui.new_hyper_tags(itemkey, HYPERLABEL_DATAITEM) + ("log-selection",)
             else:   
                 head = " "*(5-len(index))
                 tags = ("message",)
-                linktags = ui.new_hyper_tags(index, HYPERLABEL_DATAITEM)
+                linktags = ui.new_hyper_tags(itemkey, HYPERLABEL_DATAITEM)
 
             wnd.insert("end", head, tags) # ヘッダー
             wnd.insert("end", index, linktags) # No. リンク

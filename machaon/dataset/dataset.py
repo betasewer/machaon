@@ -1,10 +1,10 @@
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional
 from collections import defaultdict
 
-#from machaon.valuetype.predicate import predicate, predicate_defs
+from machaon.valuetype.variable import variable, variable_defs
+from machaon.valuetype.operation import variable_valuerow_def
 from machaon.dataset.filter import DataFilter
 from machaon.dataset.sort import DataSortKey
-from machaon.dataset.predicate import Predicate, BadPredicateError
 from machaon.cui import get_text_width
 
 #
@@ -96,12 +96,12 @@ class DataReference():
 #
 #
 class DataView():
-    def __init__(self, ref, datas, rows=None, viewtype=None, viewpreds=None):
+    def __init__(self, ref, datas, rows=None, viewtype=None, viewvars=None):
         self.ref = ref
         self.datas = datas
         self.rows = rows or []
         # 
-        self.viewpreds: List[predicate] = viewpreds or []
+        self.viewvars: List[variable] = viewvars or []
         self.viewtype: str = viewtype or "table"
         self.selecting: Optional[int] = None
     
@@ -110,14 +110,15 @@ class DataView():
         self.ref = r.ref
         self.datas = r.datas
         self.rows = r.rows
-        self.viewpreds = r.viewpreds
+        self.viewvars = r.viewvars
         self.viewtype = r.viewtype
         self.selecting = r.selecting
         return self
 
     # アクセス
     def row(self, i):
-        return self.rows[i]
+        _itemindex, row = self.rows[i]
+        return row
 
     def valid_index(self, index):
         if not self.rows:
@@ -159,30 +160,27 @@ class DataView():
         self.viewtype = viewtype
     
     #
-    def get_current_columns(self):
-        return self.viewpreds
+    def get_current_columns(self) -> List[variable]:
+        return self.viewvars
     
-    def get_all_columns(self):
+    def get_all_columns(self) -> List[variable]:
         if self.ref is None:
             return []
         return self.ref.columns.getall()
     
-    def find_column(self, name):
-        return self.ref.columns.find(name)
+    def find_column(self, name) -> Optional[variable]:
+        return self.ref.columns.get(name)
     
-    def get_first_column(self):
-        e = self.ref.columns.top_entry()
-        if e is None:
-            raise ValueError("No column")
-        return e[0]
+    def get_first_column(self) -> variable:
+        return self.ref.columns.top_entry()
     
-    def get_link_column(self):
+    def get_link_column(self) -> variable:
         e = self.ref.columns.selectone("link")
         if e:
             return e
         return self.get_first_column()
 
-    def get_default_columns(self):
+    def get_default_columns(self) -> List[variable]:
         c = self.ref.get_default_columnname(self.viewtype)
         es, _ = self.ref.columns.select(c)
         if es:
@@ -193,80 +191,69 @@ class DataView():
     #
     #
     #
-    def expand_item_to_rows(self, predicates):
-        rows = []
-        for item in self.datas:
-            row = []
-            for pred in predicates:
-                lhs = pred.get_value(item)
-                row.append(lhs)
-            rows.append(row)
-        return rows
-
-    def rows_to_string_table(self):
-        colwidth = [0 for _ in self.viewpreds]
+    def rows_to_string_table(self) -> Tuple[
+        List[Tuple[int, List[str]]], 
+        List[int]
+    ]:
+        colwidth = [0 for _ in self.viewvars]
         srows = []
-        for row in self.rows:
-            srow = []
-            for i in range(len(self.viewpreds)):
-                s = self.viewpreds[i].value_to_string(row[i])
+        for itemindex, row in self.rows:
+            srow = ["" for _ in self.viewvars]
+            for i, va in enumerate(self.viewvars):
+                s = va.predicate.value_to_string(row[i])
+                srow[i] = s
                 colwidth[i] = max(colwidth[i], get_text_width(s))
-                srow.append(s)
-            srows.append(srow)
+            srows.append((itemindex, srow))
         return srows, colwidth
 
     #
     # べつのビューを作る
     #
-    def create_view(self, viewtype, columns=None, filter=None, sortkey=None, *, trunc=True):
+    def create_view(self, viewtype, column_names=None, filter=None, sortkey=None, *, trunc=True):
         # 空のデータからは空のビューしか作られない
         if not self.datas:
             return DataView(self.ref, [])
 
-        # 列を決定する
-        if not columns:
+        # 列の変数を取得する
+        if column_names:
+            columns, invalids = self.ref.columns.select(column_names)
+            if invalids:
+                raise InvalidColumnNames(invalids)
+        else:
             columns = self.get_default_columns()
 
-        total_columns = []
-        total_columns.extend(self.ref.columns.normalize_names(columns))
-
-        def add_related_columns(total, targets):
-            indices = []
-            for column in self.ref.columns.normalize_names(targets):
-                if column not in total:
-                    total.append(column)
-                    indices.append(len(total)-1)
-                else:
-                    indices.append(total.index(column))
-            return indices
-
+        # 一行で使用する変数の並びを決める
+        rowdef = variable_valuerow_def(self.viewvars)
+        _newcolumn_indices = rowdef.register_variables(columns)
         if filter:
-            filter_indices = add_related_columns(total_columns, filter.get_related_variables())
+            filter_indices = rowdef.register_variables(filter.get_related_variables())
         if sortkey:
-            sort_indices = add_related_columns(total_columns, sortkey.get_related_variables())
+            sort_indices = rowdef.register_variables(sortkey.get_related_variables())
 
-        predicates, invalids = self.ref.columns.select(total_columns)
-        if invalids:
-            raise InvalidColumnNames(invalids)
-        
         # データを展開する
         if trunc:
-            rows = self.expand_item_to_rows(predicates)
+            rows = [(i, rowdef.make_valuerow(item)) for i, item in enumerate(self.datas)]
         else:
-            rows = self.rows
+            newvars = rowdef.get_variables()[len(self.viewvars):]
+            if newvars:
+                # 足りない列を新しく計算して結合する
+                newrowdef = variable_valuerow_def(newvars)
+                newrows = [(i, newrowdef.make_valuerow(self.datas[i])) for i, row in self.rows]
+                rows = [(i, row1+row2) for (i, row1), (_, row2) in zip(self.rows, newrows)]
+            else:
+                rows = self.rows
         
         # 関数を適用する
         if filter:
-            # 関連するカラムの値をリストで渡し、判定
-            rows = [row for row in rows if filter([row[i] for i in filter_indices])]
+            # 関連するカラムの値を渡し、判定
+            rows = [r for r in rows if filter(filter_indices.make_context(r))]
         if sortkey:
             def key(row):
-                # 同じく、関連するカラムの値をリストで渡し、判定
-                return sortkey([row[i] for i in sort_indices])
+                # 同じく、関連するカラムの値を渡し、判定
+                return sortkey(sort_indices.make_context(row))
             rows.sort(key=key)
 
-        #viewpreds =  predicates[0:len(columns)-1]
-        return DataView(self.ref, self.datas, rows, viewtype, predicates)
+        return DataView(self.ref, self.datas, rows, viewtype, rowdef.get_variables())
     
     # /v name path date /where date within 2015y 2017y /sortby ~date name /list
     # コマンドからビューを作成する
