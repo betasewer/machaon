@@ -1,5 +1,5 @@
 from machaon.valuetype.type import (
-    type_traits_library, type_define_decolator, type_generator
+    type_traits_library, type_definer, type_generator
 )
 from machaon.valuetype.fundamental import define_fundamental
 
@@ -8,7 +8,7 @@ from machaon.valuetype.fundamental import define_fundamental
 #
 #
 valtypelib = type_traits_library()
-define_valtype = type_define_decolator(valtypelib)
+define_valtype = type_definer(valtypelib)
 valtype = type_generator(valtypelib)
 
 #

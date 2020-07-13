@@ -69,17 +69,12 @@ class ArgString():
     def __repr__(self):
         return "<{}>".format(" ".join(["ArgString:", self.joined()]))
 
-    def split(self, explicit_sep=ARGSTRING_NO_SPLIT, implicit_sep=ARGSTRING_NO_SPLIT, maxsplit=-1):
-        if explicit_sep is not ARGSTRING_NO_SPLIT:
+    def split(self, sep=ARGSTRING_NO_SPLIT, maxsplit=-1):
+        if sep is not ARGSTRING_NO_SPLIT:
             # 最優先される区切り
-            jo = self.joined()
-            if explicit_sep in jo:
-                return jo.split(sep=explicit_sep, maxsplit=maxsplit)
-        
-        if implicit_sep is not ARGSTRING_NO_SPLIT and len(self.argparts) == 1:
-            # explicit_sepも改行区切りも無い場合に用いられる区切り
-            jo = self.joined()
-            return jo.split(sep=implicit_sep, maxsplit=maxsplit)
+            total = self.joined()
+            if sep in total:
+                return total.split(sep=sep, maxsplit=maxsplit)
 
         # 元の区切りそのまま
         if maxsplit > -1:
@@ -431,7 +426,7 @@ class Filepaths():
 
         # パスの羅列を区切る
         paths = []
-        for fpath in arg.split(explicit_sep = "|"):
+        for fpath in arg.split(sep = "|"):
             if not fpath:
                 continue
             # ホームディレクトリを展開

@@ -1,42 +1,57 @@
 from machaon.valuetype import (
     valtype
 )
-from machaon.valuetype.variable import (
-    predicate, variable, variable_defs
-)
 
-def test_predicate():
-    length = predicate(valtype.int, "its length", lambda item:item["length"])
-    assert length.get_description() == "its length"
-    assert length.get_type() is valtype.int
-    assert not length.is_printer()
-    assert length.get_value({"length":32}) == 32
-    assert length.value_to_string(32) == "32"
+#
+# 引数型
+#
+def test_simplex_complex():
+    assert valtype.str.is_simplex_type()
+    assert valtype.int.is_simplex_type()
+    assert valtype.bool.is_simplex_type()
+    assert valtype.float.is_simplex_type()
+    assert valtype.complex.is_simplex_type()
 
-def test_variabledefs():
-    defs = variable_defs()
-    width = defs.new(("width", "w"), valtype.int, "its width", lambda item:item["width"])
-    height = defs.new(("height", "h"), valtype.int, "its height", lambda item:item["height"])
-    name = defs.new(("name", "n"), valtype.str, "its name", lambda item:item["name"])
+    assert not valtype.separated_value_list.is_simplex_type()
+    assert valtype.separated_value_list.is_compound_type()
+    assert not valtype.separated_value_list.is_sequence_type()
+    
+    assert not valtype.filepath.is_simplex_type()
+    assert valtype.filepath.is_compound_type()
+    assert valtype.filepath.is_sequence_type()
 
-    assert defs.get("width") is width
-    assert defs.get("n") is name
 
-    assert defs.top_entry() is width
+def test_separated_list():
+    csv_list = valtype.separated_value_list(sep=",")
+    assert csv_list.convert_from_string("neko, inu, saru, azarashi") == ["neko", "inu", "saru", "azarashi"]
 
-    assert defs.select(("width", "height")) == ([width, height], [])
-    assert defs.select(("undefined", "height")) == ([height], ["undefined"])
-    assert defs.selectone("width") is width
-    assert defs.selectone("undefined") is None
+    int_list = valtype.separated_value_list(valtype.int)
+    assert int_list.convert_from_string("1 -2 3 -4") == [1, -2, 3, -4]
 
-    assert defs.getall() == [height, name, width]
+def test_filepath():
+    fpath = valtype.filepath
+    ifpath = valtype.input_filepath
+    dpath = valtype.dirpath
+    idpath = valtype.input_dirpath
 
-    assert defs.normalize_names(("w", "h")) == ["width", "height"]
+    # filepath
+    from machaon.process import TempSpirit
+    spi = TempSpirit(cd="basic")
 
-    defs.set_alias("dimension", ["width", "height"])
-    assert defs.select(("dimension",)) == ([width, height], [])
-    assert defs.select(("n", "dimension")) == ([name, width, height], [])
-    assert defs.selectone("dimension") is width # Looks like bad usage
+    assert fpath.convert_from_string("users/desktop/memo.txt bin/appli.exe", spi) == [
+        "basic\\users\\desktop\\memo.txt", "basic\\bin\\appli.exe"
+    ]
 
-    assert defs.get("dimension") is None # getではエイリアスが利かない
+    # input-filepath: globパターンを受け入れ、実在するパスを集める
+    spi = TempSpirit(cd = "c:\\Windows")
+    assert len(ifpath.convert_from_string("System32/*.dll py.exe", spi)) > 2
 
+    #
+    spi = TempSpirit(cd="users")
+    assert dpath.convert_from_string("desktop/folder bin", spi) == [
+        "users\\desktop\\folder", "users\\bin"
+    ]
+
+    #
+    spi = TempSpirit(cd = "c:\\Windows")
+    assert len(idpath.convert_from_string("system32/* system")) > 2

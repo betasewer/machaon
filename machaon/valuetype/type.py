@@ -2,7 +2,7 @@ import os
 import re
 from inspect import signature
 
-from typing import Any, Sequence, List, Dict, Union
+from typing import Any, Sequence, List, Dict, Union, Callable
 
 #
 #
@@ -20,6 +20,7 @@ TYPE_CONVWITHSPIRIT = 0x20
 #
 class type_traits():
     __mark = True
+    value_type: Callable = str
 
     def __init__(self, typename, description, args, kwargs, flags):
         self.typename: str = typename
@@ -27,6 +28,9 @@ class type_traits():
         self.args = args
         self.kwargs = kwargs
         self.flags = flags
+        
+    def __call__(self, *args, **kwargs): # type: (*Any, **Any) -> type_traits
+        return self.rebind_arguments(args, kwargs)
     
     def is_simplex_type(self):
         return (self.flags & TYPE_SIMPLEX) == TYPE_SIMPLEX
@@ -41,11 +45,11 @@ class type_traits():
         return (self.typename, self.description, args, kwargs, self.flags)
         
     #
-    def rebind_args(self, args, kwargs):
-        raise NotImplementedError()
+    def rebind_arguments(self, args, kwargs):
+        return type_traits(*self._ctor_args(args, kwargs))
 
     def get_value_type(self):
-        raise NotImplementedError()
+        return type(self).value_type
         
     def convert_from_string(self, arg: str, spirit=None):
         return self.get_value_type()(arg)
@@ -91,7 +95,7 @@ class type_traits_delegation(type_traits):
         else:
             return fn(*fnargs)
     
-    def rebind_args(self, args, kwargs):
+    def rebind_arguments(self, args, kwargs):
         return type_traits_delegation(self.klass, *self._ctor_args(args, kwargs))
     
     def get_value_type(self):
@@ -125,45 +129,49 @@ class type_traits_library:
     def __init__(self):
         self._types: Dict[str, type_traits] = {}
     
-    def define(self, typename: str, traits: Any, description: str, args, kwargs, flags: int) -> type_traits:
+    def define(self, typename: str, typeobj) -> type_traits:
         if typename in self._types:
             raise ValueError("型'{}'は既に定義されています".format(typename))
-        t: Any = None
-        if hasattr(traits, "_type_traits__mark"):
-            t = traits(typename, description, args, kwargs, flags)
-        else:
-            t = type_traits_delegation(traits, typename, description, args, kwargs, flags)
-        self._types[typename] = t
-        return t
+        self._types[typename] = typeobj
+        return typeobj
     
     def exists(self, typename:str) -> bool:
         return typename in self._types
     
-    def generate(self, typename: str, args, kwargs) -> type_traits:
+    def get(self, typename: str) -> type_traits:
         if typename not in self._types:
             raise BadTypenameError(typename)
-        if args:
-            return self._types[typename].rebind_args(args, kwargs)
-        else:
-            return self._types[typename]
+        return self._types[typename]
 
 #
 #
 #
-class type_define_decolator():
-    def __init__(self, typelib):
+class type_definer():
+    def __init__(self, typelib=None):
         self._lib = typelib
         self._type = TYPE_SIMPLEX
 
-    def define(self, function_or_class, name, description, args, kwargs, flags):
-        if name is None:
-            name = function_or_class.__name__
+    def define(self, traits_or_class, typename, description, args, kwargs, flags):
         flags = self._type + (flags & 0xFFF0)
 
-        self._lib.define(name, function_or_class, description, args, kwargs, flags)
+        t: Any = None # 型オブジェクトのインスタンス
+        if isinstance(traits_or_class, type_traits):
+            if typename is None:
+                typename = traits_or_class.typename
+            t = traits_or_class
+        else:
+            if typename is None:
+                typename = traits_or_class.__name__
+            if hasattr(traits_or_class, "_type_traits__mark"):
+                t = traits_or_class(typename, description, args, kwargs, flags)
+            else:
+                t = type_traits_delegation(traits_or_class, typename, description, args, kwargs, flags)
+        
+        if self._lib:
+            self._lib.define(typename, t)
         
         self._type = TYPE_SIMPLEX
-        return function_or_class
+        return t
 
     def __call__(self,
         name = None, 
@@ -173,11 +181,10 @@ class type_define_decolator():
         traits = None,
     ):
         if traits is not None:
-            self.define(traits, name, description, args, kwargs, flags)
+            return self.define(traits, name, description, args, kwargs, flags)
         else:
             def _deco(target):
-                self.define(target, name, description, args, kwargs, flags)
-                return target
+                return self.define(target, name, description, args, kwargs, flags)
             return _deco
     
     @property
@@ -190,7 +197,6 @@ class type_define_decolator():
         self._type = TYPE_SEQUENCE
         return self
 
-
 #
 # 型名から型定義を取得する
 #
@@ -198,23 +204,23 @@ class type_generator():
     def __init__(self, typelib):
         self._typelib: type_traits_library = typelib
 
-    def __call__(self, typecode: Union[None, str, type, type_traits] = None, *args, **kwargs) -> type_traits:
+    def __getitem__(self, typecode: Union[None, str, type, type_traits] = None) -> type_traits:
         if typecode is None:
-            return self._typelib.generate("str", (), {})
+            return self._typelib.get("str")
         elif isinstance(typecode, str):
-            return self._typelib.generate(typecode, args, kwargs)
+            return self._typelib.get(typecode)
         elif isinstance(typecode, type):
             if self._typelib.exists(typecode.__name__):
-                return self._typelib.generate(typecode.__name__, args, kwargs)
+                return self._typelib.get(typecode.__name__)
             else:
-                return self._typelib.generate("constant", (typecode,), {})
+                return self._typelib.get("constant")(typecode)
         elif isinstance(typecode, type_traits):
             return typecode
         else:
             raise ValueError("No match type exists with '{}'".format(typecode))
 
     def __getattr__(self, name) -> type_traits:
-        return self(name)
+        return self[name.replace("_","-")]
 
 #
 # 演算子の列挙

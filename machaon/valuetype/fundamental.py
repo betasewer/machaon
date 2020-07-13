@@ -2,17 +2,28 @@ import os
 import glob
 import re
 
-from machaon.valuetype.type import type_traits, type_define_decolator
+from machaon.valuetype.type import type_traits, type_definer
+
+fundumental_type = type_definer()
 
 #
 #
 #
-class str_():
+@fundumental_type(
+    "str",
+    description="文字列"
+)
+class str_(type_traits):
     value_type = str
 
     def convert_from_string(self, s):
         return s
         
+    def convert_to_string(self, v, _spirit=None):
+        return v
+        
+    #
+    # 演算子
     #
     def operator_regmatch(self, s, pattern):
         m = re.match(pattern, s)
@@ -21,34 +32,53 @@ class str_():
         return False
 
 #
-class bool_():
-    value_type = int
+@fundumental_type(
+    "bool", 
+    description="True/False"
+)
+class bool_(type_traits):
+    value_type = bool
 
     def convert_from_string(self, s):
         return int(s)
         
 
 #
-class int_():
+@fundumental_type(
+    "int", 
+    description="整数"
+)
+class int_(type_traits):
     value_type = int
 
     def convert_from_string(self, s):
         return int(s)
 
 #
-class float_():
+@fundumental_type(
+    "float", 
+    description="浮動小数"
+)
+class float_(type_traits):
     value_type = float
 
     def convert_from_string(self, s):
         return float(s)
 
 #
-class complex_():
+@fundumental_type(
+    "complex", 
+    description="複素数"
+)
+class complex_(type_traits):
     value_type = complex
 
     def convert_from_string(self, s):
         return complex(s)
         
+
+del fundumental_type
+
 #
 # 区切られた値のリスト
 #
@@ -57,13 +87,13 @@ class complex_():
 class separated_value_list():
     value_type = list
 
-    def __init__(self, valuetype: type_traits, *, sep=None, maxsplit=-1):
-        self.vtype = valuetype
+    def __init__(self, valuetype: type_traits=None, *, sep=None, maxsplit=-1):
+        self.vtype = valuetype or str_
         self.sep = sep
         self.maxsplit = maxsplit
 
     def convert_from_string(self, arg):
-        spl = arg.split(implicit_sep=self.sep, maxsplit=self.maxsplit)
+        spl = arg.split(sep=self.sep, maxsplit=self.maxsplit)
         return [self.vtype.convert_from_string(x.strip()) for x in spl]
 
 #
@@ -90,7 +120,7 @@ class filepath():
 
         # パスの羅列を区切る
         paths = []
-        for fpath in arg.split(explicit_sep = "|"):
+        for fpath in arg.split(sep = "|"):
             if not fpath:
                 continue
             # ホームディレクトリを展開
@@ -146,14 +176,14 @@ class input_dirpath(dirpath, input_filepath):
 #
 #
 def define_fundamental(typelib):
-    defined_type = type_define_decolator(typelib)
+    defined_type = type_definer(typelib)
 
     # 基本型
-    defined_type("str", traits=str_, description="文字列")
-    defined_type("bool", traits=bool_, description="True/False")
-    defined_type("int", traits=int_, description="整数")
-    defined_type("float", traits=float_, description="小数")
-    defined_type("complex", traits=complex_, description="複素数")
+    defined_type(traits=str_)
+    defined_type(traits=bool_)
+    defined_type(traits=int_)
+    defined_type(traits=float_)
+    defined_type(traits=complex_)
     
     defined_type("constant", traits=constant_value, description="定数でのみ利用可能な型")
 
@@ -183,6 +213,3 @@ def define_fundamental(typelib):
         description="存在する入力ディレクトリのパス",
         traits=input_dirpath,
     )
-
-
-    
