@@ -2,346 +2,14 @@
 # coding: utf-8
 import os
 import sys
-import inspect
 import threading
 import queue
 import time
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator
-from collections import defaultdict
 
+from machaon.action import ActionInvocation
 from machaon.dataset import DataViewFactory
 from machaon.cui import test_yesno, MiniProgressDisplay
-from machaon.parser import CommandParser
-         
-#
-# 各アプリクラスを格納する
-#
-"""
-def __init__(self, app):
-    self.app = app
-
-def init_process(self):
-    pass
-
-def process_target(self, target) -> bool: # True/None 成功 / False 中断・失敗
-    raise NotImplementedError()
-
-def exit_process(self):
-    pass
-"""
-
-#
-#
-#
-class ProcessInitFailed(Exception):
-    pass
-
-#
-# ###################################################################
-#  process target class / function
-# ###################################################################
-#
-class ProcessTarget():
-    def __init__(self, argp, spirittype, lazyargdescribe):
-        self.argparser = argp
-        self.spirittype = spirittype
-        self.lazyargdescribe = lazyargdescribe
-    
-    def load_lazy_describer(self, spirit):
-        if self.lazyargdescribe is not None:
-            self.lazyargdescribe(spirit, self.argparser)
-            self.lazyargdescribe = None # 初回の引数解析時のみ発動する
-
-    def get_argparser(self):
-        return self.argparser
-    
-    def get_help(self):
-        return self.argparser.get_help()
-    
-    def get_prog(self):
-        return self.argparser.get_prog()
-    
-    def get_description(self):
-        return self.argparser.get_description()
-    
-    # 自らのスピリットを生成する
-    def inherit_spirit(self, other_spirit):
-        sp = self.spirittype(other_spirit.app)
-        sp.inherit(other_spirit)
-        return sp
-        
-    #
-    def invoke(self, spirit, parsedcommand, invocation):
-        raise NotImplementedError()
-
-    #
-    def _target_invocation(self, label, invocation, invoker, preargs, parsedcommand):
-        for inv in invoker.prepare_invocations(label, preargs, parsedcommand):
-            invoker.invoke(inv)
-            if not invocation.continue_(label, inv):
-                return False
-        return True
-
-#
-#
-#
-class ProcessTargetClass(ProcessTarget):
-    def __init__(self, klass, argp, spirittype=None, lazyargdescribe=None):
-        super().__init__(argp, spirittype, lazyargdescribe)
-        self.klass = klass
-        
-        if hasattr(klass, "init_process"):
-            self.init_invoker = FunctionInvoker(klass.init_process)
-        else:
-            self.init_invoker = None
-        
-        self.target_invoker = FunctionInvoker(klass.process_target)
-        
-        if hasattr(klass, "exit_process"):
-            self.exit_invoker = FunctionInvoker(klass.exit_process)
-        else:
-            self.exit_invoker = None
-    
-    def get_valid_labels(self):
-        labels = (
-            ("init", self.init_invoker), 
-            ("target", self.target_invoker),
-            ("exit", self.exit_invoker)
-        )
-        return [x for (x,inv) in labels if inv is not None]
-    
-    def get_inspection(self):
-        return "class", self.klass.__qualname__, self.klass.__module__
-
-    # 
-    def invoke(self, spirit, parsedcommand, invocation):
-        # プロセスを生成
-        proc = self.klass(spirit)
-        if self.init_invoker:
-            if not self._target_invocation("init", invocation, self.init_invoker, (proc,), parsedcommand):
-                return invocation
-
-        # メイン処理
-        if not self._target_invocation("target", invocation, self.target_invoker, (proc,), parsedcommand):
-            return invocation
-
-        # 後処理
-        if self.exit_invoker:
-            if not self._target_invocation("exit", invocation, self.exit_invoker, (proc,), parsedcommand):
-                return invocation
-
-        return invocation
-
-#
-#
-#
-class ProcessTargetFunction(ProcessTarget):
-    def __init__(self, fn, argp, spirittype=None, args=None, lazyargdescribe=None):
-        super().__init__(argp, spirittype, lazyargdescribe)
-        self.args = args or ()
-        self.target_invoker = FunctionInvoker(fn)
-    
-    def get_valid_labels(self):
-        return ["target"]
-        
-    def get_inspection(self):
-        return "function", self.target_invoker.fn.__qualname__, self.target_invoker.fn.__module__
-
-    def invoke(self, spirit, parsedcommand, invocation):
-        # 束縛引数
-        preargs = []
-        if self.spirittype is not None:
-            preargs.append(spirit)
-        preargs.extend(self.args)
-        
-        # メイン処理
-        self._target_invocation("target", invocation, self.target_invoker, preargs, parsedcommand)
-        return invocation
-
-#
-#
-#
-class FunctionInvoker:
-    def __init__(self, fn):
-        self.fn = fn
-        self.argnames = None # args, kwargs
-        self.kwargvarname = None
-
-        # inspectで引数名を取り出す
-        names = []
-        sig = inspect.signature(self.fn)
-        for _, p in sig.parameters.items():
-            if p.kind == inspect.Parameter.VAR_KEYWORD:
-                self.kwargvarname = p.name
-            elif p.kind == inspect.Parameter.VAR_POSITIONAL:
-                pass
-            else:
-                names.append(p.name)
-        self.argnames = names
-    
-    @property
-    def fnqualname(self):
-        # デバッグ用
-        return self.fn.__qualname__
-    
-    #
-    def prepare(self, *args, **kwargs):
-        argmap = {}
-        argmap.update(kwargs)
-
-        values = []
-        values.extend(args)
-
-        paramnames = self.argnames[len(values):]
-        remained_argnames = {k.replace("-","_"): k for k in argmap.keys()}
-        missing_args = []
-        for paramname in paramnames:
-            if paramname in remained_argnames:
-                valuekey = remained_argnames.pop(paramname)
-                values.append(argmap[valuekey])
-            else:
-                missing_args.append(paramname)
-            
-        if missing_args:
-            raise MissingArgumentError(self.fnqualname, missing_args)
-        
-        kwargs = {}
-        if self.kwargvarname:
-            for pname, aname in remained_argnames.items():
-                if pname in argmap:
-                    kwargs[pname] = argmap[aname]
-            
-            for pname in kwargs.keys():
-                remained_argnames.pop(pname)
-
-        unused_args = list(remained_argnames.values())
-        
-        #
-        entry = InvocationEntry(values, kwargs)
-        entry.set_arg_errors(missing_args, unused_args)
-        return entry
-    
-    #
-    def prepare_next_target(self, entry, **kwargs):
-        entry = entry.clone()
-        target_arg = kwargs["target"]
-        if "target" in self.argnames:
-            entry.args[self.argnames.index("target")] = target_arg
-        else:
-            raise ValueError("'target' argument not found")
-        return entry
-    
-    #
-    def prepare_invocations(self, label, preargs, parsedcommand):
-        inv = None
-        for targs in parsedcommand.prepare_arguments(label):
-            if inv is None:
-                inv = self.prepare(*preargs, **targs)
-            else:
-                inv = self.prepare_next_target(inv, **targs)
-            yield inv
-    
-    #
-    def invoke(self, invocation):            
-        # 関数を実行する
-        result = None
-        exception = None
-        try:
-            result = self.fn(*invocation.args, **invocation.kwargs)
-        except ProcessInterrupted as e:
-            raise e
-        except Exception as e:
-            exception = e
-
-        invocation.set_result(result, exception)
-        return invocation
-
-#
-class MissingArgumentError(Exception):
-    def __init__(self, fnqualname, missings):
-        self.fnqualname = fnqualname
-        self.missings = missings
-
-#
-#
-#
-class InvocationEntry():
-    def __init__(self, args, kwargs):
-        self.args = args
-        self.kwargs = kwargs
-        self.result = None
-        self.missing_args = []
-        self.unused_args = []
-        self.exception = None
-    
-    def clone(self):
-        inv = InvocationEntry(self.args, self.kwargs)
-        inv.result = self.result
-        inv.missing_args = self.missing_args
-        inv.unused_args = self.unused_args
-        inv.exception = self.exception
-        return inv
-
-    def set_arg_errors(self, missing_args, unused_args):
-        self.missing_args = missing_args
-        self.unused_args = unused_args
-    
-    def set_result(self, result, exception):
-        self.result = result
-        self.exception = exception
-    
-    def is_failed(self):
-        if self.exception:
-            return True
-        return False
-
-    def is_init_failed(self):
-        if self.exception:
-            return True
-        else:
-            return self.result is False
-
-#
-#
-#
-class ProcessInvocation:
-    def __init__(self):
-        self.entries = defaultdict(list)
-        self.last_exception = None
-    
-    def continue_(self, label: str, entry: InvocationEntry):
-        self.entries[label].append(entry)
-        if entry.is_failed():
-            self.last_exception = entry.exception
-            return False
-        if label == "init" and entry.is_init_failed():
-            self.last_exception = ProcessInitFailed()
-            return False
-        return True
-    
-    def initerror(self, excep: BaseException):
-        entry = InvocationEntry((), {})
-        entry.set_result(None, excep)
-        self.continue_("init", entry)
-
-    def get_entries_of(self, label):
-        return self.entries[label]
-    
-    def get_last_result(self):
-        if self.entries["target"]:
-            return self.entries["target"][-1].result
-        return None
-    
-    def arg_errors(self):
-        for label in ("init", "target", "exit"):
-            if label not in self.entries or not self.entries[label]:
-                continue
-            tail = self.entries[label][-1] # 同じラベルであればエラーも同一のはず
-            yield label, tail.missing_args, tail.unused_args
-
-    def get_last_exception(self):
-        return self.last_exception
-
 
 #
 # ######################################################################
@@ -356,7 +24,7 @@ class Process:
         # 
         self.target = None
         self.spirit = None
-        self.parsedcommand = None
+        self.parameter = None
         # スレッド
         self.thread = None
         self.stop_flag = False
@@ -369,20 +37,21 @@ class Process:
         self.last_input = None
         # 付属データ
         self.bound_data = None
+        self.bound_objects = [] # Tuple[str, Any]
         
     def run(self, app):
         self.thread = threading.Thread(target=app.execute_process, args=(self,), daemon=True)
         self.stop_flag = False
         self.thread.start()
     
-    def execute(self, target, spirit, parsedcommand):
-        self.target = target
-        self.spirit = spirit
-        self.parsedcommand = parsedcommand
+    def execute(self, execentry):
+        self.target = execentry.target
+        self.spirit = execentry.spirit
+        self.parameter = execentry.parameter
 
         # 操作を実行する
-        invocation = ProcessInvocation()
-        target.invoke(spirit, parsedcommand, invocation)
+        invocation = ActionInvocation(execentry.spirit, execentry.parameter, execentry.argsource)
+        self.target.invoke(invocation)
         self.last_invocation = invocation
         return invocation
     
@@ -401,16 +70,6 @@ class Process:
             raise NotExecutedYet()
         return self.parsedcommand
     
-    def get_command_args(self):
-        return self.parsedcommand
-    
-    def build_command_string(self):
-        if self.target is None or self.parsedcommand is None:
-            raise NotExecutedYet()
-        prog = self.target.get_prog()
-        exp = self.parsedcommand.get_expanded_command()
-        return " ".join(x for x in [prog, exp] if x)
-    
     def get_command_string(self):
         return self.command
 
@@ -424,13 +83,13 @@ class Process:
     
     def is_failed(self):
         if self.last_invocation is None:
-            raise ValueError("Neither executed nor pre-execution-failed")
+            return False # まだ実行が終わっていない
         e = self.last_invocation.get_last_exception()
         return e is not None
     
     def failed_before_execution(self, excep):
         # 実行前に起きたエラーを記録する
-        invocation = ProcessInvocation()
+        invocation = ActionInvocation(None, None, None)
         invocation.initerror(excep)
         self.last_invocation = invocation
 
@@ -507,6 +166,18 @@ class Process:
             # 動作中はアクセスできない
             return None
         return self.bound_data
+    
+    #
+    #
+    #
+    def push_object(self, typename, value):
+        self.bound_objects.append((typename, value))
+    
+    def get_bound_objects(self, running=False):
+        if not running and self.is_running():
+            # 動作中はアクセスできない
+            return None
+        return self.bound_objects
     
 #
 # プロセスの中断指示
@@ -734,6 +405,10 @@ class Spirit():
         dataview = DataViewFactory(datas, *command_args, **command_kwargs)
         self.bind_data(dataview)
         return dataview
+    
+    #
+    def push_object(self, typename, value):
+        self.process.push_object(typename, value)
     
     #
     def select_process_chamber(self, index=None):

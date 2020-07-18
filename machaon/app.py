@@ -187,45 +187,40 @@ class AppRoot:
         spirit = Spirit(self, process)
 
         # コマンドを解析
-        target = None
-        parsedcommand = None
+        execentry = None
         try:
-            entries = self.cmdengine.expand_parsing_command(commandstr, spirit)
-            entry = self.cmdengine.select_parsing_command(spirit, entries)
-            if entry is not None:
-                target, spirit = entry.target, entry.spirit
-                parsedcommand = self.cmdengine.parse_command(entry)
+            entries = self.cmdengine.parse_command(commandstr, spirit)
+            if len(entries) == 1:
+                execentry = entries[0]
+            elif len(entries) > 1:
+                # 一つ選択
+                # spirit.create_data(entries)
+                # spirit.dataview()
+                # self.ui.on_select_command(spirit, process, entries)
+                # 今はとりあえず先頭を採用
+                execentry = entries[0]
+
         except Exception as parseexcep:
             # コマンド解析中の例外（コマンド解析エラーではなく）
             process.failed_before_execution(parseexcep)
             self.ui.on_error_process(spirit, process, parseexcep, timing = "argparse")
             return None
         
-        if parsedcommand is None:
-            if entry is None:
-                error = ProcessBadCommand(target=None, reason="合致するコマンドが無かった")
-            else:
-                error = ProcessBadCommand(target=entry.target, reason=self.cmdengine.get_last_parse_error())
-
+        if execentry is None:
+            error = ProcessBadCommand(target=None, reason="合致するコマンドが無かった")
             process.failed_before_execution(error)
             self.ui.on_bad_command(spirit, process, error)
             return None
 
         # 実行開始！
+        spirit = execentry.spirit
         self.ui.on_exec_process(spirit, process)
-        
-        # コマンドパーサのメッセージがある場合は出力して終了
-        if parsedcommand.has_exit_message():
-            for line in parsedcommand.get_exit_messages():
-                spirit.message(line)
-            return None
 
         # プロセスを実行する
         result = None
         invocation = None
         try:
-            #parsedcommand.expand_special_arguments(spirit)
-            invocation = process.execute(target, spirit, parsedcommand)
+            invocation = process.execute(execentry)
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
         except Exception as execexcep:
@@ -239,59 +234,26 @@ class AppRoot:
             if e:
                 # アプリコードからの例外
                 self.ui.on_error_process(spirit, process, e, timing = "execute")
+
+            # オブジェクトを得る
+            self.cmdengine.push_objects(process.get_bound_objects(running=True))
             # 最後のtargetの返り値を返す
             result = invocation.get_last_result()
 
         self.ui.on_exit_process(spirit, process, invocation)
         return result
-    
-    # プロセスを即時実行する
-    # メッセージ出力を処理しない
-    def execute_instant(self, target, argument="", *, spirit=True, args=None, custom_command_parser=None, prog=None):        
-        # コマンドエントリの構築
-        d = describe_command(target, spirit=spirit, args=args, custom_command_parser=custom_command_parser)
-        prog = prog or getattr(target, "__name__") or "$"
-        entry = d.create_entry((prog,))
 
-        # 引数の解析
-        argentries = self.cmdengine.expand_parsing_command(argument, spirit)
-        if not argentries:
-            return None
-        parsedcommand = self.cmdengine.parse_command(argentries[0])
-        if parsedcommand is None:
-            return None
-
-        if parsedcommand.has_exit_message():
-            return None
-            
-        # 実行
-        process_target = entry.load_target()
-        process_spirit = process_target.inherit_spirit(self)
-        dummyproc = Process((prog + " " + argument).strip())
-        process_spirit.bind_process(dummyproc)
-
-        invocation = None
-        try:
-            invocation = process_target.invoke(process_spirit, parsedcommand)
-        except Exception:
-            return None
-
-        return invocation, dummyproc.handle_post_message()
-    
     # 可能な構文解釈の一覧を提示する
     def parse_possible_commands(self, commandstr):
         spirit = Spirit(self, None) # processはもちろん関連付けられていない
-        return self.cmdengine.expand_parsing_command(commandstr, spirit)
+        return self.cmdengine.parse_command(commandstr, spirit)
     
     # コマンドを検索する
     def search_command(self, commandname) -> List[CommandEntry]:
-        return [entry for (entry, remained) in self.cmdengine.expand_parsing_command_head(commandname) if not remained]
+        return [entry for (entry, remained) in self.cmdengine.expand_command_head(commandname) if not remained]
     
     def get_command_sets(self):
         return self.cmdengine.command_sets()
-    
-    def set_command_prefix(self, prefix):
-        self.cmdengine.set_command_prefix(prefix)
 
     #
     # プロセススレッド

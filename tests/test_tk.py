@@ -1,7 +1,7 @@
 import pytest
 
 from machaon.app import AppRoot
-from machaon.process import ProcessMessage, Spirit, TempSpirit, Process, ProcessTargetFunction
+from machaon.process import ProcessMessage, Spirit, TempSpirit, Process
 from machaon.ui.tk import tkLauncher
 
 def gettext(log):

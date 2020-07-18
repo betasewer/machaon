@@ -2,14 +2,16 @@ import os
 import glob
 import re
 
-from machaon.valuetype.type import type_traits, type_definer
+from machaon.object.type import type_traits, type_definer
 
-fundumental_type = type_definer()
+#fundamental_type = type_definer()
+def fundamental_type(*a, **kw):
+    return lambda x:x
 
 #
 #
 #
-@fundumental_type(
+@fundamental_type(
     "str",
     description="文字列"
 )
@@ -32,7 +34,7 @@ class str_(type_traits):
         return False
 
 #
-@fundumental_type(
+@fundamental_type(
     "bool", 
     description="True/False"
 )
@@ -44,7 +46,7 @@ class bool_(type_traits):
         
 
 #
-@fundumental_type(
+@fundamental_type(
     "int", 
     description="整数"
 )
@@ -55,7 +57,7 @@ class int_(type_traits):
         return int(s)
 
 #
-@fundumental_type(
+@fundamental_type(
     "float", 
     description="浮動小数"
 )
@@ -66,7 +68,7 @@ class float_(type_traits):
         return float(s)
 
 #
-@fundumental_type(
+@fundamental_type(
     "complex", 
     description="複素数"
 )
@@ -77,12 +79,13 @@ class complex_(type_traits):
         return complex(s)
         
 
-del fundumental_type
+del fundamental_type
+
 
 #
 # 区切られた値のリスト
 #
-# machaon.valuetype.separated_value_list(machaon.valuetype.int_, sep=None, )
+# machaon.object.separated_value_list(machaon.object.int_, sep=None, )
 #
 class separated_value_list():
     value_type = list

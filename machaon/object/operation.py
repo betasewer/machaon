@@ -1,7 +1,7 @@
 import ast
 from typing import Dict, Any, List, Sequence
 
-from machaon.valuetype.variable import variable, variable_defs
+from machaon.object.variable import variable, variable_defs
 
 #
 class BadExpressionError(Exception):
@@ -337,7 +337,7 @@ def detailed_operator_name(opr):
         mod = "operator"
     elif not mod:
         mod = "builtin"
-    elif mod.startswith("machaon.valuetype.operation"):
+    elif mod.startswith("machaon.object.operation"):
         mod = "mbuiltin"
 
     return ".".join([mod, opr.__name__])

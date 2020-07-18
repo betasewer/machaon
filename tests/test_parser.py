@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, OptionContext, ArgString
+
 from machaon.process import TempSpirit
 
 def equal_contents(l, r):

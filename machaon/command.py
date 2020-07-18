@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
-from typing import Sequence
+from typing import Sequence, Union
 
-from machaon.process import ProcessTargetClass, ProcessTargetFunction, Spirit
-from machaon.parser import CommandParser
 from machaon.engine import CommandEntry, CommandSet
 
 #
@@ -22,53 +20,50 @@ class CommandBuilder():
         prog=None, 
         description="",
         commandtype="normal",
-        args=None, 
         spirit=None,
-        custom_command_parser=None, 
-        **kwargs
     ):
         self.target = target
         self.prog = prog
         self.description = description
-        self.args = args
         self.spirit = spirit
-        self.custom_cmdparser = custom_command_parser
         self.frommodule = from_module
         self.commandtype = commandtype
-        self.cmdinitargs = kwargs
 
-        self.cmdargs = []
+        self.argdescs = []
         self.lazy_describers = []
 
         #
         if isinstance(target, str) and self.frommodule is None:
             raise ValueError("'target'に識別名(str)を指定した場合、'from_module'にモジュール名の指定が必要です")
 
-    #
-    def __getitem__(self, commandstr):
+    # 引数を定義する
+    def __getitem__(self, commandstr: str):
+        if commandstr and isinstance(commandstr, str):
+            varpart, typepart = commandstr.split(":")
+            cmdtype, *paramnamepart = varpart.split()
+            objtype = typepart.strip()
+        else:
+            raise TypeError()
+
+        paramname = paramnamepart[0] if paramnamepart else None
+        
         def _command(**commandkwargs):
-            cmdtype, *cmds = commandstr.split()
-            self.cmdargs.append((cmdtype, cmds, commandkwargs))
+            self.argdescs.append((cmdtype, paramname, objtype, commandkwargs))
             return self
         return _command
 
-    #
-    def describe(self, 
-        args=None, 
+    # コマンド全体の説明
+    def describe(self,
+        description=None,
         spirit=None,
-        custom_command_parser=None, 
-        **kwargs
     ):
-        if args is not None:
-            self.args = args
+        if description is not None:
+            self.description = description
         if spirit is not None:
             self.spirit = spirit
-        if custom_command_parser is not None:
-            self.custom_cmd_parser = custom_command_parser
-        self.cmdinitargs.update(kwargs)
         return self
 
-    #
+    # 直前に実行されるコマンド初期化処理
     def lazy_describe(self, fn):
         self.lazy_describers.append(fn)
     
@@ -85,66 +80,23 @@ class CommandBuilder():
         return CommandEntry(
             keywords,
             prog = prog,
-            description = self.description, 
             builder = self,
             commandtype = self.commandtype
         )
     
-    #
-    #
-    #
-    def build_target(self, entry):
-        prog = entry.get_prog()
-
-        # コマンドをロードする
-        target = self.target
-        if isinstance(target, str):
-            if isinstance(self.frommodule, str):
-                import importlib
-                mod = importlib.import_module(self.frommodule)
-                member = getattr(mod, target, None)
-                if member is None:
-                    raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(prog, target))
-                target = member
-            
-        # コマンド自体に定義された初期化処理があれば呼ぶ
-        if hasattr(target, "describe"):
-            target.describe(self)
-
-        # 引数パーサの作成       
-        if self.custom_cmdparser is not None:
-            argp = self.custom_cmdparser(prog=prog, **self.cmdinitargs)
-        else:
-            argp = CommandParser(prog=prog, description=self.description)
-
-        for cmdtype, cmds, kwa in self.cmdargs:
-            if cmdtype in ("target", "init", "exit"):
-                kwa["methodtype"] = cmdtype
-                argp.add_arg(*cmds, **kwa)
-            else:
-                raise ValueError("Undefined command type '{}'".format(cmdtype))
-        
-        # spirit
-        spirittype = self.spirit
-        if spirittype is None:
-            spirittype = Spirit
-        
-        # 遅延コマンド初期化処理を定義する
+    def argument_describers(self):
+        for cmdtype, paramname, objtype, cmdargs in self.argdescs:
+            yield cmdtype, paramname, objtype, cmdargs
+    
+    def get_lazy_action_describer(self):
         if self.lazy_describers:
-            def lazy_arg_describe(spirit, argparser):
+            def lazy_arg_describe(spirit, action):
                 for lzydesc in self.lazy_describers:
-                    lzydesc(spirit, argparser)
+                    lzydesc(spirit, action)
         else:
             lazy_arg_describe = None
-        
-        # コマンドで実行する処理
-        if isinstance(target, type):
-            targ = ProcessTargetClass(target, argp, spirittype=spirittype, lazyargdescribe=lazy_arg_describe)
-        else:
-            targ = ProcessTargetFunction(target, argp, spirittype=spirittype, args=self.args, lazyargdescribe=lazy_arg_describe)
-        
-        return targ
-        
+        return lazy_arg_describe
+
 #
 #
 #
@@ -214,12 +166,9 @@ def describe_command(
     description="",
     prog=None, 
     spirit=None,
-    args=None, 
-    custom_command_parser=None, 
     auxiliary=False,
     hidden=False,
     from_module=None,
-    **kwargs
 ):
     typecode = "normal"
     if auxiliary: 
@@ -233,10 +182,7 @@ def describe_command(
         description=description, 
         from_module=from_module,
         spirit=spirit,
-        args=args, 
         commandtype=typecode,
-        custom_command_parser=custom_command_parser,
-        **kwargs
     )
 
 #

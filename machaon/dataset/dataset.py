@@ -1,8 +1,8 @@
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional
 from collections import defaultdict
 
-from machaon.valuetype.variable import variable, variable_defs
-from machaon.valuetype.operation import variable_valuerow_def
+from machaon.object.variable import variable, variable_defs
+from machaon.object.operation import variable_valuerow_def
 from machaon.dataset.filter import DataFilter
 from machaon.dataset.sort import DataSortKey
 from machaon.cui import get_text_width

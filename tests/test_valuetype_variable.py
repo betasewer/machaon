@@ -1,23 +1,23 @@
-from machaon.valuetype import (
-    valtype
+from machaon.object import (
+    types
 )
-from machaon.valuetype.variable import (
+from machaon.object.variable import (
     predicate, variable, variable_defs
 )
 
 def test_predicate():
-    length = predicate(valtype.int, "its length", lambda item:item["length"])
+    length = predicate(types.int, "its length", lambda item:item["length"])
     assert length.get_description() == "its length"
-    assert length.get_type() is valtype.int
+    assert length.get_type() is types.int
     assert not length.is_printer()
     assert length.get_value({"length":32}) == 32
     assert length.value_to_string(32) == "32"
 
 def test_variabledefs():
     defs = variable_defs()
-    width = defs.new(("width", "w"), valtype.int, "its width", lambda item:item["width"])
-    height = defs.new(("height", "h"), valtype.int, "its height", lambda item:item["height"])
-    name = defs.new(("name", "n"), valtype.str, "its name", lambda item:item["name"])
+    width = defs.new(("width", "w"), types.int, "its width", lambda item:item["width"])
+    height = defs.new(("height", "h"), types.int, "its height", lambda item:item["height"])
+    name = defs.new(("name", "n"), types.str, "its name", lambda item:item["name"])
 
     assert defs.get("width") is width
     assert defs.get("n") is name

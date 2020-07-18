@@ -22,16 +22,12 @@ class type_traits():
     __mark = True
     value_type: Callable = str
 
-    def __init__(self, typename, description, args, kwargs, flags):
+    def __init__(self, typename, description, flags):
         self.typename: str = typename
         self.description: str = description
-        self.args = args
-        self.kwargs = kwargs
         self.flags = flags
         
-    def __call__(self, *args, **kwargs): # type: (*Any, **Any) -> type_traits
-        return self.rebind_arguments(args, kwargs)
-    
+    """
     def is_simplex_type(self):
         return (self.flags & TYPE_SIMPLEX) == TYPE_SIMPLEX
     
@@ -40,14 +36,9 @@ class type_traits():
 
     def is_sequence_type(self):
         return (self.flags & TYPE_SEQUENCE) == TYPE_SEQUENCE
+    """
     
-    def _ctor_args(self, args, kwargs):
-        return (self.typename, self.description, args, kwargs, self.flags)
-        
     #
-    def rebind_arguments(self, args, kwargs):
-        return type_traits(*self._ctor_args(args, kwargs))
-
     def get_value_type(self):
         return type(self).value_type
         
@@ -95,9 +86,6 @@ class type_traits_delegation(type_traits):
         else:
             return fn(*fnargs)
     
-    def rebind_arguments(self, args, kwargs):
-        return type_traits_delegation(self.klass, *self._ctor_args(args, kwargs))
-    
     def get_value_type(self):
         return self.klass.value_type
     
@@ -144,7 +132,7 @@ class type_traits_library:
         return self._types[typename]
 
 #
-#
+# 型定義ユーザインターフェース
 #
 class type_definer():
     def __init__(self, typelib=None):
@@ -198,7 +186,7 @@ class type_definer():
         return self
 
 #
-# 型名から型定義を取得する
+# 型取得インターフェース
 #
 class type_generator():
     def __init__(self, typelib):

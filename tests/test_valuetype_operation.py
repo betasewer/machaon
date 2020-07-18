@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.valuetype.operation import (
+from machaon.object.operation import (
     tokenize, TOKEN_BLOCK_BEGIN, TOKEN_BLOCK_END,
     expression, parser_context, eval_context,
     parse_operator_name, modify_operator, resolve_operator,
