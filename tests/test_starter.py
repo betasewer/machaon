@@ -1,3 +1,4 @@
+import pytest
 
 from machaon.starter import TkStarter
 from machaon.command import describe_command_package, describe_command
@@ -16,6 +17,7 @@ def yielder(fn, typename):
             spi.push_object(typename, value)
     return y_
 
+@pytest.mark.skip(True)
 def test_start():
     sta = TkStarter(title="machaon sample app", geometry=(900,500), directory="")
     sta.commandset(

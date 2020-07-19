@@ -2,7 +2,10 @@
 # coding: utf-8
 from typing import Sequence, Union
 
-from machaon.engine import CommandEntry, CommandSet
+from machaon.engine import (
+    CommandEntry, CommandSet, 
+    NORMAL_COMMAND, INSTANT_COMMAND, HIDDEN_COMMAND
+)
 
 #
 # ###################################################################
@@ -39,7 +42,10 @@ class CommandBuilder():
     # 引数を定義する
     def __getitem__(self, commandstr: str):
         if commandstr and isinstance(commandstr, str):
-            varpart, typepart = commandstr.split(":")
+            if ":" in commandstr:   
+                varpart, typepart = commandstr.split(":")
+            else:
+                varpart, typepart = commandstr, "str"
             cmdtype, *paramnamepart = varpart.split()
             objtype = typepart.strip()
         else:
@@ -166,15 +172,15 @@ def describe_command(
     description="",
     prog=None, 
     spirit=None,
-    auxiliary=False,
+    instant=False,
     hidden=False,
     from_module=None,
 ):
-    typecode = "normal"
-    if auxiliary: 
-        typecode = "auxiliary"
+    typecode = NORMAL_COMMAND
+    if instant: 
+        typecode = INSTANT_COMMAND
     if hidden: 
-        typecode = "hidden"
+        typecode = HIDDEN_COMMAND
 
     return CommandBuilder(
         target, 

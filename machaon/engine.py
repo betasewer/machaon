@@ -2,7 +2,7 @@ from typing import List, Sequence, Optional, Any, Tuple, Union, Dict
 from collections import defaultdict
 
 from machaon.cui import fixsplit
-from machaon.action import Action, ActionClass, ActionFunction
+from machaon.action import Action, ActionClassBit, ActionFunctionBit
 from machaon.process import Spirit
 
 #
@@ -11,14 +11,8 @@ from machaon.process import Spirit
 # ###############################################################
 #
 NORMAL_COMMAND = 0
-AUXILIARY_COMMAND = 1
+INSTANT_COMMAND = 1
 HIDDEN_COMMAND = 2
-COMMAND_TYPES: Dict[Union[str, int], int] = {
-    "normal" : NORMAL_COMMAND,
-    "auxiliary" : AUXILIARY_COMMAND,
-    "aux" : AUXILIARY_COMMAND,
-    "hidden" : HIDDEN_COMMAND
-}
 
 cmdsetspec_sigil = '::'
 
@@ -33,14 +27,14 @@ class CommandEntry():
         description: str = "",
         builder: Any = None,
         action: Optional[Action] = None,
-        commandtype: Union[int, str] = NORMAL_COMMAND,
+        commandtype: int = NORMAL_COMMAND,
     ):
         self.action = action
         self.keywords = keywords # 展開済みのキーワード
         self.builder = builder
         self.prog = prog
         self.description = description
-        self.commandtype = COMMAND_TYPES.get(commandtype, commandtype)
+        self.commandtype = commandtype
 
     def load_action(self) -> Optional[Action]:
         if self.action is None and self.builder:
@@ -65,16 +59,18 @@ class CommandEntry():
                 target = member
         
         # コマンド自体に定義された初期化処理があれば呼ぶ
-        if hasattr(target, "describe_function"):
-            target.describe_function(self.builder)
-            action_type = "fn"
-        elif hasattr(target, "describe_class"):
-            target.describe_class(self.builder)
-            action_type = "cl"
+        if hasattr(target, "describe_command"):
+            target.describe_command(self.builder)
+            if hasattr(target, "process_target"):
+                action_type = "c"
+            else:
+                if isinstance(target, type):
+                    target = target()
+                action_type = "f"
         elif isinstance(target, type):
-            action_type = "cl"
+            action_type = "c"
         elif callable(target):
-            action_type = "fn"
+            action_type = "f"
         else:
             raise ValueError("Invalid process action target")
         
@@ -90,17 +86,26 @@ class CommandEntry():
         lazy_arg_describe = self.builder.get_lazy_action_describer()
         
         # コマンドで実行するアクション
-        if action_type == "cl":
-            act: Action = ActionClass(target, prog, description, spirittype=spirittype, lazyargdescribe=lazy_arg_describe)
-        elif action_type == "fn":
-            act = ActionFunction(target, prog, description, spirittype=spirittype, lazyargdescribe=lazy_arg_describe)
+        actbit: Any = None
+        if action_type == "c":
+            actbit = ActionClassBit(target)
+        elif action_type == "f":
+            actbit = ActionFunctionBit(target)
+
+        # Action
+        act = Action(
+            actbit, 
+            prog, description, 
+            spirittype=spirittype, 
+            lazyargdescribe=lazy_arg_describe
+        )
 
         # 引数の定義
         for cmdtype, cmdkwds, objtype, kwargs in self.builder.argument_describers():
             if cmdtype in ("target", "init", "exit"):
-                act.add_argument(cmdtype, cmdkwds, objtype, kwargs)
+                act.add_argument(cmdtype, cmdkwds, objtype, **kwargs)
             elif cmdtype in ("yield",):
-                act.add_result(objtype, kwargs)
+                act.add_result(objtype, **kwargs)
             else:
                 raise ValueError("Undefined command type '{}'".format(cmdtype))
         
@@ -220,11 +225,10 @@ class LoadFailedCommandSet(NotAvailableCommandSet):
 # コマンド解釈の候補
 #
 class CommandExecutionEntry():
-    def __init__(self, target, spirit, parameter, argsource):
+    def __init__(self, target, spirit, parameter):
         self.target = target
         self.spirit = spirit
         self.parameter = parameter
-        self.argsource = argsource
     
     def command_string(self):
         return (self.target.get_prog() + " " + self.parameter).strip()
@@ -251,10 +255,6 @@ class CommandEngine:
     def __init__(self):
         self.commandsets = []
         self.parseerror = None
-    
-    def push_objects(self, objects):
-        for typename, obj in objects:
-            self.objstack[typename].append(obj)
     
     def add_command_set(self, commandset) -> int:
         self.commandsets.append(commandset)
@@ -305,17 +305,11 @@ class CommandEngine:
 
             # 引数生成アクションであるなら、さらに生成する
             if yieldargname:
-                argdef = action.find_argument(yieldargname)
-                if argdef is None:
-                    raise ValueError("コマンド'{}'の引数ではありません: {}".format(commandentry.get_prog(), yieldargname))
-                action = self.objectdesk.create_yield_action(argdef.get_typename())
-                if action is None:
-                    raise ValueError("Fail to create")
+                action = action.create_argument_parser_action(yieldargname)
 
             # 引数をまとめる
             parameter = " ".join([x for x in (optioncompound, *commandargs) if x])
-            argsources = self.objectdesk.stack
-            entry = CommandExecutionEntry(action, spirit, parameter, argsources)
+            entry = CommandExecutionEntry(action, spirit, parameter)
 
             possible_entries.append(entry)
         

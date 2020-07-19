@@ -11,6 +11,7 @@ import subprocess
 from typing import Optional, List, Any
 
 from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet, LoadFailedCommandSet
+from machaon.object.desktop import Object, ObjectDesktop
 from machaon.command import describe_command, CommandPackage
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber, ProcessBadCommand
 from machaon.package.package import package_manager, PackageEntryLoadError
@@ -29,6 +30,7 @@ class AppRoot:
     def __init__(self):
         self.ui = None
         self.cmdengine = None 
+        self.objdesktop = None
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
         self.pkgmanager = None
@@ -40,6 +42,7 @@ class AppRoot:
             self.ui.init_with_app(self)
         self.processhive = ProcessHive()
         self.cmdengine = CommandEngine()
+        self.objdesktop = ObjectDesktop()
         self.pkgmanager = package_manager(directory)
         self.pkgmanager.add_to_import_path()
     
@@ -220,7 +223,7 @@ class AppRoot:
         result = None
         invocation = None
         try:
-            invocation = process.execute(execentry)
+            invocation = process.execute(execentry, self.objdesktop)
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
         except Exception as execexcep:
@@ -235,8 +238,10 @@ class AppRoot:
                 # アプリコードからの例外
                 self.ui.on_error_process(spirit, process, e, timing = "execute")
 
-            # オブジェクトを得る
-            self.cmdengine.push_objects(process.get_bound_objects(running=True))
+            # 生成されたオブジェクトを得る
+            for o in process.get_bound_objects(running=True):
+                self.objdesktop.push(o)
+            
             # 最後のtargetの返り値を返す
             result = invocation.get_last_result()
 

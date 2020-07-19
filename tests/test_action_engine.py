@@ -1,7 +1,9 @@
 from machaon.engine import CommandEntry, CommandSet, CommandEngine, HIDDEN_COMMAND
 from machaon.command import describe_command
 from machaon.process import Spirit, TempSpirit
-from machaon.action import Action, ActionFunction, ActionClass, ActionInvocation, ActionArgDef
+from machaon.action import Action, ActionFunctionBit, ActionClassBit, ActionInvocation, ActionArgDef
+
+from machaon.object.desktop import ObjectDesktop, Object
 
 from collections import defaultdict
 import pytest
@@ -18,18 +20,17 @@ def equal_contents(l, r):
 def test_invocation_arg():
     spi = TempSpirit()
 
-    args = defaultdict(list)
-    args["int"].append(3)
-    args["int"].append(100)
-    args["ip-address"].append((127,0,0,1))
+    args = ObjectDesktop()
+    args.push(Object("obj-1", "int", 3))
+    args.push(Object("obj-2", "int", 100))
+    args.push(Object("obj-3", "complex", 3+5j))
 
     inv = ActionInvocation(spi, "parameter", args)
     
-    assert inv.pop_arg("int") == 100
-    assert inv.pop_arg("int") == 3
-    assert inv.pop_arg("ip-address") == (127,0,0,1)
+    assert inv.pop_object("int").value == 100
+    assert inv.pop_object("int").value == 100
+    assert inv.pop_object("complex").value == 3+5j
     assert inv.pop_parameter() == "parameter"
-
 
 #
 #
@@ -94,25 +95,25 @@ def test_built_actionfunction_cmdentry():
         description="Described description.",
         prog="described-prog",
         hidden=False
-    )["target input-filepath": "filepath"](
+    )["target input-filepath: filepath"](
         help="入力ファイル"
-    )["target depth": "int"](
+    )["target depth: int"](
         help="探索深度"
-    )["yield": "research-map"](
+    )["yield: research-map"](
         help="調査結果"
     )
     act = entry.load_action()
 
-    assert isinstance(act, ActionFunction)
+    assert isinstance(act.action, ActionFunctionBit)
     assert act.get_description() == "Described description."
     assert act.get_prog() == "first-prog"
     assert act.spirittype is Spirit
 
     assert act.argdefs["target"][0].typename == "filepath"
-    assert act.argdefs["target"][0].paramname == "input-filepath"
+    assert act.argdefs["target"][0].name == "input-filepath"
     assert act.argdefs["target"][0].help == "入力ファイル"
     assert act.argdefs["target"][1].typename == "int"
-    assert act.argdefs["target"][1].paramname == "depth"
+    assert act.argdefs["target"][1].name == "depth"
     assert act.argdefs["target"][1].help == "探索深度"
 
     assert act.resdefs[0].typename == "research-map"
@@ -185,7 +186,6 @@ def test_engine_cmdsetspec(a_cmdset):
     assert len(eng.expand_command_head("command::beast")) == 1
     assert len(eng.expand_command_head("command::test")) == 1
     assert len(eng.expand_command_head("command::")) == 1
- 
 
 
 #

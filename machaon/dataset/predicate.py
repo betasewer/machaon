@@ -67,11 +67,11 @@ def _search_operators(specs, obj, title, testrunval=None):
 def list_predicate_operations(type_traits=None, *, value_type=None, testrun=False):
     specs = []
     if testrun:
-        testval = type_traits.value_type()
+        testval = TypeTraits.value_type()
     else:
         testval = None
     
-    # type_traitsから検索
+    # TypeTraitsから検索
     _search_operators(specs, type_traits, str(type_traits))
     # -- type_traits専用のメンバを除外する
     specs = [(x,_a,_b) for (x,_a,_b) in specs if x not in type_traits_members] 

@@ -2,7 +2,7 @@ import os
 import re
 from inspect import signature
 
-from typing import Any, Sequence, List, Dict, Union, Callable
+from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional
 
 #
 #
@@ -10,42 +10,34 @@ from typing import Any, Sequence, List, Dict, Union, Callable
 #
 #
 TYPE_SIMPLEX = 0x01
-TYPE_COMPLEX = 0x02
-TYPE_SEQUENCE = TYPE_COMPLEX | 0x04
-TYPE_CONVKLASS = 0x10
-TYPE_CONVWITHSPIRIT = 0x20
+TYPE_SEQUENCE = 0x04
 
 #
 #
 #
-class type_traits():
+class TypeTraits():
     __mark = True
     value_type: Callable = str
 
-    def __init__(self, typename, description, flags):
+    def __init__(self, typename, description, flags=TYPE_SIMPLEX):
         self.typename: str = typename
         self.description: str = description
         self.flags = flags
         
-    """
     def is_simplex_type(self):
         return (self.flags & TYPE_SIMPLEX) == TYPE_SIMPLEX
     
-    def is_compound_type(self):
-        return (self.flags & TYPE_COMPLEX) == TYPE_COMPLEX
-
     def is_sequence_type(self):
         return (self.flags & TYPE_SEQUENCE) == TYPE_SEQUENCE
-    """
     
     #
     def get_value_type(self):
         return type(self).value_type
         
-    def convert_from_string(self, arg: str, spirit=None):
+    def convert_from_string(self, arg: str):
         return self.get_value_type()(arg)
 
-    def convert_to_string(self, v: Any, spirit=None):
+    def convert_to_string(self, v: Any):
         if v is None:
             return ""
         else:
@@ -60,40 +52,36 @@ class type_traits():
 #
 #
 #
-class type_traits_delegation(type_traits):
+class TypeTraitsDelegation(TypeTraits):
     class InstantiateError(Exception):
         pass
 
-    def __init__(self, klass, typename, description, args, kwargs, flags):
-        super().__init__(typename, description, args, kwargs, flags)
+    def __init__(self, klass, typename, description, flags):
+        super().__init__(typename, description, flags)
         self.klass = klass
-        if getattr(self.klass, "with_spirit", False):
-            self.flags += TYPE_CONVWITHSPIRIT
         self._inst = None
     
-    def delegate(self, fnname, *fnargs, spirit=None):
+    def delegate(self, fnname, *fnargs):
         if self._inst is None:
             try:
-                self._inst = self.klass(*self.args, **self.kwargs)
+                self._inst = self.klass()
             except Exception as e:
-                raise type_traits_delegation.InstantiateError(self.typename, e)
+                raise TypeTraitsDelegation.InstantiateError(self.typename, e)
         
         fn = getattr(self._inst, fnname, None)
         if fn is None:
+            # TypeTraitsクラスのデフォルト定義を用いる
             return getattr(super(), fnname)(*fnargs)
-        elif spirit and self.flags & TYPE_CONVWITHSPIRIT:
-            return fn(*fnargs, spirit)
-        else:
-            return fn(*fnargs)
+        return fn(*fnargs)
     
     def get_value_type(self):
         return self.klass.value_type
     
-    def convert_from_string(self, arg: str, spirit=None):
-        return self.delegate("convert_from_string", arg, spirit=spirit)
+    def convert_from_string(self, arg: str):
+        return self.delegate("convert_from_string", arg)
     
-    def convert_to_string(self, arg: Any, spirit=None):
-        return self.delegate("convert_to_string", arg, spirit=spirit)
+    def convert_to_string(self, arg: Any):
+        return self.delegate("convert_to_string", arg)
     
     def get_operator(self, name):
         return get_type_operator(self.klass, name)
@@ -113,11 +101,11 @@ class BadTypenameError(Exception):
 #
 # 名前を登録して型を検索する
 #
-class type_traits_library:
+class TypeLibrary:
     def __init__(self):
-        self._types: Dict[str, type_traits] = {}
+        self._types: Dict[str, TypeTraits] = {}
     
-    def define(self, typename: str, typeobj) -> type_traits:
+    def define(self, typename: str, typeobj) -> TypeTraits:
         if typename in self._types:
             raise ValueError("型'{}'は既に定義されています".format(typename))
         self._types[typename] = typeobj
@@ -126,89 +114,111 @@ class type_traits_library:
     def exists(self, typename:str) -> bool:
         return typename in self._types
     
-    def get(self, typename: str) -> type_traits:
+    def get(self, typename: str, fallback=False) -> Optional[TypeTraits]:
         if typename not in self._types:
+            if fallback:
+                return None
             raise BadTypenameError(typename)
         return self._types[typename]
-
-#
-# 型定義ユーザインターフェース
-#
-class type_definer():
-    def __init__(self, typelib=None):
-        self._lib = typelib
-        self._type = TYPE_SIMPLEX
-
-    def define(self, traits_or_class, typename, description, args, kwargs, flags):
-        flags = self._type + (flags & 0xFFF0)
-
-        t: Any = None # 型オブジェクトのインスタンス
-        if isinstance(traits_or_class, type_traits):
-            if typename is None:
-                typename = traits_or_class.typename
-            t = traits_or_class
-        else:
-            if typename is None:
-                typename = traits_or_class.__name__
-            if hasattr(traits_or_class, "_type_traits__mark"):
-                t = traits_or_class(typename, description, args, kwargs, flags)
-            else:
-                t = type_traits_delegation(traits_or_class, typename, description, args, kwargs, flags)
-        
-        if self._lib:
-            self._lib.define(typename, t)
-        
-        self._type = TYPE_SIMPLEX
-        return t
-
-    def __call__(self,
-        name = None, 
-        description = "",
-        args = (), kwargs = {},
-        flags = 0,
-        traits = None,
-    ):
-        if traits is not None:
-            return self.define(traits, name, description, args, kwargs, flags)
-        else:
-            def _deco(target):
-                return self.define(target, name, description, args, kwargs, flags)
-            return _deco
     
-    @property
-    def compound(self):
-        self._type = TYPE_COMPLEX
-        return self
-
-    @property
-    def sequence(self):
-        self._type = TYPE_SEQUENCE
-        return self
+    def types(self) -> ItemsView[str, TypeTraits]:
+        return self._types.items()
 
 #
 # 型取得インターフェース
 #
-class type_generator():
-    def __init__(self, typelib):
-        self._typelib: type_traits_library = typelib
+class TypeModule():
+    def __init__(self):
+        self._typelib: TypeLibrary = TypeLibrary()
+        self._define_flags_typebit = 0
+    
+    #
+    def normalize_typename(self, name: str) -> str:
+        return name.replace("_","-")
 
-    def __getitem__(self, typecode: Union[None, str, type, type_traits] = None) -> type_traits:
+    #
+    # 型を取得する
+    #
+    def get(self, typecode: Union[None, str, type, TypeTraits] = None, fallback = False) -> Optional[TypeTraits]:
+        if self._typelib is None:
+            raise ValueError("No type library set up")
         if typecode is None:
             return self._typelib.get("str")
         elif isinstance(typecode, str):
-            return self._typelib.get(typecode)
+            typename = self.normalize_typename(typecode)
+            return self._typelib.get(typename, fallback)
         elif isinstance(typecode, type):
-            if self._typelib.exists(typecode.__name__):
-                return self._typelib.get(typecode.__name__)
-            else:
-                return self._typelib.get("constant")(typecode)
-        elif isinstance(typecode, type_traits):
+            typename = self.normalize_typename(typecode.__name__)
+            return self._typelib.get(typename, fallback)
+        elif isinstance(typecode, TypeTraits):
             return typecode
         else:
-            raise ValueError("No match type exists with '{}'".format(typecode))
+            raise BadTypenameError("No match type exists with '{}'".format(typecode))
+    
+    # objtypes[<typename>] -> TypeTraits
+    def __getitem__(self, typecode) -> TypeTraits:
+        return self.get(typecode)
 
-    def __getattr__(self, name) -> type_traits:
-        return self[name.replace("_","-")]
+    # objtypes.<typename> -> TypeTraits
+    def __getattr__(self, name) -> TypeTraits:
+        typename = self.normalize_typename(name)
+        return self._typelib.get(typename)
+
+    #
+    # 型を定義する
+    #
+    def define(self, 
+        name = None, 
+        description = "",
+        flags = 0,
+        traits = None,
+    ):
+        # デコレータになる
+        if traits is None:
+            def _bound(traits_):
+                return self.define(name, description, flags, traits_)
+            return _bound
+
+        # フラグ
+        flags = self._define_flags_typebit + (flags & 0xFFF0)
+
+        # 登録処理
+        t: Any = None # 型オブジェクトのインスタンス
+        if isinstance(traits, TypeTraits):
+            # Traitsまたは派生型のインスタンスが渡された
+            if name is None:
+                name = traits.typename
+            t = traits
+        else:
+            if name is None:
+                name = traits.__name__
+            if hasattr(traits, "_TypeTraits__mark"):
+                # Traitsまたは派生型の型が渡された
+                t = traits(name, description, flags)
+            else:
+                # 実装移譲先のクラス型が渡された
+                t = TypeTraitsDelegation(traits, name, description, flags)
+        
+        if self._typelib:
+            # 登録
+            self._typelib.define(name, t)
+        
+        self._define_flags_typebit = TYPE_SIMPLEX
+        return t
+
+    @property
+    def sequence(self):
+        self._define_flags_typebit = TYPE_SEQUENCE
+        return self
+    
+    #
+    #
+    #
+    def move(self, other): # type: (TypeModule) -> None
+        for name, typetraits in other._typelib.types():
+            self._typelib.define(name, typetraits)
+        del other
+
 
 #
 # 演算子の列挙

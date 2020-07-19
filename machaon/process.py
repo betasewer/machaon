@@ -8,6 +8,7 @@ import time
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator
 
 from machaon.action import ActionInvocation
+from machaon.object.desktop import Object
 from machaon.dataset import DataViewFactory
 from machaon.cui import test_yesno, MiniProgressDisplay
 
@@ -21,6 +22,7 @@ from machaon.cui import test_yesno, MiniProgressDisplay
 class Process:
     def __init__(self, command):
         self.command = command
+        self.index = None
         # 
         self.target = None
         self.spirit = None
@@ -37,23 +39,31 @@ class Process:
         self.last_input = None
         # 付属データ
         self.bound_data = None
-        self.bound_objects = [] # Tuple[str, Any]
+        self.bound_objects = []
         
     def run(self, app):
         self.thread = threading.Thread(target=app.execute_process, args=(self,), daemon=True)
         self.stop_flag = False
         self.thread.start()
     
-    def execute(self, execentry):
+    def execute(self, execentry, objdesktop) -> ActionInvocation:
         self.target = execentry.target
         self.spirit = execentry.spirit
         self.parameter = execentry.parameter
 
         # 操作を実行する
-        invocation = ActionInvocation(execentry.spirit, execentry.parameter, execentry.argsource)
+        invocation = ActionInvocation(execentry.spirit, execentry.parameter, objdesktop)
         self.target.invoke(invocation)
         self.last_invocation = invocation
         return invocation
+    
+    def set_index(self, index):
+        if self.index is not None:
+            raise ValueError("Process.index has already set.")
+        self.index = index
+    
+    def get_index(self):
+        return self.index
     
     def get_target(self):
         if self.target is None:
@@ -109,8 +119,8 @@ class Process:
     def is_interrupted(self):
         return self.stop_flag
     
-    def test_thread_ident(self, ident):
-        return self.thread.ident == ident
+    def get_thread_ident(self):
+        return self.thread.ident
 
     #
     # メッセージ
@@ -170,13 +180,17 @@ class Process:
     #
     #
     #
-    def push_object(self, typename, value):
-        self.bound_objects.append((typename, value))
+    def push_object(self, typename, value, name=None):        
+        if name is None:
+            obji = len(self.bound_objects)
+            name = "object-{}-{}".format(self.index, obji)
+        o = Object(name, typename, value)
+        self.bound_objects.append(o)
     
-    def get_bound_objects(self, running=False):
+    def get_bound_objects(self, running=False) -> List[Object]:
         if not running and self.is_running():
             # 動作中はアクセスできない
-            return None
+            return []
         return self.bound_objects
     
 #
@@ -407,8 +421,8 @@ class Spirit():
         return dataview
     
     #
-    def push_object(self, typename, value):
-        self.process.push_object(typename, value)
+    def push_object(self, typename, value, name=None):
+        self.process.push_object(typename, value, name)
     
     #
     def select_process_chamber(self, index=None):
@@ -625,8 +639,8 @@ class ProcessScreenCanvas():
 #
 class ProcessChamber:
     def __init__(self, index, process):
-        self.index = index
         self.process = process
+        self.process.set_index(index)
         self.handled_msgs = []
         
     def is_failed(self):
@@ -641,15 +655,15 @@ class ProcessChamber:
     def is_interrupted(self):
         return self.process.stop_flag
 
-    def interrupt(self):
+    def interrupt(self): 
         if self.process.is_waiting_input():
             self.process.tell_input_end("")
         self.process.tell_interruption()
 
-    def is_waiting_input(self):
+    def is_waiting_input(self): # -
         return self.process.is_waiting_input()
     
-    def finish_input(self, text):
+    def finish_input(self, text): # -
         self.process.tell_input_end(text)
 
     def handle_message(self):
@@ -657,25 +671,25 @@ class ProcessChamber:
         self.handled_msgs.extend(msgs)
         return msgs
 
-    def get_message(self):
+    def get_message(self): # -
         return self.handled_msgs
     
-    def get_command(self):
+    def get_command(self): # -
         return self.process.get_command_string()
     
-    def get_process(self):
+    def get_process(self): # -
         return self.process
     
     # ヌルの可能性あり
-    def get_bound_spirit(self):
+    def get_bound_spirit(self): # -
         return self.process.get_spirit()
     
     # ヌルの可能性あり
-    def get_bound_data(self, running=False):
+    def get_bound_data(self, running=False): # -
         return self.process.get_data(running=running)
 
-    def get_index(self):
-        return self.index
+    def get_index(self): # -
+        return self.process.get_index()
 
 #
 #
