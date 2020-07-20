@@ -134,26 +134,31 @@ class FilePath():
         return stat.filemode(self.stat.st_mode)
     
     @classmethod
-    def describe(cls, ref):
-        ref.default_columns(
-            table = ("mode", "ftype", "modtime", "size", "name"),
-            wide = ("ftype", "name",),
-            link = "path"
-        )["name n"](
-            disp="ファイル名"
-        )["nxname nx"](
-            disp="拡張子無しのファイル名"
-        )["path p"](
-            disp="パス"
-        )["ftype t"](
-            disp="タイプ"
-        )["modtime"](
-            disp="更新日時",
+    def describe_type(cls, describe):
+        describe(
+            typename="filepath",
+            description="",
+        )["member name n"](
+            name="ファイル名"
+        )["member nxname nx"](
+            name="拡張子無しのファイル名"
+        )["member path p"](
+            name="パス"
+        )["member ftype t"](
+            name="タイプ"
+        )["member modtime"](
+            name="更新日時",
             type="datetime"
-        )["size"](
-            disp="サイズ"
-        )["mode"](
-            disp="ファイルモード"
+        )["member size"](
+            name="サイズ"
+        )["member mode"](
+            name="ファイルモード"
+        )["alias long"](
+            "mode", "ftype", "modtime", "size", "name"
+        )["alias short"](
+            "ftype", "name"
+        )["alias link"](
+            "path",
         )
 
 
@@ -185,8 +190,7 @@ def filelist(app, pattern=None, long=False, howsort=None, recurse=1, silent=Fals
         app.message(cd+"\n")
 
     view = "/table" if long else "/wide"
-    app.create_data(paths, view)
-    app.dataview()
+    app.push_object_table(paths, view)
 
 #
 #

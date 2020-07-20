@@ -30,6 +30,7 @@ class InvalidColumnNames(Exception):
 #
 #
 #
+"""
 class DataMethod():
     def __init__(self, name):
         self.name = name
@@ -37,6 +38,7 @@ class DataMethod():
     def __call__(self, item):
         p = getattr(item, self.name)
         return p()
+"""
 
 #
 #

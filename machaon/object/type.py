@@ -9,8 +9,91 @@ from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Option
 #
 #
 #
-TYPE_SIMPLEX = 0x01
-TYPE_SEQUENCE = 0x04
+
+#
+#
+#
+class TypeMember():
+    class PRINTER():
+        pass
+    class UNDEFINED():
+        pass
+
+    def __init__(self, name, typecode, help="", method=None):
+        self.name = name
+        self.typecode = typecode
+        self.help = help
+        self.method = method or TypeMember.UNDEFINED
+    
+    def get_name(self):
+        return self.name
+    
+    def get_typecode(self):
+        return self.typecode
+
+    def is_printer(self):
+        return self.typecode is TypeMember.PRINTER
+        
+    #
+    def get_value(self, obj):
+        if self.is_printer():
+            return TypeMember.PRINTER
+        else:
+            return self.method(obj.value)
+    
+    def get_print(self, obj, spirit):
+        if self.is_printer():
+            self.method(obj.value, spirit)
+        else:
+            spirit.message(self.get_value(obj.value))
+
+#
+#
+#
+class TypeOperator:
+    class UNDEFINED():
+        pass
+
+    def __init__(self, name, typecode, help="", method=None):
+        self.name = name
+        self.rtypecode = typecode
+        self.help = help
+        self.method = method or TypeOperator.UNDEFINED
+    
+    def get_name(self):
+        return self.name
+    
+    def get_result_typecode(self):
+        return self.rtypecode
+
+    #
+    def operate(self, *objects):
+        args = [x.value for x in objects]
+        return self.method(*args)
+
+#
+#
+#
+class TypeAlias:
+    def __init__(self, name, dest):
+        self.name = name
+        self.dest = dest
+    
+    def get_name(self):
+        return self.name
+    
+    def get_destination(self):
+        return self.dest
+
+#
+class MethodCall():
+    def __init__(self, name):
+        self.name = name
+
+    def __call__(self, *args):
+        if len(args)==0:
+            raise ValueError("Not enough argument")
+        return getattr(args[0], self.name)(*args[1:])
 
 #
 #
@@ -19,18 +102,12 @@ class TypeTraits():
     __mark = True
     value_type: Callable = str
 
-    def __init__(self, typename, description, flags=TYPE_SIMPLEX):
+    def __init__(self, typename, description="", flags=0):
         self.typename: str = typename
         self.description: str = description
         self.flags = flags
-        
-    def is_simplex_type(self):
-        return (self.flags & TYPE_SIMPLEX) == TYPE_SIMPLEX
-    
-    def is_sequence_type(self):
-        return (self.flags & TYPE_SEQUENCE) == TYPE_SEQUENCE
-    
-    #
+        self._members: Dict[str, Any] = {}
+
     def get_value_type(self):
         return type(self).value_type
         
@@ -42,31 +119,120 @@ class TypeTraits():
             return ""
         else:
             return str(v)
+    
+    # 
+    #
+    #
+    def get_element(self, elemprefix, name):
+        meth = self._members.get("{}_{}".format(elemprefix, name), None)
+        if meth:
+            return meth
 
+    def enum_elements(self, elemprefix):
+        prefix = elemprefix + "_"
+        for name in self._members.keys():
+            if name.startswith(prefix):
+                yield self._members[name]
+                
+    def get_member(self, name):
+        return self.get_element("member", name)
+    
+    def enum_members(self, name):
+        return self.enum_elements("member")
+    
+    def new_member(self, names, type=None, help="", method=None):
+        top, *aliass = names
+        self._members["member_"+top] = TypeMember(top, type, help, method)
+        for a in aliass:
+            self.new_alias(a, top)
+            
     def get_operator(self, name):
-        return get_type_operator(self, name)
+        return self.get_element("operator", name)
 
     def enum_operators(self):
-        return enum_type_operators(self)
+        return self.enum_elements("operator")
+        
+    def new_operator(self, names, return_type=None, help="", method=None):
+        top, *aliass = names
+        self._members["operator_"+top] = TypeOperator(top, return_type, help, method)
+        for a in aliass:
+            self.new_alias(a, top)
+        
+    def get_alias(self, name):
+        return self.get_element("memberalias", name)
 
+    def enum_alias(self):
+        return self.enum_elements("memberalias")
+    
+    def new_alias(self, name, dest):
+        self._members["memberalias_"+name] = TypeAlias(name, dest)
+
+    #
+    # 型定義構文用のメソッド
+    #
+    #
+    def describe(self, 
+        typename,
+        description = "",
+    ):
+        self.typename = typename
+        self.description = description
+        return self 
+    
+    def __getitem__(self, declaration):
+        if not isinstance(declaration, str):
+            raise TypeError("declaration")
+        
+        head, tail = declaration.split(maxsplit=1)
+        if head == "member":
+            names = tail.split()
+            def member_(**kwargs):
+                self.new_member(*names, **kwargs)
+                return self
+            return member_
+
+        elif head == "alias":
+            origname = tail.strip()
+            def alias_(*names):
+                self.new_alias(origname, names)
+                return self
+            return alias_
+
+        elif head == "operator":
+            names = tail.split()
+            def opr_(**kwargs):
+                self.new_operator(*names, **kwargs)
+                return self
+            return opr_
+
+        else:
+            raise ValueError("Unknown declaration type '{}'".format(head))
 #
 #
 #
 class TypeTraitsDelegation(TypeTraits):
-    class InstantiateError(Exception):
+    class InstantiationError(Exception):
         pass
 
-    def __init__(self, klass, typename, description, flags):
-        super().__init__(typename, description, flags)
+    def __init__(self, klass: Any):
+        typename = klass.__name__
+        super().__init__(typename, typename)
         self.klass = klass
         self._inst = None
+        
+
+        # describe
+        if not hasattr(self.klass, "describe_type"):
+            raise ValueError("クラスメソッド 'describe_type' が型定義のために必要です")
+        
+        self.klass.describe_type(self)
     
     def delegate(self, fnname, *fnargs):
         if self._inst is None:
             try:
                 self._inst = self.klass()
             except Exception as e:
-                raise TypeTraitsDelegation.InstantiateError(self.typename, e)
+                raise TypeTraitsDelegation.InstantiationError(self.typename, e)
         
         fn = getattr(self._inst, fnname, None)
         if fn is None:
@@ -82,12 +248,9 @@ class TypeTraitsDelegation(TypeTraits):
     
     def convert_to_string(self, arg: Any):
         return self.delegate("convert_to_string", arg)
-    
-    def get_operator(self, name):
-        return get_type_operator(self.klass, name)
 
-    def enum_operators(self):
-        return enum_type_operators(self.klass)
+        
+
 
     #def create_prompt(self, arg, spirit):
     #    # クラス：インスタンスを生成してから実行
@@ -156,11 +319,11 @@ class TypeModule():
             raise BadTypenameError("No match type exists with '{}'".format(typecode))
     
     # objtypes[<typename>] -> TypeTraits
-    def __getitem__(self, typecode) -> TypeTraits:
+    def __getitem__(self, typecode) -> Optional[TypeTraits]:
         return self.get(typecode)
 
     # objtypes.<typename> -> TypeTraits
-    def __getattr__(self, name) -> TypeTraits:
+    def __getattr__(self, name) -> Optional[TypeTraits]:
         typename = self.normalize_typename(name)
         return self._typelib.get(typename)
 
@@ -197,7 +360,7 @@ class TypeModule():
                 t = traits(name, description, flags)
             else:
                 # 実装移譲先のクラス型が渡された
-                t = TypeTraitsDelegation(traits, name, description, flags)
+                t = TypeTraitsDelegation(traits)
         
         if self._typelib:
             # 登録
@@ -210,7 +373,7 @@ class TypeModule():
     def sequence(self):
         self._define_flags_typebit = TYPE_SEQUENCE
         return self
-    
+
     #
     #
     #

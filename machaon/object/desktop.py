@@ -6,18 +6,23 @@ from machaon.object.type import TypeTraits
 
 #
 class Object():
-    def __init__(self, name, type=None, value=""): # デフォルトは空文字列
+    def __init__(self, name, typecode=None, value=""): # デフォルトは空文字列
         self.value: Any = value
         self.name: str = name
-        self.type: TypeTraits = types.get(type, fallback=True)
+        self.type: TypeTraits = types.get(typecode, fallback=True)
+        
         if self.type is None:
-            if isinstance(type, str):
-                self.type = TypeTraits(type, "<Temporal type {}>".format(type))
+            if isinstance(typecode, str):
+                self.type = TypeTraits(typecode, "<Temporal type {}>".format(typecode))
+            elif isinstance(typecode, type) and hasattr(typecode, "describe_type"):
+                t = TypeTraitsBuilder()
+                typecode.describe_type(t)
+                self.type = t.build()
             else:
                 raise ValueError("Invalid Type '{}'".format(type))
         
     def __repr__(self):
-        return "<Object '{}' = {} [{}]>".format(self.name, self.value, self.type.typename)
+        return "<Object {} '{}' = {}>".format(self.type.typename, self.name, self.value)
 
 #
 class ObjectDesktop():

@@ -38,7 +38,6 @@ class Process:
         self.event_inputend = threading.Event()
         self.last_input = None
         # 付属データ
-        self.bound_data = None
         self.bound_objects = []
         
     def run(self, app):
@@ -180,12 +179,16 @@ class Process:
     #
     #
     #
-    def push_object(self, typename, value, name=None):        
+    def push_object(self, value, typename=None, name=None):        
         if name is None:
             obji = len(self.bound_objects)
             name = "object-{}-{}".format(self.index, obji)
         o = Object(name, typename, value)
         self.bound_objects.append(o)
+    
+    def push_object_table(self, values, *args, name=None, **kwargs):        
+        dataview = DataViewFactory(datas, *command_args, **command_kwargs)
+        self.push_object(dataview, typename, name=name)
     
     def get_bound_objects(self, running=False) -> List[Object]:
         if not running and self.is_running():
@@ -421,12 +424,11 @@ class Spirit():
         return dataview
     
     #
-    def push_object(self, typename, value, name=None):
-        self.process.push_object(typename, value, name)
+    def push_object(self, value, typename=None, name=None):
+        self.process.push_object(value, typename, name)
     
-    #
-    def select_process_chamber(self, index=None):
-        return self.app.select_chamber(index)
+    def push_object_table(self, datas, *command_args, **command_kwargs):
+        self.process.push_object_table(datas, *command_args, **command_kwargs)
 
 #
 #
