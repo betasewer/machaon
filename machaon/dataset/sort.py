@@ -1,13 +1,16 @@
 from typing import Sequence, List, Any, Tuple
-from machaon.dataset.predicate import Predicate, BadPredicateError
+
+#
+class BadPredicateError(Exception):
+    pass
 
 #
 #
 #
-class KeyWrapper():
-    def __init__(self, value, opr):
+class ValueWrapper():
+    def __init__(self, value, compare_operator):
         self.value = value
-        self.ltopr = opr
+        self.compare = compare_operator
     
     def __lt__(self, right) -> bool:
         left = self
@@ -15,7 +18,7 @@ class KeyWrapper():
             return True
         elif right.value is None:
             return False
-        return left.ltopr(left.value, right.value)
+        return left.compare(left.value, right.value)
     
     def __eq__(self, right) -> bool:
         left = self
@@ -24,46 +27,44 @@ class KeyWrapper():
 #
 #
 #
-class DataSortKey():
-    def __init__(self, ref, expression: str, dispmode=False):
-        self.ref = ref
-        self.failure = None
-
-        columnnames = []
-        sortspec = []
-        parts = expression.split()
-        for part in parts:
-            # 昇順（デフォ）か降順か
-            ascsort = True
-            if part.startswith("~"):
-                ascsort = False
-                part = part[1:]
-
-            # 述語を取得する
-            if part == "_":
-                predname, pred = self.ref.get_first_pred()
-            else:
-                pred = self.ref.find_pred(part)
-                predname = part
-            if pred is None:
-                raise BadPredicateError(part)
-
-            # 比較演算子（less）を決定
-            if ascsort:
-                ltopr = pred.parse_operation("lt")
-            else:
-                ltopr = pred.parse_operation("~lt")
-
-            sortspec.append((ascsort, ltopr))
-            columnnames.append(predname)
-
-        self.related_columns: List[str] = columnnames
-        self.sortspec = sortspec
+class Sortkey():
+    def __init__(self):
+        self.predicates: List[Tuple[str, Any, bool]] = [] # (predicate, lessthan-operator, isascend)
     
-    def __call__(self, row: Sequence[Any]) -> Tuple[KeyWrapper, ...]:
-        if len(self.related_columns) != len(row):
-            raise ValueError("invalid row length")
-        return tuple(KeyWrapper(x, opr) for x, (_, opr) in zip(row, self.sortspec))
+    def add(self, predicate, lessthan_opr, ascend):
+        self.predicates.append((predicate, lessthan_opr, ascend))
     
-    def get_related_columns(self) -> List[str]:
-        return self.related_columns
+    def __call__(self, row: Sequence[Any]) -> Tuple[ValueWrapper, ...]:
+        return tuple(ValueWrapper(v, ltopr) for v, (_, ltopr, _) in zip(row, self.predicates))
+    
+    def get_related_members(self) -> List[str]:
+        return [x for (x,_,_) in self.predicates]
+
+#
+#
+#
+def parse_sortkey(expression: str, dataset, objdesk):
+    key = Sortkey()
+
+    for predicate in expression.split(","):
+        # 昇順（デフォ）か降順か
+        if predicate.startswith("~"):
+            ascend = False
+            predicate = predicate[1:]
+        else:
+            ascend = True
+
+        # 述語を取得する
+        if predicate == "" and not ascend:
+            predicate = dataset.get_top_column_name()
+        
+        column = dataset.make_column(predicate, objdesk)
+        if column is None:
+            raise BadPredicateError(predicate)
+
+        # 比較演算子（less）を決定
+        lessthan_opr = column.make_compare_operator(lessthan=ascend)
+
+        key.add(predicate, lessthan_opr, ascend)
+    
+    return key

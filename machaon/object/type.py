@@ -11,70 +11,63 @@ from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Option
 #
 
 #
+class BadTypename(Exception):
+    pass
+#
+class BadMethodName(Exception):
+    pass
+#
+class BadMethodDelegation(Exception):
+    pass
+
 #
 #
-class TypeMember():
+#
+class TypeMethod():
     class PRINTER():
         pass
     class UNDEFINED():
         pass
 
-    def __init__(self, name, typecode, help="", method=None):
-        self.name = name
-        self.typecode = typecode
-        self.help = help
-        self.method = method or TypeMember.UNDEFINED
+    def __init__(self, name, arity, return_typecode, help="", target=None):
+        self.name: str = name
+        self.arity: int = arity
+        self.return_typecode: Union[str, TypeMethod.PRINTER] = return_typecode
+        self.help: str = help
+        self.target: str = target or self.name
     
     def get_name(self):
         return self.name
+        
+    def get_result_typecode(self):
+        return self.return_typecode
     
-    def get_typecode(self):
-        return self.typecode
+    def get_help(self):
+        return self.help
 
     def is_printer(self):
-        return self.typecode is TypeMember.PRINTER
-        
-    #
-    def get_value(self, obj):
+        return self.return_typecode is TypeMethod.PRINTER
+    
+    def resolve(self, this_type):
+        return this_type.get_method_delegation(self.target)
+    
+    def call(self, this_type, *args):
         if self.is_printer():
-            return TypeMember.PRINTER
-        else:
-            return self.method(obj.value)
-    
-    def get_print(self, obj, spirit):
+            raise TypeError("表示専用メンバ'{}'の値を参照しようとしました".format(self.target))
+
+        m = this_type.get_method_delegation(self.target)
+        return m(*args)
+
+    def print(self, this_type, spirit, *args):
+        m = this_type.get_method_delegation(self.target)
         if self.is_printer():
-            self.method(obj.value, spirit)
+            m(spirit, *args)
         else:
-            spirit.message(self.get_value(obj.value))
+            ret = m(*args)
+            spirit.message(ret)
 
 #
-#
-#
-class TypeOperator:
-    class UNDEFINED():
-        pass
-
-    def __init__(self, name, typecode, help="", method=None):
-        self.name = name
-        self.rtypecode = typecode
-        self.help = help
-        self.method = method or TypeOperator.UNDEFINED
-    
-    def get_name(self):
-        return self.name
-    
-    def get_result_typecode(self):
-        return self.rtypecode
-
-    #
-    def operate(self, *objects):
-        args = [x.value for x in objects]
-        return self.method(*args)
-
-#
-#
-#
-class TypeAlias:
+class TypeMethodAlias:
     def __init__(self, name, dest):
         self.name = name
         self.dest = dest
@@ -84,16 +77,6 @@ class TypeAlias:
     
     def get_destination(self):
         return self.dest
-
-#
-class MethodCall():
-    def __init__(self, name):
-        self.name = name
-
-    def __call__(self, *args):
-        if len(args)==0:
-            raise ValueError("Not enough argument")
-        return getattr(args[0], self.name)(*args[1:])
 
 #
 #
@@ -106,77 +89,98 @@ class TypeTraits():
         self.typename: str = typename
         self.description: str = description
         self.flags = flags
-        self._members: Dict[str, Any] = {}
+        self._methods: Dict[str, TypeMethod] = {}
+        self._methodalias: Dict[str, TypeMethodAlias] = {}
 
     def get_value_type(self):
         return type(self).value_type
-        
+    
+    def copy(self):
+        t = TypeTraits(self.typename, self.description, self.flags)
+        t._methods = self._methods.copy()
+        t._methodalias = self._methodalias.copy()
+        return t
+
+    #
+    #
+    #
     def convert_from_string(self, arg: str):
-        return self.get_value_type()(arg)
+        return self.get_method_delegation("from_string")
 
     def convert_to_string(self, v: Any):
+        return self.get_method_delegation("to_string")
+
+    def from_string(self, arg: str):
+        return self.get_value_type()(arg)
+
+    def to_string(self, v: Any):
         if v is None:
             return ""
         else:
             return str(v)
     
     # 
+    # メソッド呼び出し
     #
+    def get_method(self, name) -> Optional[TypeMethod]:
+        name = self.resolve_method_alias(name)
+        return self._methods.get(name, None)
+
+    def enum_methods(self, arity=None):
+        for meth in self._methods.values():
+            if arity is not None and meth.arity != arity:
+                continue
+            yield meth
+    
+    def new_method(self, 
+        names, 
+        arity, 
+        return_type=None, 
+        help="", 
+        target=None
+    ):
+        top, *aliass = names
+        self._methods[top] = TypeMethod(top, arity, return_type, help, target)
+        for a in aliass:
+            self.new_method_alias(a, top)
+    
+    # メソッドの実装を解決する
+    def get_method_delegation(self, attrname):
+        m = getattr(self, attrname, None)
+        if m is None:
+            import builtins
+            m = getattr(builtins, attrname, None)
+            if m is None:
+                raise BadMethodDelegation(attrname)
+        return m
+
     #
-    def get_element(self, elemprefix, name):
-        meth = self._members.get("{}_{}".format(elemprefix, name), None)
-        if meth:
-            return meth
+    # メソッド名のエイリアスを取得する
+    #
+    def resolve_method_alias(self, name) -> str:
+        a = self._methodalias.get(name, None)
+        if a:
+            return a.get_destination()
+        return name
 
-    def enum_elements(self, elemprefix):
-        prefix = elemprefix + "_"
-        for name in self._members.keys():
-            if name.startswith(prefix):
-                yield self._members[name]
-                
-    def get_member(self, name):
-        return self.get_element("member", name)
+    def enum_method_alias(self):
+        for meth in self._methodalias.values():
+            yield meth
     
-    def enum_members(self, name):
-        return self.enum_elements("member")
-    
-    def new_member(self, names, type=None, help="", method=None):
-        top, *aliass = names
-        self._members["member_"+top] = TypeMember(top, type, help, method)
-        for a in aliass:
-            self.new_alias(a, top)
-            
-    def get_operator(self, name):
-        return self.get_element("operator", name)
-
-    def enum_operators(self):
-        return self.enum_elements("operator")
-        
-    def new_operator(self, names, return_type=None, help="", method=None):
-        top, *aliass = names
-        self._members["operator_"+top] = TypeOperator(top, return_type, help, method)
-        for a in aliass:
-            self.new_alias(a, top)
-        
-    def get_alias(self, name):
-        return self.get_element("memberalias", name)
-
-    def enum_alias(self):
-        return self.enum_elements("memberalias")
-    
-    def new_alias(self, name, dest):
-        self._members["memberalias_"+name] = TypeAlias(name, dest)
+    def new_method_alias(self, name, dest):
+        self._methodalias[name] = TypeMethodAlias(name, dest)
 
     #
     # 型定義構文用のメソッド
     #
-    #
     def describe(self, 
-        typename,
+        typename = "",
         description = "",
     ):
-        self.typename = typename
-        self.description = description
+        if typename:
+            self.typename = typename
+        if description:
+            self.description = description
         return self 
     
     def __getitem__(self, declaration):
@@ -187,23 +191,23 @@ class TypeTraits():
         if head == "member":
             names = tail.split()
             def member_(**kwargs):
-                self.new_member(*names, **kwargs)
+                self.new_method(names, 1, **kwargs)
                 return self
             return member_
-
-        elif head == "alias":
-            origname = tail.strip()
-            def alias_(*names):
-                self.new_alias(origname, names)
-                return self
-            return alias_
 
         elif head == "operator":
             names = tail.split()
             def opr_(**kwargs):
-                self.new_operator(*names, **kwargs)
+                self.new_method(names, 2, **kwargs)
                 return self
             return opr_
+
+        elif head == "alias":
+            origname = tail.strip()
+            def alias_(*names):
+                self.new_method_alias(origname, names)
+                return self
+            return alias_
 
         else:
             raise ValueError("Unknown declaration type '{}'".format(head))
@@ -220,84 +224,60 @@ class TypeTraitsDelegation(TypeTraits):
         self.klass = klass
         self._inst = None
         
-
-        # describe
-        if not hasattr(self.klass, "describe_type"):
-            raise ValueError("クラスメソッド 'describe_type' が型定義のために必要です")
-        
-        self.klass.describe_type(self)
+    def copy(self):
+        t = super().copy()
+        t.klass = self.klass
+        # _inst は自分で生成させる
+        return t
     
-    def delegate(self, fnname, *fnargs):
+    def get_value_type(self):
+        return self.klass.value_type
+    
+    def get_method_delegation(self, attrname):
         if self._inst is None:
             try:
                 self._inst = self.klass()
             except Exception as e:
                 raise TypeTraitsDelegation.InstantiationError(self.typename, e)
         
-        fn = getattr(self._inst, fnname, None)
+        fn = getattr(self._inst, attrname, None)
         if fn is None:
             # TypeTraitsクラスのデフォルト定義を用いる
-            return getattr(super(), fnname)(*fnargs)
-        return fn(*fnargs)
-    
-    def get_value_type(self):
-        return self.klass.value_type
-    
-    def convert_from_string(self, arg: str):
-        return self.delegate("convert_from_string", arg)
-    
-    def convert_to_string(self, arg: Any):
-        return self.delegate("convert_to_string", arg)
-
+            fn = getattr(super(), attrname)
         
-
-
-    #def create_prompt(self, arg, spirit):
-    #    # クラス：インスタンスを生成してから実行
-    #    ins = self.klass(*self.args, **self.kwargs)
-    #    ins.prompt(arg, spirit)
-
-#
-class BadTypenameError(Exception):
-    pass
-
-#
-# 名前を登録して型を検索する
-#
-class TypeLibrary:
-    def __init__(self):
-        self._types: Dict[str, TypeTraits] = {}
-    
-    def define(self, typename: str, typeobj) -> TypeTraits:
-        if typename in self._types:
-            raise ValueError("型'{}'は既に定義されています".format(typename))
-        self._types[typename] = typeobj
-        return typeobj
-    
-    def exists(self, typename:str) -> bool:
-        return typename in self._types
-    
-    def get(self, typename: str, fallback=False) -> Optional[TypeTraits]:
-        if typename not in self._types:
-            if fallback:
-                return None
-            raise BadTypenameError(typename)
-        return self._types[typename]
-    
-    def types(self) -> ItemsView[str, TypeTraits]:
-        return self._types.items()
+        if fn is None:
+            raise BadMethodDelegation(attrname)
+        return fn
 
 #
 # 型取得インターフェース
 #
 class TypeModule():
     def __init__(self):
-        self._typelib: TypeLibrary = TypeLibrary()
-        self._define_flags_typebit = 0
+        self._typelib: Dict[str, TypeTraits] = {}
+        self._ancestors: List[TypeModule] = [] 
     
     #
     def normalize_typename(self, name: str) -> str:
         return name.replace("_","-")
+        
+    #
+    def exists(self, typename: str) -> bool:
+        return typename in self._typelib
+    
+    def find(self, typename: str) -> Optional[TypeTraits]:
+        # 自分自身の定義を探索
+        if typename in self._typelib:
+            return self._typelib[typename]
+        
+        # 親モジュールを探索
+        for ancmodule in self._ancestors:
+            tt = ancmodule.find(typename)
+            if tt is not None:
+                return tt
+
+        # 見つからなかった
+        return None
 
     #
     # 型を取得する
@@ -306,18 +286,22 @@ class TypeModule():
         if self._typelib is None:
             raise ValueError("No type library set up")
         if typecode is None:
-            return self._typelib.get("str")
+            t = self.find("str")
         elif isinstance(typecode, str):
             typename = self.normalize_typename(typecode)
-            return self._typelib.get(typename, fallback)
+            t = self.find(typename)
         elif isinstance(typecode, type):
             typename = self.normalize_typename(typecode.__name__)
-            return self._typelib.get(typename, fallback)
+            t = self.find(typename)
         elif isinstance(typecode, TypeTraits):
-            return typecode
+            t = typecode
         else:
-            raise BadTypenameError("No match type exists with '{}'".format(typecode))
-    
+            raise BadTypename("No match type exists with '{}'".format(typecode))
+        
+        if t is None and not fallback:
+            raise BadTypename(typecode)
+        return t
+
     # objtypes[<typename>] -> TypeTraits
     def __getitem__(self, typecode) -> Optional[TypeTraits]:
         return self.get(typecode)
@@ -325,74 +309,58 @@ class TypeModule():
     # objtypes.<typename> -> TypeTraits
     def __getattr__(self, name) -> Optional[TypeTraits]:
         typename = self.normalize_typename(name)
-        return self._typelib.get(typename)
+        return self.get(typename)
 
     #
     # 型を定義する
     #
     def define(self, 
-        name = None, 
+        traits: Any = None,
+        *,
+        typename = None, 
         description = "",
-        flags = 0,
-        traits = None,
-    ):
-        # デコレータになる
-        if traits is None:
-            def _bound(traits_):
-                return self.define(name, description, flags, traits_)
-            return _bound
-
-        # フラグ
-        flags = self._define_flags_typebit + (flags & 0xFFF0)
-
+    ) -> TypeTraits:
         # 登録処理
         t: Any = None # 型オブジェクトのインスタンス
-        if isinstance(traits, TypeTraits):
+        if traits is None:
+            # 一時的な型：振る舞いはすべてデフォルト、値の生成は不可
+            t = TypeTraits(typename, description)
+        elif isinstance(traits, TypeTraits):
             # Traitsまたは派生型のインスタンスが渡された
-            if name is None:
-                name = traits.typename
-            t = traits
-        else:
-            if name is None:
-                name = traits.__name__
+            t = traits.copy()
+        elif isinstance(traits, type):
             if hasattr(traits, "_TypeTraits__mark"):
                 # Traitsまたは派生型の型が渡された
-                t = traits(name, description, flags)
+                t = traits(traits.__name__)
             else:
                 # 実装移譲先のクラス型が渡された
                 t = TypeTraitsDelegation(traits)
-        
-        if self._typelib:
-            # 登録
-            self._typelib.define(name, t)
-        
-        self._define_flags_typebit = TYPE_SIMPLEX
+
+            # describe_type
+            if not hasattr(traits, "describe_type"):
+                raise ValueError("クラスメソッド 'describe_type' が型定義のために必要です")
+            traits.describe_type(t) # type: ignore
+        else:
+            raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__init__))
+
+        if typename is not None:
+            t.typename = typename
+
+        if t.typename in self._typelib:
+            raise ValueError("型'{}'は既に定義されています".format(t.typename))
+        self._typelib[t.typename] = t
+
         return t
-
-    @property
-    def sequence(self):
-        self._define_flags_typebit = TYPE_SEQUENCE
-        return self
+    
+    # デコレータ用
+    def definition(self, traits):
+        return self.define(traits=traits)
 
     #
     #
     #
-    def move(self, other): # type: (TypeModule) -> None
-        for name, typetraits in other._typelib.types():
-            self._typelib.define(name, typetraits)
-        del other
-
-
-#
-# 演算子の列挙
-#
-def get_type_operator(obj, name):
-    return getattr(obj, "operator_{}".format(name), None)
-
-def enum_type_operators(obj):
-    for name in dir(obj):
-        if name.startswith("operator_"):
-            yield name, getattr(obj, name)
+    def add_ancestor(self, other): # type: (TypeModule) -> None
+        self._ancestors.append(other)
 
 
 

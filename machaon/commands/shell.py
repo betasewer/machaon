@@ -154,9 +154,9 @@ class FilePath():
         )["member mode"](
             name="ファイルモード"
         )["alias long"](
-            "mode", "ftype", "modtime", "size", "name"
+            "mode ftype modtime size name"
         )["alias short"](
-            "ftype", "name"
+            "ftype name"
         )["alias link"](
             "path",
         )

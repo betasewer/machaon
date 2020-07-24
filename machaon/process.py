@@ -52,8 +52,8 @@ class Process:
 
         # 操作を実行する
         invocation = ActionInvocation(execentry.spirit, execentry.parameter, objdesktop)
-        self.target.invoke(invocation)
         self.last_invocation = invocation
+        self.target.invoke(invocation)
         return invocation
     
     def set_index(self, index):
@@ -179,12 +179,18 @@ class Process:
     #
     #
     #
-    def push_object(self, value, typename=None, name=None):        
-        if name is None:
-            obji = len(self.bound_objects)
-            name = "object-{}-{}".format(self.index, obji)
-        o = Object(name, typename, value)
-        self.bound_objects.append(o)
+    def push_object(self, value, typename=None, name=None):  
+        if self.last_invocation is None:
+            raise ValueError("No object desktop")
+
+        desk = self.last_invocation.get_object_desktop()
+        if isinstance(value, Object):
+            desk.push(value)
+        else:   
+            if name is None:
+                obji = len(self.bound_objects)
+                name = "object-{}-{}".format(self.index, obji)
+            desk.new(name, typename, value)
     
     def push_object_table(self, values, *args, name=None, **kwargs):        
         dataview = DataViewFactory(datas, *command_args, **command_kwargs)

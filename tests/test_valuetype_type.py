@@ -1,6 +1,3 @@
-from machaon.object import (
-    types
-)
 
 #
 # 引数型

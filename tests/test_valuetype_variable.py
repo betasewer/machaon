@@ -1,6 +1,4 @@
-from machaon.object import (
-    types
-)
+
 from machaon.object.variable import (
     predicate, variable, variable_defs
 )

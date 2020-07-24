@@ -1,7 +1,5 @@
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional
 
-from machaon.object import types
-
 import inspect
 from collections import defaultdict
 
@@ -456,6 +454,9 @@ class ActionInvocation:
         self.objdesktop = objdesktop
         self.entries: DefaultDict[str, List[InvocationEntry]] = defaultdict(list)
         self.last_exception = None
+    
+    def get_object_desktop(self):
+        return self.objdesktop
         
     def pop_object(self, typename):
         value = self.objdesktop.pick_by_type(typename)
