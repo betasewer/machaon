@@ -1,6 +1,7 @@
 from typing import Any, Optional, List, Sequence
 
 from machaon.object.type import TypeTraits
+from machaon.object.operator import ObjectOperator
 
 #
 #
@@ -18,74 +19,29 @@ class Object():
         self.value: Any = value
         self.name: str = name
         self.type: TypeTraits = type
+        if not isinstance(self.name, str):
+            raise TypeError("'name' must be str")
+        if not isinstance(self.type, TypeTraits):
+            raise TypeError("'type' must be TypeTraits instance")
 
     def __repr__(self):
         return "<Object {} '{}' = {}>".format(self.type.typename, self.name, self.value)
     
     # メソッド名を解決する
-    def resolve_method(self, method_name, *, printer=False):
-        # 型に定義されたメソッド
-        typemethod = self.type.get_method(method_name)
-        if typemethod:
-            if printer:
-                return ObjectPrintTypeMethod(typemethod)
-            else:
-                return ObjectTypeMethod(typemethod)
-        
-        # 値に定義された標準のメソッド
-        instmethod = None
-        if typemethod is None:
-            instmethod = getattr(self.value, method_name, None)
-            if instmethod:
-                return ObjectInstanceMethod(instmethod)
-        
-        return None
+    def resolve_method(self, method_name) -> ObjectOperator:
+        return ObjectOperator(method_name, self.type)
 
     # メソッド名を解決し呼び出す
     def call_method(self, method_name, *args, printer=False) -> ObjectValue:
-        method = self.resolve_method(method_name, printer=printer)
-        if method:
-            return method(self, *args)
+        method = self.resolve_method(method_name)
+        if printer:
+            spirit = args[0]
+            method(self.value, spirit, *args[1:])
+            return ObjectValue(None, None)
         else:
-            raise ValueError("メンバ'{}'の定義が見つかりません".format(method_name))
+            ret = method(self.value, *args)
+            return ObjectValue(type(ret), ret)
     
     #
     def to_string(self) -> str:
         return self.type.convert_to_string(self.value)
-
-#
-# オブジェクトのメンバ関数
-#
-class ObjectMethod:
-    def __call__(self, obj, *args):
-        raise NotImplementedError()
-
-    def get_name(self):
-        raise NotImplementedError()
-
-class ObjectTypeMethod(ObjectMethod):
-    def __init__(self, typemethod):
-        self.method = typemethod
-    
-    def __call__(self, obj, *args):
-        ret = self.method.call(obj.type, obj.value, *args)
-        return ObjectValue(self.method.get_result_typecode(), ret)
-    
-    def get_name(self):
-        return self.method.get_name()
-
-class ObjectPrintTypeMethod(ObjectTypeMethod):
-    def __call__(self, obj, spirit, *args):
-        self.method.print(obj.type, spirit, obj.value, *args[1:])
-        return None
-
-class ObjectInstanceMethod(ObjectMethod):
-    def __init__(self, method):
-        self.meth = method
-    
-    def __call__(self, _obj, *args):
-        ret = self.meth(*args)
-        return ObjectValue(type(ret), ret)
-        
-    def get_name(self):
-        return "{}.{}".format(self.meth.__module__, self.meth.__name__)

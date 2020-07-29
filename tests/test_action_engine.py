@@ -3,7 +3,7 @@ from machaon.command import describe_command
 from machaon.process import Spirit, TempSpirit
 from machaon.action import Action, ActionFunctionBit, ActionClassBit, ActionInvocation, ActionArgDef
 
-from machaon.object.desktop import ObjectDesktop, Object
+from machaon.object.desktop import ObjectDesktop, Object, ObjectValue
 
 from collections import defaultdict
 import pytest
@@ -21,15 +21,18 @@ def test_invocation_arg():
     spi = TempSpirit()
 
     args = ObjectDesktop()
-    args.push(Object("obj-1", "int", 3))
-    args.push(Object("obj-2", "int", 100))
-    args.push(Object("obj-3", "complex", 3+5j))
+    args.add_fundamental_types()
+
+    args.push("obj-1", "int", 3)
+    args.push("obj-2", "int", 100)
+    args.push("obj-3", "complex", 3+5j)
 
     inv = ActionInvocation(spi, "parameter", args)
     
     assert inv.pop_object("int").value == 100
     assert inv.pop_object("int").value == 100
     assert inv.pop_object("complex").value == 3+5j
+
     assert inv.pop_parameter() == "parameter"
 
 #

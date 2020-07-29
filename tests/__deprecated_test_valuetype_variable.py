@@ -1,7 +1,4 @@
 
-from machaon.object.variable import (
-    predicate, variable, variable_defs
-)
 
 def test_predicate():
     length = predicate(types.int, "its length", lambda item:item["length"])

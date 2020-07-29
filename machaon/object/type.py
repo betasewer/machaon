@@ -34,7 +34,7 @@ class TypeMethod():
         self.arity: int = arity
         self.return_typecode: Union[str, TypeMethod.PRINTER] = return_typecode
         self.help: str = help
-        self.target: str = target or self.name
+        self.target: str = normalize_method_target(target or self.name)
     
     def get_name(self):
         return self.name
@@ -50,21 +50,6 @@ class TypeMethod():
     
     def resolve(self, this_type):
         return this_type.get_method_delegation(self.target)
-    
-    def call(self, this_type, *args):
-        if self.is_printer():
-            raise TypeError("表示専用メンバ'{}'の値を参照しようとしました".format(self.target))
-
-        m = this_type.get_method_delegation(self.target)
-        return m(*args)
-
-    def print(self, this_type, spirit, *args):
-        m = this_type.get_method_delegation(self.target)
-        if self.is_printer():
-            m(spirit, *args)
-        else:
-            ret = m(*args)
-            spirit.message(ret)
 
 #
 class TypeMethodAlias:
@@ -84,16 +69,24 @@ class TypeMethodAlias:
 class TypeTraits():
     __mark = True
     value_type: Callable = str
+    class NONAME:
+        pass
 
-    def __init__(self, typename, description="", flags=0):
+    def __init__(self, typename=NONAME, description="", flags=0, value_type=None):
         self.typename: str = typename
         self.description: str = description
         self.flags = flags
+        self.value_type = value_type
         self._methods: Dict[str, TypeMethod] = {}
         self._methodalias: Dict[str, TypeMethodAlias] = {}
+    
+    def __str__(self):
+        return "<TypeTraits '{}'>".format(self.typename)
 
     def get_value_type(self):
-        return type(self).value_type
+        if self.value_type is None:
+            return str # デフォルトでは文字列型とする
+        return self.value_type
     
     def copy(self):
         t = TypeTraits(self.typename, self.description, self.flags)
@@ -105,10 +98,12 @@ class TypeTraits():
     #
     #
     def convert_from_string(self, arg: str):
-        return self.get_method_delegation("from_string")
+        m = self.get_method_delegation("from_string")
+        return m(arg)
 
     def convert_to_string(self, v: Any):
-        return self.get_method_delegation("to_string")
+        m = self.get_method_delegation("to_string")
+        return m(v)
 
     def from_string(self, arg: str):
         return self.get_value_type()(arg)
@@ -123,8 +118,10 @@ class TypeTraits():
     # メソッド呼び出し
     #
     def get_method(self, name) -> Optional[TypeMethod]:
-        name = self.resolve_method_alias(name)
-        return self._methods.get(name, None)
+        resolved = self.get_method_alias(name)
+        if resolved is None:
+            resolved = name
+        return self._methods.get(resolved, None)
 
     def enum_methods(self, arity=None):
         for meth in self._methods.values():
@@ -157,11 +154,11 @@ class TypeTraits():
     #
     # メソッド名のエイリアスを取得する
     #
-    def resolve_method_alias(self, name) -> str:
+    def get_method_alias(self, name) -> Optional[str]:
         a = self._methodalias.get(name, None)
         if a:
             return a.get_destination()
-        return name
+        return None
 
     def enum_method_alias(self):
         for meth in self._methodalias.values():
@@ -176,18 +173,25 @@ class TypeTraits():
     def describe(self, 
         typename = "",
         description = "",
+        value_type = None,
     ):
         if typename:
             self.typename = typename
         if description:
             self.description = description
+        if value_type:
+            self.value_type = value_type
         return self 
     
     def __getitem__(self, declaration):
         if not isinstance(declaration, str):
             raise TypeError("declaration")
         
-        head, tail = declaration.split(maxsplit=1)
+        head, _, tail = [x.strip() for x in declaration.partition(" ")]
+        if not tail:
+            tail = head
+            head = "member"
+
         if head == "member":
             names = tail.split()
             def member_(**kwargs):
@@ -210,14 +214,18 @@ class TypeTraits():
             return alias_
 
         else:
-            raise ValueError("Unknown declaration type '{}'".format(head))
-#
+            raise ValueError("不明な宣言型です：'{}'".format(head))
+    
+    def make_described(self, describer):
+        if not hasattr(describer, "describe_type"):
+            raise ValueError("クラスメソッド 'describe_type' が型定義のために必要です")
+        describer.describe_type(self) # type: ignore
+        setattr(describer, "type_traits_typename", self.typename) # getで使用可能にする
+        return self
+
 #
 #
 class TypeTraitsDelegation(TypeTraits):
-    class InstantiationError(Exception):
-        pass
-
     def __init__(self, klass: Any):
         typename = klass.__name__
         super().__init__(typename, typename)
@@ -231,16 +239,12 @@ class TypeTraitsDelegation(TypeTraits):
         return t
     
     def get_value_type(self):
-        return self.klass.value_type
+        if self.value_type is None:
+            return self.klass
+        return self.value_type
     
     def get_method_delegation(self, attrname):
-        if self._inst is None:
-            try:
-                self._inst = self.klass()
-            except Exception as e:
-                raise TypeTraitsDelegation.InstantiationError(self.typename, e)
-        
-        fn = getattr(self._inst, attrname, None)
+        fn = getattr(self.klass, attrname, None)
         if fn is None:
             # TypeTraitsクラスのデフォルト定義を用いる
             fn = getattr(super(), attrname)
@@ -248,6 +252,10 @@ class TypeTraitsDelegation(TypeTraits):
         if fn is None:
             raise BadMethodDelegation(attrname)
         return fn
+
+#
+def normalize_method_target(name):
+    return name.replace("-","_") # ハイフンはアンダースコア扱いにする
 
 #
 # 型取得インターフェース
@@ -282,7 +290,7 @@ class TypeModule():
     #
     # 型を取得する
     #
-    def get(self, typecode: Union[None, str, type, TypeTraits] = None, fallback = False) -> Optional[TypeTraits]:
+    def get(self, typecode: Any = None, fallback = False) -> Optional[TypeTraits]:
         if self._typelib is None:
             raise ValueError("No type library set up")
         if typecode is None:
@@ -290,13 +298,14 @@ class TypeModule():
         elif isinstance(typecode, str):
             typename = self.normalize_typename(typecode)
             t = self.find(typename)
-        elif isinstance(typecode, type):
-            typename = self.normalize_typename(typecode.__name__)
-            t = self.find(typename)
         elif isinstance(typecode, TypeTraits):
             t = typecode
         else:
-            raise BadTypename("No match type exists with '{}'".format(typecode))
+            if hasattr(typecode, "type_traits_typename"):
+                typename = typecode.type_traits_typename
+            else:
+                typename = self.normalize_typename(typecode.__name__)
+            t = self.find(typename)
         
         if t is None and not fallback:
             raise BadTypename(typecode)
@@ -335,11 +344,8 @@ class TypeModule():
             else:
                 # 実装移譲先のクラス型が渡された
                 t = TypeTraitsDelegation(traits)
-
             # describe_type
-            if not hasattr(traits, "describe_type"):
-                raise ValueError("クラスメソッド 'describe_type' が型定義のために必要です")
-            traits.describe_type(t) # type: ignore
+            t.make_described(traits)
         else:
             raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__init__))
 

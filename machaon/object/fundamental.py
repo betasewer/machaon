@@ -9,13 +9,12 @@ fundamental_type = TypeModule()
 #
 @fundamental_type.definition
 class str_(TypeTraits):
-    value_type = str
-
     @classmethod
     def describe_type(self, traits):
         traits.describe(
             typename="str",
-            description="Python.str"
+            description="Python.str",
+            value_type=str
         )["member length"](
             return_type="int",
             help="文字列の長さ",
@@ -52,13 +51,12 @@ class str_(TypeTraits):
 #
 @fundamental_type.definition
 class bool_(TypeTraits):
-    value_type = bool
-
     @classmethod
     def describe_type(self, traits):
         traits.describe(
             "bool", 
-            description="True/False"
+            description="True/False",
+            value_type=bool
         )
 
     def convert_from_string(self, s):
@@ -74,13 +72,12 @@ class bool_(TypeTraits):
 #
 @fundamental_type.definition
 class int_(TypeTraits):
-    value_type = int
-
     @classmethod
     def describe_type(self, traits):
         traits.describe(
             "int", 
-            description="整数"
+            description="整数",
+            value_type=int
         )
 
     def convert_from_string(self, s):
@@ -89,13 +86,12 @@ class int_(TypeTraits):
 #
 @fundamental_type.definition
 class float_(TypeTraits):
-    value_type = float
-
     @classmethod
     def describe_type(self, traits):
         traits.describe(
             "float", 
-            description="浮動小数"
+            description="浮動小数",
+            value_type=float
         )
 
     def convert_from_string(self, s):
@@ -104,13 +100,12 @@ class float_(TypeTraits):
 #
 @fundamental_type.definition
 class complex_(TypeTraits):
-    value_type = complex
-
     @classmethod
     def describe_type(self, traits):
         traits.describe(
             "complex", 
-            description="複素数"
+            description="複素数",
+            value_type=complex
         )
 
     def convert_from_string(self, s):

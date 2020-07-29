@@ -55,6 +55,6 @@ def test_method():
     assert regmatch is not None
     assert regmatch.name == "regmatch"
     assert regmatch.return_typecode == "bool"
-    assert regmatch.call(fundamental_type.str, "0123.txt", "[0-9]+")
-    assert not regmatch.call(fundamental_type.str, "AIUEO.wav", "[0-9]+")
+    assert regmatch.resolve(fundamental_type.str)("0123.txt", "[0-9]+")
+    assert not regmatch.resolve(fundamental_type.str)("AIUEO.wav", "[0-9]+")
 

@@ -9,7 +9,6 @@ from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator
 
 from machaon.action import ActionInvocation
 from machaon.object.desktop import Object
-from machaon.dataset import DataViewFactory
 from machaon.cui import test_yesno, MiniProgressDisplay
 
 #

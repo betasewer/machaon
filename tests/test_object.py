@@ -7,17 +7,17 @@ def test_desktop():
     desk = ObjectDesktop()
     desk.add_types(fundamental_type)
 
-    desk.push("obj-1", ObjectValue("int", 3))
+    desk.push("obj-1", "int", 3)
     desk.push("obj-2", ObjectValue("int", 100))
-    desk.push("obj-3", ObjectValue("complex", 3+5j))
-    desk.push("obj-4", ObjectValue("ip-address", (128,0,0,1)))
+    desk.push(Object("obj-3", desk.get_type("complex"), 3+5j))
+    desk.push("obj-4", ObjectValue("ip-address", "128.0.0.1"))
 
     assert desk.pick("obj-1").value == 3
 
     assert desk.pick_by_type("int").name == 'obj-2'
     assert desk.pick_by_type("complex").name == 'obj-3'
     assert desk.pick_by_type("ip-address").name == 'obj-4'
-    assert desk.pick_by_type("ip-address").value == (128,0,0,1)
+    assert desk.pick_by_type("ip-address").value == "128.0.0.1"
     
 
 def test_object_new():
@@ -37,7 +37,7 @@ def test_object_new():
     o2 = desk.push("obj-1", "postcode", 1001623)
     assert desk.pick_by_type("postcode") is o2
     assert o2.type == desk._types.get("postcode")
-    assert o2.value == 1001623
+    assert o2.value == "1001623" # デフォルトは文字列型
 
 
 def test_object_method():
@@ -48,12 +48,12 @@ def test_object_method():
 
     # 型定義メソッド
     v = o.call_method("regmatch", "[a-zA-Z]+")
-    assert v.typecode == "bool"
+    assert v.typecode is bool
     assert v.value is True
     
     # インスタンスメソッド
     v = o.call_method("title")
-    assert v.typecode == str
+    assert v.typecode is str
     assert v.value == "Gegege No Ge"
 
     # グローバルメソッド
