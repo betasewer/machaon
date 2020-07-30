@@ -10,7 +10,7 @@ import tkinter.filedialog
 import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
-from machaon.ui.basic_launcher import Launcher
+from machaon.ui.basic import Launcher
 from machaon.command import describe_command, describe_command_package
 from machaon.process import ProcessMessage, ProcessChamber
 from machaon.cui import collapse_text, get_text_width, ljust
@@ -93,6 +93,11 @@ def text_get_tag_ranges(wid, tag) -> Generator[Tuple[Optional[str], Optional[str
 #
 class HYPERLABEL_DATAITEM:
     pass
+
+#
+def parse_dataitem_link(s):
+    dataname, _, key = s.rpartition("/")
+    return dataname, int(key)
 
 #
 def menukeytag(index):
@@ -670,22 +675,23 @@ class tkLauncher(Launcher):
         return {
             "table" : DataTableView,
             "wide" : DataWideView,
-        }[viewtype]
+        }.get(viewtype)
     
-    def insert_screen_dataview(self, msg, viewer, data):
+    def insert_screen_dataview(self, data, viewer, dataname):
         self.log.configure(state='normal')
-        viewer.render(self, self.log, data)
+        viewer.render(self, self.log, data, dataname)
         self.log.insert("end", "\n")
         self.log.configure(state='disabled')
     
-    def select_screen_dataview_item(self, index, charindex):
+    def select_screen_dataview_item(self, dataname, index, charindex):
         # 現在のデータセットのアイテムを選択する
-        datas = self.app.get_active_chamber().get_bound_data(running=True)
-        if datas is None:
+        dataobj = self.app.objdesktop.pick(dataname)
+        if dataobj is None:
             return False
+        datas = dataobj.value
         datas.select(index)
         self.log.configure(state='normal')
-        self.dataviewer(datas.get_viewtype()).change_select(self, self.log, charindex)
+        self.dataviewer(datas.get_viewtype()).change_select(self, self.log, charindex, dataname)
         self.log.configure(state='disabled')
         return True
     
@@ -693,8 +699,8 @@ class tkLauncher(Launcher):
         # リンクからオブジェクトを取り出す        
         link, label = self.hyper_resolve_link(index)
         if label is HYPERLABEL_DATAITEM:
-            itemindex = int(link)
-            if self.select_screen_dataview_item(itemindex, charindex=index):
+            dataname, itemindex = parse_dataitem_link(link)
+            if self.select_screen_dataview_item(dataname, itemindex, charindex=index):
                 return True
         return False
 
@@ -703,14 +709,14 @@ class tkLauncher(Launcher):
         for linkbeg, linkend in text_get_tag_ranges(self.log, "hyperlink"):
             link, label = self.hyper_resolve_link(linkbeg)
             if label is HYPERLABEL_DATAITEM:
-                itemindex = int(link)
+                dataname, itemindex = parse_dataitem_link(link)
                 if itemindex == index:
                     break
         else:
             raise IndexError("invalid dataview index")
 
         self.log_set_selection(linkbeg, linkend)
-        self.select_screen_dataview_item(index, charindex=linkbeg)
+        self.select_screen_dataview_item(dataname, index, charindex=linkbeg)
     
     #
     #
@@ -941,11 +947,11 @@ class tkLauncher(Launcher):
 #
 class DataTableView():    
     @classmethod
-    def render(cls, ui, wnd, data):
-        rows, colwidth = data.rows_to_string_table()
+    def render(cls, ui, wnd, dataview, dataname):
+        rows, colmaxwidths = dataview.rows_to_string_table()
         
-        columns = [x.get_description() for x in data.get_current_columns()]
-        colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colwidth)]
+        columns = [x.get_help() for x in dataview.get_current_columns()]
+        colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colmaxwidths)]
 
         # ヘッダー
         head = "      | "
@@ -962,8 +968,8 @@ class DataTableView():
                 line += ljust(s, width)
 
             index = str(i)
-            itemkey = str(itemindex)
-            if i == data.selection():
+            itemkey = "{}/{}".format(dataname, itemindex)
+            if i == dataview.selection():
                 head = ">> " + " "*(2-len(index))
                 tags = ("message", "log-item-selection")
                 linktags = ui.new_hyper_tags(itemkey, HYPERLABEL_DATAITEM) + ("log-selection",)
@@ -978,7 +984,7 @@ class DataTableView():
     
     #
     @classmethod
-    def change_select(cls, ui, wnd, charindex):
+    def change_select(cls, ui, wnd, charindex, dataname):
         wnd.configure(state='normal')
         
         selpoints = wnd.tag_ranges("log-item-selection")

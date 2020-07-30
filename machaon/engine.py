@@ -2,7 +2,7 @@ from typing import List, Sequence, Optional, Any, Tuple, Union, Dict
 from collections import defaultdict
 
 from machaon.cui import fixsplit
-from machaon.action import Action, ActionClassBit, ActionFunctionBit
+from machaon.action import Action, ActionClass, ActionFunction, ObjectConstructorAction
 from machaon.process import Spirit
 
 #
@@ -45,8 +45,6 @@ class CommandEntry():
         if self.builder is None:
             raise ValueError("No builder")
 
-        prog = self.prog
-
         # コマンドをロードする
         target = self.builder.target
         if isinstance(target, str):
@@ -55,11 +53,14 @@ class CommandEntry():
                 mod = importlib.import_module(self.builder.frommodule)
                 member = getattr(mod, target, None)
                 if member is None:
-                    raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(prog, target))
+                    raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(self.prog, target))
                 target = member
         
-        # コマンド自体に定義された初期化処理があれば呼ぶ
-        if hasattr(target, "describe_command"):
+        # アクションタイプの決定
+        if self.commandtype & INSTANT_COMMAND:
+            action_type = "i"
+        elif hasattr(target, "describe_command"):
+            # アクション自体に定義された初期化処理を呼ぶ
             target.describe_command(self.builder)
             if hasattr(target, "process_target"):
                 action_type = "c"
@@ -73,32 +74,35 @@ class CommandEntry():
             action_type = "f"
         else:
             raise ValueError("Invalid process action target")
+
+        # prog
+        prog = self.prog
         
         # description
         description = self.builder.description
 
         # spirit
         spirittype = self.builder.spirit
-        if spirittype is None:
-            spirittype = Spirit
         
         # 遅延コマンド初期化処理を実行する関数を作成する
         lazy_arg_describe = self.builder.get_lazy_action_describer()
         
         # コマンドで実行するアクション
-        actbit: Any = None
+        kwargs = {
+            "prog": prog,
+            "description": description,
+            "spirittype": spirittype, 
+            "lazyargdescribe": lazy_arg_describe
+        }
+        act: Any = None
         if action_type == "c":
-            actbit = ActionClassBit(target)
+            act = ActionClass(target, **kwargs)
         elif action_type == "f":
-            actbit = ActionFunctionBit(target)
-
-        # Action
-        act = Action(
-            actbit, 
-            prog, description, 
-            spirittype=spirittype, 
-            lazyargdescribe=lazy_arg_describe
-        )
+            act = ActionFunction(target, **kwargs)
+        elif action_type == "i":
+            act = ObjectConstructorAction(target, prog=prog, description=description)
+        else:
+            raise ValueError("action_type")
 
         # 引数の定義
         for cmdtype, cmdkwds, objtype, kwargs in self.builder.argument_describers():
@@ -300,12 +304,11 @@ class CommandEngine:
             if action is None:
                 raise ValueError("CommandEntry '{}' の構築に失敗".format(commandentry.get_prog()))
 
-            spirit = action.inherit_spirit(spirit)
-            action.load_lazy_describer(spirit)
-
             # 引数生成アクションであるなら、さらに生成する
             if yieldargname:
                 action = action.create_argument_parser_action(yieldargname)
+            
+            spirit = action.load(spirit) # アクションの専用spiritに変換される
 
             # 引数をまとめる
             parameter = " ".join([x for x in (optioncompound, *commandargs) if x])

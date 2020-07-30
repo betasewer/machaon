@@ -53,21 +53,35 @@ class Launcher():
                 cnt = msg.argument("count")
                 lno = msg.argument("line")
                 self.delete_screen_message(lno, cnt)
-            elif tag == "dataview":
-                datas = self.app.get_active_chamber().get_bound_data(running=True)
-                if datas is None:
-                    msg.tag = "message"
-                    msg.text = "データが作成されていません" + "\n"
-                    self.insert_screen_message(msg)
-                elif datas.nothing():
-                    msg.tag = "message"
-                    msg.text = "結果は0件です" + "\n"
-                    self.insert_screen_message(msg)
+
+            elif tag == "object-view":
+                obj = msg.argument("object")
+                
+                # 見出し
+                text = "オブジェクト：{} [{}]\n".format(obj.name, obj.get_typename())
+                self.insert_screen_message(ProcessMessage(text, tag="message_em"))
+
+                # 内容
+                if obj.get_typename() == "dataview":
+                    datas = obj.value
+                    if datas.nothing():
+                        text = "結果は0件です" + "\n"
+                        self.insert_screen_message(ProcessMessage(text))
+                    else:
+                        viewtype = datas.get_viewtype()
+                        viewer = self.dataviewer(viewtype)
+                        if viewer is None:
+                            text = "表示形式'{}'は不明です".format(viewtype)
+                            self.insert_screen_message(ProcessMessage(text, tag="error"))
+                            return
+                        self.insert_screen_dataview(datas, viewer, obj.name)
                 else:
-                    viewer = self.dataviewer(datas.get_viewtype())
-                    self.insert_screen_dataview(msg, viewer, datas)
+                    text = "値：\n  {}\n".format(obj.to_string())
+                    self.insert_screen_message(ProcessMessage(text))
+
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
+
             else:
                 # 適宜改行を入れる
                 if msg.argument("wrap", True):
@@ -107,7 +121,7 @@ class Launcher():
     def dataviewer(self, viewtype):
         raise NotImplementedError()
 
-    def insert_screen_dataview(self, msg, viewer, data):
+    def insert_screen_dataview(self, dataview, viewer, dataname):
         raise NotImplementedError()
     
     #

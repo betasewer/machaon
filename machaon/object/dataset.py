@@ -101,23 +101,10 @@ class DataView():
         return row
     
     def row_from_item(self, itemindex) -> Optional[int]:
+        # 素朴に線形で探索
         for irow, (iitem, _row) in enumerate(self.rows):
             if iitem == itemindex:
                 return irow
-        """
-        lo = 0
-        hi = len(self.rows)
-        while lo < hi:
-            mid = (lo+hi)//2
-            index, _row = self.rows[mid]
-            if index < itemindex: 
-                lo = mid+1
-            else: 
-                hi = mid
-        
-        if lo != len(self.rows) and self.rows[lo][0] == itemindex:
-            return lo
-        """
         return None
     
     def item_from_row(self, rowindex) -> int:
@@ -346,13 +333,13 @@ class DataViewRowIndexer():
 #
 #
 #
-def parse_new_dataview(objdesk, items, expression=None, *, itemtypecode=None, filter_query=None, sort_query=None):
-    if itemtypecode is None:
+def parse_new_dataview(objdesk, items, expression=None, *, itemtype=None, filter_query=None, sort_query=None):
+    if itemtype is None:
         if not items:
             raise ValueError("アイテムの型を推定できません")
-        itemtypecode = type(items[0])
-    itemtype = objdesk.get_type(itemtypecode)
-    dataview = DataView(itemtype, items)
+        itemtype = type(items[0])
+    item_t = objdesk.get_type(itemtype)
+    dataview = DataView(item_t, items)
     return parse_dataview(objdesk, dataview, expression, trunc=True, filter_query=filter_query, sort_query=sort_query)
 
 #

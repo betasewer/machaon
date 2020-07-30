@@ -26,24 +26,30 @@ def exit_process(self):
 #
 class Action():
     def __init__(self, 
-        action,
         prog, 
         description="", 
         spirittype=None, 
         lazyargdescribe=None, 
     ):
-        self.action = action
         self.prog = prog
         self.description = description
         self.spirittype = spirittype
         self.lazyargdescribe = lazyargdescribe
         self.argdefs: DefaultDict[str, List[ActionArgDef]] = defaultdict(list)
         self.resdefs: List[ActionResultDef] = []
-    
-    def load_lazy_describer(self, spirit):
+
+    # 実行前に呼び出される
+    def load(self, generic_spirit): # return Spirit
+        spi = generic_spirit
+        if self.spirittype:
+            spi = self.spirittype(generic_spirit.app)
+            spi.inherit(generic_spirit)
+        
         if self.lazyargdescribe is not None:
-            self.lazyargdescribe(spirit, self)
-            self.lazyargdescribe = None # 初回の引数解析時のみ発動する
+            self.lazyargdescribe(spi, self)
+            self.lazyargdescribe = None # 初回のロード時のみ発動する
+
+        return spi
     
     def get_help(self):
         return "<Action.get_help not implemented yet>"
@@ -53,18 +59,12 @@ class Action():
     
     def get_description(self):
         return self.description
-        
-    # 自らのスピリットを生成する
-    def inherit_spirit(self, other_spirit):
-        sp = self.spirittype(other_spirit.app)
-        sp.inherit(other_spirit)
-        return sp
-    
+
     def get_valid_labels(self):
-        return self.action.valid_labels()
+        raise NotImplementedError()
     
     def get_inspection(self):
-        return self.action.inspection()
+        raise NotImplementedError()
     
     def is_instant_action(self):
         return False
@@ -73,11 +73,11 @@ class Action():
     def add_argument(self, label, argname, typename, **kwargs):
         if not label:
             label = "target"
-        elif label not in self.action.valid_labels(): 
+        elif label not in self.get_valid_labels(): 
             raise ValueError("'{}'はこのアクションの呼び出しタイミング名ではありません".format(label))
         a = ActionArgDef(argname, typename, **kwargs)
         self.argdefs[label].append(a)
-        
+
     def find_argument(self, argname):
         for defs in self.argdefs.values():
             for d in defs:
@@ -95,13 +95,12 @@ class Action():
             raise ValueError("コマンド'{}'の引数ではありません: {}".format(self.prog, argname))
     
         prog = "{}.{}".format(self.prog, argname)
-        action = InstantParserAction(d.typename, prog)
+        action = ObjectConstructorAction(d.typename, prog)
         return action
 
     #
-    def invoke(self, invocation):
-        self.action.invoke(invocation, self)
-        return invocation
+    def invoke(self, invocation): # should return invocation
+        raise NotImplementedError()
     
     #
     def prepare_arguments(self, label, invocations):
@@ -135,29 +134,13 @@ class Action():
         for rdef, r in zip(self.resdefs, results):
             yield rdef, r
 
-#
-#
-#
-class BasicActionBit():
-    def __init__(self):
-        pass
-
-    def valid_labels(self):
-        raise NotImplementedError()
-    
-    def inspection(self):
-        raise NotImplementedError()
-    
-    def invoke(self, invocation, action):
-        raise NotImplementedError()
-    
 
 #
 #
 #
-class ActionClassBit(BasicActionBit):
-    def __init__(self, klass):
-        super().__init__()
+class ActionClass(Action):
+    def __init__(self, klass, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.klass = klass
         
         if hasattr(klass, "init_process"):
@@ -175,7 +158,7 @@ class ActionClassBit(BasicActionBit):
         else:
             self.exit_invoker = None
     
-    def valid_labels(self):
+    def get_valid_labels(self):
         labels = (
             ("init", self.init_invoker), 
             ("target", self.target_invoker),
@@ -183,27 +166,27 @@ class ActionClassBit(BasicActionBit):
         )
         return [x for (x,inv) in labels if inv is not None]
     
-    def inspection(self):
+    def get_inspection(self):
         return "class", self.klass.__qualname__, self.klass.__module__
 
     # 
-    def invoke(self, invocation, action):
+    def invoke(self, invocation):
         # プロセスを生成
         proc = self.klass(invocation.spirit)
         if self.init_invoker:
-            kwargs = action.prepare_arguments("init", invocation)
-            if not action.invoke_function("init", invocation, self.init_invoker, (proc,), kwargs):
+            kwargs = self.prepare_arguments("init", invocation)
+            if not self.invoke_function("init", invocation, self.init_invoker, (proc,), kwargs):
                 return invocation
 
         # メイン処理
-        kwargs = action.prepare_arguments("target", invocation)
-        if not action.invoke_function("target", invocation, self.target_invoker, (proc,), kwargs):
+        kwargs = self.prepare_arguments("target", invocation)
+        if not self.invoke_function("target", invocation, self.target_invoker, (proc,), kwargs):
             return invocation
 
         # 後処理
         if self.exit_invoker:
-            kwargs = action.prepare_arguments("exit", invocation)
-            if not action.invoke_function("exit", invocation, self.exit_invoker, (proc,), kwargs):
+            kwargs = self.prepare_arguments("exit", invocation)
+            if not self.invoke_function("exit", invocation, self.exit_invoker, (proc,), kwargs):
                 return invocation
 
         return invocation
@@ -211,57 +194,73 @@ class ActionClassBit(BasicActionBit):
 #
 #
 #
-class ActionFunctionBit(BasicActionBit):
-    def __init__(self, fn):
-        super().__init__()
+class ActionFunction(Action):
+    def __init__(self, fn, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.target_invoker = FunctionInvoker(fn)
     
-    def valid_labels(self):
+    def get_valid_labels(self):
         return ["target"]
         
-    def inspection(self):
+    def get_inspection(self):
         return "function", self.target_invoker.fn.__qualname__, self.target_invoker.fn.__module__
 
-    def invoke(self, invocation, action):
+    def invoke(self, invocation):
         # 束縛引数
         preargs = [
             invocation.spirit
         ]
         
         # メイン処理
-        kwargs = action.prepare_arguments("target", invocation)
-        action.invoke_function("target", invocation, self.target_invoker, preargs, kwargs)
+        kwargs = self.prepare_arguments("target", invocation)
+        self.invoke_function("target", invocation, self.target_invoker, preargs, kwargs)
         return invocation
 
 #
 #
 #
-class InstantParserAction(Action):
-    def __init__(self, typename, prog, description=None):
-        typedef = types.get(typename)
-        action = ActionFunctionBit(typedef.convert_from_string)
-        
+class ObjectConstructorAction(Action):
+    def __init__(self, 
+            typecode, 
+            prog, 
+            description=None
+        ):
         if description is None:
             description = "Parse {}.".format(prog)
-        
-        super().__init__(action, prog, description, None)
+        super().__init__(prog, description, None, None)
 
-        self.add_result(typename, help="Parsed value")
+        self.typecode = typecode
+        self._parsefn_invoker = FunctionInvoker(ObjectConstructorAction._parser_function)
+        self.add_result(typecode, help="Parsed value")
+    
+    def load(self, spirit):
+        return spirit
 
     def is_instant_action(self):
         return True
         
+    def get_valid_labels(self):
+        return ["target"]
+    
     def get_inspection(self):
-        _, qualname, modname = self.action.inspection()
-        return "instant-parser-function", qualname, modname
+        fn = ObjectConstructorAction._parser_function
+        return "instant-parser-function", fn.__qualname__, fn.__module__
+    
+    # 型のパーサ関数をよびだす
+    @staticmethod
+    def _parser_function(ttraits, parameter):
+        return ttraits.convert_from_string(parameter)
 
     def invoke(self, invocation):
-        # 束縛引数 - かならずparameterをとり、spiritは渡さない
+        ttraits = invocation.get_object_desktop().get_type(self.typecode)
+
+        # 束縛引数 - 型クラス＋かならずparameterをとる
         args = []
+        args.append(ttraits)
         args.append(invocation.pop_parameter())
         
         # メイン処理
-        self.invoke_function("target", invocation, self.action.target_invoker, args, {})
+        self.invoke_function("target", invocation, self._parsefn_invoker, args, {})
 
         # 返り値オブジェクトを設定する
         result = invocation.get_last_result()
@@ -270,7 +269,7 @@ class InstantParserAction(Action):
                 result = (result,)
 
             for resdef, resval in zip(self.resdefs, result):
-                invocation.spirit.push_object(resdef.get_typename(), resval)
+                invocation.spirit.push_object(value=resval, typename=resdef.get_typename())
         
         return invocation
 

@@ -49,6 +49,8 @@ class str_(TypeTraits):
         return False
 
 #
+#
+#
 @fundamental_type.definition
 class bool_(TypeTraits):
     @classmethod
@@ -70,6 +72,8 @@ class bool_(TypeTraits):
             raise ValueError(s)
 
 #
+#
+#
 @fundamental_type.definition
 class int_(TypeTraits):
     @classmethod
@@ -83,6 +87,8 @@ class int_(TypeTraits):
     def convert_from_string(self, s):
         return int(s, 0)
 
+#
+#
 #
 @fundamental_type.definition
 class float_(TypeTraits):
@@ -98,6 +104,8 @@ class float_(TypeTraits):
         return float(s)
 
 #
+#
+#
 @fundamental_type.definition
 class complex_(TypeTraits):
     @classmethod
@@ -111,3 +119,23 @@ class complex_(TypeTraits):
     def convert_from_string(self, s):
         return complex(s)
 
+#
+#
+#
+@fundamental_type.definition
+class dataview_t(TypeTraits):
+    @classmethod
+    def describe_type(self, traits):
+        from machaon.object.dataset import DataView
+        traits.describe(
+            "dataview", 
+            description="データビュー",
+            value_type=DataView
+        )
+
+    def convert_from_string(self, s):
+        raise ValueError("unsupported")
+
+    def convert_to_string(self, v):
+        raise ValueError("unsupported")
+    

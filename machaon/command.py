@@ -120,9 +120,9 @@ class CommandPackage():
         ):
             cmds = commandstr.split()
             if builder is None:
-                if target is None:
-                    raise ValueError("CommandPackage: 'entry' or 'target' argument is required")
                 builder = describe_command(target, **kwargs)
+                if builder.target is None:
+                    raise ValueError("CommandPackage: 'entry' or 'target' argument is required")
 
             if self.spirit is not None and builder.spirit is None:
                 builder.spirit = self.spirit
@@ -167,18 +167,20 @@ class CommandPackage():
 #       
 #
 def describe_command(
-    target,
+    target=None,
     *,
     description="",
     prog=None, 
     spirit=None,
-    instant=False,
+    construct_object=None,
     hidden=False,
     from_module=None,
 ):
     typecode = NORMAL_COMMAND
-    if instant: 
+    if construct_object: 
         typecode = INSTANT_COMMAND
+        if target is None:
+            target = construct_object
     if hidden: 
         typecode = HIDDEN_COMMAND
 

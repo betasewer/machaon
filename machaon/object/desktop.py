@@ -38,7 +38,7 @@ class ObjectDesktop():
                 typename = typetraits
             else:
                 typename = typetraits.__name__
-            tt = self._types.define(typename=typename, description="<Temporal type {}>".format(typename))
+            tt = self._types.define(typename=typename, description="<Temporal string type {}>".format(typename))
         return tt
 
     # オブジェクトを新規生成し、追加

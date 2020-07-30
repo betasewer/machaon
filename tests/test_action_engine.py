@@ -1,7 +1,7 @@
 from machaon.engine import CommandEntry, CommandSet, CommandEngine, HIDDEN_COMMAND
 from machaon.command import describe_command
 from machaon.process import Spirit, TempSpirit
-from machaon.action import Action, ActionFunctionBit, ActionClassBit, ActionInvocation, ActionArgDef
+from machaon.action import Action, ActionFunction, ActionClass, ActionInvocation, ActionArgDef
 
 from machaon.object.desktop import ObjectDesktop, Object, ObjectValue
 
@@ -107,10 +107,10 @@ def test_built_actionfunction_cmdentry():
     )
     act = entry.load_action()
 
-    assert isinstance(act.action, ActionFunctionBit)
+    assert isinstance(act, ActionFunction)
     assert act.get_description() == "Described description."
     assert act.get_prog() == "first-prog"
-    assert act.spirittype is Spirit
+    assert act.spirittype is None
 
     assert act.argdefs["target"][0].typename == "filepath"
     assert act.argdefs["target"][0].name == "input-filepath"

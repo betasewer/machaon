@@ -40,9 +40,14 @@ class AppRoot:
         self.ui = ui
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
+        
         self.processhive = ProcessHive()
+        
         self.cmdengine = CommandEngine()
+        
         self.objdesktop = ObjectDesktop()
+        self.objdesktop.add_fundamental_types()
+
         self.pkgmanager = package_manager(directory)
         self.pkgmanager.add_to_import_path()
     

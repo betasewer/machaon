@@ -27,6 +27,9 @@ class Object():
     def __repr__(self):
         return "<Object {} '{}' = {}>".format(self.type.typename, self.name, self.value)
     
+    def get_typename(self):
+        return self.type.typename
+    
     # メソッド名を解決する
     def resolve_method(self, method_name) -> ObjectOperator:
         return ObjectOperator(method_name, self.type)

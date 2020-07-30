@@ -82,8 +82,6 @@ class Process:
         return self.command
 
     def get_last_invocation(self):
-        if self.is_running():
-            raise StillExecuting()
         return self.last_invocation
     
     def is_executed(self):
@@ -166,34 +164,23 @@ class Process:
     #
     #
     #
-    def bind_data(self, data):
-        self.bound_data = data
-
-    def get_data(self, running=False):
-        if not running and self.is_running():
-            # 動作中はアクセスできない
-            return None
-        return self.bound_data
-    
-    #
-    #
-    #
     def push_object(self, value, typename=None, name=None):  
         if self.last_invocation is None:
             raise ValueError("No object desktop")
 
+        if typename is None:
+            typename = type(value)
+
         desk = self.last_invocation.get_object_desktop()
         if isinstance(value, Object):
-            desk.push(value)
-        else:   
+            obj = value
+        else:
             if name is None:
                 obji = len(self.bound_objects)
-                name = "object-{}-{}".format(self.index, obji)
-            desk.new(name, typename, value)
-    
-    def push_object_table(self, values, *args, name=None, **kwargs):        
-        dataview = DataViewFactory(datas, *command_args, **command_kwargs)
-        self.push_object(dataview, typename, name=name)
+                name = "object-{}-{}".format(self.index+1, obji)
+            obj = desk.new(name, typename, value)
+        desk.push(obj)
+        return obj
     
     def get_bound_objects(self, running=False) -> List[Object]:
         if not running and self.is_running():
@@ -326,8 +313,8 @@ class Spirit():
         return ProcessMessage(tag="delete-message", count=count, line=line)
     
     @_spirit_msgmethod
-    def dataview(self):
-        return ProcessMessage(tag="dataview")
+    def objectview(self, o):
+        return ProcessMessage(tag="object-view", object=o)
     
     def canvas(self, name, width, height, color=None):
         return ProcessScreenCanvas(self, name, width, height, color)
@@ -418,22 +405,21 @@ class Spirit():
     #
     #
     #
-    def bind_data(self, dataview):
-        if self.process is None:
-            raise ValueError("no process to be bound dataset exists")
-        self.process.bind_data(dataview)
+    def push_object(self, value, typename=None, name=None, *, view=True):
+        o = self.process.push_object(value, typename, name)
+        if view:
+            self.objectview(o)
+        return o
     
-    def create_data(self, datas, *command_args, **command_kwargs):
-        dataview = DataViewFactory(datas, *command_args, **command_kwargs)
-        self.bind_data(dataview)
-        return dataview
-    
-    #
-    def push_object(self, value, typename=None, name=None):
-        self.process.push_object(value, typename, name)
-    
-    def push_object_table(self, datas, *command_args, **command_kwargs):
-        self.process.push_object_table(datas, *command_args, **command_kwargs)
+    def push_dataview(self, items, *dataview_args, name=None, view=True, **dataview_kwargs):
+        # データビューオブジェクトを作成
+        from machaon.object.dataset import parse_new_dataview
+        inv = self.process.get_last_invocation()
+        if inv is None:
+            raise ValueError()
+        dataview = parse_new_dataview(inv.get_object_desktop(), items, *dataview_args, **dataview_kwargs)
+        # オブジェクトを積む
+        return self.push_object(dataview, typename="dataview", name=name, view=view)
 
 #
 #
