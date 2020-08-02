@@ -134,7 +134,7 @@ class FilePath():
         return stat.filemode(self.stat.st_mode)
     
     @classmethod
-    def describe_type(cls, describe):
+    def describe_object(cls, describe):
         describe(
             typename="filepath",
             description="",

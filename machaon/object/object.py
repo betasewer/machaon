@@ -48,3 +48,6 @@ class Object():
     #
     def to_string(self) -> str:
         return self.type.convert_to_string(self.value)
+    
+    def get_summary(self) -> str:
+        return self.type.make_summary(self.value)

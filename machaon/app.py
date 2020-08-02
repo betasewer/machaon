@@ -29,8 +29,7 @@ import machaon.platforms
 class AppRoot:
     def __init__(self):
         self.ui = None
-        self.cmdengine = None 
-        self.objdesktop = None
+        self.cmdengine = None
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
         self.pkgmanager = None
@@ -38,18 +37,17 @@ class AppRoot:
 
     def initialize(self, *, ui, directory):
         self.ui = ui
-        if hasattr(self.ui, "init_with_app"):
-            self.ui.init_with_app(self)
-        
-        self.processhive = ProcessHive()
-        
+
         self.cmdengine = CommandEngine()
-        
-        self.objdesktop = ObjectDesktop()
-        self.objdesktop.add_fundamental_types()
+
+        self.processhive = ProcessHive()
+        self.processhive.new_desktop("desk1")
 
         self.pkgmanager = package_manager(directory)
         self.pkgmanager.add_to_import_path()
+        
+        if hasattr(self.ui, "init_with_app"):
+            self.ui.init_with_app(self)
     
     def get_ui(self):
         return self.ui
@@ -183,8 +181,7 @@ class AppRoot:
     def run_process(self, commandstr: str):
         process = Process(commandstr)
         chamber = self.processhive.new(process)
-        self.processhive.activate(chamber.get_index())
-        self.processhive.run(self)
+        process.run(self)
         return chamber
     
     # プロセスの実行フロー
@@ -223,12 +220,17 @@ class AppRoot:
         # 実行開始！
         spirit = execentry.spirit
         self.ui.on_exec_process(spirit, process)
+        
+        # オブジェクトを取得
+        deskchm = self.processhive.get_last_active_desktop()
+        if deskchm is None:
+            raise ValueError("No object desktop can be found")
 
         # プロセスを実行する
         result = None
         invocation = None
         try:
-            invocation = process.execute(execentry, self.objdesktop)
+            invocation = process.execute(execentry, deskchm.get_desktop())
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
         except Exception as execexcep:
@@ -240,12 +242,12 @@ class AppRoot:
             # エラーが発生しているか
             e = invocation.get_last_exception()
             if e:
-                # アプリコードからの例外
-                self.ui.on_error_process(spirit, process, e, timing = "execute")
+                # アプリエラーはオブジェクトとして格納する
+                process.push_object((e, "execute", process), typename="process-error")
 
-            # 生成されたオブジェクトを得る
+            # 生成されたオブジェクトを配置する
             for o in process.get_bound_objects(running=True):
-                self.objdesktop.push(o)
+                deskchm.get_desktop().push(o)
             
             # 最後のtargetの返り値を返す
             result = invocation.get_last_result()
@@ -264,6 +266,11 @@ class AppRoot:
     
     def get_command_sets(self):
         return self.cmdengine.command_sets()
+        
+    # プロセスをスレッドで実行しアクティブにする
+    def new_desktop(self, name: str):
+        chamber = self.processhive.new_desktop(name)
+        return chamber
 
     #
     # プロセススレッド
@@ -302,11 +309,14 @@ class AppRoot:
         if index is None or index == "":
             chm = self.get_active_chamber()
         elif isinstance(index, str):
-            try:
-                index = int(index, 10)-1
-            except ValueError:
-                raise ValueError(str(index))
-            chm = self.get_chamber(index, activate=activate)
+            if index=="desktop":
+                chm = self.processhive.get_last_active_desktop()
+            else:
+                try:
+                    index = int(index, 10)-1
+                except ValueError:
+                    raise ValueError(str(index))
+                chm = self.get_chamber(index, activate=activate)
         elif isinstance(index, int):
             chm = self.get_chamber(index, activate=activate)
         return chm
@@ -331,3 +341,13 @@ class AppRoot:
             chm.interrupt()
             chm.join(timeout=timeout)
         return chm
+    
+    #
+    def select_desktop(self, index=None):
+        if index is None:
+            chm = self.select_chamber("desktop")
+        else:
+            chm = self.select_chamber(index)
+        if chm is None:
+            raise ValueError("Desktop Chamber is not found")
+        return chm.get_desktop()

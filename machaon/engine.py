@@ -47,15 +47,14 @@ class CommandEntry():
 
         # コマンドをロードする
         target = self.builder.target
-        if isinstance(target, str):
-            if isinstance(self.builder.frommodule, str):
-                import importlib
-                mod = importlib.import_module(self.builder.frommodule)
-                member = getattr(mod, target, None)
-                if member is None:
-                    raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(self.prog, target))
-                target = member
-        
+        if isinstance(target, str) and isinstance(self.builder.frommodule, str):
+            import importlib
+            mod = importlib.import_module(self.builder.frommodule)
+            member = getattr(mod, target, None)
+            if member is None:
+                raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(self.prog, target))
+            target = member
+
         # アクションタイプの決定
         if self.commandtype & INSTANT_COMMAND:
             action_type = "i"
@@ -73,7 +72,7 @@ class CommandEntry():
         elif callable(target):
             action_type = "f"
         else:
-            raise ValueError("Invalid process action target")
+            raise ValueError("無効なアクションターゲットです：{}".format(target))
 
         # prog
         prog = self.prog
@@ -290,6 +289,15 @@ class CommandEngine:
     # コマンドを解析して実行エントリの候補を生成する
     def parse_command(self, commandstr: str, spirit: Spirit) -> List[CommandExecutionEntry]:
         commandhead, commandargs = split_command(commandstr)
+
+        # オブジェクト生成コマンドか
+        if commandhead.startswith("[") and commandhead.endswith("]"):
+            typecode = commandhead.strip("[]").strip()
+            act = ObjectConstructorAction(typecode, "new-object", "オブジェクトを生成します。")
+            parameter = " ".join(commandargs)
+            return [
+                CommandExecutionEntry(act, spirit, parameter)
+            ]
 
         # 引数を生成するコマンドか
         yieldargname = None

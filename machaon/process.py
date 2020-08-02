@@ -5,11 +5,12 @@ import sys
 import threading
 import queue
 import time
-from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator
+import traceback
+from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
 
 from machaon.action import ActionInvocation
-from machaon.object.desktop import Object
-from machaon.cui import test_yesno, MiniProgressDisplay
+from machaon.object.desktop import Object, ObjectDesktop
+from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 
 #
 # ######################################################################
@@ -72,11 +73,16 @@ class Process:
         if self.spirit is None:
             raise NotExecutedYet()
         return self.spirit
+    
+    def is_constructor_process(self) -> bool:
+        if self.target is None:
+            return False
+        return self.target.is_constructor_action()
         
-    def get_parsed_command(self):
-        if self.parsedcommand is None:
-            raise NotExecutedYet()
-        return self.parsedcommand
+    #def get_parsed_command(self):
+    #    if self.parsedcommand is None:
+    #        raise NotExecutedYet()
+    #    return self.parsedcommand
     
     def get_command_string(self):
         return self.command
@@ -84,20 +90,29 @@ class Process:
     def get_last_invocation(self):
         return self.last_invocation
     
-    def is_executed(self):
-        return self.target is not None and self.parsedcommand is not None
+    #def is_executed(self):
+    #    return self.target is not None and self.parsedcommand is not None
     
     def is_failed(self):
-        if self.last_invocation is None:
-            return False # まだ実行が終わっていない
-        e = self.last_invocation.get_last_exception()
+        e = self.get_last_exception()
         return e is not None
+    
+    def is_failed_before_execution(self):
+        if self.last_invocation is None:
+            return False
+        time = self.last_invocation.get_last_exception_time()
+        return time == "init"
     
     def failed_before_execution(self, excep):
         # 実行前に起きたエラーを記録する
         invocation = ActionInvocation(None, None, None)
         invocation.initerror(excep)
         self.last_invocation = invocation
+    
+    def get_last_exception(self):
+        if self.last_invocation is None:
+            return None
+        return self.last_invocation.get_last_exception()
 
     #
     # スレッド
@@ -164,21 +179,25 @@ class Process:
     #
     #
     #
-    def push_object(self, value, typename=None, name=None):  
+    def push_object(self, value, typename, name=None):  
         if self.last_invocation is None:
             raise ValueError("No object desktop")
-
-        if typename is None:
-            typename = type(value)
 
         desk = self.last_invocation.get_object_desktop()
         if isinstance(value, Object):
             obj = value
         else:
+            otype = desk.get_type(typename)
+
             if name is None:
                 obji = len(self.bound_objects)
-                name = "object-{}-{}".format(self.index+1, obji)
-            obj = desk.new(name, typename, value)
+                name = "{}-{}-{}".format(otype.typename.lower(), self.index+1, obji)
+            
+            if isinstance(value, tuple):
+                obj = desk.new(name, otype, *value)
+            else:
+                obj = desk.new(name, otype, value)
+
         desk.push(obj)
         return obj
     
@@ -405,7 +424,7 @@ class Spirit():
     #
     #
     #
-    def push_object(self, value, typename=None, name=None, *, view=True):
+    def push_object(self, value, *, typename, name=None, view=True):
         o = self.process.push_object(value, typename, name)
         if view:
             self.objectview(o)
@@ -445,7 +464,7 @@ class TempSpirit(Spirit):
             kwargs = str(msg.kwargs) if msg.kwargs else ""
             print("[{}]{} {}".format(msg.tag, msg.text, kwargs))
     
-    def get(self):
+    def get_message(self):
         return self.msgs
         
     #
@@ -622,6 +641,8 @@ class ProcessScreenCanvas():
     def oval(self, *, coord=None, color=None, dash=None, stipple=None):
         self.add_graph("oval", coord=coord, color=color, dash=dash, stipple=stipple)
 
+    def text(self, *, coord=None, text=None, color=None):
+        self.add_graph("text", coord=coord, text=text, color=color)
 
 #
 # #####################################################################
@@ -631,11 +652,10 @@ class ProcessScreenCanvas():
 # プロセスの動作を表示する
 #
 class ProcessChamber:
-    def __init__(self, index, process):
+    def __init__(self, process):
         self.process = process
-        self.process.set_index(index)
         self.handled_msgs = []
-        
+    
     def is_failed(self):
         return self.process.is_failed()
     
@@ -658,6 +678,9 @@ class ProcessChamber:
     
     def finish_input(self, text): # -
         self.process.tell_input_end(text)
+        
+    def is_constructor_process(self) -> bool:
+        return self.process.is_constructor_process()
 
     def handle_message(self):
         msgs = self.process.handle_post_message()
@@ -667,7 +690,17 @@ class ProcessChamber:
     def get_message(self): # -
         return self.handled_msgs
     
-    def get_command(self): # -
+    def get_title(self): # -
+        target = self.process.target
+        if target is not None:
+            title = target.get_prog()
+        else:
+            cmd = self.process.get_command_string()
+            title = collapse_text(cmd.partition(" ")[0], 15)
+        title = "{}. {}".format(self.process.get_index()+1, title)
+        return title
+    
+    def get_input_command(self):
         return self.process.get_command_string()
     
     def get_process(self): # -
@@ -676,10 +709,6 @@ class ProcessChamber:
     # ヌルの可能性あり
     def get_bound_spirit(self): # -
         return self.process.get_spirit()
-    
-    # ヌルの可能性あり
-    def get_bound_data(self, running=False): # -
-        return self.process.get_data(running=running)
 
     def get_index(self): # -
         return self.process.get_index()
@@ -687,29 +716,82 @@ class ProcessChamber:
 #
 #
 #
+class DesktopChamber():
+    def __init__(self, name, index):
+        self._index = index
+        self._name = name
+        self._objdesk = ObjectDesktop()
+        self._objdesk.add_fundamental_types()
+        self._msgs = []
+    
+    def get_desktop(self):
+        return self._objdesk
+
+    def get_index(self): # -
+        return self._index
+    
+    def is_running(self):
+        return False
+    
+    def is_failed(self):
+        return False
+        
+    def is_waiting_input(self): # -
+        return False
+
+    def is_constructor_process(self):
+        return False
+
+    def handle_message(self):
+        return []
+
+    def get_message(self): #
+        msgs = []
+        for obj in self._objdesk.enumerates():
+            msg = ProcessMessage(object=obj, tag="object-summary")
+            msgs.append(msg)
+        return msgs
+
+    def get_title(self): # -
+        title = "机{}. {}".format(self._index+1, self._name)
+        return title
+        
+    def get_input_command(self):
+        return ""
+
+#
+#
+#
 class ProcessHive:
     def __init__(self):
-        self.chambers: Dict[int, ProcessChamber] = {}
+        self.chambers: Dict[int, Union[ProcessChamber,DesktopChamber]] = {}
         self._allhistory: List[int] = []
         self._nextindex: int = 0
-        
-    def run(self, app):
-        cha = self.get_active()
-        p = cha.get_process()
-        p.run(app)
-
+    
     def execute(self, app):
         cha = self.get_active()
         p = cha.get_process()
         app.execute_process(p)
 
     # 新しいチャンバーを作成して返す
-    def new(self, process: Process) -> ProcessChamber:
+    def new(self, process: Process, *, activate=True) -> ProcessChamber:
         newindex = self._nextindex
+        process.set_index(newindex)
+        chm = ProcessChamber(process)
+        self.chambers[newindex] = chm
         self._nextindex += 1
-        scr = ProcessChamber(newindex, process)
-        self.chambers[newindex] = scr
-        return scr
+        if activate:
+            self.activate(newindex)
+        return chm
+    
+    def new_desktop(self, name: str, *, activate=True) -> DesktopChamber:
+        newindex = self._nextindex
+        chm = DesktopChamber(name, newindex)
+        self.chambers[newindex] = chm
+        self._nextindex += 1
+        if activate:
+            self.activate(newindex)
+        return chm
     
     # 既存のチャンバーをアクティブにする
     def activate(self, index: int) -> bool:
@@ -736,6 +818,13 @@ class ProcessHive:
         ac = next(vs, None)
         if ac is not None:
             return self.chambers[ac]
+        return None
+    
+    def get_last_active_desktop(self):
+        for index in self.rhistory():
+            chm = self.chambers[index]
+            if isinstance(chm, DesktopChamber):
+                return chm
         return None
 
     #
@@ -786,3 +875,38 @@ class ProcessHive:
     def interrupt_all(self):
         for cha in self.get_runnings():
             cha.interrupt()
+
+#
+#
+#
+class ProcessError():
+    def __init__(self, excep, timing, process):
+        self._timing = timing
+        self._excep = excep
+        self._proc = process
+    
+    def explain_process(self):
+        return "プロセス[{}] {}".format(self._proc.get_index(), self._proc.get_command_string())
+    
+    def explain_timing(self):
+        if self._timing == "argparse":
+            tim = "引数の解析"
+        elif self._timing == "executing":
+            tim = "実行前後での"
+        elif self._timing == "execute":
+            tim = "実行"
+        else:
+            tim = "不明な時空間'{}'での".format(self._timing)
+        return "{}エラー".format(tim)
+    
+    def get_traces(self):
+        traces = traceback.format_exception(type(self._excep), self._excep, self._excep.__traceback__)
+        return traces[-1], traces[1:-1]
+
+    def print_traceback(self, spi):
+        excep, traces = self.get_traces()
+        spi.error(excep)
+        spi.message_em("スタックトレース：")
+        spi.message("".join(traces))
+
+    

@@ -31,6 +31,10 @@ class Launcher():
     def init_with_app(self, app):
         self.app = app
         self.init_screen()
+        # デスクトップの追加
+        deskchamber = self.app.select_chamber("desktop")
+        self.update_active_chamber(deskchamber, updatemenu=False)
+        self.add_chamber_menu(deskchamber)
     
     def init_screen(self):
         pass
@@ -78,6 +82,10 @@ class Launcher():
                 else:
                     text = "値：\n  {}\n".format(obj.to_string())
                     self.insert_screen_message(ProcessMessage(text))
+            
+            elif tag == "object-summary":
+                obj = msg.argument("object")
+                self.insert_screen_object_summary(obj)
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
@@ -94,7 +102,6 @@ class Launcher():
     def handle_chamber_message(self, chamber):
         for msg in chamber.handle_message():
             self.message_handler(msg)
-        return True
 
     #
     # メッセージウィンドウの操作
@@ -111,11 +118,24 @@ class Launcher():
     #
     # プロセスの情報を更新するために監視
     #
-    def watch_active_process(self):
-        raise NotImplementedError()
+    def watch_chamber_message(self):        
+        """ チャンバーの発するメッセージを読みに行く """
+        procchamber = self.app.get_active_chamber()
+        running = procchamber.is_running()
+        self.handle_chamber_message(procchamber)
+        return running
 
-    def watch_running_process(self, states):
-        raise NotImplementedError()
+    def watch_chamber_state(self, prevstates):
+        """ 動作中のプロセスの状態を調べる """
+        curstates = self.app.get_chambers_state()
+
+        # 停止したプロセスを調べる
+        for wasrunning in prevstates["running"]:
+            if wasrunning not in curstates["running"]:
+                chm = self.app.get_chamber(wasrunning)
+                self.finish_chamber(chm)
+
+        return curstates
         
     # 
     def dataviewer(self, viewtype):
@@ -126,6 +146,10 @@ class Launcher():
     
     #
     def insert_screen_appendix(self, values, title=""):
+        raise NotImplementedError()
+    
+    #
+    def insert_screen_object_summary(self, obj):
         raise NotImplementedError()
     
     #
@@ -149,20 +173,16 @@ class Launcher():
         if not command:
             return
 
-        # 特殊コマンド
+        # 特殊コマンド（メタコマンド）
         if command[0] == meta_command_sigil:
             self.invoke_meta_command(command[1:])
             return
-    
+        
+        # 通常コマンドを実行
         chamber = self.app.run_process(command) # 実行
 
-        self.update_active_chamber(chamber, updatemenu=False)
-        self.add_chamber_menu(chamber)
-
-        # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
-        states = self.app.get_chambers_state()
-        states["running"].append(chamber.get_index())
-        self.watch_running_process(states)
+        # 表示を更新する
+        self.activate_new_chamber(chamber)
     
     #
     def invoke_meta_command(self, command):
@@ -298,7 +318,7 @@ class Launcher():
         if cha is None:
             return
         curline = self.pop_input_text(nopop=True)
-        prevline = cha.get_command()
+        prevline = cha.get_input_command()
         if curline == prevline:
             return False
         self.replace_input_text(prevline)
@@ -319,61 +339,68 @@ class Launcher():
     #
     #
     #
-    def activate_new_chamber(self):
-        chamber = self.app.get_active_chamber()
-        self.update_active_chamber(chamber, updatemenu=False)
-        self.add_chamber_menu(chamber)
+    def activate_new_chamber(self, newchm):
+        """ チャンバーの新規作成時に呼ばれる """
+        self.update_active_chamber(newchm, updatemenu=False)
+        self.add_chamber_menu(newchm)
 
         # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
         states = self.app.get_chambers_state()
-        states["running"].append(chamber.get_index())
-        self.watch_running_process(states)
+        states["running"].append(newchm.get_index())
+
+        self.watch_chamber_state(states)
 
     def shift_active_chamber(self, delta):
+        """ 隣接したチャンバーをアクティブにする """
         chm = self.app.shift_active_chamber(delta)
         if chm is None:
             return
         self.update_active_chamber(chm)
 
     def update_active_chamber(self, chamber, updatemenu=True):
+        """ アクティブなチャンバーを移す """
         msgs = chamber.get_message()
         self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
-        self.watch_active_process()
+        self.watch_chamber_message()
         if updatemenu:
             self.update_chamber_menu(active=chamber)
 
     def close_active_chamber(self):
-        # アクティブなプロセスを停止する
-        
-        def remove_and_flip(chm):
+        """ アクティブなチャンバーを削除する。動作中なら停止を試みる """
+        chm = self.app.get_active_chamber()
+
+        # 第一デスクトップは削除させない
+        if chm.get_index() == 0:
+            return
+
+        # 削除し新たにアクティブにする
+        def remove_and_shift(chm):
             # 消去
             self.remove_chamber_menu(chm)
             self.app.remove_chamber(chm.get_index())
             
             # 隣のチャンバーに移る
             nchm = self.app.get_active_chamber() # 新たなチャンバー
-            if nchm:
-                self.update_active_chamber(nchm)
-            else:
-                self.replace_screen_message([])
+            self.update_active_chamber(nchm)
 
         # 停止処理
-        chm = self.app.get_active_chamber()
         if chm.is_running():
-            self.break_chamber_process(timeout=10, after=remove_and_flip)
+            self.break_chamber_process(timeout=10, after=remove_and_shift)
         else:
-            remove_and_flip(chm)
+            remove_and_shift(chm)
     
-    #
     def break_chamber_process(self, timeout=10, after=None):
+        """ アクティブな作動中のチャンバーを停止する """
         chm = self.app.get_active_chamber()
         if not chm.is_running():
             return
         if chm.is_interrupted():
             return # 既に別箇所で中断が試みられている
-        chm.interrupt()
+
+        chm.interrupt() # 中断をプロセスに通知する
 
         self.insert_screen_appendix("プロセス[{}]の中断を試みます...({}秒)".format(chm.get_index(), timeout))
+        
         def watcher():
             for _ in range(timeout):
                 if not chm.is_running():
@@ -385,16 +412,36 @@ class Launcher():
                 self.insert_screen_appendix("プロセス[{}]を終了できません".format(chm.get_index()))
 
         wch = threading.Thread(None, watcher, daemon=True)
-        wch.start() # 終了しなかったので、見張りを開始する
-            
+        wch.start() # 一定時間、終了を待つ
+    
+    def finish_chamber(self, chamber):
+        """ 終了したチャンバーに対する処理 """
+        if chamber.is_constructor_process():
+            # コンストラクタアクションであれば、チャンバーを削除
+            self.remove_chamber_menu(chamber)
+            self.app.remove_chamber(chamber.get_index())
+            # 最寄りのデスクトップにフォーカス
+            deskchm = self.app.select_chamber("desktop", activate=True)
+            self.update_active_chamber(deskchm)
+        elif chamber.is_failed() and chamber.get_process().is_failed_before_execution():
+            # チャンバーを削除
+            self.remove_chamber_menu(chamber)
+            self.app.remove_chamber(chamber.get_index())
+            # 前のチャンバーにフォーカス
+            self.update_active_chamber(self.app.get_active_chamber())
+        else:
+            # 文字色を実行中の色から戻す
+            self.update_chamber_menu(ceased=chamber)
+
+    # メニューの更新
     def add_chamber_menu(self, chamber):
-        pass
+        raise NotImplementedError()
 
     def update_chamber_menu(self, *, active=None, ceased=None):
-        pass
+        raise NotImplementedError()
     
     def remove_chamber_menu(self, chamber):
-        pass
+        raise NotImplementedError()
 
     #
     # 
@@ -446,8 +493,6 @@ class Launcher():
             tim = "引数の解析中に"
         elif timing == "executing":
             tim = "プロセス実行の前後に"
-        elif timing == "execute":
-            tim = "プロセス内で"
         else:
             tim = "不明な時空間'{}'にて".format(timing)
         spirit.error("{}エラーが発生し、失敗しました。".format(tim))
@@ -476,16 +521,10 @@ class Launcher():
     def on_bad_command(self, spirit, process, excep):
         """ 不明なコマンド """
         command = process.get_command_string()
-        target = excep.get_target()
-        if target is None:
-            spirit.error("'{}'は不明なコマンドです".format(command))
-            if self.app.search_command("prog"):
-                spirit.message("'prog'でコマンド一覧を表示できます")
-        else:
-            spirit.error("{}: コマンド引数が間違っています:".format(target.get_prog()))
-            spirit.error(excep.get_reason())
-            for line in target.get_help():
-                spirit.message(line)
+        err = "'{}'は不明なコマンドです".format(command)
+        if self.app.search_command("prog"):
+            err += "。プログラムの一覧を表示 -> prog"
+        self.replace_input_text(err)
     
     def on_exit(self):
         """ アプリ終了時 """

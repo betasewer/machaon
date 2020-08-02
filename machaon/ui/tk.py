@@ -13,7 +13,7 @@ import tkinter.ttk as ttk
 from machaon.ui.basic import Launcher
 from machaon.command import describe_command, describe_command_package
 from machaon.process import ProcessMessage, ProcessChamber
-from machaon.cui import collapse_text, get_text_width, ljust
+from machaon.cui import get_text_width, ljust, composit_text, collapse_text
 import machaon.platforms
 
 #
@@ -441,89 +441,35 @@ class tkLauncher(Launcher):
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
         
+    def insert_screen_object_summary(self, obj): 
+        self.log.configure(state='normal')
+        insert_text_screen_object_summary(self.log, obj, self.theme)
+        self.log.configure(state='disabled')
+        
     def insert_screen_canvas(self, msg):
         """ ログ欄に図形を描画する """
         self.log.configure(state='normal')
-        canvas_id = self.create_screen_canvas_script(msg.argument("canvas"))
+        canvas_id = embed_text_screen_canvas(self.log, msg.argument("canvas"), self.theme)
         self.log.window_create(tk.END, window=canvas_id)
         self.log.insert(tk.END, "\n") # 
         self.log.configure(state='disabled')
-        
-    def create_screen_canvas_script(self, canvas):
-        """ キャンバスを作成する """
-        bg = canvas.bg
-        if bg is None:
-            bg = self.theme.getval("color.background")
-
-        cv = tk.Canvas(
-            self.log,
-            width=canvas.width,
-            height=canvas.height,
-            bg=bg,
-            highlightbackground=bg,
-            highlightcolor=bg
-        )
-
-        for typ, args in canvas.get_graphs():
-            if args.get("coord") is None:
-                args["coord"] = (1, 1, canvas.width, canvas.height)
-
-            if args.get("color") is None:
-                args["color"] = self.theme.getval("color.message")
-
-            if args.get("width") is None:
-                args["width"] = 1
-               
-            if typ == "rectangle":
-                cv.create_rectangle(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
-            elif typ == "rectangle-frame":
-                coord = args["coord"]
-                coordlist = [
-                    coord[0], coord[1],
-                    coord[2], coord[1],
-                    coord[2], coord[3],
-                    coord[0], coord[3],
-                    coord[0], coord[1]
-                ]
-                cv.create_line(*coordlist, fill=args["color"], width=args["width"], dash=args["dash"])
-            elif typ == "oval":
-                cv.create_oval(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
-            else:
-                raise NotImplementedError()
-
-        return cv
     
     def get_screen_texts(self):
         """ プレーンテキストに変換 """
         return self.log.get(1.0, tk.END)
         
-    def watch_active_process(self):
+    def watch_chamber_message(self):
         """ アクティブなプロセスの発するメッセージを読みに行く """
-        procchamber = self.app.get_active_chamber()
-        print("active shift: watching... [{}]".format(procchamber.get_command()))
-        running = procchamber.is_running()
-        if not self.handle_chamber_message(procchamber):
-            return
+        running = super().watch_chamber_message()
         if running:
-            self.log.after(300, self.watch_active_process) # 300ms
-        else:
-            print("stopped watching.")
+            self.log.after(300, self.watch_chamber_message) # 300ms
+        return running
 
-    def watch_running_process(self, states):
-        curstates = self.app.get_chambers_state()
-        print("running: watching... [{}]".format(curstates["running"]))
-
-        # 停止したプロセスを調べる
-        for wasrunning in states["running"]:
-            if wasrunning not in curstates["running"]:
-                self.update_chamber_menu(ceased=self.app.get_chamber(wasrunning))
-                procchamber = self.app.get_chamber(wasrunning)
-                print("[{}] finished.".format(procchamber.get_command()))
-        
+    def watch_chamber_state(self, states):
+        curstates = super().watch_chamber_state(states)
         if curstates["running"]:
-            self.log.after(100, self.watch_running_process, curstates) 
-        else:
-            print("stopped checking.")
+            self.log.after(100, self.watch_chamber_state, curstates) 
+        return curstates
     
     #
     def scroll_vertical(self, sign):
@@ -685,7 +631,7 @@ class tkLauncher(Launcher):
     
     def select_screen_dataview_item(self, dataname, index, charindex):
         # 現在のデータセットのアイテムを選択する
-        dataobj = self.app.objdesktop.pick(dataname)
+        dataobj = self.app.select_desktop().pick(dataname)
         if dataobj is None:
             return False
         datas = dataobj.value
@@ -743,19 +689,14 @@ class tkLauncher(Launcher):
     #
     def add_chamber_menu(self, chamber: ProcessChamber):
         # メニュータイトルの作成
-        target = chamber.get_process().target
-        if target is not None:
-            title = target.get_prog()
-        else:
-            title = collapse_text(chamber.get_command().partition(" ")[0], 15)
-        title = " {}. {} ".format(chamber.get_index()+1, title)
+        title = chamber.get_title()
 
         # 表示の末尾に追加
         keytag = menukeytag(chamber.get_index())
         self.chambermenu.configure(state='normal')
         if self.app.count_chamber() > 1:
             self.chambermenu.insert(tk.END, " | ", ("chamber",))
-        self.chambermenu.insert(tk.END, title, ("running", "chamberlink", "chamber", keytag))
+        self.chambermenu.insert(tk.END, " "+title+" ", ("running", "chamberlink", "chamber", keytag))
         self.chambermenu.configure(state='disable')
 
         # プロセスの状態を反映する
@@ -794,7 +735,7 @@ class tkLauncher(Launcher):
                 update_prefix(self.chambermenu_active, "  ")
                 update_tag(self.chambermenu_active, "active", False)
             # 新たなアクティブチャンバー
-            update_prefix(iactive, "[]")
+            update_prefix(iactive, "<>")
             update_tag(iactive, "active", True)
             self.chambermenu_active = iactive
             # 必要ならスクロールする
@@ -1047,5 +988,114 @@ class HyperlinkDatabase:
         ds.extend(["{:03}|{}".format(key, link) for (key, link) in self.links.items()])
         return ds
 
+#
+# 埋め込みキャンバス
+#
+def embed_text_screen_canvas(parent, canvas, theme):
+    """ キャンバスを作成する """
+    bg = canvas.bg
+    if bg is None:
+        bg = theme.getval("color.background")
 
+    cv = tk.Canvas(
+        parent,
+        width=canvas.width,
+        height=canvas.height,
+        bg=bg,
+        highlightbackground=bg,
+        highlightcolor=bg
+    )
 
+    for typ, args in canvas.get_graphs():
+        if args.get("coord") is None:
+            args["coord"] = (1, 1, canvas.width, canvas.height)
+
+        if args.get("color") is None:
+            args["color"] = theme.getval("color.message")
+
+        if args.get("width") is None:
+            args["width"] = 1
+            
+        if typ == "rectangle":
+            cv.create_rectangle(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
+        elif typ == "rectangle-frame":
+            coord = args["coord"]
+            coordlist = [
+                coord[0], coord[1],
+                coord[2], coord[1],
+                coord[2], coord[3],
+                coord[0], coord[3],
+                coord[0], coord[1]
+            ]
+            cv.create_line(*coordlist, fill=args["color"], width=args["width"], dash=args["dash"])
+        elif typ == "oval":
+            cv.create_oval(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
+        elif typ == "text":
+            cv.create_text(*args["coord"], fill=args["color"], text=args["text"])
+        else:
+            raise NotImplementedError()
+
+    return cv
+
+#
+#
+#
+def insert_text_screen_object_summary(parent, obj, theme):
+    width = 30
+    tags = ("message",)
+    frametags = ("message", "frame")
+    
+    # 上の罫
+    title = "{}".format("object")
+    tops = composit_text(" "+title+" ", width, fill=("─", " "))
+    topline = "┌" + tops + "┐" + '\n'
+    parent.insert("end", topline, frametags) # ヘッダー
+
+    # 上段：オブジェクトの情報
+    props = [
+        "name: {}".format(obj.name),
+        "type: {}".format(obj.get_typename())
+    ]
+    for line, _ in composit_text.filled_lines("\n".join(props), width, fill=" "):
+        parent.insert("end", "｜", frametags)
+        parent.insert("end", line, tags) 
+        parent.insert("end", "｜\n", frametags)
+
+    # 仕切りの罫
+    mid = composit_text("", width, fill=("─", " "))
+    midline = "├" + mid + "┤" + '\n'
+    parent.insert("end", midline, frametags) # 
+
+    # 下段：オブジェクトの値
+    summary = obj.get_summary()
+    for line, _ in composit_text.filled_lines(summary, width, fill=" "):
+        parent.insert("end", "｜", frametags)
+        parent.insert("end", line, tags) 
+        parent.insert("end", "｜\n", frametags)
+
+    # 下の罫
+    bottoms = composit_text("", width, fill=("─", " "))
+    bottomline = "└" + bottoms + "┘" + '\n'
+    parent.insert("end", bottomline, frametags) # 
+    
+    """
+    # Canvasでグラフィカルな表示＠AAで充分？
+    width = 30     
+    title = "[{}] {}".format(obj.get_typename(), obj.name)
+
+    summary = obj.get_summary()
+    y = 10
+    sumlines = []
+    for rawline in composit_text(summary, width+2).splitlines():
+        y += 10
+        sumlines.append((rawline, y))
+    
+    from machaon.process import ProcessScreenCanvas
+    cv = ProcessScreenCanvas(None, name="obj-{}".format(obj.name), width="%im"%30, height="%im"%y, color="#400080")
+
+    cv.text(coord=(50,10), text=title, color="#FFFF00")
+    for sumline, ycoord in sumlines:
+        cv.text(coord=(50,ycoord), text=sumline, color="#FFFFFF")
+
+    self.insert_screen_canvas(ProcessMessage("canvas", canvas=cv))
+    """

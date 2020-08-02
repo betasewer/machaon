@@ -6,7 +6,7 @@ class dummy_rabbit(TypeTraits):
     describe_count = 0
     
     @classmethod
-    def describe_type(cls, traits):
+    def describe_object(cls, traits):
         traits.describe(
             typename = "dummy-rabbit"
         )

@@ -114,6 +114,9 @@ class TypeTraits():
         else:
             return str(v)
     
+    def make_summary(self, v):
+        return self.convert_to_string(v)
+
     # 
     # メソッド呼び出し
     #
@@ -187,7 +190,11 @@ class TypeTraits():
         if not isinstance(declaration, str):
             raise TypeError("declaration")
         
-        head, _, tail = [x.strip() for x in declaration.partition(" ")]
+        decl, _, typecode = [x.strip() for x in declaration.partition("->")]
+        if not typecode:
+            typecode = "str"
+        
+        head, _, tail = [x.strip() for x in decl.partition(" ")]
         if not tail:
             tail = head
             head = "member"
@@ -195,6 +202,7 @@ class TypeTraits():
         if head == "member":
             names = tail.split()
             def member_(**kwargs):
+                kwargs.setdefault("return_type", typecode)
                 self.new_method(names, 1, **kwargs)
                 return self
             return member_
@@ -202,6 +210,7 @@ class TypeTraits():
         elif head == "operator":
             names = tail.split()
             def opr_(**kwargs):
+                kwargs.setdefault("return_type", typecode)
                 self.new_method(names, 2, **kwargs)
                 return self
             return opr_
@@ -217,9 +226,9 @@ class TypeTraits():
             raise ValueError("不明な宣言型です：'{}'".format(head))
     
     def make_described(self, describer):
-        if not hasattr(describer, "describe_type"):
-            raise ValueError("クラスメソッド 'describe_type' が型定義のために必要です")
-        describer.describe_type(self) # type: ignore
+        if not hasattr(describer, "describe_object"):
+            raise ValueError("クラスメソッド 'describe_object' が型定義のために必要です")
+        describer.describe_object(self) # type: ignore
         setattr(describer, "type_traits_typename", self.typename) # getで使用可能にする
         return self
 
@@ -344,7 +353,7 @@ class TypeModule():
             else:
                 # 実装移譲先のクラス型が渡された
                 t = TypeTraitsDelegation(traits)
-            # describe_type
+            # describe_object
             t.make_described(traits)
         else:
             raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__init__))

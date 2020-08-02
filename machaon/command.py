@@ -35,10 +35,6 @@ class CommandBuilder():
         self.argdescs = []
         self.lazy_describers = []
 
-        #
-        if isinstance(target, str) and self.frommodule is None:
-            raise ValueError("'target'に識別名(str)を指定した場合、'from_module'にモジュール名の指定が必要です")
-
     # 引数を定義する
     def __getitem__(self, commandstr: str):
         if commandstr and isinstance(commandstr, str):

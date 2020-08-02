@@ -10,20 +10,17 @@ fundamental_type = TypeModule()
 @fundamental_type.definition
 class str_(TypeTraits):
     @classmethod
-    def describe_type(self, traits):
+    def describe_object(self, traits):
         traits.describe(
             typename="str",
             description="Python.str",
             value_type=str
-        )["member length"](
-            return_type="int",
+        )["member length -> int"](
             help="文字列の長さ",
             target="len"
-        )["operator regmatch"](
-            return_type="bool",
+        )["operator regmatch -> bool"](
             help="正規表現に先頭から適合するか"
-        )["operator regsearch"](
-            return_type="bool",
+        )["operator regsearch -> bool"](
             help="正規表現に一部が適合するか"
         )
 
@@ -54,7 +51,7 @@ class str_(TypeTraits):
 @fundamental_type.definition
 class bool_(TypeTraits):
     @classmethod
-    def describe_type(self, traits):
+    def describe_object(self, traits):
         traits.describe(
             "bool", 
             description="True/False",
@@ -77,7 +74,7 @@ class bool_(TypeTraits):
 @fundamental_type.definition
 class int_(TypeTraits):
     @classmethod
-    def describe_type(self, traits):
+    def describe_object(self, traits):
         traits.describe(
             "int", 
             description="整数",
@@ -93,7 +90,7 @@ class int_(TypeTraits):
 @fundamental_type.definition
 class float_(TypeTraits):
     @classmethod
-    def describe_type(self, traits):
+    def describe_object(self, traits):
         traits.describe(
             "float", 
             description="浮動小数",
@@ -109,7 +106,7 @@ class float_(TypeTraits):
 @fundamental_type.definition
 class complex_(TypeTraits):
     @classmethod
-    def describe_type(self, traits):
+    def describe_object(self, traits):
         traits.describe(
             "complex", 
             description="複素数",
@@ -125,7 +122,7 @@ class complex_(TypeTraits):
 @fundamental_type.definition
 class dataview_t(TypeTraits):
     @classmethod
-    def describe_type(self, traits):
+    def describe_object(self, traits):
         from machaon.object.dataset import DataView
         traits.describe(
             "dataview", 
@@ -138,4 +135,34 @@ class dataview_t(TypeTraits):
 
     def convert_to_string(self, v):
         raise ValueError("unsupported")
+
+    def make_summary(self, view):
+        itemtype = view.itemtype
+        col = ", ".join([x.get_name() for x in view.get_current_columns()])
+        return "{}：{}\n({})\n{}件のアイテム".format(itemtype.typename, itemtype.description, col, view.count())
+
+#
+#
+#
+@fundamental_type.definition
+class process_error_t(TypeTraits):
+    @classmethod
+    def describe_object(self, traits):
+        from machaon.process import ProcessError
+        traits.describe(
+            "process-error", 
+            description="プロセスで発生したエラー",
+            value_type=ProcessError
+        )
+
+    def convert_from_string(self, s):
+        raise ValueError("unsupported")
+
+    def convert_to_string(self, v):
+        raise ValueError("unsupported")
+
+    def make_summary(self, error):
+        excep, _ = error.get_traces()
+        msg = "\n".join([error.explain_process(), error.explain_timing(), excep])
+        return msg
     

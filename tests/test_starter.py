@@ -13,9 +13,10 @@ def hello_world(spi, count, string=None):
 
 class WorkerShift():
     @classmethod
-    def describe_type(cls, traits):
+    def describe_object(cls, traits):
         traits.describe(
-            typename="授業員のシフト"
+            typename="worker-shift",
+            description="授業員のシフト"
         )["member name"](
             help="名前"
         )["member day"](
@@ -60,24 +61,6 @@ def test_start():
                 help="回数"
             )["target string: str"](
                 help="文字列"
-            )
-        )["int"](
-            describe_command(
-                construct_object=int,
-                description="make int object",
-            )["target parameter: parameter"](
-                help="整数の表現"
-            )["yield: int"](
-                help="int"
-            )
-        )["str"](
-            describe_command(
-                construct_object=str,
-                description="make int object",
-            )["target parameter: parameter"](
-                help="整数の表現"
-            )["yield: str"](
-                help="str"
             )
         )["shift"](
             describe_command(

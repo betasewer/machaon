@@ -23,7 +23,7 @@ class Employee():
         return self._postcode
 
     @classmethod
-    def describe_type(cls, traits):
+    def describe_object(cls, traits):
         traits.describe(
             typename="employee"
         )["name"](

@@ -21,7 +21,7 @@ def test_resolve_operator():
     # 型メソッド（クラス実装）
     class Date(TypeTraits):
         @classmethod
-        def describe_type(cls, traits):
+        def describe_object(cls, traits):
             traits.describe(
                 typename="datetime"
             )["member isocalendar"](
@@ -45,7 +45,7 @@ def test_resolve_operator():
             return self._buggages
 
         @classmethod
-        def describe_type(cls, traits):
+        def describe_object(cls, traits):
             traits.describe(
                 typename="datetime"
             )["operator put-buggage"](

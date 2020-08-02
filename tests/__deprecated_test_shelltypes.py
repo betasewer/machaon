@@ -160,7 +160,7 @@ class Typeset:
         return ts1, ts2
         
     @classmethod
-    def describe_type(cls, signature):
+    def describe_object(cls, signature):
         signature(
             "typeset",
             "版面"

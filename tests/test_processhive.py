@@ -8,8 +8,7 @@ def newproc() -> Process:
     return Process("process{}".format(proc_))
 
 def new_activate(hive, proc: Process) -> ProcessChamber:
-    chm = hive.new(proc)
-    hive.activate(chm.get_index())
+    chm = hive.new(proc) # 自動でactiveにする
     return chm
 
 def test_activate():

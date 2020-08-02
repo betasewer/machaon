@@ -66,7 +66,7 @@ class Action():
     def get_inspection(self):
         raise NotImplementedError()
     
-    def is_instant_action(self):
+    def is_constructor_action(self):
         return False
 
     #
@@ -232,11 +232,11 @@ class ObjectConstructorAction(Action):
         self.typecode = typecode
         self._parsefn_invoker = FunctionInvoker(ObjectConstructorAction._parser_function)
         self.add_result(typecode, help="Parsed value")
-    
+
     def load(self, spirit):
         return spirit
 
-    def is_instant_action(self):
+    def is_constructor_action(self):
         return True
         
     def get_valid_labels(self):
@@ -252,12 +252,13 @@ class ObjectConstructorAction(Action):
         return ttraits.convert_from_string(parameter)
 
     def invoke(self, invocation):
+        param = invocation.pop_parameter()
         ttraits = invocation.get_object_desktop().get_type(self.typecode)
 
         # 束縛引数 - 型クラス＋かならずparameterをとる
         args = []
         args.append(ttraits)
-        args.append(invocation.pop_parameter())
+        args.append(param)
         
         # メイン処理
         self.invoke_function("target", invocation, self._parsefn_invoker, args, {})
@@ -265,11 +266,7 @@ class ObjectConstructorAction(Action):
         # 返り値オブジェクトを設定する
         result = invocation.get_last_result()
         if result is not None:
-            if not isinstance(result, tuple):
-                result = (result,)
-
-            for resdef, resval in zip(self.resdefs, result):
-                invocation.spirit.push_object(value=resval, typename=resdef.get_typename())
+            invocation.spirit.push_object(result, typename=ttraits.typename)
         
         return invocation
 
@@ -437,11 +434,8 @@ class InvocationEntry():
             return True
         return False
 
-    def is_init_failed(self):
-        if self.exception:
-            return True
-        else:
-            return self.result is False
+    def check_init_result(self):
+        return self.result is False
 
 #
 #
@@ -452,7 +446,7 @@ class ActionInvocation:
         self.parameter: str = parameter
         self.objdesktop = objdesktop
         self.entries: DefaultDict[str, List[InvocationEntry]] = defaultdict(list)
-        self.last_exception = None
+        self._last_exception: Tuple[str, Exception] = ("", None)
     
     def get_object_desktop(self):
         return self.objdesktop
@@ -469,10 +463,10 @@ class ActionInvocation:
     def push_invocation_and_continue(self, label: str, entry: InvocationEntry):
         self.entries[label].append(entry)
         if entry.is_failed():
-            self.last_exception = entry.exception
+            self._last_exception = (label, entry.exception)
             return False
-        if label == "init" and entry.is_init_failed():
-            self.last_exception = ActionInitFailed()
+        if label == "init" and not entry.check_init_result():
+            self._last_exception = (label, ActionInitFailed())
             return False
         return True
     
@@ -496,8 +490,13 @@ class ActionInvocation:
             tail = self.entries[label][-1] # 同じラベルであればエラーも同一のはず
             yield label, tail.missing_args, tail.unused_args
 
-    def get_last_exception(self):
-        return self.last_exception
+    def get_last_exception(self) -> Exception:
+        return self._last_exception[1]
+    
+    def get_last_exception_time(self) -> str:
+        return self._last_exception[0]
+
+
 
 #
 class ActionInitFailed(Exception):

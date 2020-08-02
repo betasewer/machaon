@@ -30,7 +30,7 @@ class ObjectDesktop():
     
     # 新しい型を定義する
     def new_type(self, typetraits): # str | TypeTraitsKlass
-        if hasattr(typetraits, "describe_type"):
+        if hasattr(typetraits, "describe_object"):
             tt = self._types.define(typetraits)
         else:
             # 実質は文字列と同一の新しい型を作成
@@ -49,9 +49,10 @@ class ObjectDesktop():
             typecode = typecode.typecode
 
         # 型を決定する
-        tt = self._types.get(typecode, fallback=True)
-        if tt is None:
-            tt = self.new_type(typecode)
+        if isinstance(typecode, TypeTraits):
+            tt = typecode
+        else:
+            tt = self.get_type(typecode)
         
         # オブジェクトを構築
         value_type = tt.get_value_type()
@@ -70,7 +71,8 @@ class ObjectDesktop():
             obj = obj_or_name
 
         if obj.name in self._objects:
-            raise ValueError()
+            raise ValueError("オブジェクト名'{}'は重複しています".format(obj.name))
+
         self._objects[obj.name] = obj
         self._objtypemap[obj.type.typename].append(obj.name)
         return obj
@@ -86,4 +88,9 @@ class ObjectDesktop():
         if names:
             return self._objects[names[-1]]
         return None
+    
+    #
+    def enumerates(self):
+        for _, o in sorted(self._objects.items(), key=lambda x:x[0]):
+            yield o
 
