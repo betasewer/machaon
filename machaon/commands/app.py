@@ -130,10 +130,6 @@ class ProcessListItem():
             return p.build_command_string()
         else:
             return p.get_command_string()
-            
-    def handler(self):
-        parsedcommand = self.chamber.get_process().get_command_args()
-        return " / ".join(parsedcommand.preview_handlers())
 
     def status(self):
         if self.chamber.is_waiting_input():
@@ -162,8 +158,6 @@ class ProcessListItem():
             disp="状態"
         )["spirit_type"](
             disp="スピリット"
-        )["handler"](
-            disp="ハンドラ呼び出し"
         )
 
 #

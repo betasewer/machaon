@@ -11,6 +11,7 @@ import subprocess
 from typing import Optional, List, Any
 
 from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet, LoadFailedCommandSet
+from machaon.object.desktop import Object, ObjectDesktop
 from machaon.command import describe_command, CommandPackage
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber, ProcessBadCommand
 from machaon.package.package import package_manager, PackageEntryLoadError
@@ -28,7 +29,7 @@ import machaon.platforms
 class AppRoot:
     def __init__(self):
         self.ui = None
-        self.cmdengine = None 
+        self.cmdengine = None
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
         self.pkgmanager = None
@@ -36,12 +37,17 @@ class AppRoot:
 
     def initialize(self, *, ui, directory):
         self.ui = ui
-        if hasattr(self.ui, "init_with_app"):
-            self.ui.init_with_app(self)
-        self.processhive = ProcessHive()
+
         self.cmdengine = CommandEngine()
+
+        self.processhive = ProcessHive()
+        self.processhive.new_desktop("desk1")
+
         self.pkgmanager = package_manager(directory)
         self.pkgmanager.add_to_import_path()
+        
+        if hasattr(self.ui, "init_with_app"):
+            self.ui.init_with_app(self)
     
     def get_ui(self):
         return self.ui
@@ -175,8 +181,7 @@ class AppRoot:
     def run_process(self, commandstr: str):
         process = Process(commandstr)
         chamber = self.processhive.new(process)
-        self.processhive.activate(chamber.get_index())
-        self.processhive.run(self)
+        process.run(self)
         return chamber
     
     # プロセスの実行フロー
@@ -187,49 +192,50 @@ class AppRoot:
         spirit = Spirit(self, process)
 
         # コマンドを解析
-        target = None
-        parsedcommand = None
+        execentry = None
         try:
-            entries = self.cmdengine.expand_parsing_command(commandstr, spirit)
-            entry = self.cmdengine.select_parsing_command(spirit, entries)
-            if entry is not None:
-                target, spirit = entry.target, entry.spirit
-                parsedcommand = self.cmdengine.parse_command(entry)
+            entries = self.cmdengine.parse_command(commandstr, spirit)
+            if len(entries) == 1:
+                execentry = entries[0]
+            elif len(entries) > 1:
+                # 一つ選択
+                # spirit.create_data(entries)
+                # spirit.dataview()
+                # self.ui.on_select_command(spirit, process, entries)
+                # 今はとりあえず先頭を採用
+                execentry = entries[0]
+
         except Exception as parseexcep:
             # コマンド解析中の例外（コマンド解析エラーではなく）
             process.failed_before_execution(parseexcep)
             self.ui.on_error_process(spirit, process, parseexcep, timing = "argparse")
             return None
         
-        if parsedcommand is None:
-            if entry is None:
-                error = ProcessBadCommand(target=None, reason="合致するコマンドが無かった")
-            else:
-                error = ProcessBadCommand(target=entry.target, reason=self.cmdengine.get_last_parse_error())
-
+        if execentry is None:
+            error = ProcessBadCommand(target=None, reason="合致するコマンドが無かった")
             process.failed_before_execution(error)
             self.ui.on_bad_command(spirit, process, error)
             return None
 
         # 実行開始！
+        spirit = execentry.spirit
         self.ui.on_exec_process(spirit, process)
         
-        # コマンドパーサのメッセージがある場合は出力して終了
-        if parsedcommand.has_exit_message():
-            for line in parsedcommand.get_exit_messages():
-                spirit.message(line)
-            return None
+        # オブジェクトを取得
+        deskchm = self.processhive.get_last_active_desktop()
+        if deskchm is None:
+            raise ValueError("No object desktop can be found")
 
         # プロセスを実行する
         result = None
         invocation = None
         try:
-            #parsedcommand.expand_special_arguments(spirit)
-            invocation = process.execute(target, spirit, parsedcommand)
+            invocation = process.execute(execentry, deskchm.get_desktop())
         except ProcessInterrupted:
             self.ui.on_interrupt_process(spirit, process)
         except Exception as execexcep:
             # アプリコードの外からの例外
+            print(execexcep)
             self.ui.on_error_process(spirit, process, execexcep, timing = "executing")
             return None
 
@@ -237,61 +243,35 @@ class AppRoot:
             # エラーが発生しているか
             e = invocation.get_last_exception()
             if e:
-                # アプリコードからの例外
-                self.ui.on_error_process(spirit, process, e, timing = "execute")
+                # アプリエラーはオブジェクトとして格納する
+                process.push_object((e, "execute", process), typename="process-error")
+
+            # 生成されたオブジェクトを配置する
+            for o in process.get_bound_objects(running=True):
+                deskchm.get_desktop().push(o)
+            
             # 最後のtargetの返り値を返す
             result = invocation.get_last_result()
 
         self.ui.on_exit_process(spirit, process, invocation)
         return result
-    
-    # プロセスを即時実行する
-    # メッセージ出力を処理しない
-    def execute_instant(self, target, argument="", *, spirit=True, args=None, custom_command_parser=None, prog=None):        
-        # コマンドエントリの構築
-        d = describe_command(target, spirit=spirit, args=args, custom_command_parser=custom_command_parser)
-        prog = prog or getattr(target, "__name__") or "$"
-        entry = d.create_entry((prog,))
 
-        # 引数の解析
-        argentries = self.cmdengine.expand_parsing_command(argument, spirit)
-        if not argentries:
-            return None
-        parsedcommand = self.cmdengine.parse_command(argentries[0])
-        if parsedcommand is None:
-            return None
-
-        if parsedcommand.has_exit_message():
-            return None
-            
-        # 実行
-        process_target = entry.load_target()
-        process_spirit = process_target.inherit_spirit(self)
-        dummyproc = Process((prog + " " + argument).strip())
-        process_spirit.bind_process(dummyproc)
-
-        invocation = None
-        try:
-            invocation = process_target.invoke(process_spirit, parsedcommand)
-        except Exception:
-            return None
-
-        return invocation, dummyproc.handle_post_message()
-    
     # 可能な構文解釈の一覧を提示する
     def parse_possible_commands(self, commandstr):
         spirit = Spirit(self, None) # processはもちろん関連付けられていない
-        return self.cmdengine.expand_parsing_command(commandstr, spirit)
+        return self.cmdengine.parse_command(commandstr, spirit)
     
     # コマンドを検索する
     def search_command(self, commandname) -> List[CommandEntry]:
-        return [entry for (entry, remained) in self.cmdengine.expand_parsing_command_head(commandname) if not remained]
+        return [entry for (entry, remained) in self.cmdengine.expand_command_head(commandname) if not remained]
     
     def get_command_sets(self):
         return self.cmdengine.command_sets()
-    
-    def set_command_prefix(self, prefix):
-        self.cmdengine.set_command_prefix(prefix)
+        
+    # プロセスをスレッドで実行しアクティブにする
+    def new_desktop(self, name: str):
+        chamber = self.processhive.new_desktop(name)
+        return chamber
 
     #
     # プロセススレッド
@@ -330,11 +310,14 @@ class AppRoot:
         if index is None or index == "":
             chm = self.get_active_chamber()
         elif isinstance(index, str):
-            try:
-                index = int(index, 10)-1
-            except ValueError:
-                raise ValueError(str(index))
-            chm = self.get_chamber(index, activate=activate)
+            if index=="desktop":
+                chm = self.processhive.get_last_active_desktop()
+            else:
+                try:
+                    index = int(index, 10)-1
+                except ValueError:
+                    raise ValueError(str(index))
+                chm = self.get_chamber(index, activate=activate)
         elif isinstance(index, int):
             chm = self.get_chamber(index, activate=activate)
         return chm
@@ -359,3 +342,13 @@ class AppRoot:
             chm.interrupt()
             chm.join(timeout=timeout)
         return chm
+    
+    #
+    def select_desktop(self, index=None):
+        if index is None:
+            chm = self.select_chamber("desktop")
+        else:
+            chm = self.select_chamber(index)
+        if chm is None:
+            raise ValueError("Desktop Chamber is not found")
+        return chm.get_desktop()

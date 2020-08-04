@@ -13,7 +13,7 @@ def reencode(s, encoding, errors="replace"):
 #
 #
 #
-def get_char_width(c, *, a=False, tab_width=4):
+def get_char_width(c, *, a=True, tab_width=4):
     if c == "\t":
         return tab_width
     
@@ -29,10 +29,10 @@ def get_char_width(c, *, a=False, tab_width=4):
 
     return 1
 
-def get_text_width(text, *, a=False):
+def get_text_width(text, *, a=True):
     width = 0
     for ch in text:
-        chwidth = get_char_width(ch, a=True)
+        chwidth = get_char_width(ch, a=a)
         width += chwidth
     return width
 
@@ -73,33 +73,78 @@ def collapse_text(text, width, tab_width=4):
 #  indent 全体の字下げ
 #  *first_indent 一行目の字下げ（絶対的値）
 #
-def composit_text(s, max_width, *, indent=0, first_indent=None, tab_width=4):
-    if first_indent is None:
-        first_indent = indent
-        
-    text = " " * indent
-    linewidth = 0
-    for ch in s:
-        if ch == "\n":
-            text += ch
-            linewidth = 0
-            continue
-        
-        ind = None
-        if linewidth == 0:
-            ind = " " * first_indent
+class CompositText():
+    def __init__(self, tab_width=4, a_width=True):
+        self._tab_width = tab_width
+        self._a_width = a_width
+    
+    # 文字列を折り返し、新たな各行の幅を返すジェネレータ
+    def lines(self, s, width, *, first_indent=0):
+        if first_indent and not isinstance(first_indent, int):
+            raise TypeError("first_indent")
+
+        line = ""
+        linewidth = 0
+        for ch in s:
+            if ch == "\n":
+                yield (line, linewidth)
+                line = ""
+                linewidth = 0
+                continue
+            
+            if linewidth == 0 and first_indent:
+                line += " " * first_indent
+                linewidth += first_indent
+            
+            new_linewidth = linewidth + get_char_width(ch, a=self._a_width, tab_width=self._tab_width)
+            if new_linewidth > width:
+                yield (line, linewidth)
+                line = ch
+                linewidth = new_linewidth - linewidth
+            else:
+                line += ch
+                linewidth = new_linewidth
+
+        yield (line, linewidth)
+        line = ""
+        linewidth = 0
+    
+    # 足りない幅を指定の文字で補うジェネレータ（デフォルトは半角スペース）
+    def filled_lines(self, s, width, *, fill=" ", first_indent=None):
+        if isinstance(fill, tuple):
+            f2 = fill[1]
+            fill = fill[0]
         else:
-            ind = " " * indent
-        
-        newwidth = linewidth + get_char_width(ch, a=True, tab_width=tab_width)
-        if newwidth > max_width:
-            ch = "\n" + ch
-            newwidth -= linewidth
+            if fill is True:
+                fill = " "
+            f2 = None
 
-        text = text + ind + ch
-        linewidth = newwidth
+        fillunitwidth = get_char_width(fill)
+        for line, linewidth in self.lines(s, width, first_indent=first_indent):
+            fillerwidth = width-linewidth
+            filler = fill * (fillerwidth // fillunitwidth)
+            
+            if f2 is not None and (fillerwidth % fillunitwidth) != 0:
+                # 単位を合わせるために第2の詰め文字で埋める
+                filler = f2 * (fillerwidth % fillunitwidth) + filler
 
-    return text
+            yield (line + filler), width
+
+    # 連結した文字列を返す
+    def __call__(self, s, width, *, fill=None, first_indent=0) -> str:
+        if fill is not None:
+            lines = self.filled_lines(s, width, fill=fill, first_indent=first_indent)
+        else:
+            lines = self.lines(s, width, first_indent=first_indent)
+
+        texts = []
+        for line, _linewidth in lines:
+            texts.append(line)
+        return "\n".join(texts)
+
+# API
+composit_text = CompositText()
+
 
 #
 def complete_break(text):

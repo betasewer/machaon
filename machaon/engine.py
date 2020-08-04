@@ -1,31 +1,24 @@
-from typing import List, Sequence, Optional, Any, Tuple
+from typing import List, Sequence, Optional, Any, Tuple, Union, Dict
+from collections import defaultdict
 
 from machaon.cui import fixsplit
-from machaon.parser import BadCommand, CommandParser, CommandParserResult, PARSE_SEP, TokenRow, product_candidates
-from machaon.process import ProcessTarget, Spirit
+from machaon.action import Action, ActionClass, ActionFunction, ObjectConstructorAction
+from machaon.process import Spirit
 
 #
 # ###############################################################
 #  CommandLauncher
 # ###############################################################
 #
-normal_command = 0
-auxiliary_command = 1
-hidden_command = 2
-
-COMMAND_TYPES = {
-    normal_command : normal_command,
-    "normal" : normal_command,
-    auxiliary_command : auxiliary_command,
-    "auxiliary" : auxiliary_command,
-    "aux" : auxiliary_command,
-    hidden_command : hidden_command,
-    "hidden" : hidden_command
-}
+NORMAL_COMMAND = 0
+INSTANT_COMMAND = 1
+HIDDEN_COMMAND = 2
 
 cmdsetspec_sigil = '::'
 
+#
 # process + command keyword
+#
 class CommandEntry():
     def __init__(
         self, 
@@ -33,20 +26,93 @@ class CommandEntry():
         prog: Optional[str] = None, 
         description: str = "",
         builder: Any = None,
-        target: Optional[ProcessTarget] = None,
-        commandtype: int = normal_command,
+        action: Optional[Action] = None,
+        commandtype: int = NORMAL_COMMAND,
     ):
-        self.target = target
+        self.action = action
         self.keywords = keywords # 展開済みのキーワード
         self.builder = builder
         self.prog = prog
         self.description = description
-        self.commandtype = COMMAND_TYPES.get(commandtype, normal_command)
+        self.commandtype = commandtype
 
-    def load_target(self) -> Optional[ProcessTarget]:
-        if self.target is None and self.builder:
-            self.target = self.builder.build_target(self)
-        return self.target
+    def load_action(self) -> Optional[Action]:
+        if self.action is None and self.builder:
+            self.action = self.build_action()
+        return self.action
+
+    def build_action(self) -> Action:
+        if self.builder is None:
+            raise ValueError("No builder")
+
+        # コマンドをロードする
+        target = self.builder.target
+        if isinstance(target, str) and isinstance(self.builder.frommodule, str):
+            import importlib
+            mod = importlib.import_module(self.builder.frommodule)
+            member = getattr(mod, target, None)
+            if member is None:
+                raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(self.prog, target))
+            target = member
+
+        # アクションタイプの決定
+        if self.commandtype & INSTANT_COMMAND:
+            action_type = "i"
+        elif hasattr(target, "describe_command"):
+            # アクション自体に定義された初期化処理を呼ぶ
+            target.describe_command(self.builder)
+            if hasattr(target, "process_target"):
+                action_type = "c"
+            else:
+                if isinstance(target, type):
+                    target = target()
+                action_type = "f"
+        elif isinstance(target, type):
+            action_type = "c"
+        elif callable(target):
+            action_type = "f"
+        else:
+            raise ValueError("無効なアクションターゲットです：{}".format(target))
+
+        # prog
+        prog = self.prog
+        
+        # description
+        description = self.builder.description
+
+        # spirit
+        spirittype = self.builder.spirit
+        
+        # 遅延コマンド初期化処理を実行する関数を作成する
+        lazy_arg_describe = self.builder.get_lazy_action_describer()
+        
+        # コマンドで実行するアクション
+        kwargs = {
+            "prog": prog,
+            "description": description,
+            "spirittype": spirittype, 
+            "lazyargdescribe": lazy_arg_describe
+        }
+        act: Any = None
+        if action_type == "c":
+            act = ActionClass(target, **kwargs)
+        elif action_type == "f":
+            act = ActionFunction(target, **kwargs)
+        elif action_type == "i":
+            act = ObjectConstructorAction(target, prog=prog, description=description)
+        else:
+            raise ValueError("action_type")
+
+        # 引数の定義
+        for cmdtype, cmdkwds, objtype, kwargs in self.builder.argument_describers():
+            if cmdtype in ("target", "init", "exit"):
+                act.add_argument(cmdtype, cmdkwds, objtype, **kwargs)
+            elif cmdtype in ("yield",):
+                act.add_result(objtype, **kwargs)
+            else:
+                raise ValueError("Undefined command type '{}'".format(cmdtype))
+        
+        return act
     
     def match(self, target: str) -> Tuple[bool, Optional[str]]:
         match_rests = []
@@ -64,10 +130,12 @@ class CommandEntry():
         return self.keywords
 
     def get_description(self):
+        if self.builder:
+            return self.builder.description
         return self.description
-    
+
     def is_hidden(self):
-        return self.commandtype == hidden_command
+        return self.commandtype == HIDDEN_COMMAND
 
 #
 # set of CommandEntry
@@ -159,15 +227,14 @@ class LoadFailedCommandSet(NotAvailableCommandSet):
 #
 # コマンド解釈の候補
 #
-class PossibleCommandSyntaxItem():
-    def __init__(self, target, spirit, cmdrow):
+class CommandExecutionEntry():
+    def __init__(self, target, spirit, parameter):
         self.target = target
         self.spirit = spirit
-        self.command_row = cmdrow
+        self.parameter = parameter
     
     def command_string(self):
-        cmdstring = self.target.get_argparser().display_command_row(self.command_row)
-        return (self.target.get_prog() + " " + cmdstring).strip()
+        return (self.target.get_prog() + " " + self.parameter).strip()
     
     def description(self):
         return self.target.get_description()
@@ -191,8 +258,7 @@ class CommandEngine:
     def __init__(self):
         self.commandsets = []
         self.parseerror = None
-        self.prefix = ""
-        
+    
     def add_command_set(self, commandset) -> int:
         self.commandsets.append(commandset)
         return len(self.commandsets)-1
@@ -206,11 +272,8 @@ class CommandEngine:
     def command_sets(self):
         return self.commandsets
     
-    def set_command_prefix(self, prefix):
-        self.prefix = prefix
-    
     # 先頭文字列が示すコマンドエントリを選び出す
-    def expand_parsing_command_head(self, commandhead) -> List[Tuple[CommandEntry, str]]: # [(entry, optioncompound)...]
+    def expand_command_head(self, commandhead) -> List[Tuple[CommandEntry, str]]: # [(entry, optioncompound)...]
         possible_commands: List[Tuple[CommandEntry, str]] = []
 
         cmdtarget = commandhead
@@ -223,51 +286,51 @@ class CommandEngine:
             possible_commands.extend(matches)
         return possible_commands
 
-    # コマンドを解析して候補を選ぶ
-    def expand_parsing_command(self, commandstr: str, spirit: Spirit) -> List[PossibleCommandSyntaxItem]:
+    # コマンドを解析して実行エントリの候補を生成する
+    def parse_command(self, commandstr: str, spirit: Spirit) -> List[CommandExecutionEntry]:
         commandhead, commandargs = split_command(commandstr)
+
+        # オブジェクト生成コマンドか
+        if commandhead.startswith("[") and commandhead.endswith("]"):
+            typecode = commandhead.strip("[]").strip()
+            act = ObjectConstructorAction(typecode, "new-object", "オブジェクトを生成します。")
+            parameter = " ".join(commandargs)
+            return [
+                CommandExecutionEntry(act, spirit, parameter)
+            ]
+
+        # 引数を生成するコマンドか
+        yieldargname = None
+        if "." in commandhead:
+            commandhead, yieldargname = commandhead.split(".", maxsplit=1)
         
         # オプションと引数を解析し、全ての可能なコマンド解釈を生成する
-        possible_commands = self.expand_parsing_command_head(commandhead) # コマンドエントリの解釈
-        possible_entries: List[PossibleCommandSyntaxItem] = []
+        possible_commands = self.expand_command_head(commandhead) # コマンドエントリの解釈
+        possible_entries: List[CommandExecutionEntry] = []
         for commandentry, optioncompound in possible_commands:
-            target = commandentry.load_target()
-            if target is None:
+            action = commandentry.load_action()
+            if action is None:
                 raise ValueError("CommandEntry '{}' の構築に失敗".format(commandentry.get_prog()))
 
-            spirit = target.inherit_spirit(spirit)
-            target.load_lazy_describer(spirit)
-
-            rows: List[TokenRow] = [] 
-
-            argparser: CommandParser = target.get_argparser()
-            tailrows = argparser.generate_parsing_candidates(commandargs)
-            rows.extend(tailrows)
-
-            if optioncompound:
-                # コマンド名に抱合されたオプションを前に挿入する
-                optrows = argparser.generate_parsing_candidates((optioncompound,), compound=True)
-                rows = product_candidates(optrows, (PARSE_SEP,), rows)
+            # 引数生成アクションであるなら、さらに生成する
+            if yieldargname:
+                action = action.create_argument_parser_action(yieldargname)
             
-            if not rows:
-                rows.append([]) # 引数ゼロを示す
+            spirit = action.load(spirit) # アクションの専用spiritに変換される
 
-            for cmdrow in rows:
-                entry = PossibleCommandSyntaxItem(target, spirit, cmdrow)
-                possible_entries.append(entry)
+            # 引数をまとめる
+            parameter = " ".join([x for x in (optioncompound, *commandargs) if x])
+            entry = CommandExecutionEntry(action, spirit, parameter)
+
+            possible_entries.append(entry)
         
-        # 最も長く入力コマンドにマッチしている解釈の順に並べ直す
-        possible_entries.sort(key=lambda x:len(x.command_row))
         return possible_entries
         
-    # ひとつを選択する
-    def select_parsing_command(self, spirit, possible_entries: Sequence[PossibleCommandSyntaxItem]) -> Optional[PossibleCommandSyntaxItem]:
+    # 候補からひとつを選択する
+    def select_command_entry(self, spirit, possible_entries: Sequence[CommandExecutionEntry]) -> Optional[CommandExecutionEntry]:
         if not possible_entries:
             return None
         elif len(possible_entries) > 1:
-            if len(possible_entries[0].command_row) == 0:
-                # 先頭コマンド全体でマッチしているならそれを優先
-                return possible_entries[0]
             # 一つ選択
             spirit.create_data(possible_entries)
             spirit.dataview()
@@ -275,35 +338,6 @@ class CommandEngine:
             return possible_entries[0]
         else:
             return possible_entries[0]
-
-    # コマンド文字列を引数の集合に変換する
-    def parse_command(self, item: PossibleCommandSyntaxItem) -> Optional[CommandParserResult]:
-        argparser = item.target.get_argparser()
-        spirit = item.spirit
-        commandrow = item.command_row
-
-        result = None
-        self.parseerror = None
-        
-        use_dialog = False
-        if commandrow and commandrow[0] == "?":
-            use_dialog = True
-            self.parseerror = "<dialog under construction>"
-
-        if not use_dialog:
-            try:
-                result = argparser.parse_args(commandrow, spirit)
-            except BadCommand as e:
-                self.parseerror = e
-                use_dialog = True
-
-            if result is None:
-                use_dialog = True
-
-        if use_dialog:
-            self.prompt_command_args(argparser, spirit)
-
-        return result
     
     #
     def prompt_command_args(self, argparser, spirit):

@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.parser import CommandParser, OPT_METHOD_TARGET, OPT_METHOD_EXIT, PARSE_SEP, typeof_argument, OptionContext, ArgString
+
 from machaon.process import TempSpirit
 
 def equal_contents(l, r):
@@ -290,83 +290,11 @@ def test_parsing_candidates():
     assert parse_and_recompose(["john", "-zpaf"]) == [["john", "-zp", "af"]]
     assert parse_and_recompose(["john", "-ozp1"]) == [["john", "-o", "-zp", "1"]]
 
-
-
-#
-# 引数型
-#
-def test_preset_types():
-    str_, int_, bool_, float_, complex_, valuelist, filepath = [
-        typeof_argument(x) for x in ("str", "int", "bool", "float", "complex", "value-list", "filepath")
-    ]
-    assert str_.is_simplex_type()
-    assert int_.is_simplex_type()
-    assert bool_.is_simplex_type()
-    assert float_.is_simplex_type()
-    assert complex_.is_simplex_type()
-
-    assert not valuelist.is_simplex_type()
-    assert valuelist.is_compound_type()
-    assert not valuelist.is_sequence_type()
-    
-    assert not filepath.is_simplex_type()
-    assert filepath.is_compound_type()
-    assert filepath.is_sequence_type()
-
 #
 #
 #
-def test_listarg():
-    p = build_parser(
-        option("animal-names", valuetype=typeof_argument("value-list", sep=",")),
-        option("--rating", "-r", valuetype="float"),
-        option("--margin", "-m", valuetype=typeof_argument("value-list", "int"))
-    )
-    assert p.do_parse_args(["neko, inu, saru, azarashi", "-r", "1.2", "--margin", "1 -2 3 -4"]) == {
-        'animal-names' : ["neko", "inu", "saru", "azarashi"],
-        'rating' : 1.2,
-        'margin' : [1, -2, 3, -4]
-    }
-
-#
-#
-#
-def test_filepath():
-    p = build_parser(
-        option("files", valuetype="filepath"),
-        option("--rating", "-r", valuetype="float"),
-    )
-    spirit = TempSpirit(cd="basic")
-    assert p.do_parse_args(["users/desktop/memo.txt", "bin/appli.exe", "-r", "1.2"], spirit) == {
-        'files' : ["basic\\users\\desktop\\memo.txt", "basic\\bin\\appli.exe"],
-        'rating' : 1.2,
-    }
-    
-#
-#
-#
+@pytest.mark.skip(True)
 def test_parser_result():
-    p = build_parser(
-        option("files", valuetype="filepath", foreach=True),
-        option("--rating", "-r", valuetype="float"),
-    )
-    spi = TempSpirit(cd="/")
-    assert list(
-        p.parse_args(["users/desktop/memo.txt", "bin/appli.exe", "-r", "1.2"], spi)
-        .prepare_arguments("target")
-    ) == [
-        { 'files' : "\\users\\desktop\\memo.txt", 'rating' : 1.2, },
-        { 'files' : "\\bin\\appli.exe", 'rating' : 1.2, },
-    ]
-
-    # input-filepath: globパターンを受け入れ、実在するパスを集める
-    p = build_parser(
-        option("files", valuetype="input-filepath"),
-        option("--margin", valuetype=typeof_argument("value-list", "int")),
-    )
-    spi = TempSpirit(cd = "c:\\Windows")
-    assert len(list(p.parse_args(["System32/*.dll", "py.exe"], spi).prepare_arguments("target"))) > 2
-
     # 元のアイテムの区切り方が、空白によらず保存される
     # 型ごとにデフォルトでforeachかどうかが決まっている
     assert list(
