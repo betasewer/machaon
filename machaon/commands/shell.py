@@ -134,36 +134,37 @@ class FilePath():
         return stat.filemode(self.stat.st_mode)
     
     @classmethod
-    def describe_object(cls, describe):
-        describe(
+    def describe_object(cls, traits):
+        traits.describe(
             typename="filepath",
-            description="",
+            description="ファイル",
         )["member name n"](
-            name="ファイル名"
+            help="ファイル名"
         )["member nxname nx"](
-            name="拡張子無しのファイル名"
+            help="拡張子無しのファイル名"
         )["member path p"](
-            name="パス"
+            help="パス"
         )["member ftype t"](
-            name="タイプ"
+            help="タイプ"
         )["member modtime"](
-            name="更新日時",
-            type="datetime"
+            help="更新日時"
         )["member size"](
-            name="サイズ"
+            help="サイズ"
         )["member mode"](
-            name="ファイルモード"
+            help="ファイルモード"
         )["alias long"](
-            "mode ftype modtime size name"
+            "mode", "ftype", "modtime", "size", "name"
         )["alias short"](
-            "ftype name"
+            "ftype", "name"
         )["alias link"](
             "path",
         )
 
+def filelist_s(app):
+    filelist(app)
 
 #
-def filelist(app, pattern=None, long=False, howsort=None, recurse=1, silent=False):
+def filelist(app, pattern=None, recurse=1, silent=False):
     # パスを集める
     paths = []
     def walk(dirpath, level):
@@ -189,8 +190,7 @@ def filelist(app, pattern=None, long=False, howsort=None, recurse=1, silent=Fals
     if not silent:
         app.message(cd+"\n")
 
-    view = "/table" if long else "/wide"
-    app.push_object_table(paths, view)
+    app.push_dataview(paths, "long")
 
 #
 #

@@ -121,10 +121,7 @@ class TypeTraits():
     # メソッド呼び出し
     #
     def get_method(self, name) -> Optional[TypeMethod]:
-        resolved = self.get_method_alias(name)
-        if resolved is None:
-            resolved = name
-        return self._methods.get(resolved, None)
+        return self._methods.get(name, None)
 
     def enum_methods(self, arity=None):
         for meth in self._methods.values():

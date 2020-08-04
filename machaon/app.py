@@ -235,6 +235,7 @@ class AppRoot:
             self.ui.on_interrupt_process(spirit, process)
         except Exception as execexcep:
             # アプリコードの外からの例外
+            print(execexcep)
             self.ui.on_error_process(spirit, process, execexcep, timing = "executing")
             return None
 

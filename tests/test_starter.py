@@ -45,6 +45,34 @@ def worker_shift_table(spi):
 def empty_table(spi):
     spi.push_dataview([], itemtype=WorkerShift)
 
+"""
+obj = describe_object(
+    typename="opener",
+    description=""
+)["hello"](
+
+)[""](
+
+)
+
+
+class Test():
+    ''' aaaaaa '''
+
+    def hello(self, count, string):
+        ''' 
+        (int, str) -> str 
+        '''
+    
+    def shift(self):
+        '''  
+        '''
+    index = describe_object(
+        target=""
+    )
+
+"""
+
 
 @pytest.mark.skip(True)
 def test_start():
@@ -71,6 +99,12 @@ def test_start():
             describe_command(
                 empty_table,
                 description="空の表を表示",
+            )
+        )["ls"](
+            describe_command(
+                "filelist_s",
+                from_module="machaon.commands.shell",
+                description="作業ディレクトリにあるフォルダとファイルの一覧を表示します。", 
             )
         )
     )

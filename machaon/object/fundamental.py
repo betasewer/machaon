@@ -26,9 +26,6 @@ class str_(TypeTraits):
 
     def convert_from_string(self, s):
         return s
-        
-    def convert_to_string(self, v, _spirit=None):
-        return v
 
     #
     # 演算子

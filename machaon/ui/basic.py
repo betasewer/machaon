@@ -12,6 +12,7 @@ from typing import Tuple, Sequence, List
 
 from machaon.cui import composit_text
 from machaon.process import ProcessMessage, NotExecutedYet
+from machaon.object.dataset import parse_dataview
 
 #
 meta_command_sigil = "/"
@@ -221,9 +222,9 @@ class Launcher():
                 procindex, itemname = parse_procindex(commandhead[1:])
                 msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
             
-            elif command.startswith("sort"):
+            elif command.startswith("sortby"):
                 # データビューのフィルター・ソートの指定
-                expr = "/sortby " + command[len("sort"):]
+                expr = "/sortby " + command[len("sortby"):]
                 msg = self.meta_command_dataview_operation(expr.strip())
                 
             elif command.startswith("where"):
@@ -491,7 +492,8 @@ class Launcher():
         details = traceback.format_exception(type(excep), excep, excep.__traceback__)
         spirit.error(details[-1])
         spirit.message_em("スタックトレース：")
-        spirit.message("".join(details[1:-1]))
+        spirit.message("".join(details[1:-1]))        
+        print(''.join(details))
 
     def on_exit_process(self, spirit, process, invocation):
         """ プロセスの正常終了時 """
@@ -586,13 +588,25 @@ class Launcher():
         
     def meta_command_dataview_operation(self, expression):  
         chm = self.app.select_chamber()
-        if chm:
-            data = chm.get_bound_data()
-            if data:
-                data.assign(data.command_create_view(expression))
-                # メッセージを再描画
-                self.replace_screen_message([])
-                self.update_active_chamber(chm)
+        if chm is None:
+            return
+
+        obj = None
+        objdesk = None
+        for msg in chm.get_message():
+            if msg.tag == "object-view":
+                obj = msg.argument("object")
+                deskchm = self.app.select_chamber("desktop") # 仮対応：実際には、オブジェクトデスクをチャンバーに紐づけておく
+                objdesk = deskchm.get_desktop()
+                break
+        else:
+            return
+
+        datas = obj.value
+        datas.assign(parse_dataview(objdesk, datas, expression))
+        # メッセージを再描画
+        self.replace_screen_message([])
+        self.update_active_chamber(chm)
     
     def meta_command_show_predicates(self, keyword, procindex):  
         chm = self.app.select_chamber(procindex)

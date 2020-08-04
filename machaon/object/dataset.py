@@ -59,7 +59,15 @@ def make_data_columns(type, objdesk: ObjectDesktop, *member_names) -> List[DataC
     columns = []
     invalid_names = []
 
+    names: List[str] = []
     for member_name in member_names:
+        aliases = type.get_method_alias(member_name)
+        if aliases is not None:
+            names.extend(aliases)
+        else:
+            names.append(member_name)
+
+    for member_name in names:
         meth = type.get_method(member_name)
         if meth:
             coltype = objdesk.get_type(meth.get_result_typecode())
