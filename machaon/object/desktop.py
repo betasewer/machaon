@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, DefaultDict, List
+from typing import Dict, Any, Optional, DefaultDict, List, Set
 from collections import defaultdict
 
 from machaon.object.object import Object, ObjectValue
@@ -12,6 +12,7 @@ class ObjectDesktop():
         self._objects: Dict[str, Object] = {}
         self._objtypemap: DefaultDict[str, List[str]] = defaultdict(list)
         self._types: TypeModule = TypeModule()
+        self._selection: Set[str] = set()
     
     # 対応するオブジェクト型を設定する
     def add_types(self, types: TypeModule):
@@ -89,8 +90,18 @@ class ObjectDesktop():
             return self._objects[names[-1]]
         return None
     
-    #
+    # 列挙する
     def enumerates(self):
         for _, o in sorted(self._objects.items(), key=lambda x:x[0]):
             yield o
 
+    # 選択する
+    def select(self, name, select=True):
+        if select:
+            self._selection.add(name)
+        else:
+            self._selection.remove(name)
+
+    def is_selected(self, name):
+        return name in self._selection
+    

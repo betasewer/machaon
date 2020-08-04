@@ -73,19 +73,13 @@ class Launcher():
                         self.insert_screen_message(ProcessMessage(text))
                     else:
                         viewtype = datas.get_viewtype()
-                        viewer = self.dataviewer(viewtype)
-                        if viewer is None:
-                            text = "表示形式'{}'は不明です".format(viewtype)
-                            self.insert_screen_message(ProcessMessage(text, tag="error"))
-                            return
-                        self.insert_screen_dataview(datas, viewer, obj.name)
+                        self.insert_screen_dataview(datas, viewtype, obj.name)
                 else:
                     text = "値：\n  {}\n".format(obj.to_string())
                     self.insert_screen_message(ProcessMessage(text))
             
             elif tag == "object-summary":
-                obj = msg.argument("object")
-                self.insert_screen_object_summary(obj)
+                self.insert_screen_object_summary(msg)
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
@@ -138,10 +132,7 @@ class Launcher():
         return curstates
         
     # 
-    def dataviewer(self, viewtype):
-        raise NotImplementedError()
-
-    def insert_screen_dataview(self, dataview, viewer, dataname):
+    def insert_screen_dataview(self, dataview, viewtype, dataname):
         raise NotImplementedError()
     
     #
@@ -149,7 +140,7 @@ class Launcher():
         raise NotImplementedError()
     
     #
-    def insert_screen_object_summary(self, obj):
+    def insert_screen_object_summary(self, msg):
         raise NotImplementedError()
     
     #

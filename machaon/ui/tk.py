@@ -17,7 +17,7 @@ from machaon.cui import get_text_width, ljust, composit_text, collapse_text
 import machaon.platforms
 
 #
-class textindex():
+class TextIndex():
     def __init__(self, tkindex=None, *, line=None, char=None):
         if tkindex:
             parts = str(tkindex).split(".")
@@ -34,12 +34,16 @@ class textindex():
         self.line = line
         self.char = char
     
-    def __call__(self, *, line=None, char=None):
+    def move(self, *, line=None, char=None):
         if line is not None:
             self.line = line
         if char is not None:
             self.char = char
         return self
+    
+    def moved(self, **kwargs):
+        i = TextIndex(line=self.line, char=self.char)
+        return i.move(**kwargs)
     
     def __str__(self):
         return "{}.{}".format(self.line, self.char)
@@ -53,6 +57,10 @@ class textindex():
         if char is not None:
             self.char += char
         return self
+        
+    def shifted(self, **kwargs):
+        i = TextIndex(line=self.line, char=self.char)
+        return i.shift(**kwargs)
     
     def compare(self, right):
         left = self
@@ -83,21 +91,45 @@ def text_get_first_tag_range(wid, tag) -> Tuple[Optional[str], Optional[str]]:
     return selpoints[0], selpoints[1]
 
 #
-def text_get_tag_ranges(wid, tag) -> Generator[Tuple[Optional[str], Optional[str]], None, None]:
-    points = wid.tag_ranges(tag)
-    if len(points)%2 == 1:
+def text_iter_coord_pair(coords) -> Generator[Tuple[Optional[str], Optional[str]], None, None]:
+    if len(coords)%2 == 1:
         raise ValueError("Number of the tag ranges is odd")
-    for i in range(0, len(points), 2):
-        yield points[i], points[i+1]
+    for i in range(0, len(coords), 2):
+        yield coords[i], coords[i+1]
 
 #
-class HYPERLABEL_DATAITEM:
-    pass
+class DataItemTag:
+    @staticmethod
+    def parse(s):
+        spl = s.split("/")
+        if len(spl) != 3 and spl[0] != "item":
+            return None, None
+        dataname, key = spl[1], spl[2]
+        return dataname, int(key)
+    
+    @staticmethod
+    def make(dataname, key):
+        return "item/{}/{}".format(dataname, key)
+    
+    class HYPERLABEL:
+        pass
 
 #
-def parse_dataitem_link(s):
-    dataname, _, key = s.rpartition("/")
-    return dataname, int(key)
+class ObjectTag:
+    @staticmethod
+    def parse(s):
+        spl = s.split("/")
+        if len(spl) != 3 and spl[0] != "obj":
+            return None, None
+        deskindex, name = spl[1], spl[2]
+        return int(deskindex), name
+
+    @staticmethod
+    def make(dataname, key):
+        return "obj/{}/{}".format(dataname, key)
+
+    class HYPERLABEL:
+        pass
 
 #
 def menukeytag(index):
@@ -441,15 +473,18 @@ class tkLauncher(Launcher):
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
         
-    def insert_screen_object_summary(self, obj): 
+    def insert_screen_object_summary(self, msg):
+        obj = msg.argument("object")
+        deskname = msg.argument("deskname")
+        sel = msg.argument("sel") 
         self.log.configure(state='normal')
-        insert_text_screen_object_summary(self.log, obj, self.theme)
+        screen_insert_object(self, self.log, deskname, obj, sel)
         self.log.configure(state='disabled')
         
     def insert_screen_canvas(self, msg):
         """ ログ欄に図形を描画する """
         self.log.configure(state='normal')
-        canvas_id = embed_text_screen_canvas(self.log, msg.argument("canvas"), self.theme)
+        canvas_id = screen_insert_canvas(self.log, msg.argument("canvas"), self.theme)
         self.log.window_create(tk.END, window=canvas_id)
         self.log.insert(tk.END, "\n") # 
         self.log.configure(state='disabled')
@@ -540,12 +575,13 @@ class tkLauncher(Launcher):
             else:
                 import webbrowser
                 webbrowser.open_new_tab(link)
+        return "break"
 
     def hyper_select(self, _event):
-        cur = textindex(self.log.index(tk.CURRENT))
+        cur = TextIndex(self.log.index(tk.CURRENT))
 
         ppoints = self.log.tag_prevrange("hyperlink", tk.CURRENT)
-        if ppoints and cur.compare(textindex(ppoints[1])) >= 0:
+        if ppoints and cur.compare(TextIndex(ppoints[1])) >= 0:
             beg, end = ppoints[0], ppoints[1]
         else: 
             # rend -> compare の順になっている
@@ -555,7 +591,26 @@ class tkLauncher(Launcher):
             beg, end = npoints[0], npoints[1]
             
         self.log_set_selection(beg, end)
-        self.hyper_select_dataview_item(beg)
+        self.hyper_select_object(beg)
+        return "break"
+        
+    def hyper_select_object(self, index):
+        # リンクからオブジェクトを取り出す        
+        link, label = self.hyper_resolve_link(index)
+
+        if label is DataItemTag.HYPERLABEL:
+            # データビューのアイテム
+            dataname, itemindex = DataItemTag.parse(link)
+            if self.select_screen_dataview_item(dataname, itemindex, charindex=index):
+                return True
+
+        elif label is ObjectTag.HYPERLABEL:
+            # オブジェクト
+            deskname, objname = ObjectTag.parse(link)
+            if self.select_screen_object_on_desktop(deskname, objname, charindex=index):
+                return True
+
+        return False
 
     def hyper_select_next(self):
         _beg, end = text_get_first_tag_range(self.log, "log-selection")
@@ -567,8 +622,9 @@ class tkLauncher(Launcher):
             points = self.log.tag_nextrange("hyperlink", "1.0")
             if not points:
                 return
+
         self.log_set_selection(points[0], points[1])
-        self.hyper_select_dataview_item(points[0])
+        self.hyper_select_object(points[0])
         self.log.see(points[1])
     
     def hyper_select_prev(self):
@@ -581,9 +637,20 @@ class tkLauncher(Launcher):
             points = self.log.tag_prevrange("hyperlink", tk.END)
             if not points:
                 return
+
         self.log_set_selection(points[0], points[1])
-        self.hyper_select_dataview_item(points[0])
+        self.hyper_select_object(points[0])
         self.log.see(points[1])
+
+    def hyper_copy_input_text(self, _event):
+        """ クリックされたハイパーリンクを入力欄に追加する """
+        link, label = self.hyper_resolve_link(tk.CURRENT)
+        if label is ObjectTag.HYPERLABEL:
+            return
+        if os.path.exists(link):
+            link = os.path.relpath(link, self.app.get_current_dir()) # 存在するパスであれば相対パスに直す
+        self.insert_input_text(link)
+        return "break"
 
     #
     # 選択
@@ -607,7 +674,7 @@ class tkLauncher(Launcher):
         # リンクからオブジェクトを取り出す
         resolved_as_item = False
         link, label = self.hyper_resolve_link(beg)
-        if label is HYPERLABEL_DATAITEM:
+        if label is DataItemTag.HYPERLABEL:
             # データ取り出し
             resolved_as_item = True
 
@@ -617,15 +684,13 @@ class tkLauncher(Launcher):
     #
     #
     #
-    def dataviewer(self, viewtype):
-        return {
-            "table" : DataTableView,
-            "wide" : DataWideView,
-        }.get(viewtype)
-    
-    def insert_screen_dataview(self, data, viewer, dataname):
+    def insert_screen_dataview(self, data, viewtype, dataname):
+        insert = screen_get_dataview_method(viewtype, "insert")
+        if insert is None:
+            raise ValueError("表示形式'{}'には未対応です".format(viewtype))
+        
         self.log.configure(state='normal')
-        viewer.render(self, self.log, data, dataname)
+        insert(self, self.log, data, dataname)
         self.log.insert("end", "\n")
         self.log.configure(state='disabled')
     
@@ -636,26 +701,43 @@ class tkLauncher(Launcher):
             return False
         datas = dataobj.value
         datas.select(index)
+
+        viewtype = datas.get_viewtype()
+        select_item = screen_get_dataview_method(viewtype, "select_item")
+        if select_item is None:
+            raise ValueError("表示形式'{}'には未対応です".format(viewtype))
+
         self.log.configure(state='normal')
-        self.dataviewer(datas.get_viewtype()).change_select(self, self.log, charindex, dataname)
+        select_item(self, self.log, charindex, dataname)
         self.log.configure(state='disabled')
         return True
     
-    def hyper_select_dataview_item(self, index):
-        # リンクからオブジェクトを取り出す        
-        link, label = self.hyper_resolve_link(index)
-        if label is HYPERLABEL_DATAITEM:
-            dataname, itemindex = parse_dataitem_link(link)
-            if self.select_screen_dataview_item(dataname, itemindex, charindex=index):
-                return True
-        return False
+    def select_screen_object_on_desktop(self, deskname, objname, charindex):
+        # オブジェクトを選択する
+        objdesk = self.app.select_desktop(deskname)
+        if objdesk is None:
+            return False
+        obj = objdesk.pick(objname)
+        if obj is None:
+            return False
+        
+        # 選択状態を切り替える
+        sel = not objdesk.is_selected(objname)
+        objdesk.select(objname, sel)
+
+        # 描画を更新する
+        self.log.configure(state='normal')
+        screen_select_object(self, self.log, charindex, ObjectTag.make(deskname,objname), sel)
+        self.log.configure(state='disabled')
+        return True
 
     def select_dataview_item(self, index):
         # リンクの場所を探す
-        for linkbeg, linkend in text_get_tag_ranges(self.log, "hyperlink"):
+        ranges = self.log.tag_ranges("hyperlink")
+        for linkbeg, linkend in text_iter_coord_pair(ranges):
             link, label = self.hyper_resolve_link(linkbeg)
-            if label is HYPERLABEL_DATAITEM:
-                dataname, itemindex = parse_dataitem_link(link)
+            if label is DataItemTag.HYPERLABEL:
+                dataname, itemindex = DataItemTag.parse(link)
                 if itemindex == index:
                     break
         else:
@@ -710,9 +792,9 @@ class tkLauncher(Launcher):
             keytag = menukeytag(index)
             menubeg, menuend = text_get_first_tag_range(self.chambermenu, keytag)
             if menubeg is not None:
-                leftinside = textindex(menubeg).shift(char=1).string()
+                leftinside = TextIndex(menubeg).shift(char=1).string()
                 self.chambermenu.replace(menubeg, leftinside, prefixes[0], ("chamber", keytag))
-                rightinside = textindex(menuend).shift(char=-1).string()
+                rightinside = TextIndex(menuend).shift(char=-1).string()
                 self.chambermenu.replace(rightinside, menuend, prefixes[1], ("chamber", keytag))
 
         def update_tag(index, tag, on):
@@ -757,10 +839,10 @@ class tkLauncher(Launcher):
             self.chambermenu.configure(state='normal')
             self.chambermenu.delete(menubeg, menuend)
             # セパレータの削除
-            if textindex(menubeg).char == 0:
+            if TextIndex(menubeg).char == 0:
                 self.chambermenu.delete(1.0, 1.3) 
             else:
-                self.chambermenu.delete(textindex(menubeg).shift(char=-3).string(), menubeg) 
+                self.chambermenu.delete(TextIndex(menubeg).shift(char=-3).string(), menubeg) 
             self.chambermenu.configure(state='disable')
 
     def chamber_menu_click(self, e):
@@ -797,13 +879,6 @@ class tkLauncher(Launcher):
         if not nopop:
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
-
-    def hyper_copy_input_text(self, _event):
-        """ クリックされたハイパーリンクを入力欄に追加する """
-        link, _label = self.hyper_resolve_link(tk.CURRENT)
-        if os.path.exists(link):
-            link = os.path.relpath(link, self.app.get_current_dir()) # 存在するパスであれば相対パスに直す
-        self.insert_input_text(link)
 
     # 
     #
@@ -874,6 +949,9 @@ class tkLauncher(Launcher):
         self.log.tag_configure("hyperlink", foreground=msg_hyp)
         self.log.tag_configure("log-selection", background=highlight, foreground=msg)
         self.log.tag_configure("log-item-selection", foreground=msg_em)
+        self.log.tag_configure("object-frame", foreground="#888888")
+        self.log.tag_configure("object-metadata", foreground=msg_inp)
+        self.log.tag_configure("object-selection", foreground=msg_wan)
 
         self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
         self.chambermenu.tag_configure("chamber", foreground=msg)
@@ -885,79 +963,84 @@ class tkLauncher(Launcher):
 
 #
 #
+# 描画関数
 #
-class DataTableView():    
-    @classmethod
-    def render(cls, ui, wnd, dataview, dataname):
-        rows, colmaxwidths = dataview.rows_to_string_table()
-        
-        columns = [x.get_help() for x in dataview.get_current_columns()]
-        colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colmaxwidths)]
+#
 
-        # ヘッダー
-        head = "      | "
-        wnd.insert("end", head, ("message",))
-        line = ""
-        for col, width in zip(columns, colwidths):
-            line += ljust(col, width)
-        wnd.insert("end", line+"\n", ("message_em",))
-
-        # 値
-        for i, (itemindex, row) in enumerate(rows):
-            line = " | "
-            for s, width in zip(row, colwidths):
-                line += ljust(s, width)
-
-            index = str(i)
-            itemkey = "{}/{}".format(dataname, itemindex)
-            if i == dataview.selection():
-                head = ">> " + " "*(2-len(index))
-                tags = ("message", "log-item-selection")
-                linktags = ui.new_hyper_tags(itemkey, HYPERLABEL_DATAITEM) + ("log-selection",)
-            else:   
-                head = " "*(5-len(index))
-                tags = ("message",)
-                linktags = ui.new_hyper_tags(itemkey, HYPERLABEL_DATAITEM)
-
-            wnd.insert("end", head, tags) # ヘッダー
-            wnd.insert("end", index, linktags) # No. リンク
-            wnd.insert("end", line+"\n", tags) # 行本体
+#
+# Dataview Table
+#
+def screen_dataview_table_insert(ui, wnd, dataview, dataname):
+    rows, colmaxwidths = dataview.rows_to_string_table()
     
-    #
-    @classmethod
-    def change_select(cls, ui, wnd, charindex, dataname):
-        wnd.configure(state='normal')
-        
-        selpoints = wnd.tag_ranges("log-item-selection")
-        if selpoints:
-            for i in range(0, len(selpoints), 2):
-                wnd.tag_remove("log-item-selection", selpoints[i], selpoints[i+1])
-            oline = textindex(selpoints[0])
-            wnd.delete(str(oline(char=0)), str(oline(char=2)))
-            wnd.insert(str(oline(char=0)), "  ")
-        
-        line = textindex(charindex)
-        wnd.tag_add("log-item-selection", str(line(char=0)), str(line(char="end")))
-        wnd.delete(str(line(char=0)), str(line(char=2)))
-        wnd.insert(str(line(char=0)), ">>", "log-item-selection")
-        
-        wnd.configure(state='disabled')
+    columns = [x.get_help() for x in dataview.get_current_columns()]
+    colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colmaxwidths)]
 
+    # ヘッダー
+    head = "      | "
+    wnd.insert("end", head, ("message",))
+    line = ""
+    for col, width in zip(columns, colwidths):
+        line += ljust(col, width)
+    wnd.insert("end", line+"\n", ("message_em",))
 
-#
-class DataWideView(DataTableView):
-    pass
+    # 値
+    for i, (itemindex, row) in enumerate(rows):
+        line = " | "
+        for s, width in zip(row, colwidths):
+            line += ljust(s, width)
 
-#
-class DataListView():
-    @classmethod
-    def render(cls, ui, wnd, data):
-        pass
+        index = str(i)
+        itemkey = DataItemTag.make(dataname, itemindex)
+        if i == dataview.selection():
+            head = ">> " + " "*(2-len(index))
+            tags = ("message", "log-item-selection")
+            linktags = ui.new_hyper_tags(itemkey, DataItemTag.HYPERLABEL) + ("log-selection",)
+        else:   
+            head = " "*(5-len(index))
+            tags = ("message",)
+            linktags = ui.new_hyper_tags(itemkey, DataItemTag.HYPERLABEL)
+
+        wnd.insert("end", head, tags) # ヘッダー
+        wnd.insert("end", index, linktags) # No. リンク
+        wnd.insert("end", line+"\n", tags) # 行本体
     
-    #
-    @classmethod
-    def change_select(cls, ui, wnd, charindex):
-        pass
+def screen_dataview_table_select_item(ui, wnd, charindex, dataname):
+    wnd.configure(state='normal')
+    
+    selpoints = wnd.tag_ranges("log-item-selection")
+    if selpoints:
+        for i in range(0, len(selpoints), 2):
+            wnd.tag_remove("log-item-selection", selpoints[i], selpoints[i+1])
+        olinehead = TextIndex(selpoints[0]).move(char=0)
+        wnd.delete(str(olinehead), str(olinehead.moved(char=2)))
+        wnd.insert(str(olinehead), "  ")
+    
+    linehead = TextIndex(charindex).move(char=0)
+    wnd.tag_add("log-item-selection", str(linehead), str(linehead.moved(char="end")))
+    wnd.delete(str(linehead), str(linehead.moved(char=2)))
+    wnd.insert(str(linehead), ">>", "log-item-selection")
+    
+    wnd.configure(state='disabled')
+
+#
+# Dataview Wide
+#
+def screen_dataview_wide_insert(ui, wnd):
+    raise NotImplementedError()
+
+def screen_dataview_wide_select_item(ui, wnd):
+    raise NotImplementedError()
+
+#
+# Dataview List
+#
+
+# 実装関数を取得する
+def screen_get_dataview_method(viewtype, name):
+    viewtype = {
+    }.get(viewtype, viewtype).lower()
+    return globals().get("screen_dataview_{}_{}".format(viewtype, name), None)
 
 #
 #
@@ -991,7 +1074,7 @@ class HyperlinkDatabase:
 #
 # 埋め込みキャンバス
 #
-def embed_text_screen_canvas(parent, canvas, theme):
+def screen_insert_canvas(parent, canvas, theme):
     """ キャンバスを作成する """
     bg = canvas.bg
     if bg is None:
@@ -1040,16 +1123,27 @@ def embed_text_screen_canvas(parent, canvas, theme):
 #
 #
 #
-def insert_text_screen_object_summary(parent, obj, theme):
+def screen_insert_object(ui, wnd, deskname, obj, sel):
     width = 30
-    tags = ("message",)
-    frametags = ("message", "frame")
+    objtag = ObjectTag.make(deskname, obj.name)
+    tags = ("message", objtag)
+    frametags = ("message", "object-frame", objtag)
+    metatags = ("message", "object-metadata", objtag)
+    buttontags = ("hyperlink", "clickable", objtag) + ui.new_hyper_tags(objtag, ObjectTag.HYPERLABEL)
     
+    # 選択状態を反映する：枠のタグを切り替え
+    if sel:
+        frametags = frametags + ("object-selection",)
+        btnchar = "X"
+    else:
+        btnchar = "O"
+
     # 上の罫
     title = "{}".format("object")
-    tops = composit_text(" "+title+" ", width, fill=("─", " "))
-    topline = "┌" + tops + "┐" + '\n'
-    parent.insert("end", topline, frametags) # ヘッダー
+    tops = composit_text(" "+title+" ", width-3, fill=("─", " ")) # ボタンが4文字分入る
+    wnd.insert("end", "┌" + tops + "[", frametags) # ヘッダー
+    wnd.insert("end", btnchar, buttontags)
+    wnd.insert("end", "]┐" + '\n', frametags) # ヘッダー
 
     # 上段：オブジェクトの情報
     props = [
@@ -1057,45 +1151,62 @@ def insert_text_screen_object_summary(parent, obj, theme):
         "type: {}".format(obj.get_typename())
     ]
     for line, _ in composit_text.filled_lines("\n".join(props), width, fill=" "):
-        parent.insert("end", "｜", frametags)
-        parent.insert("end", line, tags) 
-        parent.insert("end", "｜\n", frametags)
+        wnd.insert("end", "｜", frametags)
+        wnd.insert("end", line, metatags) 
+        wnd.insert("end", "｜\n", frametags)
 
     # 仕切りの罫
     mid = composit_text("", width, fill=("─", " "))
     midline = "├" + mid + "┤" + '\n'
-    parent.insert("end", midline, frametags) # 
+    wnd.insert("end", midline, frametags) # 
 
     # 下段：オブジェクトの値
     summary = obj.get_summary()
     for line, _ in composit_text.filled_lines(summary, width, fill=" "):
-        parent.insert("end", "｜", frametags)
-        parent.insert("end", line, tags) 
-        parent.insert("end", "｜\n", frametags)
+        wnd.insert("end", "｜", frametags)
+        wnd.insert("end", line, tags) 
+        wnd.insert("end", "｜\n", frametags)
 
     # 下の罫
     bottoms = composit_text("", width, fill=("─", " "))
     bottomline = "└" + bottoms + "┘" + '\n'
-    parent.insert("end", bottomline, frametags) # 
-    
-    """
-    # Canvasでグラフィカルな表示＠AAで充分？
-    width = 30     
-    title = "[{}] {}".format(obj.get_typename(), obj.name)
+    wnd.insert("end", bottomline, frametags) # 
 
-    summary = obj.get_summary()
-    y = 10
-    sumlines = []
-    for rawline in composit_text(summary, width+2).splitlines():
-        y += 10
-        sumlines.append((rawline, y))
-    
-    from machaon.process import ProcessScreenCanvas
-    cv = ProcessScreenCanvas(None, name="obj-{}".format(obj.name), width="%im"%30, height="%im"%y, color="#400080")
+#
+#
+#
+def screen_select_object(ui, wnd, charindex, objtag, sel):
+    btnchar = TextIndex(charindex)
+    btntags = wnd.tag_names(btnchar)
 
-    cv.text(coord=(50,10), text=title, color="#FFFF00")
-    for sumline, ycoord in sumlines:
-        cv.text(coord=(50,ycoord), text=sumline, color="#FFFFFF")
+    # オブジェクトの枠の座標範囲を推定する
+    framecoords = []
+    objbeg, objend = text_get_first_tag_range(wnd, objtag)
+    beg = TextIndex(objbeg)
+    end = TextIndex(objend)
+    while beg.line < end.line:
+        if "object-frame" in wnd.tag_names(beg.shifted(char=2)):
+            framecoords.extend([
+                beg.string(), 
+                beg.moved(char="end").string()
+            ])
+        else:
+            framecoords.extend([
+                beg.string(), 
+                beg.moved(char=1).string(), 
+                beg.moved(char="end").string() + " -1 indices", 
+                beg.moved(char="end").string()
+            ])
+        beg = beg.shift(line=1)
 
-    self.insert_screen_canvas(ProcessMessage("canvas", canvas=cv))
-    """
+    # 表示を切り替える：タグの付け替え、ボタンの切り替え
+    if sel:
+        wnd.tag_add("object-selection", *framecoords)
+        wnd.delete(str(btnchar), str(btnchar.shifted(char=1)))
+        wnd.insert(str(btnchar), "X", btntags)
+    else:
+        for beg, end in text_iter_coord_pair(framecoords):
+            wnd.tag_remove("object-selection", beg, end) # なぜか一括削除に対応していない
+        wnd.delete(str(btnchar), str(btnchar.shifted(char=1)))
+        wnd.insert(str(btnchar), "O", btntags)
+

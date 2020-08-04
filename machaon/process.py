@@ -748,7 +748,8 @@ class DesktopChamber():
     def get_message(self): #
         msgs = []
         for obj in self._objdesk.enumerates():
-            msg = ProcessMessage(object=obj, tag="object-summary")
+            sel = self._objdesk.is_selected(obj.name)
+            msg = ProcessMessage(object=obj, deskname=self._index, tag="object-summary", sel=sel)
             msgs.append(msg)
         return msgs
 
