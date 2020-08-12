@@ -35,36 +35,6 @@ class CommandBuilder():
         self.argdescs = []
         self.lazy_describers = []
 
-    # 引数を定義する
-    def __getitem__(self, commandstr: str):
-        if commandstr and isinstance(commandstr, str):
-            if ":" in commandstr:   
-                varpart, typepart = commandstr.split(":")
-            else:
-                varpart, typepart = commandstr, "str"
-            cmdtype, *paramnamepart = varpart.split()
-            objtype = typepart.strip()
-        else:
-            raise TypeError()
-
-        paramname = paramnamepart[0] if paramnamepart else None
-        
-        def _command(**commandkwargs):
-            self.argdescs.append((cmdtype, paramname, objtype, commandkwargs))
-            return self
-        return _command
-
-    # コマンド全体の説明
-    def describe(self,
-        description=None,
-        spirit=None,
-    ):
-        if description is not None:
-            self.description = description
-        if spirit is not None:
-            self.spirit = spirit
-        return self
-
     # 直前に実行されるコマンド初期化処理
     def lazy_describe(self, fn):
         self.lazy_describers.append(fn)
@@ -85,10 +55,6 @@ class CommandBuilder():
             builder = self,
             commandtype = self.commandtype
         )
-    
-    def argument_describers(self):
-        for cmdtype, paramname, objtype, cmdargs in self.argdescs:
-            yield cmdtype, paramname, objtype, cmdargs
     
     def get_lazy_action_describer(self):
         if self.lazy_describers:

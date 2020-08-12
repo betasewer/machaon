@@ -2,7 +2,7 @@ from typing import List, Sequence, Optional, Any, Tuple, Union, Dict
 from collections import defaultdict
 
 from machaon.cui import fixsplit
-from machaon.action import Action, ActionClass, ActionFunction, ObjectConstructorAction
+#from machaon.action import Action, ActionClass, ActionFunction, ObjectConstructorAction
 from machaon.process import Spirit
 
 #
@@ -35,84 +35,6 @@ class CommandEntry():
         self.prog = prog
         self.description = description
         self.commandtype = commandtype
-
-    def load_action(self) -> Optional[Action]:
-        if self.action is None and self.builder:
-            self.action = self.build_action()
-        return self.action
-
-    def build_action(self) -> Action:
-        if self.builder is None:
-            raise ValueError("No builder")
-
-        # コマンドをロードする
-        target = self.builder.target
-        if isinstance(target, str) and isinstance(self.builder.frommodule, str):
-            import importlib
-            mod = importlib.import_module(self.builder.frommodule)
-            member = getattr(mod, target, None)
-            if member is None:
-                raise ValueError("コマンド'{}'のターゲット'{}'をロードできません".format(self.prog, target))
-            target = member
-
-        # アクションタイプの決定
-        if self.commandtype & INSTANT_COMMAND:
-            action_type = "i"
-        elif hasattr(target, "describe_command"):
-            # アクション自体に定義された初期化処理を呼ぶ
-            target.describe_command(self.builder)
-            if hasattr(target, "process_target"):
-                action_type = "c"
-            else:
-                if isinstance(target, type):
-                    target = target()
-                action_type = "f"
-        elif isinstance(target, type):
-            action_type = "c"
-        elif callable(target):
-            action_type = "f"
-        else:
-            raise ValueError("無効なアクションターゲットです：{}".format(target))
-
-        # prog
-        prog = self.prog
-        
-        # description
-        description = self.builder.description
-
-        # spirit
-        spirittype = self.builder.spirit
-        
-        # 遅延コマンド初期化処理を実行する関数を作成する
-        lazy_arg_describe = self.builder.get_lazy_action_describer()
-        
-        # コマンドで実行するアクション
-        kwargs = {
-            "prog": prog,
-            "description": description,
-            "spirittype": spirittype, 
-            "lazyargdescribe": lazy_arg_describe
-        }
-        act: Any = None
-        if action_type == "c":
-            act = ActionClass(target, **kwargs)
-        elif action_type == "f":
-            act = ActionFunction(target, **kwargs)
-        elif action_type == "i":
-            act = ObjectConstructorAction(target, prog=prog, description=description)
-        else:
-            raise ValueError("action_type")
-
-        # 引数の定義
-        for cmdtype, cmdkwds, objtype, kwargs in self.builder.argument_describers():
-            if cmdtype in ("target", "init", "exit"):
-                act.add_argument(cmdtype, cmdkwds, objtype, **kwargs)
-            elif cmdtype in ("yield",):
-                act.add_result(objtype, **kwargs)
-            else:
-                raise ValueError("Undefined command type '{}'".format(cmdtype))
-        
-        return act
     
     def match(self, target: str) -> Tuple[bool, Optional[str]]:
         match_rests = []
@@ -128,14 +50,6 @@ class CommandEntry():
     
     def get_keywords(self):
         return self.keywords
-
-    def get_description(self):
-        if self.builder:
-            return self.builder.description
-        return self.description
-
-    def is_hidden(self):
-        return self.commandtype == HIDDEN_COMMAND
 
 #
 # set of CommandEntry

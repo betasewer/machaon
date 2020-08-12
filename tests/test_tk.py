@@ -1,8 +1,8 @@
 import pytest
 
-from machaon.app import AppRoot
-from machaon.process import ProcessMessage, Spirit, TempSpirit, Process
-from machaon.ui.tk import tkLauncher
+#from machaon.app import AppRoot
+#from machaon.process import ProcessMessage, Spirit, TempSpirit, Process
+#from machaon.ui.tk import tkLauncher
 
 def gettext(log):
     return log.get(1.0, "end")
@@ -66,13 +66,16 @@ def test_progress_display(approot):
 
 
 def test_textindex(approot):
-    from machaon.ui.tk import textindex
+    from machaon.ui.tk import TextIndex as textindex
 
     assert textindex("1.2").line == 1 and textindex("1.2").char == 2
     assert str(textindex("2.3")) == "2.3"
-    assert str(textindex("10.2")(char=5)) == "10.5"
-    assert str(textindex("10.2")(line=0, char=0)) == "0.0"
+    assert str(textindex("10.2").move(char=5)) == "10.5"
+    assert str(textindex("10.2").move(line=0, char=0)) == "0.0"
     assert str(textindex(line=3, char="end")) == "3.end"
+    i = textindex("9.7")
+    assert i.shifted(line=-1, char=1).string() == "8.8"
+    assert i.string() == "9.7"
     assert textindex("1.0").compare(textindex("1.3")) == 1
     assert textindex("1.2").compare(textindex("2.3")) == 1
     assert textindex("2.3").compare(textindex("2.3")) == 0

@@ -1,10 +1,10 @@
-from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator
+from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable
 from collections import defaultdict
 
-from machaon.object.type import TypeTraits, TypeMethod
-from machaon.object.desktop import ObjectDesktop
+from machaon.object.type import TypeTraits, TypeModule
+from machaon.object.object import Object
+from machaon.object.invocation import MemberInvocationContext, select_type_method, select_method
 from machaon.object.formula import ValuesEvalContext, parse_formula
-from machaon.object.operator import parse_operator_expression
 from machaon.object.sort import parse_sortkey
 from machaon.cui import get_text_width
 
@@ -32,9 +32,13 @@ class InvalidColumnNames(Exception):
 #
 #
 class DataColumn():
-    def __init__(self, method, type):
-        self.method = method
+    def __init__(self, method_inv, type):
+        self.method_inv = method_inv
         self.type = type
+    
+    @property
+    def method(self):
+        return self.method_inv.method
 
     def get_name(self):
         return self.method.get_name()
@@ -45,17 +49,18 @@ class DataColumn():
     def make_value_string(self, value):
         return self.type.convert_to_string(value)
     
-    def make_value(self, subject_type, subject_value):
-        return self.method.resolve(subject_type)(subject_value) # 引数なしで呼び出す
+    def make_value(self, cxt: MemberInvocationContext):
+        self.method_inv.invoke(cxt)
+        return cxt.get_evaluated_value()
     
     def make_compare_operator(self, lessthan=True):
         if lessthan:
-            return parse_operator_expression("lt", self.type)
+            return select_method("lt", self.type, arity=2, return_type="bool")
         else:
-            return parse_operator_expression("!lt", self.type)
+            return select_method("!lt", self.type, arity=2, return_type="bool")
 
 #
-def make_data_columns(type, objdesk: ObjectDesktop, *member_names) -> List[DataColumn]:
+def make_data_columns(type, typemodule: TypeModule, *member_names) -> List[DataColumn]:
     columns = []
     invalid_names = []
 
@@ -68,11 +73,13 @@ def make_data_columns(type, objdesk: ObjectDesktop, *member_names) -> List[DataC
             names.append(member_name)
 
     for member_name in names:
-        meth = type.get_method(member_name)
-        if meth:
-            coltype = objdesk.get_type(meth.get_result_typecode())
-            col = DataColumn(meth, coltype)
-            columns.append(col)
+        methinv = select_type_method(member_name, type)
+        if methinv:
+            rtype = methinv.method.get_first_result_typename()
+            if rtype is None:
+                raise ValueError("データカラムで表示しようとしたメソッド'{}'が値を返しません".format(member_name))
+            coltype = typemodule.new(rtype)
+            columns.append(DataColumn(methinv, coltype))
         else:
             invalid_names.append(member_name)
 
@@ -169,12 +176,6 @@ class DataView():
     # アイテムのメンバを表の列とする
     def get_item_type(self) -> TypeTraits:
         return self.itemtype
-
-    def all_item_members(self) -> Generator[TypeMethod, None, None]:
-        if self.itemtype is None:
-            return
-        for meth in self.itemtype.enum_methods(arity=1):
-            yield meth
     
     def get_current_columns(self) -> List[DataColumn]:
         return self.viewcolumns
@@ -232,7 +233,15 @@ class DataView():
     #
     # 新しい条件でビューを作る
     #
-    def create_view(self, objdesk, viewtype, column_names=None, filterformula=None, sortkey=None, *, trunc=True):
+    def create_view(self, 
+        typemodule: TypeModule, 
+        viewtype: str, 
+        column_names=None, 
+        filterformula=None, 
+        sortkey=None, 
+        *, 
+        trunc=True
+    ):
         # 空のデータからは空のビューしか作られない
         if not self.items:
             return DataView(self.itemtype, [])
@@ -252,9 +261,10 @@ class DataView():
         
         # 列を新規作成  使用しない列は削除？
         new_column_names = rowindexer.pop_new_columns()
-        columns = make_data_columns(self.itemtype, objdesk, *cur_column_names, *new_column_names)
+        columns = make_data_columns(self.itemtype, typemodule, *cur_column_names, *new_column_names)
 
         # データを展開する
+        newrowlayout: Iterable[Tuple[int, List[Any]]]
         if trunc:
             # すべて新たに計算する
             newcolumns = columns
@@ -262,7 +272,7 @@ class DataView():
         else:
             # 新規追加された欄のみ
             newcolumns = columns[len(cur_column_names):]
-            newrowlayout = self.rows # 現在使用されているアイテムに結合
+            newrowlayout = iter(self.rows) # 現在使用されているアイテムに結合
 
         if newcolumns:
             # 新たに値を計算
@@ -270,8 +280,9 @@ class DataView():
             for itemindex, currow in newrowlayout:
                 newrow = []
                 item = self.items[itemindex]
+                inv = MemberInvocationContext(self.itemtype, item)
                 for column in newcolumns:
-                    val = column.make_value(self.itemtype, item)
+                    val = column.make_value(inv)
                     newrow.append(val)
                 newrows.append((itemindex, currow+newrow)) # 既存の行の後ろに結合
             rows = newrows
@@ -341,21 +352,21 @@ class DataViewRowIndexer():
 #
 #
 #
-def parse_new_dataview(objdesk, items, expression=None, *, itemtype=None, filter_query=None, sort_query=None):
+def parse_new_dataview(typemodule, items, expression=None, *, itemtype=None, filter_query=None, sort_query=None):
     if itemtype is None:
         if not items:
             raise ValueError("アイテムの型を推定できません")
         itemtype = type(items[0])
-    item_t = objdesk.get_type(itemtype)
+    item_t = typemodule.new(itemtype)
     dataview = DataView(item_t, items)
-    return parse_dataview(objdesk, dataview, expression, trunc=True, filter_query=filter_query, sort_query=sort_query)
+    return parse_dataview(typemodule, dataview, expression, trunc=True, filter_query=filter_query, sort_query=sort_query)
 
 #
 #
 # コマンドからビューを作成する
 # /v name path date /where date within 2015y 2017y /sortby ~date name /list
 #
-def parse_dataview(objdesk, dataview, expression=None, *, trunc=True, filter_query=None, sort_query=None):
+def parse_dataview(typemodule, dataview, expression=None, *, trunc=True, filter_query=None, sort_query=None):
     # コマンド文字列を解析する
     column_part = None
     viewtype_part = None
@@ -394,7 +405,7 @@ def parse_dataview(objdesk, dataview, expression=None, *, trunc=True, filter_que
 
     filter_ = None
     if filter_query:
-        filter_ = parse_formula(filter_query, objdesk, dataview.itemtype)
+        filter_ = parse_formula(filter_query, typemodule, dataview.itemtype)
 
     # ソート指示
     if sorter_part is not None:
@@ -405,5 +416,5 @@ def parse_dataview(objdesk, dataview, expression=None, *, trunc=True, filter_que
         sortkey = parse_sortkey(sort_query)
 
     # 新たなビューを構築する
-    return dataview.create_view(objdesk, viewtype, columns, filter_, sortkey, trunc=trunc)
+    return dataview.create_view(typemodule, viewtype, columns, filter_, sortkey, trunc=trunc)
 

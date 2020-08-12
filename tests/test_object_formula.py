@@ -2,11 +2,13 @@ import pytest
 
 from machaon.object.type import TypeTraits, TypeModule
 from machaon.object.desktop import ObjectDesktop
+"""
 from machaon.object.formula import (
     tokenize_expression, TOKEN_BLOCK_BEGIN, TOKEN_BLOCK_END,
     FormulaParser, FormulaExpression, ValuesEvalContext,
     parse_formula
 )
+"""
 
 
 #

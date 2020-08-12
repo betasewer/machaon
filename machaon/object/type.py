@@ -4,10 +4,13 @@ from inspect import signature
 
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional
 
-#
-#
-#
-#
+from machaon.object.method import Method, method_declaration_chain
+
+# imported from...
+# desktop
+# object
+# formula
+# dataset
 #
 
 #
@@ -20,48 +23,6 @@ class BadMethodName(Exception):
 class BadMethodDelegation(Exception):
     pass
 
-#
-#
-#
-class TypeMethod():
-    class PRINTER():
-        pass
-    class UNDEFINED():
-        pass
-
-    def __init__(self, name, arity, return_typecode, help="", target=None):
-        self.name: str = name
-        self.arity: int = arity
-        self.return_typecode: Union[str, TypeMethod.PRINTER] = return_typecode
-        self.help: str = help
-        self.target: str = normalize_method_target(target or self.name)
-    
-    def get_name(self):
-        return self.name
-        
-    def get_result_typecode(self):
-        return self.return_typecode
-    
-    def get_help(self):
-        return self.help
-
-    def is_printer(self):
-        return self.return_typecode is TypeMethod.PRINTER
-    
-    def resolve(self, this_type):
-        return this_type.get_method_delegation(self.target)
-
-#
-class TypeMethodAlias:
-    def __init__(self, name, dest):
-        self.name = name
-        self.dest = dest
-    
-    def get_name(self):
-        return self.name
-    
-    def get_destination(self):
-        return self.dest
 
 #
 #
@@ -77,7 +38,7 @@ class TypeTraits():
         self.description: str = description
         self.flags = flags
         self.value_type = value_type
-        self._methods: Dict[str, TypeMethod] = {}
+        self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, TypeMethodAlias] = {}
     
     def __str__(self):
@@ -105,6 +66,7 @@ class TypeTraits():
         m = self.get_method_delegation("to_string")
         return m(v)
 
+    # デフォルトの動作
     def from_string(self, arg: str):
         return self.get_value_type()(arg)
 
@@ -120,8 +82,9 @@ class TypeTraits():
     # 
     # メソッド呼び出し
     #
-    def get_method(self, name) -> Optional[TypeMethod]:
-        return self._methods.get(name, None)
+    def get_method(self, name) -> Optional[Method]:
+        meth = self._methods.get(name, None)
+        return meth
 
     def enum_methods(self, arity=None):
         for meth in self._methods.values():
@@ -129,26 +92,16 @@ class TypeTraits():
                 continue
             yield meth
     
-    def new_method(self, 
-        names, 
-        arity, 
-        return_type=None, 
-        help="", 
-        target=None
-    ):
-        top, *aliass = names
-        self._methods[top] = TypeMethod(top, arity, return_type, help, target)
-        for a in aliass:
-            self.new_method_alias(a, top)
+    def add_method(self, name, method):
+        if name in self._methods:
+            raise BadMethodName("重複しています")
+        self._methods[name] = method
     
     # メソッドの実装を解決する
     def get_method_delegation(self, attrname):
         m = getattr(self, attrname, None)
         if m is None:
-            import builtins
-            m = getattr(builtins, attrname, None)
-            if m is None:
-                raise BadMethodDelegation(attrname)
+            raise BadMethodDelegation(attrname)
         return m
 
     #
@@ -183,44 +136,25 @@ class TypeTraits():
             self.value_type = value_type
         return self 
     
+    # 個別のメンバを表明する
     def __getitem__(self, declaration):
         if not isinstance(declaration, str):
             raise TypeError("declaration")
         
-        decl, _, typecode = [x.strip() for x in declaration.partition("->")]
-        if not typecode:
-            typecode = "str"
-        
-        head, _, tail = [x.strip() for x in decl.partition(" ")]
-        if not tail:
-            tail = head
-            head = "member"
-
-        if head == "member":
-            names = tail.split()
-            def member_(**kwargs):
-                kwargs.setdefault("return_type", typecode)
-                self.new_method(names, 1, **kwargs)
-                return self
-            return member_
-
-        elif head == "operator":
-            names = tail.split()
-            def opr_(**kwargs):
-                kwargs.setdefault("return_type", typecode)
-                self.new_method(names, 2, **kwargs)
-                return self
-            return opr_
-
-        elif head == "alias":
+        declaration = declaration.lstrip()
+        if declaration.startswith("alias"):
+            _head, _, tail = declaration.partition(" ")
             origname = tail.strip()
-            def alias_(*names):
-                self.new_method_alias(origname, names)
+            def alias_(name):
+                self.new_method_alias(origname, name)
                 return self
             return alias_
-
         else:
-            raise ValueError("不明な宣言型です：'{}'".format(head))
+            return method_declaration_chain(self, declaration)
+
+    # describeの中で使用できる
+    def describe_method(self, **kwargs):
+        return Method(**kwargs)
     
     def make_described(self, describer):
         if not hasattr(describer, "describe_object"):
@@ -253,15 +187,8 @@ class TypeTraitsDelegation(TypeTraits):
         fn = getattr(self.klass, attrname, None)
         if fn is None:
             # TypeTraitsクラスのデフォルト定義を用いる
-            fn = getattr(super(), attrname)
-        
-        if fn is None:
-            raise BadMethodDelegation(attrname)
+            fn = super().get_method_delegation(attrname)
         return fn
-
-#
-def normalize_method_target(name):
-    return name.replace("-","_") # ハイフンはアンダースコア扱いにする
 
 #
 # 型取得インターフェース
@@ -325,6 +252,23 @@ class TypeModule():
     def __getattr__(self, name) -> Optional[TypeTraits]:
         typename = self.normalize_typename(name)
         return self.get(typename)
+    
+    #
+    # 取得し、無ければ定義する
+    #
+    def new(self, typecode):
+        tt = self.get(typecode, fallback=True)
+        if tt is None:
+            if hasattr(tt, "describe_object"):
+                tt = self.define(tt)
+            else:
+                # 実質は文字列と同一の新しい型を作成
+                if isinstance(tt, str):
+                    typename = tt
+                else:
+                    typename = tt.__name__
+                tt = self.define(typename=typename, description="<Prototype {}>".format(typename))
+        return tt
 
     #
     # 型を定義する
@@ -373,6 +317,10 @@ class TypeModule():
     #
     def add_ancestor(self, other): # type: (TypeModule) -> None
         self._ancestors.append(other)
+    
+    def add_fundamental_types(self):
+        from machaon.object.fundamental import fundamental_type
+        self.add_ancestor(fundamental_type)
 
 
 

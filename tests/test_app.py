@@ -1,5 +1,5 @@
-from machaon.app import AppRoot
-from machaon.process import Spirit
+#from machaon.app import AppRoot
+#from machaon.process import Spirit
 
 def test_spirit_currentdir(tmpdir):
     app = AppRoot()
