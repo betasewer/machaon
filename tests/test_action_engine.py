@@ -1,7 +1,7 @@
-from machaon.engine import CommandEntry, CommandSet, CommandEngine, HIDDEN_COMMAND
-from machaon.command import describe_command
-from machaon.process import Spirit, TempSpirit
-from machaon.action import Action, ActionFunction, ActionClass, ActionInvocation, ActionArgDef
+#from machaon.engine import CommandEntry, CommandSet, CommandEngine, HIDDEN_COMMAND
+#from machaon.command import describe_command
+#from machaon.process import Spirit, TempSpirit
+#from machaon.action import Action, ActionFunction, ActionClass, ActionInvocation, ActionArgDef
 
 from machaon.object.desktop import ObjectDesktop, Object, ObjectValue
 

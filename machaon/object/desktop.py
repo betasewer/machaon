@@ -4,6 +4,12 @@ from collections import defaultdict
 from machaon.object.object import Object, ObjectValue
 from machaon.object.type import TypeModule, TypeTraits
 
+# imported from...
+# action
+# dataset
+# 
+#
+
 #
 #
 #
@@ -11,36 +17,11 @@ class ObjectDesktop():
     def __init__(self):
         self._objects: Dict[str, Object] = {}
         self._objtypemap: DefaultDict[str, List[str]] = defaultdict(list)
-        self._types: TypeModule = TypeModule()
         self._selection: Set[str] = set()
     
-    # 対応するオブジェクト型を設定する
-    def add_types(self, types: TypeModule):
-        self._types.add_ancestor(types)
-    
-    def add_fundamental_types(self):
-        from machaon.object.fundamental import fundamental_type
-        self.add_types(fundamental_type)
-    
-    # 型オブジェクトを得る
-    def get_type(self, typecode):
-        tt = self._types.get(typecode, fallback=True)
-        if tt is None:
-            tt = self.new_type(typecode) # 存在しなければ作成する
-        return tt
-    
-    # 新しい型を定義する
-    def new_type(self, typetraits): # str | TypeTraitsKlass
-        if hasattr(typetraits, "describe_object"):
-            tt = self._types.define(typetraits)
-        else:
-            # 実質は文字列と同一の新しい型を作成
-            if isinstance(typetraits, str):
-                typename = typetraits
-            else:
-                typename = typetraits.__name__
-            tt = self._types.define(typename=typename, description="<Temporal string type {}>".format(typename))
-        return tt
+    # 型の一覧を取得
+    def get_types(self) -> TypeModule:
+        raise NotImplementedError()
 
     # オブジェクトを新規生成し、追加
     def new(self, name, typecode, *args, **kwargs):
@@ -53,7 +34,7 @@ class ObjectDesktop():
         if isinstance(typecode, TypeTraits):
             tt = typecode
         else:
-            tt = self.get_type(typecode)
+            tt = self.get_types().new(typecode)
         
         # オブジェクトを構築
         value_type = tt.get_value_type()
@@ -104,4 +85,12 @@ class ObjectDesktop():
 
     def is_selected(self, name):
         return name in self._selection
+    
+    # 新しい空のデスクトップを作る
+    def spawn(self):
+        # 型のみ引き継ぐ
+        desk = ObjectDesktop()
+        desk._types = self._types
+        return desk
+
     

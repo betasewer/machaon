@@ -1,5 +1,5 @@
 import pytest
-from machaon.process import ProcessHive, ProcessChamber, Process
+#from machaon.process import ProcessHive, ProcessChamber, Process
 
 proc_ = 0
 def newproc() -> Process:

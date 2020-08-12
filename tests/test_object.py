@@ -1,7 +1,7 @@
 import pytest
-from machaon.object.object import Object, ObjectValue
-from machaon.object.desktop import ObjectDesktop
-from machaon.object.fundamental import fundamental_type
+#from machaon.object.object import Object, ObjectValue
+#from machaon.object.desktop import ObjectDesktop
+#from machaon.object.fundamental import fundamental_type
 
 def test_desktop():
     desk = ObjectDesktop()

@@ -1,7 +1,7 @@
 import pytest
 
-from machaon.starter import TkStarter
-from machaon.command import describe_command_package, describe_command
+#from machaon.starter import TkStarter
+#from machaon.command import describe_command_package, describe_command
 
 def hello_world(spi, count, string=None):
     if string is None: string = "Hello, world"

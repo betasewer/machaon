@@ -1,15 +1,15 @@
 import pytest
-from machaon.app import AppRoot
-from machaon.ui.tk import tkLauncher
+#from machaon.app import AppRoot
+#from machaon.ui.tk import tkLauncher
 
-from machaon.commands.catalogue import shell_commands
-from machaon.package.package import package
-from machaon.package.repository import bitbucket_rep
-from machaon.package.auth import basic_auth
-from machaon.package.archive import local_archive
-from machaon.engine import NotYetInstalledCommandSet
-from machaon.process import TempSpirit
-from machaon.commands.package import package_install, command_package
+#from machaon.commands.catalogue import shell_commands
+#from machaon.package.package import package
+#from machaon.package.repository import bitbucket_rep
+#from machaon.package.auth import basic_auth
+#from machaon.package.archive import local_archive
+#from machaon.engine import NotYetInstalledCommandSet
+#from machaon.process import TempSpirit
+#from machaon.commands.package import package_install, command_package
 
 @pytest.fixture
 def approot():

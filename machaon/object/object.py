@@ -1,7 +1,12 @@
 from typing import Any, Optional, List, Sequence
 
 from machaon.object.type import TypeTraits
-from machaon.object.operator import ObjectOperator
+
+# imported from...
+# desktop
+# 
+#
+#
 
 #
 #
@@ -31,7 +36,8 @@ class Object():
         return self.type.typename
     
     # メソッド名を解決する
-    def resolve_method(self, method_name) -> ObjectOperator:
+    """
+    def resolve_method(self, method_name):
         return ObjectOperator(method_name, self.type)
 
     # メソッド名を解決し呼び出す
@@ -44,6 +50,7 @@ class Object():
         else:
             ret = method(self.value, *args)
             return ObjectValue(type(ret), ret)
+    """
     
     #
     def to_string(self) -> str:

@@ -1,5 +1,5 @@
-from machaon.object.fundamental import fundamental_type
-from machaon.object.type import TypeTraits, TypeModule
+#from machaon.object.fundamental import fundamental_type
+#from machaon.object.type import TypeTraits, TypeModule
 
 @fundamental_type.definition
 class dummy_rabbit(TypeTraits):

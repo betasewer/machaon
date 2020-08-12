@@ -350,13 +350,13 @@ def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=
     if options:
         cmd.extend(options)
 
-    from machaon.commands.shell import popen_capture_output, PopenEnd
-    proc = popen_capture_output(cmd)
-    for line in proc:
-        if isinstance(line, PopenEnd):
-            yield package_manager.PIP_END.bind(returncode=line.returncode)
-        elif line:
-            yield package_manager.PIP_MSG.bind(msg=line)
+    from machaon.commands.shellpopen import popen_capture
+    proc = popen_capture(cmd)
+    for msg in proc:
+        if msg.is_finished():
+            yield package_manager.PIP_END.bind(returncode=msg.returncode())
+        elif msg.is_output():
+            yield package_manager.PIP_MSG.bind(msg=msg.text())
         
 
 #

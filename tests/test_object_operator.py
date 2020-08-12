@@ -1,10 +1,10 @@
 from machaon.object.type import (
     TypeTraits, TypeTraitsDelegation
 )
-from machaon.object.operator import (
-    ObjectOperator, parse_operator_expression,
-    OPERATION_REVERSE, OPERATION_NEGATE
-)
+#from machaon.object.operator import (
+#    ObjectOperator, parse_operator_expression,
+#    OPERATION_REVERSE, OPERATION_NEGATE
+#)
 
 #
 def test_parse_operator_name():
