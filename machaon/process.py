@@ -45,7 +45,7 @@ class Process:
         self.stop_flag = False
         self.thread.start()
     
-    def execute(self, execentry, objdesktop) -> ActionInvocation:
+    def execute(self, execentry, objdesktop): # -> ActionInvocation:
         self.target = execentry.target
         self.spirit = execentry.spirit
         self.parameter = execentry.parameter

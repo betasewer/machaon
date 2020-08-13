@@ -59,8 +59,6 @@ class Method():
     def check_valid(self):
         if self.name is None:
             raise ValueError("name")
-        if self.target is None:
-            raise ValueError("target")
     
     def is_task(self):
         return (self.flags & METHOD_TASK) > 0
@@ -94,23 +92,45 @@ class Method():
             return method_parameter_declaration_chain(self, declaration)
 
     #
-    # メソッドの実行
+    # 実装のロード
     #
     def load_action(self, this_type):
-        # 実装コードを読み込む
-        if self._action is None:
+        if self._action is not None:
             return self._action
 
         if self.target is None:
             self.target = normalize_method_target(self.name)     
 
-        from machaon.object.invocation import load_method_action
-        act = load_method_action(this_type, self.target, self)
-        if act is None:
-            raise ValueError("Failed to load action")
+        # 実装コードを読み込む
+        from machaon.object.importer import maybe_import_target, import_member
+        action = None
+        while True:
+            # 1. 型定義のメソッドを取り出す
+            typefn = None
+            if not maybe_import_target(self.target):
+                typefn = this_type.get_method_delegation(self.target)
+
+            if typefn is not None:
+                action = typefn
+                break
         
-        self._action = act
-        return act
+            # 2. 外部モジュールから定義をロードする
+            callobj = import_member(self.target) # モジュールが見つからなければ例外が投げられる
+            if hasattr(callobj, "describe_method"):
+                # アクション自体に定義されたメソッド初期化処理を呼ぶ
+                callobj.describe_method(self)
+        
+            if isinstance(callobj, type):
+                callobj = callobj()
+        
+            if callable(callobj):
+                action = callobj
+                break
+            
+            raise ValueError("無効なアクションです：{}".format(self.target))
+
+        self._action = action
+        return action
         
 #
 #
@@ -230,13 +250,13 @@ def method_declaration_chain(traits, declaration):
         target=None, 
         **kwargs
     ):
-        kwargs.setdefault("returntype", typename)
         kwargs.setdefault("is_task", istask)
 
         if method is None:
             method = Method(name=name, target=target, **kwargs)
             for n, t, d in defparams:
                 method.add_parameter(n, t, doc=d)
+            method.add_result(typename)
         
         method.check_valid()
 

@@ -19,6 +19,10 @@ class InvocationFailed(Exception):
     def __init__(self, context):
         self.context = context
 
+#
+class BadMethodInvocation(Exception):
+    def __init__(self, name):
+        self.name = name
 
 #
 # ###################################################################
@@ -82,35 +86,6 @@ class FunctionInvoker:
             raise ValueError("'target' argument not found")
         return entry
 """
-#
-# target = method-name => ActionFunction
-# target = python.xuthus.component.concat
-#
-def load_method_action(this_type, target, method):
-    # 型定義のメソッドを取り出す
-    typefn = None
-    if not maybe_import_target(target):
-        typefn = this_type.get_method_delegation(target)
-
-    if typefn is not None:
-        return typefn
-    
-    # Pythonのモジュールからロードする
-    loaded = import_member(target)
-    
-    if hasattr(loaded, "describe_method"):
-        # アクション自体に定義されたメソッド初期化処理を呼ぶ
-        loaded.describe_method(method)
-    
-    if isinstance(loaded, type):
-        callobj = loaded()
-    else:
-        callobj = loaded
-    
-    if not callable(callobj):
-        raise ValueError("アクションとして無効です：{}".format(callobj))
-
-    return callobj
 
 #
 #
@@ -160,23 +135,30 @@ class InvocationContext:
         self.spirit = spirit
         self.parameter: str = parameter
         self.input_objects = ObjectDesktop()
+        self.local_stack: List[Object] = []
         self.invocations: List[InvocationEntry] = []
         self._last_exception = None
 
-    #def push_input_object(self, obj):
-    #    self.input_objects.
+    def push_local_objects(self, objects):
+        self.local_stack.append(objects)
+    
+    def pop_local_objects(self):
+        self.local_stack.pop()
 
-    def get_self_object(self) -> Optional[Object]:
-        return self.input_objects.pick_self()
-        
+    def get_local_objects(self) -> Sequence[Object]:
+        return self.local_stack
+    
     def get_selected_objects(self) -> Sequence[Object]:
         return self.input_objects.pick_selected()
     
-    def get_selected_objects_typedict(self):
-        objmap = defaultdict(list) # type: DefaultDict[str, List[Object]]
-        for obj in self.get_selected_objects():
-            objmap[obj.get_typename()].append(obj)
-        return objmap
+    #def get_self_object(self) -> Optional[Object]:
+    #    return self.input_objects.pick_self()
+        
+    #def get_selected_objects_typedict(self):
+    #    objmap = defaultdict(list) # type: DefaultDict[str, List[Object]]
+    #    for obj in self.get_selected_objects():
+    #        objmap[obj.get_typename()].append(obj)
+    #    return objmap
     
     def get_selected_objects_and_parameter(self, num):
         objs = []
@@ -267,9 +249,9 @@ class BasicInvocation():
             m.append("straight")
         return " ".join(m)
     
-    def invoke(self, invocations):
+    def invoke(self, context, *args):
         # 引数とアクションを生成
-        action, inventry = self.prepare_invoke(invocations)
+        action, inventry = self.prepare_invoke(context, *args)
 
         if self.modifier & INVOCATION_REVERSE_ARGS:
             inventry.reverse_args()
@@ -292,20 +274,28 @@ class BasicInvocation():
             inventry.negate_result()
         
         # 格納
-        invocations.push_invocation(inventry)
+        context.push_invocation(inventry)
     
     #
     # これらをオーバーロードする
     #
-    def prepare_invoke(self, invocations):
+    def prepare_invoke(self, context):
         raise NotImplementedError()
     
     def result_invoke(self, result, entry):
         raise NotImplementedError()
     
-    def is_task(self):
+    def get_result_typehint(self):
         raise NotImplementedError()
 
+    def is_task(self):
+        raise NotImplementedError()
+    
+    def get_max_arity(self):
+        return 0xFFFF # 不明なので適当な大きい値
+
+    def get_min_arity(self):
+        return 0 # 不明なので0
 
 #
 # 型に定義されたメソッドの呼び出し 
@@ -324,25 +314,22 @@ class TypeMethodInvocation(BasicInvocation):
     def get_result_typehint(self):
         return self.method.get_result_typecode()
     
-    def prepare_invoke(self, invocations):
-        # 引数をオブジェクトの集合から収集
-        selfobj = invocations.get_self_object()
-        if selfobj is None:
-            raise ValueError("self object is not set")
+    def prepare_invoke(self, context, *argobjects):
+        selfobj, *argobjs = argobjects
 
         args = []
         if self.method.is_task():
             # Taskアクションにはspiritを渡す
-            args.append(invocations.spirit)
-        args.append(selfobj.value)
+            args.append(context.get_spirit())
 
-        # 仮引数の型を基準に収集する
-        objmap = invocations.get_selected_objects_typedict()
+        args.append(selfobj.value)
+        args.extend([x.value for x in argobjs])
+        
+        # 引数が足りなければ、仮引数の型を基準に収集する
         kwargs = {}
-        for param in self.method.get_params():
-            if param.is_parameter():
-                kwargs[param.name] = invocations.get_parameter()
-            else:
+        if len(args) < 0:
+            objmap = context.get_selected_objects_typedict()
+            for param in self.method.get_params():
                 if len(objmap[param.typename]) > 0:    
                     obj = objmap[param.typename].pop(0)
                     kwargs[param.name] = obj.value
@@ -361,44 +348,38 @@ class TypeMethodInvocation(BasicInvocation):
                 entry.push_result(definition.typename, value)
         else:
             entry.push_result(self.method.results[0].typename, result)
+    
+    def get_max_arity(self):
+        return 0xFFFF # メソッドから得られる
+
+    def get_min_arity(self):
+        return 0 # 実行時に指定もできる
+
 
 #
 # 定義のわからないメソッドを実行するたびに呼び出す
 #
 class InstanceMethodInvocation(BasicInvocation):
-    def __init__(self, attrname, arity, modifier=0):
+    def __init__(self, attrname, modifier=0):
         super().__init__(modifier)
         self.attrname = attrname
-        self.arity = arity
-        if arity is not None and arity < 1:
-            raise ValueError("Arity must be more than 0")
 
     def __str__(self):
         return "<InstanceMethodInvocation '{}' {}>".format(self.attrname, self.modifier_name())
     
     def is_task(self):
         return False
+    
+    def get_result_typehint(self):
+        return None
 
-    def prepare_invoke(self, invocations):
-        # 引数をオブジェクトの集合から収集
-        selfobj = invocations.get_self_object()
-        if selfobj is None:
-            raise ValueError("self object is not set")
-        
+    def prepare_invoke(self, context, *argobjects):
+        selfval, *args = [x.value for x in argobjects]
+
         # 値に定義されたメソッドを取得
-        method = getattr(selfobj.value, self.attrname, None)
+        method = getattr(selfval, self.attrname, None)
         if method is None:
-            raise ValueError("")
-        
-        arity = self.arity
-        if arity is None:
-            sig = inspect.signature(method)
-            arity = len(sig.parameters)
-        
-        # 決められた数の引数を、オブジェクト集合の上から順に取る
-        args = []
-        args.append(selfobj.value)
-        args.extend([o.value for o in invocations.get_selected_objects_and_parameter(arity-1)])
+            raise BadMethodInvocation(self.attrname)
 
         # 実行
         entry = InvocationEntry(args, {})
@@ -409,16 +390,22 @@ class InstanceMethodInvocation(BasicInvocation):
         entry.push_result(type(result), result)
 
 #
-# 定義のわからないメソッドを実行するたびに呼び出す
+# グローバルな関数を呼び出す
 #
 class StaticMethodInvocation(BasicInvocation):
-    def __init__(self, function, arity, modifier=0):
+    def __init__(self, function, modifier=0):
         super().__init__(modifier)
         self.fn = function
-        if arity is None:
-            sig = inspect.signature(function)
-            arity = len(sig.parameters)
-        self.arity = arity
+        try:
+            sig = inspect.signature(self.fn)
+            minarg = 0
+            for p in sig.parameters.values():
+                if p.default != inspect.Parameter.empty:
+                    break
+                minarg += 1
+            self.arity = (minarg, len(sig.parameters))
+        except ValueError:
+            self.arity = (0, 0xFFFF)
 
     def __str__(self):
         name = ".".join([self.fn.__module__, self.fn.__name__])
@@ -426,13 +413,13 @@ class StaticMethodInvocation(BasicInvocation):
     
     def is_task(self):
         return False
+        
+    def get_result_typehint(self):
+        return None
 
-    def prepare_invoke(self, invocations):        
-        # 決められた数の引数を、オブジェクト集合の上から順に取る
-        arity = self.arity
-        args = [o.value for o in invocations.get_selected_objects_and_parameter(arity)]
-
-        # 実行
+    def prepare_invoke(self, invocations, *argobjects):
+        # そのままの引数で
+        args = [x.value for x in argobjects]
         entry = InvocationEntry(args, {})
         return self.fn, entry
     
@@ -440,3 +427,8 @@ class StaticMethodInvocation(BasicInvocation):
         # 返り値を設定する
         entry.push_result(type(result), result)
 
+    def get_max_arity(self):
+        return self.arity[1]
+
+    def get_min_arity(self):
+        return self.arity[0]

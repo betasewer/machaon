@@ -22,16 +22,19 @@ class ObjectValue():
 class Object():
     def __init__(self, name, type, value): # デフォルトは空文字列
         self.value: Any = value
-        self.name: str = name
+        self.name: Optional[str] = name
         self.type: TypeTraits = type
-        if not isinstance(self.name, str):
-            raise TypeError("'name' must be str")
+        if self.name is not None and not isinstance(self.name, str):
+            raise TypeError("'name' must be str or None")
         if not isinstance(self.type, TypeTraits):
             raise TypeError("'type' must be TypeTraits instance")
 
     def __repr__(self):
         return "<Object {} '{}' = {}>".format(self.type.typename, self.name, self.value)
     
+    def is_unnamed(self):
+        return self.name is None
+
     def get_typename(self):
         return self.type.typename
     

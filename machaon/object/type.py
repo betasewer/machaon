@@ -33,9 +33,9 @@ class TypeTraits():
     class NONAME:
         pass
 
-    def __init__(self, typename=NONAME, description="", flags=0, value_type=None):
+    def __init__(self, typename=NONAME, doc="", flags=0, value_type=None):
         self.typename: str = typename
-        self.description: str = description
+        self.doc: str = doc
         self.flags = flags
         self.value_type = value_type
         self._methods: Dict[str, Method] = {}
@@ -50,7 +50,7 @@ class TypeTraits():
         return self.value_type
     
     def copy(self):
-        t = TypeTraits(self.typename, self.description, self.flags)
+        t = TypeTraits(self.typename, self.doc, self.flags)
         t._methods = self._methods.copy()
         t._methodalias = self._methodalias.copy()
         return t
@@ -92,7 +92,8 @@ class TypeTraits():
                 continue
             yield meth
     
-    def add_method(self, name, method):
+    def add_method(self, method):
+        name = method.name
         if name in self._methods:
             raise BadMethodName("重複しています")
         self._methods[name] = method
@@ -125,13 +126,13 @@ class TypeTraits():
     #
     def describe(self, 
         typename = "",
-        description = "",
+        doc = "",
         value_type = None,
     ):
         if typename:
             self.typename = typename
-        if description:
-            self.description = description
+        if doc:
+            self.doc = doc
         if value_type:
             self.value_type = value_type
         return self 
@@ -267,7 +268,7 @@ class TypeModule():
                     typename = tt
                 else:
                     typename = tt.__name__
-                tt = self.define(typename=typename, description="<Prototype {}>".format(typename))
+                tt = self.define(typename=typename, doc="<Prototype {}>".format(typename))
         return tt
 
     #
@@ -277,13 +278,13 @@ class TypeModule():
         traits: Any = None,
         *,
         typename = None, 
-        description = "",
+        doc = "",
     ) -> TypeTraits:
         # 登録処理
         t: Any = None # 型オブジェクトのインスタンス
         if traits is None:
             # 一時的な型：振る舞いはすべてデフォルト、値の生成は不可
-            t = TypeTraits(typename, description)
+            t = TypeTraits(typename, doc)
         elif isinstance(traits, TypeTraits):
             # Traitsまたは派生型のインスタンスが渡された
             t = traits.copy()
