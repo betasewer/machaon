@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple
 
 from machaon.object.type import TypeTraits, TypeModule
 from machaon.object.object import Object
+from machaon.object.selector import select_method
 
 # imported from...
 # desktop
@@ -21,9 +22,6 @@ from machaon.object.object import Object
 #
 class BadExpressionError(Exception):
     pass
-
-#
-SIGIL_OBJECT_ID = "@"
 
 #
 #
@@ -51,12 +49,12 @@ class Message:
         
     def is_max_arg_specified(self):
         if self.selector:
-            return len(self.args) >= self.selector.get_max_arity()
+            return len(self.args) >= self.selector.get_max_arity()-1
         return False
     
     def is_min_arg_specified(self):        
         if self.selector:
-            return len(self.args) >= self.selector.get_min_arity()
+            return len(self.args) >= self.selector.get_min_arity()-1
         return False
     
     def is_specified(self, *, minarg=False):
@@ -71,20 +69,46 @@ class Message:
             if isinstance(elem, Message) and elem is msg:
                 return True
         return False
-
-    def get_reciever_type(self):
-        pass
     
-    def get_return_type(self):
-        pass
+    #
+    def eval(self, context):
+        args = []
 
+        # コンテキスト引数を取り出す。スタックにあるかもしれないので、逆順に
+        revargs = [*reversed(self.args), self.reciever]
+        for argobj in revargs:
+            if isinstance(argobj, LeafResultRef):
+                args.append(argobj.get_object(context))
+            else:
+                args.append(argobj)
+
+        # 実行する
+        args.reverse() # 元の順番に戻す
+        self.selector.invoke(context, *args)
+
+        # 返り値（一つだけ）
+        ret = context.get_last_result()
+        return Object(None, context.get_type(ret.typecode), ret.value)
+
+    # レシーバオブジェクトの型特性を得る
+    def get_reciever_object_type(self, context=None):
+        if isinstance(self.reciever, LeafResultRef):
+            if context is None:
+                raise ValueError("スタック上にあるレシーバの型を導出できません")
+            return self.reciever.get_object(context).type
+        else:
+            return self.reciever.type
+
+    #
+    # デバッグ用
+    #
     def sexprs(self):
         # S式風に表示：不完全なメッセージであっても表示する
         exprs = []
 
         def put(item):
-            if isinstance(item, Message):
-                exprs.append(item.sexprs())
+            if isinstance(item, Object):
+                exprs.append("(object {} {})".format(item.get_typename(), item.value))
             else:
                 exprs.append(str(item))
 
@@ -97,7 +121,7 @@ class Message:
             put(self.selector)
 
             minarg = self.selector.get_min_arity()
-            for elem, _ in zip_longest(self.args, range(minarg)):
+            for elem, _ in zip_longest(self.args, range(minarg-1)):
                 if elem is not None:
                     put(elem)
                 else:
@@ -108,12 +132,51 @@ class Message:
 
         return "({})".format(" ".join(exprs))
 
+# スタックにおかれた計算結果を取り出す
+class LeafResultRef:
+    def __init__(self):
+        self._lastvalue = None
+    
+    def get_object(self, context):
+        if self._lastvalue is None:
+            self._lastvalue = context.top_local_object()
+            context.pop_local_object()
+        return self._lastvalue
+
+#
+# メッセージの構成要素
+#
+def select_object_ref(context, *, name=None, typename=None):
+    if typename:
+        return context.get_object_by_type(typename)
+    else:
+        return context.get_object(name)
+
+#
+def select_type_ref(context, name):
+    tt = context.get_type(name)
+    if tt is None:
+        return None
+    return Object(None, context.get_type("Type"), tt)
+
+#
+def select_literal(context, string, tokentype):
+    if tokentype & TOKEN_STRING:
+        value = string
+    else:
+        try:
+            value = ast.literal_eval(string)
+        except Exception:
+            value = string
+    return Object(None, context.get_type(type(value)), value)
+
 #
 # 式の文字列をトークンへ変換
 #
 TOKEN_TERM = 0x01
 TOKEN_BLOCK_BEGIN = 0x02
 TOKEN_BLOCK_END = 0x04
+TOKEN_STRING = 0x10
 
 EXPECT_NOTHING = 0
 EXPECT_RECIEVER = 0x10
@@ -130,6 +193,9 @@ TERM_NEW_BLOCK_AS_LAST_ARG = 7
 TERM_EXPLICIT_BLOCK_BEGIN = 0x20
 TERM_EXPLICIT_BLOCK_END = 0x40
 
+SIGIL_OBJECT_ID = "@"
+SIGILS_OBJECT_TYPENAME = "[]"
+
 #
 #
 #
@@ -137,19 +203,23 @@ class MessageParser():
     def __init__(self, expression):
         self.source = expression
         self._readings = []
-        self._sequence = []
-        self._log = []
+        self.log = []
 
-    # 1.0
+    # 入力文字列をトークンに
     def read_token(self) -> Generator[Tuple[str, int], None, None]:
         buffer = [""]
 
-        def flush_token(buf, endbit):
-            # 空白要素を落としコピー
-            terms = [x for x in buf if x] 
+        def flush_buffer(back=None):
+            # 空白要素を落とす
+            for s in buffer[back:]:
+                if s: yield s
             # バッファは初期化
-            buf.clear()
-            buf.append("")
+            del buffer[back:]
+            if not buffer:
+                buffer.append("")
+
+        def yield_token(strings, endbit):
+            terms = [x for x in strings if x] 
             # トークンを排出
             if not terms: return
             for term in terms[:-1]:
@@ -163,12 +233,13 @@ class MessageParser():
                 quotedby = ch
             elif quotedby and quotedby == ch:
                 quotedby = None
+                yield from yield_token(flush_buffer(-1), TOKEN_TERM|TOKEN_STRING)
             elif not quotedby and ch == "(":
-                yield from flush_token(buffer, TOKEN_TERM)
+                yield from yield_token(flush_buffer(), TOKEN_TERM)
                 yield ("", TOKEN_BLOCK_BEGIN)
                 parens += 1
             elif not quotedby and ch == ")":
-                yield from flush_token(buffer, TOKEN_BLOCK_END)
+                yield from yield_token(flush_buffer(), TOKEN_BLOCK_END)
                 parens -= 1
                 if parens < 0:
                     raise SyntaxError("始め括弧が足りません")
@@ -177,12 +248,12 @@ class MessageParser():
             else:
                 buffer[-1] += ch
 
-        yield from flush_token(buffer, TOKEN_BLOCK_END)
+        yield from yield_token(flush_buffer(), TOKEN_BLOCK_END)
         if parens > 0:
             raise SyntaxError("終わり括弧が足りません")
 
-    #
-    def parse_syntax(self, token: str, tokentype: int) -> Tuple: # (int, Any...)
+    # 構文を組み立てる
+    def build_message(self, token: str, tokentype: int, context: Any) -> Tuple: # (int, Any...)
         reading: Optional[Message] = None
         if self._readings:
             reading = self._readings[-1]
@@ -200,11 +271,11 @@ class MessageParser():
             expect = EXPECT_ARGUMENT
 
         # ブロック終了指示
-        if tokentype == TOKEN_BLOCK_END:
+        if tokentype & TOKEN_BLOCK_END:
             tokenbits |= TERM_EXPLICIT_BLOCK_END
 
         # ブロック開始指示
-        if tokentype == TOKEN_BLOCK_BEGIN:
+        if tokentype & TOKEN_BLOCK_BEGIN:
             tokenbits |= TERM_EXPLICIT_BLOCK_BEGIN
 
             if expect == EXPECT_SELECTOR:
@@ -224,7 +295,11 @@ class MessageParser():
             if expect == EXPECT_SELECTOR:
                 raise SyntaxError("セレクタが必要です")
 
-            obj = parse_object_specifier(token[1:])
+            if token[1:].startswith(SIGILS_OBJECT_TYPENAME[0]) and token.endswith(SIGILS_OBJECT_TYPENAME[1]):
+                obj = select_object_ref(context, typename=token[2:-1].strip())
+            else:
+                obj = select_object_ref(context, name=token[2:])
+
             if expect == EXPECT_ARGUMENT:
                 return (tokenbits | TERM_LAST_BLOCK_ARG, obj) # 前のメッセージの引数になる
             
@@ -235,14 +310,14 @@ class MessageParser():
                 return (tokenbits | TERM_NEW_BLOCK_RECIEVER, obj) # 新しいメッセージのレシーバになる
 
         # 型名
-        tt = select_type(token)
+        tt = select_type_ref(context, token)
         if tt is not None:
             if expect == EXPECT_SELECTOR:
                 raise SyntaxError("セレクタが必要です")
 
             if expect == EXPECT_ARGUMENT:
                 raise SyntaxError("型は引数にとれません")
-            
+
             if expect == EXPECT_RECIEVER:
                 return (tokenbits | TERM_LAST_BLOCK_RECIEVER, tt)
             
@@ -251,36 +326,36 @@ class MessageParser():
         
         # メソッドかリテラルか、文脈で判断
         if expect == EXPECT_SELECTOR and reading:
-            meth = select_method(token, reading.get_reciever_type())
-            if meth is not None:
-                return (tokenbits | TERM_LAST_BLOCK_SELECTOR, meth) # 前のメッセージのセレクタになる
-            raise SyntaxError("不明なセレクタです：{}".format(token))
+            calling = select_method(token, reading.get_reciever_object_type(context))
+            if calling is None:
+                raise SyntaxError("不明なセレクタです：{}".format(token))
+            return (tokenbits | TERM_LAST_BLOCK_SELECTOR, calling) # 前のメッセージのセレクタになる
         
         if expect == EXPECT_ARGUMENT:
-            arg = parse_arg_literal(token)
+            arg = select_literal(context, token, tokentype)
             return (tokenbits | TERM_LAST_BLOCK_ARG, arg) # 前のメッセージの引数になる
 
         if expect == EXPECT_RECIEVER:
-            arg = parse_arg_literal(token)
+            arg = select_literal(context, token, tokentype)
             return (tokenbits | TERM_LAST_BLOCK_RECIEVER, arg) 
 
         if expect == EXPECT_NOTHING:
-            if self._sequence:
-                # セレクタになるかまず試す
-                seqlast = self._sequence[-1]
-                meth = select_method(token, seqlast.get_return_type())
-                if meth is not None:
-                    seqlast = self._sequence.pop(-1)
-                    return (tokenbits | TERM_NEW_BLOCK_SELECTOR, seqlast, meth)
-
-            # レシーバオブジェクトのリテラルとする
-            arg = parse_arg_literal(token)
+            lastret = context.top_local_object()
+            if lastret:
+                # 先行するメッセージをレシーバとするセレクタ名か
+                calling = select_method(token, lastret.type)
+                if calling:
+                    context.pop_local_object()
+                    return (tokenbits | TERM_NEW_BLOCK_SELECTOR, lastret, calling)
+            
+            # 新しいブロックの開始。レシーバオブジェクトのリテラルとする
+            arg = select_literal(context, token, tokentype)
             return (tokenbits | TERM_NEW_BLOCK_RECIEVER, arg) 
         
         raise SyntaxError("cannot parse")
 
-    # 3 メッセージの樹を構築する
-    def build_ast_step(self, code, *values):
+    # 構文木を組みたてつつ、完成したところからどんどん実行
+    def send_message_step(self, code, values, context):
         tokenbits = code & 0xF0
         code = code & 0x0F
 
@@ -303,48 +378,39 @@ class MessageParser():
 
         elif code == TERM_NEW_BLOCK_AS_LAST_RECIEVER:
             new_msg = Message()
-            values[0].set_reciever(new_msg)
+            values[0].set_reciever(LeafResultRef())
             self._readings.append(new_msg)
         
         elif code == TERM_NEW_BLOCK_AS_LAST_ARG:
             new_msg = Message()
-            values[0].add_arg(new_msg)
+            values[0].add_arg(LeafResultRef())
             self._readings.append(new_msg)
         
-        # 新しく完成したメッセージをキューから取り出す
-        tail = 0
+        # 完成したメッセージをキューから取り出す
+        completes = []
         for msg in reversed(self._readings):
-            if tail == 0 and tokenbits & TERM_EXPLICIT_BLOCK_END:
+            if not completes and tokenbits & TERM_EXPLICIT_BLOCK_END:
                 if not msg.is_specified(minarg=True):
                     raise SyntaxError("不完全なメッセージ式です：{}".format(msg.sexprs()))
-                complete=True
+                completed=True
             else:
-                complete=msg.is_specified()
+                completed=msg.is_specified()
 
-            if complete:
-                # 親子関係がある場合は親にまとめる
-                if self._sequence and msg.is_child_element(self._sequence[-1]):
-                    self._sequence[-1] = msg
-                else:
-                    self._sequence.append(msg)
-                tail += 1
+            if completed:
+                # 実行する
+                result = msg.eval(context)
+                context.push_local_object(result) # スタックに乗せる
+                completes.append(msg)
             else:
                 break
 
-        if tail:
-            del self._readings[-tail:]
-
+        if completes:
+            del self._readings[-len(completes):]
+        return completes
     
     #
-    def get_sequence(self):
-        return self._sequence
-    
-    def sequence_sexprs(self):
-        return "".join([x.sexprs() for x in self._sequence])
-    
-    #
-    def parse(self, log=False):
-        self._log = []
+    def run(self, context, *, log=False):
+        self.log = []
         if log:
             logger = self._logger
         else:
@@ -354,18 +420,17 @@ class MessageParser():
         for i, (token, tokentype) in enumerate(self.read_token()):
             logger(0, i, token)
             
-            code, *values = self.parse_syntax(token, tokentype)
+            code, *values = self.build_message(token, tokentype, context)
             logger(1, code, values)
             
-            self.build_ast_step(code, *values)
-            logger(2)
+            completes = self.send_message_step(code, values, context)
+            logger(2, completes)
 
-        return self._sequence
     
     #
     def _logger(self, state, *values):
         if state == 0:
-            self._log.append([])
+            self.log.append([])
         elif state == 1:
             code, vals = values
             tokenbits = code & 0xF0
@@ -383,50 +448,10 @@ class MessageParser():
                 codename = "*" + codename
             values = (codename, vals)
         elif state == 2:
-            values = (self.sequence_sexprs(),)
-        self._log[-1].extend(values)
-
-#
-#
-#
-# 3. Pythonのリテラルとみなす
-def parse_arg_literal(s):
-    try:
-        return ast.literal_eval(s)
-    except Exception:
-        pass
-    return s # 文字列
-
-    
-# ---------------------------------------------------------------
-# スタブ
-#
-#
-def parse_object_specifier(s):
-    return s
-    
-def select_type(s):
-    return None
-
-def select_method(s, type):
-    if s == "stub-binary":
-        return StubSelector(1,1)
-    elif s == "stub-unary":
-        return StubSelector(0,0)
-
-class StubSelector:
-    def __init__(self, min=1, max=1):
-        self.min = min
-        self.max = max
-
-    def get_min_arity(self):
-        return self.min
-
-    def get_max_arity(self):
-        return self.max
-    
-    def __str__(self):
-        return "stub-method-{}-{}".format(self.min, self.max)
+            completes = values[0]
+            values = ("".join([x.sexprs() for x in completes]),)
+        self.log[-1].extend(values)
         
-
-# ---------------------------------------------------------------
+    def last_run_sexprs(self):
+        return "".join([x.sexprs() for x in self._sequence])
+    

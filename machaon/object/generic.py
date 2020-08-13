@@ -6,7 +6,7 @@ from machaon.object.method import Method
 #
 def resolve_generic_method(name):
     truename = "function_" + name
-    fn = globals().items().get(truename, None)
+    fn = globals().get(truename, None)
     return fn
 
 #

@@ -1,21 +1,23 @@
+import ast
+
+from machaon.object.object import Object, ObjectValue
 from machaon.object.method import normalize_method_target, Method
 from machaon.object.invocation import (
     INVOCATION_NEGATE_RESULT, INVOCATION_REVERSE_ARGS,
     TypeMethodInvocation,
     InstanceMethodInvocation,
-    StaticMethodInvocation,
-    load_member_from_module
+    StaticMethodInvocation
 )
 from machaon.object.importer import maybe_import_target, import_member
 
 #
 #
-# セレクタ
+# メソッドのセレクタ
 #
 #
-SIGIL_IMPORT_METHOD = "<>"
+SIGIL_IMPORT_METHOD = "<>" 
 
-# 
+#
 def parse_invocation_modifier(expression, modifier=0):
     expr = expression
     modbits = modifier
@@ -54,7 +56,7 @@ def select_type_method(name, typetraits, *, modbits=None):
 #
 #
 #
-def select_method(name, typetraits, *, arity=None, return_type=None, modbits=None):
+def select_method(name, typetraits=None, *, modbits=None):
     if modbits is None:
         name, modbits = parse_invocation_modifier(name)
 
@@ -62,7 +64,7 @@ def select_method(name, typetraits, *, arity=None, return_type=None, modbits=Non
     if maybe_import_target(name):
         modname, modbits = parse_invocation_modifier(name)
         modfn = import_member(modname)
-        return StaticMethodInvocation(modfn, arity, modbits)
+        return StaticMethodInvocation(modfn, modbits)
 
     # 型メソッド
     if typetraits is not None:
@@ -78,11 +80,10 @@ def select_method(name, typetraits, *, arity=None, return_type=None, modbits=Non
     from machaon.object.generic import resolve_generic_method
     genfn = resolve_generic_method(name)
     if genfn is not None:
-        return StaticMethodInvocation(genfn, arity, modbits)
+        return StaticMethodInvocation(genfn, modbits)
     
     # インスタンスメソッド
-    return InstanceMethodInvocation(name, arity, modbits)
-
+    return InstanceMethodInvocation(name, modbits)
 
 #
 # 演算子とセレクタの対応
@@ -97,6 +98,7 @@ operator_selectors = {
     ">" : "greater",
     "+" : "add",
     "-" : "sub",
+    "neg" : "negative",
     "*" : "mul",
     "**" : "pow",
     "/" : "div",
@@ -112,16 +114,4 @@ operator_selectors = {
     "&&" : "and", 
     "||" : "or",  
 }
-
-#
-#
-#
-#
-#
-def select_left_operand():
-    pass
-
-
-def select_right_operand():
-    pass
 
