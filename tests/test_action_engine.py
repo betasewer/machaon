@@ -3,7 +3,7 @@
 #from machaon.process import Spirit, TempSpirit
 #from machaon.action import Action, ActionFunction, ActionClass, ActionInvocation, ActionArgDef
 
-from machaon.object.desktop import ObjectDesktop, Object, ObjectValue
+from machaon.object.object import ObjectCollection, Object, ObjectValue
 
 from collections import defaultdict
 import pytest

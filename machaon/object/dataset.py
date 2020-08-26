@@ -3,8 +3,6 @@ from collections import defaultdict
 
 from machaon.object.type import TypeTraits, TypeModule
 from machaon.object.object import Object
-from machaon.object.invocation import MemberInvocationContext, select_type_method, select_method
-from machaon.object.formula import ValuesEvalContext, parse_formula
 from machaon.object.sort import parse_sortkey
 from machaon.cui import get_text_width
 
@@ -49,7 +47,7 @@ class DataColumn():
     def make_value_string(self, value):
         return self.type.convert_to_string(value)
     
-    def make_value(self, cxt: MemberInvocationContext):
+    def make_value(self, cxt):
         self.method_inv.invoke(cxt)
         return cxt.get_evaluated_value()
     

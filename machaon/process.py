@@ -9,7 +9,7 @@ import traceback
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
 
 #from machaon.action import ActionInvocation
-from machaon.object.desktop import Object, ObjectDesktop
+from machaon.object.object import Object, ObjectCollection
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 
 #

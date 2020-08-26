@@ -1,45 +1,37 @@
 import pytest
-#from machaon.object.object import Object, ObjectValue
-#from machaon.object.desktop import ObjectDesktop
-#from machaon.object.fundamental import fundamental_type
+from machaon.object.object import Object, ObjectValue, ObjectCollection
+from machaon.object.fundamental import fundamental_type
 
 def test_desktop():
-    desk = ObjectDesktop()
-    desk.add_types(fundamental_type)
+    desk = ObjectCollection()
 
-    desk.push("obj-1", "int", 3)
-    desk.push("obj-2", ObjectValue("int", 100))
-    desk.push(Object("obj-3", desk.get_type("complex"), 3+5j))
-    desk.push("obj-4", ObjectValue("ip-address", "128.0.0.1"))
+    desk.push("obj-1", Object(fundamental_type.Int, 100))
+    desk.push("obj-2", Object(fundamental_type.Int, 7))
+    desk.push("obj-3", Object(fundamental_type.Complex, 3+5j))
+    desk.push("obj-4", Object(fundamental_type.new("ip-address"), "128.0.0.1"))
 
-    assert desk.pick("obj-1").value == 3
+    assert desk.get_by_name("obj-1").value == 100
 
-    assert desk.pick_by_type("int").name == 'obj-2'
-    assert desk.pick_by_type("complex").name == 'obj-3'
-    assert desk.pick_by_type("ip-address").name == 'obj-4'
-    assert desk.pick_by_type("ip-address").value == "128.0.0.1"
-    
+    assert desk.get_by_type("int").name == 'obj-2' # 最後に追加したオブジェクトになる
+    assert desk.get_by_type("complex").name == 'obj-3'
+    assert desk.get_by_type("ip-address").name == 'obj-4'
+    assert desk.get_by_type("ip-address").value == "128.0.0.1"
+
+    # まだオブジェクトは追加されていない
+    assert desk.get_by_type("float") is None
+    o = desk.push("obj-5", Object(fundamental_type.Float, 33.3))
+    assert desk.get_by_type("float") is o
+
 
 def test_object_new():
-    desk = ObjectDesktop()
-    desk.add_types(fundamental_type)
+    desk = ObjectCollection()
 
-    o = desk.new("value", int, 1)
-    assert o.name == "value"
-    assert o.value == 1
-    assert o.type == desk._types.get("int")
+    o = desk.new("obj-new", fundamental_type.Int, 128)
+    assert o.name == "obj-new"
+    assert o.value == 128
+    assert o.type == fundamental_type.Int
     
-    # まだオブジェクトは追加されていない
-    assert desk.pick_by_type("int") is None
-    desk.push(o)
-    assert desk.pick_by_type("int") is o
-
-    o2 = desk.push("obj-1", "postcode", 1001623)
-    assert desk.pick_by_type("postcode") is o2
-    assert o2.type == desk._types.get("postcode")
-    assert o2.value == "1001623" # デフォルトは文字列型
-
-
+"""
 def test_object_method():
     desk = ObjectDesktop()
     desk.add_types(fundamental_type)
@@ -58,8 +50,7 @@ def test_object_method():
 
     # グローバルメソッド
     assert o.call_method("length").value == len("gegege no ge")
-
-
+"""
 
 
 

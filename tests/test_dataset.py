@@ -3,7 +3,7 @@ import pytest
 import operator
 
 from machaon.object.type import TypeModule
-from machaon.object.desktop import ObjectDesktop
+from machaon.object.object import ObjectCollection
 #from machaon.object.dataset import parse_new_dataview, parse_dataview, DataViewRowIndexer, DataView, make_data_columns
 #from machaon.object.formula import parse_formula
 from machaon.object.sort import ValueWrapper

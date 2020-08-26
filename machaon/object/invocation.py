@@ -3,8 +3,8 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional
 import inspect
 from collections import defaultdict
 
-from machaon.object.object import Object, ObjectValue
-from machaon.object.importer import maybe_import_target, import_member
+from machaon.object.type import TypeTraits, TypeModule
+from machaon.object.object import Object, ObjectValue, ObjectCollection
 
 #
 # 
@@ -23,69 +23,6 @@ class InvocationFailed(Exception):
 class BadMethodInvocation(Exception):
     def __init__(self, name):
         self.name = name
-
-#
-# ###################################################################
-#  action class / function
-# ###################################################################
-#
-
-
-"""
-class __Action():
-    def __init__(self):
-        pass
-
-    # 実行前に呼び出される
-    def load(self, generic_spirit): # return Spirit
-        spi = generic_spirit
-        if self.spirittype:
-            spi = self.spirittype(generic_spirit.app)
-            spi.inherit(generic_spirit)
-        
-        if self.lazyargdescribe is not None:
-            self.lazyargdescribe(spi, self)
-            self.lazyargdescribe = None # 初回のロード時のみ発動する
-
-        return spi
-
-
-class FunctionInvoker:
-    def __init__(self, fn):
-        self.fn = fn
-        self.argnames = None # args, kwargs
-        self.kwargvarname = None
-        self.argdefaults = {}
-
-        # inspectで引数名を取り出す
-        names = []
-        sig = inspect.signature(self.fn)
-        for _, p in sig.parameters.items():
-            if p.kind == inspect.Parameter.VAR_KEYWORD:
-                self.kwargvarname = p.name
-            elif p.kind == inspect.Parameter.VAR_POSITIONAL:
-                pass
-            else:
-                defval = p.default
-                if defval is not inspect.Parameter.empty:
-                    self.argdefaults[p.name] = defval
-                names.append(p.name)
-        self.argnames = names
-    
-    @property
-    def fnqualname(self):
-        # デバッグ用
-        return self.fn.__qualname__
-
-    def prepare_next_target(self, entry, **kwargs):
-        entry = entry.clone()
-        target_arg = kwargs["target"]
-        if "target" in self.argnames:
-            entry.args[self.argnames.index("target")] = target_arg
-        else:
-            raise ValueError("'target' argument not found")
-        return entry
-"""
 
 #
 #
@@ -131,48 +68,63 @@ class InvocationEntry():
 #
 #
 class InvocationContext:
-    def __init__(self, *, spirit=None, parameter=""):
+    def __init__(self, *, input_objects, type_module, spirit=None):
+        self.type_module: TypeModule = type_module
+        self.input_objects: ObjectCollection = input_objects
+        self.local_objects: List[Object] = []
         self.spirit = spirit
-        self.parameter: str = parameter
-        self.input_objects = ObjectDesktop()
-        self.local_stack: List[Object] = []
         self.invocations: List[InvocationEntry] = []
         self._last_exception = None
 
-    def push_local_objects(self, objects):
-        self.local_stack.append(objects)
+    # 
+    def push_local_object(self, obj: Object):
+        self.local_objects.append(obj)
     
-    def pop_local_objects(self):
-        self.local_stack.pop()
+    def top_local_object(self) -> Optional[Object]:
+        if not self.local_objects:
+            return None
+        return self.local_objects[-1]
 
-    def get_local_objects(self) -> Sequence[Object]:
-        return self.local_stack
-    
-    def get_selected_objects(self) -> Sequence[Object]:
-        return self.input_objects.pick_selected()
-    
-    #def get_self_object(self) -> Optional[Object]:
-    #    return self.input_objects.pick_self()
+    def pop_local_object(self):
+        self.local_objects.pop()
+
+    def get_local_objects(self) -> List[Object]:
+        return self.local_objects
+
+    #
+    def get_object(self, name) -> Optional[Object]:
+        for x in self.input_objects.pick_by_name(name):
+            return x.object
+        return None
         
-    #def get_selected_objects_typedict(self):
-    #    objmap = defaultdict(list) # type: DefaultDict[str, List[Object]]
-    #    for obj in self.get_selected_objects():
-    #        objmap[obj.get_typename()].append(obj)
-    #    return objmap
-    
-    def get_selected_objects_and_parameter(self, num):
-        objs = []
-        objs.extend(self.get_selected_objects())
-        if len(objs) < num:
-            objs.append(self.get_parameter_object())
-        return objs
+    def get_object_by_type(self, typename) -> Optional[Object]:
+        for x in self.input_objects.pick_by_type(typename):
+            return x.object
+        return None
 
-    def get_parameter(self) -> str:
-        return self.parameter
-    
-    def get_parameter_object(self, name="parameter") -> Object:
-        return Object(name, None, self.parameter)
+    def get_selected_objects(self) -> List[Object]:
+        li = [] # type: List[Object]
+        for x in self.input_objects.pick_all():
+            if x.selected:
+                li.append(x.object)
+        return li
 
+    def get_selected_objects_typedict(self):
+        objmap = defaultdict(list) # type: DefaultDict[str, List[Object]]
+        for x in self.input_objects.pick_all():
+            if x.selected:
+                obj = x.object
+                objmap[obj.get_typename()].append(obj)
+        return objmap
+
+    #    
+    def get_type(self, typename) -> Optional[TypeTraits]:
+        return self.type_module.get(typename, fallback=True)
+        
+    def new_type(self, typename) -> TypeTraits:
+        return self.type_module.new(typename)
+
+    #
     def push_invocation(self, entry: InvocationEntry):
         self.invocations.append(entry)
         if entry.is_failed():
@@ -216,7 +168,7 @@ class InvocationContext:
 class MemberInvocationContext(InvocationContext):
     def __init__(self, objtype, objval):
         super().__init__(spirit=None, parameter="")
-        self.push_input_object(Object("subject", objtype, objval))
+        self.push_input_object(Object(objtype, objval))
 
     def get_evaluated_value(self):
         if self.is_failed():
@@ -334,7 +286,7 @@ class TypeMethodInvocation(BasicInvocation):
                     obj = objmap[param.typename].pop(0)
                     kwargs[param.name] = obj.value
                 elif not param.is_required():
-                    kwargs[param.name] = param.get_default()   
+                    kwargs[param.name] = param.get_default() # デフォルト引数で埋めておく
         
         # 実行
         entry = InvocationEntry(args, kwargs)
@@ -350,10 +302,13 @@ class TypeMethodInvocation(BasicInvocation):
             entry.push_result(self.method.results[0].typename, result)
     
     def get_max_arity(self):
-        return 0xFFFF # メソッドから得られる
+        cnt = self.method.get_max_arity()
+        if cnt is None:
+            return 0xFFFF # メソッドから最大数を得る
+        return cnt
 
     def get_min_arity(self):
-        return 0 # 実行時に指定もできる
+        return 0 # 暗黙の取得もあり得るので0
 
 
 #

@@ -13,6 +13,10 @@ from collections import defaultdict
 METHOD_TASK = 0x1
 
 #
+PARAMETER_REQUIRED = 0x01
+PARAMETER_VARIABLE = 0x10
+
+#
 class MethodParameterNoDefault:
     pass
 
@@ -39,6 +43,10 @@ class Method():
         self.params: List[MethodParameter] = []
         self.results: List[MethodResult] = []
 
+    def check_valid(self):
+        if self.name is None:
+            raise ValueError("name")
+    
     def get_name(self):
         return self.name
         
@@ -51,15 +59,11 @@ class Method():
     def get_doc(self):
         return self.doc
     
-    def get_action_inspection(self):
+    def get_action_target(self):
         if self._action is None:
             raise ValueError("Action is not loaded")
-        return self._action.get_inspection()
+        return self.target
 
-    def check_valid(self):
-        if self.name is None:
-            raise ValueError("name")
-    
     def is_task(self):
         return (self.flags & METHOD_TASK) > 0
 
@@ -68,9 +72,15 @@ class Method():
         name,
         typename,
         doc = "",
-        default = MethodParameterNoDefault
+        default = MethodParameterNoDefault,
+        variable = False
     ):
-        p = MethodParameter(name, typename, doc, default)
+        f = 0
+        if variable:
+            f |= PARAMETER_VARIABLE
+        if default is MethodParameterNoDefault:
+            f |= PARAMETER_REQUIRED
+        p = MethodParameter(name, typename, doc, default, f)
         self.params.append(p)
 
     # 返り値宣言を追加
@@ -81,6 +91,15 @@ class Method():
         r = MethodResult(typename, doc)
         self.results.append(r)
     
+    # 受け入れ可能なスペース区切りの引数の数、Noneで無限を示す
+    def get_acceptable_argument_max(self) -> Union[int, None]:
+        cnt = 0
+        for p in self.params:
+            if p.is_raw_string() or p.is_variable():
+                return None
+            cnt += 1
+        return cnt
+
     #
     # 構文で引数を追加する
     # 
@@ -102,45 +121,57 @@ class Method():
             self.target = normalize_method_target(self.name)     
 
         # 実装コードを読み込む
-        from machaon.object.importer import maybe_import_target, import_member
+        from machaon.object.importer import get_importer
         action = None
+        source = None
         while True:
-            # 1. 型定義のメソッドを取り出す
-            typefn = None
-            if not maybe_import_target(self.target):
-                typefn = this_type.get_method_delegation(self.target)
+            importer = get_importer(self.target)
 
-            if typefn is not None:
-                action = typefn
-                break
+            # 1. 型定義のメソッドを取り出す
+            if importer is None:
+                typefn = this_type.get_method_delegation(self.target)
+                if typefn is not None:
+                    action = typefn
+                    source = "TypeMethod:{}".format(self.target)
+                    break
         
             # 2. 外部モジュールから定義をロードする
-            callobj = import_member(self.target) # モジュールが見つからなければ例外が投げられる
+            callobj = None
+            if importer is not None:
+                callobj = importer() # モジュールやメンバが見つからなければ例外が投げられる
+                source = "ImportedMethod:{}".format(self.target)
+            
+            # アクションオブジェクトの初期化処理
             if hasattr(callobj, "describe_method"):
-                # アクション自体に定義されたメソッド初期化処理を呼ぶ
+                # アクションに定義されたメソッド定義処理があれば実行
                 callobj.describe_method(self)
+            else:
+                # TODO: callobjのdocstringsを解析する。
+                pass
         
             if isinstance(callobj, type):
                 callobj = callobj()
         
-            if callable(callobj):
+            if callobj is not None and callable(callobj):
                 action = callobj
                 break
             
             raise ValueError("無効なアクションです：{}".format(self.target))
 
         self._action = action
+        self.target = source
         return action
         
 #
 #
 #
 class MethodParameter():
-    def __init__(self, name, typename, doc, default=MethodParameterNoDefault):
+    def __init__(self, name, typename, doc, default=None, flags=0):
         self.name = name
         self.typename = typename
         self.doc = doc
         self.default = default
+        self.flags = flags
     
     def get_name(self):
         return self.name
@@ -150,13 +181,19 @@ class MethodParameter():
     
     def get_doc(self):
         return self.doc
-
-    def is_parameter(self):
-        return self.typename == "parameter"
     
-    def is_required(self):
-        return self.default is MethodParameterNoDefault
+    def is_any(self):
+        return self.typename == "Any"
 
+    def is_raw_string(self):
+        return self.typename == "RawString"
+
+    def is_required(self):
+        return (self.flags & PARAMETER_REQUIRED) > 0
+
+    def is_variable(self):
+        return (self.flags & PARAMETER_VARIABLE) > 0
+    
     def get_default(self):
         return self.default
 
@@ -184,7 +221,7 @@ def method_parameter_declaration_chain(method, declaration):
         if ":" in declaration:   
             varpart, typepart = declaration.split(":")
         else:
-            varpart, typepart = declaration, "any"
+            varpart, typepart = declaration, "Any"
         typename = typepart.strip()
         
         paramname = varpart.strip()
@@ -228,7 +265,7 @@ def method_declaration_chain(traits, declaration):
     name, *othernames = names.split()
     
     if not typename:
-        typename = "any"
+        typename = "Any"
     
     if not names:
         names = method_type
@@ -241,7 +278,7 @@ def method_declaration_chain(traits, declaration):
     elif method_type == "member":
         defparams = []
     elif method_type == "operator":
-        defparams = [("right", "any", "第2引数")]
+        defparams = [("right", "Any", "第2引数")]
 
     #
     def trailing_call(

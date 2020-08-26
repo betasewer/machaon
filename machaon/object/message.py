@@ -1,10 +1,17 @@
 import ast
 from itertools import zip_longest
-from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple
+from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
 from machaon.object.type import TypeTraits, TypeModule
 from machaon.object.object import Object
-from machaon.object.selector import select_method
+from machaon.object.invocation import (
+    INVOCATION_NEGATE_RESULT, INVOCATION_REVERSE_ARGS,
+    BasicInvocation,
+    TypeMethodInvocation,
+    InstanceMethodInvocation,
+    StaticMethodInvocation
+)
+
 
 # imported from...
 # desktop
@@ -27,18 +34,28 @@ class BadExpressionError(Exception):
 #
 #
 class Message:
-    def __init__(self, reciever=None, selector=None, args=None):
-        self.reciever = reciever
-        self.selector = selector
-        self.args = args or []
+    def __init__(self, 
+        reciever = None, 
+        selector = None, 
+        args = None
+    ):
+        self.reciever = reciever # type: Union[Object, LeafResultRef, None]
+        self.selector = selector # type: Union[BasicInvocation, None]
+        self.args = args or []   # type: List[Union[Object, LeafResultRef]]
     
     def set_reciever(self, reciever):
+        if reciever is None:
+            raise TypeError()
         self.reciever = reciever
 
     def set_selector(self, selector):
+        if selector is None:
+            raise TypeError()
         self.selector = selector
     
     def add_arg(self, arg):
+        if arg is None:
+            raise TypeError()
         self.args.append(arg)
     
     def is_reciever_specified(self):
@@ -46,7 +63,7 @@ class Message:
     
     def is_selector_specified(self):
         return self.selector is not None
-        
+
     def is_max_arg_specified(self):
         if self.selector:
             return len(self.args) >= self.selector.get_max_arity()-1
@@ -71,7 +88,10 @@ class Message:
         return False
     
     #
-    def eval(self, context):
+    def eval(self, context) -> Optional[Object]:
+        if self.reciever is None or self.selector is None:
+            raise ValueError()
+
         args = []
 
         # コンテキスト引数を取り出す。スタックにあるかもしれないので、逆順に
@@ -88,7 +108,11 @@ class Message:
 
         # 返り値（一つだけ）
         ret = context.get_last_result()
-        return Object(None, context.get_type(ret.typecode), ret.value)
+        if ret is not None:
+            rettype = context.get_type(ret.typecode)
+            return Object(rettype, ret.value)
+
+        return None
 
     # レシーバオブジェクトの型特性を得る
     def get_reciever_object_type(self, context=None):
@@ -143,23 +167,28 @@ class LeafResultRef:
             context.pop_local_object()
         return self._lastvalue
 
+
+# --------------------------------------------------------------------
 #
 # メッセージの構成要素
 #
+# --------------------------------------------------------------------
+
+# オブジェクト参照
 def select_object_ref(context, *, name=None, typename=None):
     if typename:
         return context.get_object_by_type(typename)
     else:
         return context.get_object(name)
 
-#
+# 型名
 def select_type_ref(context, name):
     tt = context.get_type(name)
     if tt is None:
         return None
-    return Object(None, context.get_type("Type"), tt)
+    return Object(context.get_type("Type"), tt)
 
-#
+# リテラル
 def select_literal(context, string, tokentype):
     if tokentype & TOKEN_STRING:
         value = string
@@ -168,11 +197,87 @@ def select_literal(context, string, tokentype):
             value = ast.literal_eval(string)
         except Exception:
             value = string
-    return Object(None, context.get_type(type(value)), value)
+    return Object(context.get_type(type(value)), value)
+
+# メソッド
+def select_method(name, typetraits=None, *, modbits=None):
+    # モディファイアを分離する
+    if modbits is None:
+        def startsmod(sigil, value, expr, bits):
+            if expr.startswith(sigil):
+                return (expr[len(sigil):], value|bits)
+            else:
+                return (expr, bits)
+        
+        modbits = 0
+        name, modbits = startsmod("~", INVOCATION_REVERSE_ARGS, name, modbits)
+        name, modbits = startsmod("!", INVOCATION_NEGATE_RESULT, name, modbits)
+        name, modbits = startsmod("not-", INVOCATION_NEGATE_RESULT, name, modbits)
+
+    # 外部関数
+    from machaon.object.importer import get_importer
+    importer = get_importer(name, no_implicit=True)
+    if importer:
+        modfn = importer(fallback=True)
+        return StaticMethodInvocation(modfn, modbits)
+
+    # 型メソッド
+    if typetraits is not None:
+        meth = typetraits.get_method(name)
+        if meth is not None:
+            return TypeMethodInvocation(meth, modbits)
+    
+    # 演算子の記号を関数に
+    if name in operator_selectors:
+        name = operator_selectors[name]
+    
+    # グローバル定義の関数
+    from machaon.object.generic import resolve_generic_method
+    genfn = resolve_generic_method(name)
+    if genfn is not None:
+        return StaticMethodInvocation(genfn, modbits)
+    
+    # インスタンスメソッド
+    return InstanceMethodInvocation(name, modbits)
 
 #
-# 式の文字列をトークンへ変換
+# 演算子とセレクタの対応
 #
+operator_selectors = {
+    # operator methods
+    "==" : "equal",
+    "!=" : "not-equal",
+    "<=" : "less-equal",
+    "<" : "less",
+    ">=" : "greater-equal",
+    ">" : "greater",
+    "+" : "add",
+    "-" : "sub",
+    "neg" : "negative",
+    "*" : "mul",
+    "**" : "pow",
+    "/" : "div",
+    "//" : "floordiv",
+    "%" : "mod",
+    "&" : "bitand",
+    "^" : "bitxor",
+    "|" : "bitor",
+    "~" : "bitinv",
+    ">>" : "rshift",
+    "<<" : "lshift",
+    # generic methods
+    "&&" : "and", 
+    "||" : "or",  
+}
+
+
+# --------------------------------------------------------------------
+#
+# 文字列からメッセージを組み立てつつ実行する
+#
+# --------------------------------------------------------------------
+
+# 式の文字列をトークンへ変換
 TOKEN_TERM = 0x01
 TOKEN_BLOCK_BEGIN = 0x02
 TOKEN_BLOCK_END = 0x04
@@ -199,7 +304,7 @@ SIGILS_OBJECT_TYPENAME = "[]"
 #
 #
 #
-class MessageParser():
+class MessageEngine():
     def __init__(self, expression):
         self.source = expression
         self._readings = []
@@ -298,7 +403,10 @@ class MessageParser():
             if token[1:].startswith(SIGILS_OBJECT_TYPENAME[0]) and token.endswith(SIGILS_OBJECT_TYPENAME[1]):
                 obj = select_object_ref(context, typename=token[2:-1].strip())
             else:
-                obj = select_object_ref(context, name=token[2:])
+                obj = select_object_ref(context, name=token[1:])
+            
+            if obj is None:
+                raise SyntaxError("オブジェクト'{}'は存在しません".format(token))
 
             if expect == EXPECT_ARGUMENT:
                 return (tokenbits | TERM_LAST_BLOCK_ARG, obj) # 前のメッセージの引数になる
@@ -399,6 +507,8 @@ class MessageParser():
             if completed:
                 # 実行する
                 result = msg.eval(context)
+                if result is None:
+                    return None # エラー発生
                 context.push_local_object(result) # スタックに乗せる
                 completes.append(msg)
             else:
@@ -424,9 +534,12 @@ class MessageParser():
             logger(1, code, values)
             
             completes = self.send_message_step(code, values, context)
-            logger(2, completes)
+            if completes is None:
+                logger(-1, context.get_last_exception())
+                break
+            else:
+                logger(2, completes)
 
-    
     #
     def _logger(self, state, *values):
         if state == 0:
@@ -450,8 +563,8 @@ class MessageParser():
         elif state == 2:
             completes = values[0]
             values = ("".join([x.sexprs() for x in completes]),)
+        elif state == -1:
+            err = values[0]
+            values = ("<An error occurred on evaluation: {}>".format(err),)
+
         self.log[-1].extend(values)
-        
-    def last_run_sexprs(self):
-        return "".join([x.sexprs() for x in self._sequence])
-    
