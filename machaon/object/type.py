@@ -23,34 +23,42 @@ class BadMethodName(Exception):
 class BadMethodDelegation(Exception):
     pass
 
+#
+def normalize_typename(name: str) -> str:
+    if not name[0].isupper():
+        raise BadMethodName("型名は大文字で始めてください")
+    return name.replace("_","-")
+
 
 #
 #
 #
 class TypeTraits():
     __mark = True
-    value_type: Callable = str
-    class NONAME:
-        pass
 
-    def __init__(self, typename=NONAME, doc="", flags=0, value_type=None):
-        self.typename: str = typename
-        self.doc: str = doc
-        self.flags = flags
-        self.value_type = value_type
+    def __init__(self):
+        self.typename: str = None
+        self.doc: str = ""
+        self.flags = 0
+        self.value_type: Callable = str # デフォルト型は文字列
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, TypeMethodAlias] = {}
+    
+    def is_undescribed(self):
+        return not self.typename
     
     def __str__(self):
         return "<TypeTraits '{}'>".format(self.typename)
 
     def get_value_type(self):
-        if self.value_type is None:
-            return str # デフォルトでは文字列型とする
         return self.value_type
     
     def copy(self):
-        t = TypeTraits(self.typename, self.doc, self.flags)
+        t = TypeTraits()
+        t.typename = self.typename
+        t.doc = self.doc
+        t.flags = self.flags
+        t.value_type = self.value_type
         t._methods = self._methods.copy()
         t._methodalias = self._methodalias.copy()
         return t
@@ -130,7 +138,7 @@ class TypeTraits():
         value_type = None,
     ):
         if typename:
-            self.typename = typename
+            self.typename = normalize_typename(typename)
         if doc:
             self.doc = doc
         if value_type:
@@ -160,29 +168,31 @@ class TypeTraits():
     def make_described(self, describer):
         if not hasattr(describer, "describe_object"):
             raise ValueError("クラスメソッド 'describe_object' が型定義のために必要です")
+        
+        # 記述メソッドを呼び出す
         describer.describe_object(self) # type: ignore
-        setattr(describer, "type_traits_typename", self.typename) # getで使用可能にする
+        
+        # フォールバック値として
+        if not self.typename and hasattr(describer, "__name__"):
+            self.typename = normalize_typename(describer.__name__)
+        if not self.doc and hasattr(describer, "__doc__"):
+            self.doc = describer.__doc__
+        
+        setattr(describer, "TypeTraits_typename", self.typename) # typemodule.getで使用可能にする
         return self
 
 #
 #
 class TypeTraitsDelegation(TypeTraits):
     def __init__(self, klass: Any):
-        typename = klass.__name__
-        super().__init__(typename, typename)
+        super().__init__()
+        self.value_type = klass
         self.klass = klass
-        self._inst = None
         
     def copy(self):
         t = super().copy()
         t.klass = self.klass
-        # _inst は自分で生成させる
         return t
-    
-    def get_value_type(self):
-        if self.value_type is None:
-            return self.klass
-        return self.value_type
     
     def get_method_delegation(self, attrname):
         fn = getattr(self.klass, attrname, None)
@@ -192,16 +202,22 @@ class TypeTraitsDelegation(TypeTraits):
         return fn
 
 #
+# 型の取得時まで定義の読み込みを遅延する
+#
+class TypeTraitsDelayLoader():
+    def __init__(self, traits, typename=None):
+        self.traits = traits
+        if typename is None:
+            typename = normalize_typename(traits.__name__)
+        self.typename = typename
+
+#
 # 型取得インターフェース
 #
 class TypeModule():
     def __init__(self):
         self._typelib: Dict[str, TypeTraits] = {}
         self._ancestors: List[TypeModule] = [] 
-    
-    #
-    def normalize_typename(self, name: str) -> str:
-        return name.replace("_","-")
         
     #
     def exists(self, typename: str) -> bool:
@@ -224,25 +240,28 @@ class TypeModule():
     #
     # 型を取得する
     #
-    def get(self, typecode: Any = None, fallback = False) -> Optional[TypeTraits]:
+    def get(self, typecode: Any, fallback = False) -> Optional[TypeTraits]:
         if self._typelib is None:
             raise ValueError("No type library set up")
-        if typecode is None:
-            t = self.find("str")
-        elif isinstance(typecode, str):
-            typename = self.normalize_typename(typecode)
+
+        if isinstance(typecode, str):
+            typename = normalize_typename(typecode)
             t = self.find(typename)
         elif isinstance(typecode, TypeTraits):
             t = typecode
-        else:
-            if hasattr(typecode, "type_traits_typename"):
-                typename = typecode.type_traits_typename
-            else:
-                typename = self.normalize_typename(typecode.__name__)
+        elif hasattr(typecode, "TypeTraits_typename"):
+            typename = typecode.TypeTraits_typename
             t = self.find(typename)
+        else:
+            raise ValueError("型識別子として無効な値です：{}".format(typecode))
         
         if t is None and not fallback:
             raise BadTypename(typecode)
+
+        # 遅延された読み込みを実行する
+        if isinstance(t, TypeTraitsDelayLoader):
+            t = self.define(t.traits, typename=t.typename)
+        
         return t
 
     # objtypes[<typename>] -> TypeTraits
@@ -251,7 +270,7 @@ class TypeModule():
 
     # objtypes.<typename> -> TypeTraits
     def __getattr__(self, name) -> Optional[TypeTraits]:
-        typename = self.normalize_typename(name)
+        typename = normalize_typename(name)
         return self.get(typename)
     
     #
@@ -260,14 +279,14 @@ class TypeModule():
     def new(self, typecode):
         tt = self.get(typecode, fallback=True)
         if tt is None:
-            if hasattr(tt, "describe_object"):
-                tt = self.define(tt)
+            if hasattr(typecode, "describe_object"):
+                tt = self.define(typecode)
             else:
                 # 実質は文字列と同一の新しい型を作成
-                if isinstance(tt, str):
-                    typename = tt
+                if isinstance(typecode, str):
+                    typename = typecode
                 else:
-                    typename = tt.__name__
+                    typename = typecode.__name__
                 tt = self.define(typename=typename, doc="<Prototype {}>".format(typename))
         return tt
 
@@ -284,18 +303,21 @@ class TypeModule():
         t: Any = None # 型オブジェクトのインスタンス
         if traits is None:
             # 一時的な型：振る舞いはすべてデフォルト、値の生成は不可
-            t = TypeTraits(typename, doc)
+            t = TypeTraits().describe(typename, doc, str)
+        elif isinstance(traits, TypeTraitsDelayLoader):
+            t = traits
         elif isinstance(traits, TypeTraits):
             # Traitsまたは派生型のインスタンスが渡された
             t = traits.copy()
         elif isinstance(traits, type):
             if hasattr(traits, "_TypeTraits__mark"):
                 # Traitsまたは派生型の型が渡された
-                t = traits(traits.__name__)
+                t = traits()
             else:
                 # 実装移譲先のクラス型が渡された
                 t = TypeTraitsDelegation(traits)
             # describe_object
+            t.describe(typename=typename, doc=doc)
             t.make_described(traits)
         else:
             raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__init__))
@@ -303,15 +325,16 @@ class TypeModule():
         if typename is not None:
             t.typename = typename
 
-        if t.typename in self._typelib:
-            raise ValueError("型'{}'は既に定義されています".format(t.typename))
         self._typelib[t.typename] = t
 
         return t
     
-    # デコレータ用
-    def definition(self, traits):
-        return self.define(traits=traits)
+    # 遅延登録デコレータ
+    def definition(self, name=None):
+        def _deco(traits):
+            self.define(traits=TypeTraitsDelayLoader(traits, name))
+            return traits
+        return _deco
 
     #
     #

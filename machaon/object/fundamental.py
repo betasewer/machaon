@@ -7,51 +7,76 @@ fundamental_type = TypeModule()
 #
 #
 #
-@fundamental_type.definition
-class str_(TypeTraits):
+@fundamental_type.definition()
+class Str(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         traits.describe(
-            typename="str",
-            description="Python.str",
+            doc="Python.str",
             value_type=str
-        )["member length -> int"](
-            help="文字列の長さ",
-            target="len"
-        )["operator regmatch -> bool"](
-            help="正規表現に先頭から適合するか"
-        )["operator regsearch -> bool"](
-            help="正規表現に一部が適合するか"
+        )["method"](
+            "regmatch",
+            "regsearch",
+            "format"
         )
 
-    def convert_from_string(self, s):
+    def construct_from_string(self, s):
         return s
+    
+    def stringify(self, v):
+        return v
 
     #
     # 演算子
     #
     def regmatch(self, s, pattern):
+        '''
+        正規表現にマッチするかを調べる
+        
+        Str: 文字列
+        Str: 正規表現
+        ->
+        Bool: マッチ成功か
+        '''
         m = re.match(pattern, s)
         if m:
             return True
         return False
     
     def regsearch(self, s, pattern):
+        '''
+        正規表現に一部が適合するかを調べる
+
+        Str: 文字列
+        Str: 正規表現
+        -> 
+        Bool: 適合したか
+        '''
         m = re.search(pattern, s)
         if m:
             return True
         return False
+    
+    def format(self, s, *args):
+        """
+        引数から書式にしたがって文字列を作成する
+
+        Str: 書式
+        *Any: 引数
+        ->
+        Str: 文字列
+        """
+        return s.format(*args)
 
 #
 #
 #
-@fundamental_type.definition
-class bool_(TypeTraits):
+@fundamental_type.definition()
+class Bool(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         traits.describe(
-            "bool", 
-            description="True/False",
+            doc="True/False",
             value_type=bool
         )
 
@@ -68,13 +93,12 @@ class bool_(TypeTraits):
 #
 #
 #
-@fundamental_type.definition
-class int_(TypeTraits):
+@fundamental_type.definition()
+class Int(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         traits.describe(
-            "int", 
-            description="整数",
+            doc="整数",
             value_type=int
         )
 
@@ -84,13 +108,12 @@ class int_(TypeTraits):
 #
 #
 #
-@fundamental_type.definition
-class float_(TypeTraits):
+@fundamental_type.definition()
+class Float(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         traits.describe(
-            "float", 
-            description="浮動小数",
+            doc="浮動小数",
             value_type=float
         )
 
@@ -100,13 +123,12 @@ class float_(TypeTraits):
 #
 #
 #
-@fundamental_type.definition
-class complex_(TypeTraits):
+@fundamental_type.definition()
+class Complex(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         traits.describe(
-            "complex", 
-            description="複素数",
+            doc="複素数",
             value_type=complex
         )
 
@@ -116,14 +138,14 @@ class complex_(TypeTraits):
 #
 #
 #
-@fundamental_type.definition
-class dataview_t(TypeTraits):
+@fundamental_type.definition()
+class DataviewType(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         from machaon.object.dataset import DataView
         traits.describe(
-            "dataview", 
-            description="データビュー",
+            typename="Dataview", 
+            doc="データビュー",
             value_type=DataView
         )
 
@@ -141,14 +163,14 @@ class dataview_t(TypeTraits):
 #
 #
 #
-@fundamental_type.definition
-class process_error_t(TypeTraits):
+@fundamental_type.definition()
+class ProcessErrorType(TypeTraits):
     @classmethod
     def describe_object(self, traits):
         from machaon.process import ProcessError
         traits.describe(
-            "process-error", 
-            description="プロセスで発生したエラー",
+            "ProcessError", 
+            doc="プロセスで発生したエラー",
             value_type=ProcessError
         )
 

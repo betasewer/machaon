@@ -11,7 +11,7 @@ import subprocess
 from typing import Optional, List, Any
 
 from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet, LoadFailedCommandSet
-from machaon.object.desktop import Object, ObjectDesktop
+from machaon.object.object import Object, ObjectCollection
 from machaon.command import describe_command, CommandPackage
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber, ProcessBadCommand
 from machaon.package.package import package_manager, PackageEntryLoadError
