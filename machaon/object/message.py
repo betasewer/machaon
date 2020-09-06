@@ -2,7 +2,8 @@ import ast
 from itertools import zip_longest
 from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
-from machaon.object.type import TypeTraits, TypeModule
+from machaon.object.typename import python_builtin_typenames
+from machaon.object.type import Type, TypeModule
 from machaon.object.object import Object
 from machaon.object.invocation import (
     INVOCATION_NEGATE_RESULT, INVOCATION_REVERSE_ARGS,
@@ -42,6 +43,7 @@ class Message:
         self.reciever = reciever # type: Union[Object, LeafResultRef, None]
         self.selector = selector # type: Union[BasicInvocation, None]
         self.args = args or []   # type: List[Union[Object, LeafResultRef]]
+        self._argsend = False
     
     def set_reciever(self, reciever):
         if reciever is None:
@@ -57,6 +59,9 @@ class Message:
         if arg is None:
             raise TypeError()
         self.args.append(arg)
+    
+    def end_arg(self):
+        self._argsend = True
     
     def is_reciever_specified(self):
         return self.reciever is not None
@@ -74,17 +79,16 @@ class Message:
             return len(self.args) >= self.selector.get_min_arity()-1
         return False
     
-    def is_specified(self, *, minarg=False):
+    def is_specified(self):
         return (
             self.is_reciever_specified() 
             and self.is_selector_specified() 
-            and (self.is_min_arg_specified() if minarg else self.is_max_arg_specified())
+            and (self._argsend or self.is_max_arg_specified())
         )
-    
-    def is_child_element(self, msg):
-        for elem in (self.reciever, self.selector, *self.args):
-            if isinstance(elem, Message) and elem is msg:
-                return True
+
+    def is_selector_parameter_consumer(self):
+        if self.selector:
+            return self.selector.is_parameter_consumer()
         return False
     
     #
@@ -173,23 +177,22 @@ class LeafResultRef:
 # メッセージの構成要素
 #
 # --------------------------------------------------------------------
-
-# オブジェクト参照
-def select_object_ref(context, *, name=None, typename=None):
+# 外部オブジェクト参照
+def select_object_ref(context, *, name=None, typename=None) -> Optional[Object]:
     if typename:
         return context.get_object_by_type(typename)
     else:
         return context.get_object(name)
 
 # 型名
-def select_type_ref(context, name):
+def select_type_ref(context, name) -> Optional[Object]:
     tt = context.get_type(name)
     if tt is None:
         return None
     return Object(context.get_type("Type"), tt)
 
 # リテラル
-def select_literal(context, string, tokentype):
+def select_literal(context, string, tokentype) -> Object:
     if tokentype & TOKEN_STRING:
         value = string
     else:
@@ -197,7 +200,26 @@ def select_literal(context, string, tokentype):
             value = ast.literal_eval(string)
         except Exception:
             value = string
-    return Object(context.get_type(type(value)), value)
+    
+    typename = type(value).__name__
+    if typename not in python_builtin_typenames:
+        raise BadExpressionError("Unsupported literal type: {}".format(typename))
+    return Object(context.get_type(typename), value)
+
+# 無名関数の引数参照
+def select_la_subject_value(context, key=None) -> Optional[Object]:
+    if key is None:
+        obj = context.get_subject_object()
+        if obj is None:
+            raise BadExpressionError("No object specified to lambda")
+        return obj
+    else:
+        vs = context.get_subject_values()
+        if vs is not None:
+            if key not in vs:
+                raise BadExpressionError("Object value '{}' does not exist".format(key))
+            return vs[key]
+    return None
 
 # メソッド
 def select_method(name, typetraits=None, *, modbits=None):
@@ -215,21 +237,18 @@ def select_method(name, typetraits=None, *, modbits=None):
         name, modbits = startsmod("not-", INVOCATION_NEGATE_RESULT, name, modbits)
 
     # 外部関数
-    from machaon.object.importer import get_importer
-    importer = get_importer(name, no_implicit=True)
-    if importer:
-        modfn = importer(fallback=True)
-        return StaticMethodInvocation(modfn, modbits)
+    from machaon.object.importer import attribute_loader
+    loader = attribute_loader(name)
+    if loader:
+        modfn = loader(fallback=True)
+        if modfn:
+            return StaticMethodInvocation(modfn, modbits)
 
     # 型メソッド
     if typetraits is not None:
-        meth = typetraits.get_method(name)
+        meth = typetraits.select_method(name)
         if meth is not None:
             return TypeMethodInvocation(meth, modbits)
-    
-    # 演算子の記号を関数に
-    if name in operator_selectors:
-        name = operator_selectors[name]
     
     # グローバル定義の関数
     from machaon.object.generic import resolve_generic_method
@@ -240,36 +259,6 @@ def select_method(name, typetraits=None, *, modbits=None):
     # インスタンスメソッド
     return InstanceMethodInvocation(name, modbits)
 
-#
-# 演算子とセレクタの対応
-#
-operator_selectors = {
-    # operator methods
-    "==" : "equal",
-    "!=" : "not-equal",
-    "<=" : "less-equal",
-    "<" : "less",
-    ">=" : "greater-equal",
-    ">" : "greater",
-    "+" : "add",
-    "-" : "sub",
-    "neg" : "negative",
-    "*" : "mul",
-    "**" : "pow",
-    "/" : "div",
-    "//" : "floordiv",
-    "%" : "mod",
-    "&" : "bitand",
-    "^" : "bitxor",
-    "|" : "bitor",
-    "~" : "bitinv",
-    ">>" : "rshift",
-    "<<" : "lshift",
-    # generic methods
-    "&&" : "and", 
-    "||" : "or",  
-}
-
 
 # --------------------------------------------------------------------
 #
@@ -278,28 +267,30 @@ operator_selectors = {
 # --------------------------------------------------------------------
 
 # 式の文字列をトークンへ変換
+TOKEN_NOTHING = 0
 TOKEN_TERM = 0x01
 TOKEN_BLOCK_BEGIN = 0x02
-TOKEN_BLOCK_END = 0x04
+TOKEN_ENDING = 0x04
 TOKEN_STRING = 0x10
+TOKEN_ARGUMENT = 0x20
 
 EXPECT_NOTHING = 0
 EXPECT_RECIEVER = 0x10
 EXPECT_SELECTOR = 0x20
 EXPECT_ARGUMENT = 0x40
 
-TERM_NEW_BLOCK_RECIEVER = 1
-TERM_NEW_BLOCK_SELECTOR = 2
+TERM_NOTHING = 0
 TERM_LAST_BLOCK_RECIEVER = 3
 TERM_LAST_BLOCK_SELECTOR = 4
 TERM_LAST_BLOCK_ARG = 5
 TERM_NEW_BLOCK_AS_LAST_RECIEVER = 6
 TERM_NEW_BLOCK_AS_LAST_ARG = 7
-TERM_EXPLICIT_BLOCK_BEGIN = 0x20
-TERM_EXPLICIT_BLOCK_END = 0x40
+TERM_NEW_BLOCK_ISOLATED = 8
+TERM_END_LAST_BLOCK = 0x10
+TERM_POP_LOCAL = 0x20
 
-SIGIL_OBJECT_ID = "@"
-SIGILS_OBJECT_TYPENAME = "[]"
+SIGIL_OBJECT_ID = "$"
+SIGIL_LAMBDA_SUBJECT = "@"
 
 #
 #
@@ -308,63 +299,65 @@ class MessageEngine():
     def __init__(self, expression):
         self.source = expression
         self._readings = []
+        self._trailing_as_parameter = False
+        self._codes = []
         self.log = []
 
     # 入力文字列をトークンに
-    def read_token(self) -> Generator[Tuple[str, int], None, None]:
-        buffer = [""]
-
-        def flush_buffer(back=None):
-            # 空白要素を落とす
-            for s in buffer[back:]:
-                if s: yield s
-            # バッファは初期化
-            del buffer[back:]
-            if not buffer:
-                buffer.append("")
-
-        def yield_token(strings, endbit):
-            terms = [x for x in strings if x] 
-            # トークンを排出
-            if not terms: return
-            for term in terms[:-1]:
-                yield (term, TOKEN_TERM)
-            yield (terms[-1], endbit)
+    def read_token(self, source) -> Generator[Tuple[str, int], None, None]:
+        def flush(buf, tokentype):
+            string = "".join(buf)
+            if string:
+                # 空であれば排出しない
+                yield (string, tokentype)
+                buf.clear()
         
-        quotedby = None
-        parens = 0
-        for ch in self.source:
-            if not quotedby and ch == "'" or ch == '"':
-                quotedby = ch
-            elif quotedby and quotedby == ch:
-                quotedby = None
-                yield from yield_token(flush_buffer(-1), TOKEN_TERM|TOKEN_STRING)
-            elif not quotedby and ch == "(":
-                yield from yield_token(flush_buffer(), TOKEN_TERM)
-                yield ("", TOKEN_BLOCK_BEGIN)
-                parens += 1
-            elif not quotedby and ch == ")":
-                yield from yield_token(flush_buffer(), TOKEN_BLOCK_END)
-                parens -= 1
-                if parens < 0:
-                    raise SyntaxError("始め括弧が足りません")
-            elif not quotedby and ch.isspace():
-                buffer.append("")
+        buffer = [] # type: List[str]
+        quoted_by = None
+        paren_count = 0
+        for ch in source:
+            if self._trailing_as_parameter:
+                buffer += ch
+            elif not quoted_by and (ch == "'" or ch == '"'):
+                quoted_by = ch
+            elif quoted_by and quoted_by == ch:
+                quoted_by = None
+                yield from flush(buffer, TOKEN_TERM|TOKEN_STRING)
+            elif quoted_by is None:
+                if ch == "(":
+                    yield from flush(buffer, TOKEN_TERM)
+                    yield ("", TOKEN_BLOCK_BEGIN)
+                    paren_count += 1
+                elif ch == ")":
+                    yield from flush(buffer, TOKEN_TERM|TOKEN_ENDING)
+                    paren_count -= 1
+                    if paren_count < 0:
+                        raise SyntaxError("始め括弧が足りません")
+                elif ch.isspace():
+                    yield from flush(buffer, TOKEN_TERM)
+                else:
+                    buffer += ch
             else:
-                buffer[-1] += ch
+                buffer += ch
 
-        yield from yield_token(flush_buffer(), TOKEN_BLOCK_END)
-        if parens > 0:
-            raise SyntaxError("終わり括弧が足りません")
+        if self._trailing_as_parameter:
+            yield from flush(buffer, TOKEN_TERM|TOKEN_ENDING|TOKEN_STRING|TOKEN_ARGUMENT)
+        else:
+            yield from flush(buffer, TOKEN_TERM|TOKEN_ENDING)
+            if paren_count > 0:
+                raise SyntaxError("終わり括弧が足りません")
 
     # 構文を組み立てる
     def build_message(self, token: str, tokentype: int, context: Any) -> Tuple: # (int, Any...)
-        reading: Optional[Message] = None
+        reading = None # type: Optional[Message]
         if self._readings:
             reading = self._readings[-1]
         
         tokenbits = 0
 
+        #
+        # 直前のトークンから次に来るべきトークンの意味を決定する
+        #
         expect = EXPECT_NOTHING
         if reading is None:
             pass
@@ -374,39 +367,46 @@ class MessageEngine():
             expect = EXPECT_SELECTOR
         elif not reading.is_max_arg_specified():
             expect = EXPECT_ARGUMENT
+        
+        # 意味を無視して全体を文字列引数とみなす
+        if tokentype & TOKEN_ARGUMENT:
+            if expect != EXPECT_ARGUMENT:
+                raise BadExpressionError("引数を受け入れるセレクタが直前にありません")
+            
+            arg = select_literal(context, token, tokentype)
+            return (tokenbits | TERM_LAST_BLOCK_ARG, arg) # 前のメッセージの引数になる
 
         # ブロック終了指示
-        if tokentype & TOKEN_BLOCK_END:
-            tokenbits |= TERM_EXPLICIT_BLOCK_END
+        if tokentype & TOKEN_ENDING:
+            tokenbits |= TERM_END_LAST_BLOCK
 
         # ブロック開始指示
         if tokentype & TOKEN_BLOCK_BEGIN:
-            tokenbits |= TERM_EXPLICIT_BLOCK_BEGIN
-
             if expect == EXPECT_SELECTOR:
-                raise SyntaxError("メッセージはセレクタになりません")
+                raise BadExpressionError("メッセージはセレクタになりません")
 
             if expect == EXPECT_RECIEVER:
-                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, reading)
+                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, )
 
             if expect == EXPECT_ARGUMENT:
-                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, reading)
+                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, )
 
             if expect == EXPECT_NOTHING: 
-                return (tokenbits | TERM_NEW_BLOCK_RECIEVER, None)
+                return (tokenbits | TERM_NEW_BLOCK_ISOLATED, )
 
         # オブジェクト参照
         if token.startswith(SIGIL_OBJECT_ID):
             if expect == EXPECT_SELECTOR:
-                raise SyntaxError("セレクタが必要です")
+                raise SyntaxError("セレクタが必要です") 
 
-            if token[1:].startswith(SIGILS_OBJECT_TYPENAME[0]) and token.endswith(SIGILS_OBJECT_TYPENAME[1]):
-                obj = select_object_ref(context, typename=token[2:-1].strip())
+            key = token[1:]
+            if key and key[0].isupper(): # 大文字なら型とみなす
+                obj = select_object_ref(context, typename=key)
             else:
-                obj = select_object_ref(context, name=token[1:])
+                obj = select_object_ref(context, name=key)
             
             if obj is None:
-                raise SyntaxError("オブジェクト'{}'は存在しません".format(token))
+                raise BadExpressionError("オブジェクト'{}'は存在しません".format(token))
 
             if expect == EXPECT_ARGUMENT:
                 return (tokenbits | TERM_LAST_BLOCK_ARG, obj) # 前のメッセージの引数になる
@@ -415,28 +415,61 @@ class MessageEngine():
                 return (tokenbits | TERM_LAST_BLOCK_RECIEVER, obj) # 新しいメッセージのレシーバになる
             
             if expect == EXPECT_NOTHING:
-                return (tokenbits | TERM_NEW_BLOCK_RECIEVER, obj) # 新しいメッセージのレシーバになる
+                return (tokenbits | TERM_NEW_BLOCK_ISOLATED, obj) # 新しいメッセージのレシーバになる
+
+        # 引数
+        if token.startswith(SIGIL_LAMBDA_SUBJECT):
+            key = token[1:]
+            obj = None
+            if len(key) == 0:
+                token = "Function"
+                # 型名として扱う
+            else:
+                valobj = select_la_subject_value(context, key)
+                if valobj is not None:
+                    if expect == EXPECT_ARGUMENT:
+                        return (tokenbits | TERM_LAST_BLOCK_ARG, valobj) # 前のメッセージの引数になる
+
+                    if expect == EXPECT_RECIEVER:
+                        return (tokenbits | TERM_LAST_BLOCK_RECIEVER, valobj) # 前のメッセージのレシーバになる
+                    
+                    if expect == EXPECT_NOTHING:
+                        return (tokenbits | TERM_NEW_BLOCK_ISOLATED, valobj) # 新しいメッセージのレシーバになる
+
+                else:
+                    subj = context.get_subject_object()
+                    if subj is None:
+                        raise BadExpressionError("無名関数の引数を参照しようとしましたが、与えられていません")
+
+                    meth = select_method(key, subj.type)
+                    
+                    if expect == EXPECT_ARGUMENT:
+                        return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, subj, meth) # 前のメッセージの引数になる
+
+                    if expect == EXPECT_RECIEVER:
+                        return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, subj, meth) # 前のメッセージのレシーバになる
+                    
+                    if expect == EXPECT_NOTHING:
+                        return (tokenbits | TERM_NEW_BLOCK_ISOLATED, subj, meth) # 新しいメッセージのレシーバになる
 
         # 型名
         tt = select_type_ref(context, token)
         if tt is not None:
             if expect == EXPECT_SELECTOR:
-                raise SyntaxError("セレクタが必要です")
+                raise BadExpressionError("セレクタが必要です")
 
             if expect == EXPECT_ARGUMENT:
-                raise SyntaxError("型は引数にとれません")
+                raise BadExpressionError("型は引数にとれません")
 
             if expect == EXPECT_RECIEVER:
                 return (tokenbits | TERM_LAST_BLOCK_RECIEVER, tt)
             
             if expect == EXPECT_NOTHING:
-                return (tokenbits | TERM_NEW_BLOCK_RECIEVER, tt) # 新しいメッセージのレシーバになる
+                return (tokenbits | TERM_NEW_BLOCK_ISOLATED, tt) # 新しいメッセージのレシーバになる
         
         # メソッドかリテラルか、文脈で判断
         if expect == EXPECT_SELECTOR and reading:
             calling = select_method(token, reading.get_reciever_object_type(context))
-            if calling is None:
-                raise SyntaxError("不明なセレクタです：{}".format(token))
             return (tokenbits | TERM_LAST_BLOCK_SELECTOR, calling) # 前のメッセージのセレクタになる
         
         if expect == EXPECT_ARGUMENT:
@@ -453,58 +486,58 @@ class MessageEngine():
                 # 先行するメッセージをレシーバとするセレクタ名か
                 calling = select_method(token, lastret.type)
                 if calling:
-                    context.pop_local_object()
-                    return (tokenbits | TERM_NEW_BLOCK_SELECTOR, lastret, calling)
+                    return (tokenbits | TERM_NEW_BLOCK_ISOLATED|TERM_POP_LOCAL, lastret, calling)
             
             # 新しいブロックの開始。レシーバオブジェクトのリテラルとする
             arg = select_literal(context, token, tokentype)
-            return (tokenbits | TERM_NEW_BLOCK_RECIEVER, arg) 
+            return (tokenbits | TERM_NEW_BLOCK_ISOLATED, arg) 
         
-        raise SyntaxError("cannot parse")
+        raise BadExpressionError("Could not parse")
 
     # 構文木を組みたてつつ、完成したところからどんどん実行
     def send_message_step(self, code, values, context):
-        tokenbits = code & 0xF0
-        code = code & 0x0F
-
-        if code == TERM_NEW_BLOCK_RECIEVER:
-            new_msg = Message(values[0])
-            self._readings.append(new_msg)
-
-        elif code == TERM_NEW_BLOCK_SELECTOR:
-            new_msg = Message(values[0], values[1])
-            self._readings.append(new_msg)
-        
-        elif code == TERM_LAST_BLOCK_RECIEVER:
+        code1 = code & 0x0F
+        if code1 == TERM_LAST_BLOCK_RECIEVER:
             self._readings[-1].set_reciever(values[0])
 
-        elif code == TERM_LAST_BLOCK_SELECTOR:
+        elif code1 == TERM_LAST_BLOCK_SELECTOR:
             self._readings[-1].set_selector(values[0])
 
-        elif code == TERM_LAST_BLOCK_ARG:
+        elif code1 == TERM_LAST_BLOCK_ARG:
             self._readings[-1].add_arg(values[0])
 
-        elif code == TERM_NEW_BLOCK_AS_LAST_RECIEVER:
-            new_msg = Message()
-            values[0].set_reciever(LeafResultRef())
+        elif code1 == TERM_NEW_BLOCK_AS_LAST_RECIEVER:
+            new_msg = Message(*values)
+            self._readings[-1].set_reciever(LeafResultRef())
             self._readings.append(new_msg)
         
-        elif code == TERM_NEW_BLOCK_AS_LAST_ARG:
-            new_msg = Message()
-            values[0].add_arg(LeafResultRef())
+        elif code1 == TERM_NEW_BLOCK_AS_LAST_ARG:
+            new_msg = Message(*values)
+            self._readings[-1].add_arg(LeafResultRef())
             self._readings.append(new_msg)
         
+        elif code1 == TERM_NEW_BLOCK_ISOLATED:
+            new_msg = Message(*values)
+            self._readings.append(new_msg)
+        
+        code2 = code & 0xF0
+        if code2 & TERM_END_LAST_BLOCK:
+            msg = self._readings[-1]
+            if not msg.is_min_arg_specified():
+                raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
+            msg.end_arg()
+
+        if code2 & TERM_POP_LOCAL:
+            context.pop_local_object() # ローカルオブジェクトを一つ消費した
+        
+        # 以降の文字列は区切らずに一つのリテラルとみなす
+        if self._readings and self._readings[-1].is_selector_parameter_consumer():
+            self._trailing_as_parameter = True
+
         # 完成したメッセージをキューから取り出す
         completes = []
         for msg in reversed(self._readings):
-            if not completes and tokenbits & TERM_EXPLICIT_BLOCK_END:
-                if not msg.is_specified(minarg=True):
-                    raise SyntaxError("不完全なメッセージ式です：{}".format(msg.sexprs()))
-                completed=True
-            else:
-                completed=msg.is_specified()
-
-            if completed:
+            if msg.is_specified():
                 # 実行する
                 result = msg.eval(context)
                 if result is None:
@@ -516,55 +549,141 @@ class MessageEngine():
 
         if completes:
             del self._readings[-len(completes):]
+        
         return completes
     
     #
-    def run(self, context, *, log=False):
-        self.log = []
-        if log:
-            logger = self._logger
-        else:
-            def logger(state, *values):
-                pass
+    def tokenizer(self, context, *, logger=None):
+        if logger is None:
+            logger = self._begin_logger(dummy=True)
+        
+        if not self._codes:
+            # トークン文字列をコードに変換
+            for token, tokentype in self.read_token(self.source):
+                logger(0, token, tokentype)
 
-        for i, (token, tokentype) in enumerate(self.read_token()):
-            logger(0, i, token)
-            
-            code, *values = self.build_message(token, tokentype, context)
-            logger(1, code, values)
-            
-            completes = self.send_message_step(code, values, context)
+                try:
+                    code, *values = self.build_message(token, tokentype, context)
+                    logger(1, code, values)
+                    yield (code, values)
+                except Exception as e:
+                    logger(-1, e)
+                    break
+        else:
+            # キャッシュを利用する
+            for code, *values in self._codes:
+                logger(0, "", TOKEN_NOTHING)
+                logger(1, code, values)
+                yield (code, values)
+
+    #
+    def run(self, context, *, log=False):
+        self._trailing_as_parameter = False # リセット
+        logger = self._begin_logger(dummy=not log)
+        
+        # コードから構文を組み立てつつ随時実行
+        codes = []
+        for code, values in self.tokenizer(context, logger=logger):
+            try:
+                completes = self.send_message_step(code, values, context)
+            except Exception as e:
+                logger(-1, e)
+                return
+
             if completes is None:
                 logger(-1, context.get_last_exception())
-                break
+                return
             else:
                 logger(2, completes)
+            
+            codes.append((code, *values))
+
+        self._codes = codes
+
+    #
+    def tokenize(self, context, *, logger=None):
+        self._codes = []
+        self._codes.extend(self.tokenizer(context, logger=logger))
+        return self._codes
 
     #
     def _logger(self, state, *values):
         if state == 0:
             self.log.append([])
+            token, tokentype = values
+            typeflags = _view_bitflag("TOKEN_", tokentype)
+            values = (token, typeflags)
         elif state == 1:
             code, vals = values
-            tokenbits = code & 0xF0
-            code = code & 0x0F
-            for k, v in globals().items():
-                if k.startswith("TERM_") and v==code:
-                    codename = k
-                    break
-            else:
-                raise ValueError("")
-
-            if tokenbits & TERM_EXPLICIT_BLOCK_END:
-                codename = codename + "*"
-            if tokenbits & TERM_EXPLICIT_BLOCK_BEGIN:
-                codename = "*" + codename
-            values = (codename, vals)
+            code1 = code & 0x0F
+            code2 = code & 0xF0
+            codename = _view_constant("TERM_", code1)
+            if code2:
+                codename += "+" + _view_constant("TERM_", code2)
+            values = (codename, ", ".join([str(x) for x in vals]))
         elif state == 2:
             completes = values[0]
             values = ("".join([x.sexprs() for x in completes]),)
         elif state == -1:
+            self.log.append([])
             err = values[0]
-            values = ("<An error occurred on evaluation: {}>".format(err),)
+            values = ("!!! Error occurred on evaluation: {} {}".format(type(err).__name__, err), )
 
         self.log[-1].extend(values)
+    
+    def _begin_logger(self, *, dummy):
+        self.log = []
+        if dummy:
+            def logger(state, *values):
+                pass
+        else:
+            logger = self._logger
+        return logger
+
+    def pprint_log(self):
+        rowtitles = ("token", "token-type", "meaning", "yielded", "done-branch")
+        for i, logrow in enumerate(self.log):
+            print("[{}]-----------------".format(i))
+            for title, value in zip(rowtitles, logrow):
+                pad = 16-len(title)
+                print(" {}:{}{}".format(title, pad*" ", value))
+
+
+# ログ表示用に定数名を得る
+def _view_constant(prefix, code):
+    for k, v in globals().items():
+        if k.startswith(prefix) and v==code:
+            return k
+    else:
+        return "<定数=0x{0X}（{}***）の名前は不明です>".format(code, prefix)
+
+def _view_bitflag(prefix, code):
+    c = code
+    n = []
+    for k, v in globals().items():
+        if k.startswith(prefix) and v & c:
+            n.append(k)
+            c = (c & ~v)
+    if c!=0:
+        n.append("0x{0X}".format(c))
+    return "+".join(n)
+
+#
+# 引数を一つとりメッセージを実行する
+#
+class Function():
+    def __init__(self, expr: str):
+        self.message = MessageEngine(expr)
+    
+    def get_expr(self):
+        return self.message.source
+    
+    def compile(self, context):
+        self.message.tokenize(context)
+
+    def run(self, subject, context, log=False):
+        context.set_subject(subject)
+        self.message.run(context, log=True)
+        returns = context.clear_local_objects()
+        context.set_subject(None) # クリアする
+        return tuple(returns)

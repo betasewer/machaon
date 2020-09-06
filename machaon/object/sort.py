@@ -30,7 +30,7 @@ class ValueWrapper():
 class Sortkey():
     def __init__(self):
         self._predicates: List[Tuple[str, bool]] = [] # (predicate, isascend)
-        self._operators: List[Any] = [] # lessthan-operator
+        self._operators: List[List[Any, Any]] = [] # [operator, column]
 
     def add(self, predicate, ascend):
         self._predicates.append((predicate, ascend))
@@ -44,14 +44,17 @@ class Sortkey():
             if column is None:
                 raise BadPredicateError(member_name)
 
-            # 比較演算子（less）を決定
-            lessthan_opr = column.make_compare_operator(lessthan=ascend)
-            self._operators.append(lessthan_opr)
+            self._operators.append([None, column])
     
     def __call__(self, evalcontext) -> Tuple[ValueWrapper, ...]:
         values = []
-        for (member_name, _), ltopr in zip(self._predicates, self._operators):
-            val = evalcontext.get_member_value(member_name)
+        for (member_name, ascend), oprentry in zip(self._predicates, self._operators):
+            if oprentry[0] is None:
+                # 比較演算子（less）を決定
+                oprentry[0] = oprentry[1].make_compare_operator(evalcontext, lessthan=ascend)
+            ltopr = oprentry[0]
+
+            val = evalcontext.get_object(member_name)
             values.append(ValueWrapper(val, ltopr))
         return tuple(values)
     

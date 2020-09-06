@@ -1,9 +1,9 @@
-from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional
+from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union
 
 import inspect
 from collections import defaultdict
 
-from machaon.object.type import TypeTraits, TypeModule
+from machaon.object.type import Type, TypeModule
 from machaon.object.object import Object, ObjectValue, ObjectCollection
 
 #
@@ -44,7 +44,7 @@ class InvocationEntry():
         inv.exception = self.exception
         return inv
 
-    def push_result(self, typename, value):
+    def push_result(self, typename: str, value: Any):
         self.results.append(ObjectValue(typename, value))
     
     def get_first_result(self) -> Optional[ObjectValue]:
@@ -70,11 +70,20 @@ class InvocationEntry():
 class InvocationContext:
     def __init__(self, *, input_objects, type_module, spirit=None):
         self.type_module: TypeModule = type_module
-        self.input_objects: ObjectCollection = input_objects
-        self.local_objects: List[Object] = []
+        self.input_objects: ObjectCollection = input_objects # 外部のオブジェクト参照
+        self.subject_object: Union[None, Object, Dict[str, Object]] = None  # 無名関数の引数とするオブジェクト
+        self.local_objects: List[Object] = []                # メソッドの返り値を置いておく
         self.spirit = spirit
         self.invocations: List[InvocationEntry] = []
         self._last_exception = None
+    
+    def get_spirit(self):
+        return self.spirit
+    
+    #
+    def inherit(self):
+        cxt = InvocationContext(input_objects=self.input_objects, type_module=self.type_module, spirit=self.spirit)
+        return cxt
 
     # 
     def push_local_object(self, obj: Object):
@@ -86,10 +95,14 @@ class InvocationContext:
         return self.local_objects[-1]
 
     def pop_local_object(self):
+        if not self.local_objects:
+            return
         self.local_objects.pop()
 
-    def get_local_objects(self) -> List[Object]:
-        return self.local_objects
+    def clear_local_objects(self) -> List[Object]:
+        objs = self.local_objects
+        self.local_objects = []
+        return objs
 
     #
     def get_object(self, name) -> Optional[Object]:
@@ -116,12 +129,29 @@ class InvocationContext:
                 obj = x.object
                 objmap[obj.get_typename()].append(obj)
         return objmap
+    
+    def push_object(self, name: str, obj: Object):
+        self.input_objects.push(name, obj)
+    
+    #
+    def set_subject(self, subject: Union[Object, Dict[str, Object]]):
+        self.subject_object = subject
+    
+    def get_subject_values(self):
+        if isinstance(self.subject_object, dict):
+            return self.subject_object
+        return None
+    
+    def get_subject_object(self):
+        if isinstance(self.subject_object, Object):
+            return self.subject_object
+        return None
 
     #    
-    def get_type(self, typename) -> Optional[TypeTraits]:
+    def get_type(self, typename) -> Optional[Type]:
         return self.type_module.get(typename, fallback=True)
         
-    def new_type(self, typename) -> TypeTraits:
+    def new_type(self, typename) -> Type:
         return self.type_module.new(typename)
 
     #
@@ -163,20 +193,6 @@ class InvocationContext:
         self.push_invocation(entry)
         
 #
-# datasetやformulaで値を評価するために呼ばれるコンテクスト
-#
-class MemberInvocationContext(InvocationContext):
-    def __init__(self, objtype, objval):
-        super().__init__(spirit=None, parameter="")
-        self.push_input_object(Object(objtype, objval))
-
-    def get_evaluated_value(self):
-        if self.is_failed():
-            raise InvocationFailed(self)
-        objval = self.get_last_result()
-        return objval.value
-
-#
 #
 # メソッドの実行
 #
@@ -190,6 +206,7 @@ INVOCATION_REVERSE_ARGS = 0x2
 class BasicInvocation():
     def __init__(self, modifier):
         self.modifier = modifier
+        self.result_typehint = None
 
     def modifier_name(self):
         m = []
@@ -201,7 +218,7 @@ class BasicInvocation():
             m.append("straight")
         return " ".join(m)
     
-    def invoke(self, context, *args):
+    def invoke(self, context: InvocationContext, *args):
         # 引数とアクションを生成
         action, inventry = self.prepare_invoke(context, *args)
 
@@ -220,7 +237,16 @@ class BasicInvocation():
         
         # 返り値をまとめる
         if result is not None:
-            self.result_invoke(result, inventry)
+            typenames = self.get_result_typenames()
+            if not isinstance(result, tuple):
+                result = (result,)
+            for i, value in enumerate(result):
+                if isinstance(value, Object):
+                    inventry.push_result(value.get_typename(), value.value)
+                elif i<len(typenames):
+                    inventry.push_result(typenames[i], value)
+                else:
+                    inventry.push_result(type(value).__name__, value)
         
         if self.modifier & INVOCATION_NEGATE_RESULT:
             inventry.negate_result()
@@ -228,20 +254,31 @@ class BasicInvocation():
         # 格納
         context.push_invocation(inventry)
     
+    def set_result_typehint(self, typename: str):
+        self.result_typehint = typename
+        
+    def get_result_typehint(self):
+        return self.result_typehint
+    
     #
     # これらをオーバーロードする
     #
-    def prepare_invoke(self, context):
+    def prepare_invoke(self, context: InvocationContext, *args):
         raise NotImplementedError()
     
-    def result_invoke(self, result, entry):
-        raise NotImplementedError()
+    def result_invoke(self, result, entry: InvocationEntry):
+        # 返り値を設定する
+        typename = type(result).__name__
+        entry.push_result(typename, result)
     
-    def get_result_typehint(self):
-        raise NotImplementedError()
+    def get_result_typenames(self):
+        return []
 
     def is_task(self):
-        raise NotImplementedError()
+        return False
+    
+    def is_parameter_consumer(self):
+        return False
     
     def get_max_arity(self):
         return 0xFFFF # 不明なので適当な大きい値
@@ -262,14 +299,21 @@ class TypeMethodInvocation(BasicInvocation):
     
     def is_task(self):
         return self.method.is_task()
-        
-    def get_result_typehint(self):
-        return self.method.get_result_typecode()
+
+    def is_parameter_consumer(self):
+        return self.method.is_trailing_params_consumer()
     
-    def prepare_invoke(self, context, *argobjects):
+    def prepare_invoke(self, context: InvocationContext, *argobjects):
         selfobj, *argobjs = argobjects
+        
+        # メソッドの実装を読み込む
+        self.method.load(selfobj.type)
 
         args = []
+        if self.method.is_type_bound():
+            # 型オブジェクトを渡す
+            args.append(selfobj.type)
+
         if self.method.is_task():
             # Taskアクションにはspiritを渡す
             args.append(context.get_spirit())
@@ -290,19 +334,13 @@ class TypeMethodInvocation(BasicInvocation):
         
         # 実行
         entry = InvocationEntry(args, kwargs)
-        action = self.method.load_action(selfobj.type)
-        return action, entry
+        return self.method.get_action(), entry
 
-    def result_invoke(self, result, entry):
-        # 返り値を設定する
-        if isinstance(result, tuple):
-            for definition, value in zip(self.method.results, result):
-                entry.push_result(definition.typename, value)
-        else:
-            entry.push_result(self.method.results[0].typename, result)
+    def get_result_typenames(self):
+        return [x.typename for x in self.method.results]
     
     def get_max_arity(self):
-        cnt = self.method.get_max_arity()
+        cnt = self.method.get_acceptable_argument_max()
         if cnt is None:
             return 0xFFFF # メソッドから最大数を得る
         return cnt
@@ -322,12 +360,6 @@ class InstanceMethodInvocation(BasicInvocation):
     def __str__(self):
         return "<InstanceMethodInvocation '{}' {}>".format(self.attrname, self.modifier_name())
     
-    def is_task(self):
-        return False
-    
-    def get_result_typehint(self):
-        return None
-
     def prepare_invoke(self, context, *argobjects):
         selfval, *args = [x.value for x in argobjects]
 
@@ -340,10 +372,6 @@ class InstanceMethodInvocation(BasicInvocation):
         entry = InvocationEntry(args, {})
         return method, entry
     
-    def result_invoke(self, result, entry):
-        # 返り値を設定する
-        entry.push_result(type(result), result)
-
 #
 # グローバルな関数を呼び出す
 #
@@ -366,22 +394,12 @@ class StaticMethodInvocation(BasicInvocation):
         name = ".".join([self.fn.__module__, self.fn.__name__])
         return "<StaticMethodInvocation '{}' {}>".format(name, self.modifier_name())
     
-    def is_task(self):
-        return False
-        
-    def get_result_typehint(self):
-        return None
-
     def prepare_invoke(self, invocations, *argobjects):
         # そのままの引数で
         args = [x.value for x in argobjects]
         entry = InvocationEntry(args, {})
         return self.fn, entry
     
-    def result_invoke(self, result, entry):
-        # 返り値を設定する
-        entry.push_result(type(result), result)
-
     def get_max_arity(self):
         return self.arity[1]
 

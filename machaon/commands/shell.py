@@ -72,6 +72,14 @@ def currentdir(spi, path=None, silent=False):
 #
 #
 class FilePath():
+    """ファイルパス
+
+    MemberAlias:
+        long: (mode ftype modtime size name)
+        short: (ftype name)
+        link: path
+    """
+
     def __init__(self, path):
         self._path = path
         self._isdir = None
@@ -91,16 +99,32 @@ class FilePath():
 
     #
     def path(self):
+        """ [method]
+         ファイルパス
+        Alias: p
+        """
         return self._path
 
     def name(self):
+        """ [method]
+         ファイル名
+        Alias: n
+        """
         return os.path.basename(self._path)
     
     def nxname(self):
+        """ [method]
+         拡張子なしのファイル名
+        Alias: nx
+        """
         n, _ext = os.path.splitext(os.path.basename(self._path))
         return n
     
     def ftype(self):
+        """ [method]
+         ファイルタイプ
+        Alias: t
+        """
         if self.isdir:
             return "DIR"
         else:
@@ -110,6 +134,10 @@ class FilePath():
             return fext
     
     def modtime(self):
+        """ [method]
+         変更日時
+        Alias: time
+        """
         mtime = time.localtime(os.path.getmtime(self._path))
         wkday = {6:"日",0:"月",1:"火",2:"水",3:"木",4:"金",5:"土"}.get(mtime[6],"？")
         ftime = "{:02}/{:02}/{:02}（{}）{:02}:{:02}.{:02}".format(
@@ -118,6 +146,9 @@ class FilePath():
         return ftime
     
     def size(self):
+        """ [method]
+         ファイルサイズ
+        """
         if self.isdir:
             return None
         else:
@@ -131,34 +162,11 @@ class FilePath():
             return "{:.0F} {}".format(s, size_name[i])
     
     def mode(self):
+        """ [method]
+         モード
+        """
         return stat.filemode(self.stat.st_mode)
-    
-    @classmethod
-    def describe_object(cls, traits):
-        traits.describe(
-            typename="filepath",
-            description="ファイル",
-        )["member name n"](
-            help="ファイル名"
-        )["member nxname nx"](
-            help="拡張子無しのファイル名"
-        )["member path p"](
-            help="パス"
-        )["member ftype t"](
-            help="タイプ"
-        )["member modtime"](
-            help="更新日時"
-        )["member size"](
-            help="サイズ"
-        )["member mode"](
-            help="ファイルモード"
-        )["alias long"](
-            "mode", "ftype", "modtime", "size", "name"
-        )["alias short"](
-            "ftype", "name"
-        )["alias link"](
-            "path",
-        )
+
 
 def filelist_s(app):
     filelist(app)

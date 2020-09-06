@@ -3,6 +3,9 @@ from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Option
 import inspect
 from collections import defaultdict
 
+from machaon.object.typename import normalize_typename
+from machaon.object.docstring import DocStringParser
+
 # imported from...
 # type
 # operator
@@ -10,20 +13,29 @@ from collections import defaultdict
 #
 
 #
-METHOD_TASK = 0x1
+METHOD_TASK = 0x0001
+METHOD_CONSUME_TRAILING_PARAMS = 0x0002
+METHOD_BIND_TYPEVAR = 0x0010
 
 #
-PARAMETER_REQUIRED = 0x01
-PARAMETER_VARIABLE = 0x10
+PARAMETER_REQUIRED = 0x0100
+PARAMETER_VARIABLE = 0x0200
 
 #
-class MethodParameterNoDefault:
+class BadMethodName(Exception):
     pass
-
+class BadMethodDeclaration(Exception):
+    pass
+class UnloadedMethod(Exception):
+    pass
 
 #
 def normalize_method_target(name):
     return name.replace("-","_") # ハイフンはアンダースコア扱いにする
+
+#
+class MethodParameterNoDefault:
+    pass
 
 #
 #
@@ -63,9 +75,18 @@ class Method():
         if self._action is None:
             raise ValueError("Action is not loaded")
         return self.target
+    
+    def get_action(self):
+        return self._action
 
     def is_task(self):
         return (self.flags & METHOD_TASK) > 0
+        
+    def is_trailing_params_consumer(self):
+        return (self.flags & METHOD_CONSUME_TRAILING_PARAMS) > 0
+    
+    def is_type_bound(self):
+        return (self.flags & METHOD_BIND_TYPEVAR) > 0
 
     # 仮引数を追加
     def add_parameter(self,
@@ -73,12 +94,17 @@ class Method():
         typename,
         doc = "",
         default = MethodParameterNoDefault,
-        variable = False
+        variable = False,
+        *,
+        flags = 0
     ):
         f = 0
+        if flags:
+            f |= flags
         if variable:
             f |= PARAMETER_VARIABLE
         if default is MethodParameterNoDefault:
+            default = None
             f |= PARAMETER_REQUIRED
         p = MethodParameter(name, typename, doc, default, f)
         self.params.append(p)
@@ -95,7 +121,7 @@ class Method():
     def get_acceptable_argument_max(self) -> Union[int, None]:
         cnt = 0
         for p in self.params:
-            if p.is_raw_string() or p.is_variable():
+            if p.is_variable():
                 return None
             cnt += 1
         return cnt
@@ -113,41 +139,42 @@ class Method():
     #
     # 実装のロード
     #
-    def load_action(self, this_type):
+    def load(self, this_type):
         if self._action is not None:
-            return self._action
+            return
 
         if self.target is None:
             self.target = normalize_method_target(self.name)     
 
         # 実装コードを読み込む
-        from machaon.object.importer import get_importer
+        from machaon.object.importer import attribute_loader
         action = None
         source = None
         while True:
-            importer = get_importer(self.target)
-
-            # 1. 型定義のメソッドを取り出す
-            if importer is None:
-                typefn = this_type.get_method_delegation(self.target)
-                if typefn is not None:
-                    action = typefn
-                    source = "TypeMethod:{}".format(self.target)
-                    break
-        
-            # 2. 外部モジュールから定義をロードする
+            loader = attribute_loader(self.target)
             callobj = None
-            if importer is not None:
-                callobj = importer() # モジュールやメンバが見つからなければ例外が投げられる
+
+            if loader is None:
+                # 1. 型定義のメソッドを取り出す
+                typefn = this_type.method_delegation(self.target)
+                if typefn is not None:
+                    callobj = typefn
+                    source = "TypeMethod:{}".format(self.target)
+                    self.flags |= METHOD_BIND_TYPEVAR # 第一引数は型オブジェクトを渡す
+            else:
+                # 2. 外部モジュールから定義をロードする
+                callobj = loader() # モジュールやメンバが見つからなければ例外が投げられる
                 source = "ImportedMethod:{}".format(self.target)
             
             # アクションオブジェクトの初期化処理
             if hasattr(callobj, "describe_method"):
                 # アクションに定義されたメソッド定義処理があれば実行
                 callobj.describe_method(self)
+            elif hasattr(callobj, "__doc__") and callobj.__doc__ is not None:
+                # callobjのdocstringsを解析する。
+                self.load_syntax_from_docstring(callobj.__doc__, callobj)
             else:
-                # TODO: callobjのdocstringsを解析する。
-                pass
+                raise BadMethodDeclaration("メソッド定義がありません。メソッド 'describe_method' かドキュメント文字列で記述してください")
         
             if isinstance(callobj, type):
                 callobj = callobj()
@@ -160,7 +187,89 @@ class Method():
 
         self._action = action
         self.target = source
-        return action
+    
+    def is_loaded(self):
+        return self._action is not None
+
+    # docstringの解析で引数を追加する
+    def load_syntax_from_docstring(self, doc: str, function: Callable):
+        """ @method [alias-names]
+        メソッドの説明
+        Params:
+            caption (str): 見出し 
+            count (int): 回数
+        Returns:
+            str: 結果の文字列
+        """
+        sections = DocStringParser(doc, (
+            "Returns", 
+            "Params",
+            "Parameters",
+            "Arguments",
+            "Args",
+        ))
+        method_type, _, desc = sections.get_string("Summary").partition(" ")
+        if "[" in desc and "]" in desc:
+            _, _, desc = desc.partition("]") # エイリアス宣言を読み飛ばす
+
+        desc += sections.get_string("Description")
+        if desc:
+            self.doc = desc.strip()
+
+        if method_type == "@task":
+            self.flags |= METHOD_TASK
+        else:
+            self.flags = self.flags & (~METHOD_TASK)
+
+        #
+        funcsig = inspect.signature(function)
+        
+        # 引数
+        lines = sections.get_lines("Params", "Parameters", "Arguments", "Args")
+        for line in lines:
+            flags = 0
+
+            head, _, doc = [x.strip() for x in line.partition(":")]
+            if head.startswith("*"):
+                name = head[1:]
+                typename = "Any"
+                flags |= PARAMETER_VARIABLE
+            else:
+                name, _, paren = head.partition("(")
+                name = name.strip()
+                typename, _, _ = paren.partition(")")
+                typename = typename.strip()
+            
+            if typename.endswith("..."):
+                self.flags |= METHOD_CONSUME_TRAILING_PARAMS
+                typename = typename.rstrip(".")
+
+            p = funcsig.parameters.get(name)
+            if p is None:
+                raise BadMethodDeclaration()
+            
+            default = p.default
+            if default is inspect.Signature.empty:
+                default = None
+                flags |= PARAMETER_REQUIRED
+            
+            if p.kind == p.VAR_KEYWORD or p.kind == p.KEYWORD_ONLY:
+                raise BadMethodDeclaration("キーワード引数には未対応です")
+            
+            typename = normalize_typename(typename)
+            self.add_parameter(name, typename, doc, default, flags=flags)
+
+        # 戻り値
+        lines = sections.get_lines("Returns")
+        for line in lines:
+            typename, _, doc = [x.strip() for x in line.partition(":")]
+            typename = normalize_typename(typename)
+            self.add_result(typename, doc)
+    
+    # 直に設定
+    def set_action(self, action):
+        self._action = action
+
         
 #
 #
@@ -255,140 +364,84 @@ def method_result_declaration_chain(method, declaration):
     return trailing_call
 
 #
-# member <method-name> -> ReturnType
-# operator <method-name> -> ReturnType
-# task <method-name> -> ReturnType
 #
-def method_declaration_chain(traits, declaration):
-    decl, _, typename = [x.strip() for x in declaration.partition("->")]
-    method_type, _, names = [x.strip() for x in decl.partition(" ")]
-    name, *othernames = names.split()
+#
+def create_method_prototype(traits, method_type, target, name, othernames, resulttype, params, **kwargs):
+    if not resulttype:
+        resulttype = "Any"
     
-    if not typename:
-        typename = "Any"
-    
-    if not names:
-        names = method_type
-        method_type = "member"    
-    
-    defparams = None
-    istask = False
     if method_type == "task":
-        istask = True
+        kwargs["is_task"] = True
     elif method_type == "member":
-        defparams = []
-    elif method_type == "operator":
-        defparams = [("right", "Any", "第2引数")]
+        pass
 
-    #
-    def trailing_call(
-        method=None,
-        *, 
-        target=None, 
-        **kwargs
-    ):
-        kwargs.setdefault("is_task", istask)
+    if method is None:
+        method = Method(name=name, target=target, **kwargs)
+        for n, t, d in params:
+            method.add_parameter(n, t, doc=d)
+        method.add_result(resulttype)
+    
+    method.check_valid()
 
-        if method is None:
-            method = Method(name=name, target=target, **kwargs)
-            for n, t, d in defparams:
-                method.add_parameter(n, t, doc=d)
-            method.add_result(typename)
-        
-        method.check_valid()
+    traits.add_method(method)
+    for alias in othernames:
+        traits.add_method_alias(alias, name)
+    
+    return method
 
-        traits.add_method(method)
-        for alias in othernames:
-            traits.add_method_alias(alias, name)
-        
+#
+# prorotype + describe_method
+# )[method <method-name> -> ReturnType](
+#   parameter and result decl... (traits.describe_method)
+# )
+#
+def methoddecl_setter_chain(traits, method_type, declaration):
+    namerow, _, typename = [x.strip() for x in declaration.partition("->")]
+    names = namerow.split()
+    if len(names) == 0:
+        raise BadMethodDeclaration("Bad declaration syntax: [method|task <method-name> (-> <return-type>)]")
+
+    name, *othernames = names
+    
+    def trailing_call(method=None, *, target=None, **kwargs):
+        create_method_prototype(traits, method_type, target, name, othernames, typename, [], **kwargs)
         return traits
-
     return trailing_call
 
-
-"""
-declare_method("member position p -> Coord")(
-    doc='''座標'''
-)
-declare_method("operator less-than -> bool")(
-    doc='''比較する''',
-    param1_name = "target right: This",
-    param1_doc = ,
-    param1_default = ,
-)
-declare_method("operator less-than -> bool")(
-    Method(
-        target=""
-    )["target right: This"](
-        doc="右パラメータ"
-    )
-
-    doc='''比較する''',
-    param1_name = "target right: This",
-    param1_doc = ,
-    param1_default = ,
-)
-
-"""
-
-
-
+# 
+# 特定のドキュメント文字列を持った属性を列挙する
 #
-class TypeMethodAlias:
-    def __init__(self, name, dest):
-        self.name = name
-        self.dest = dest
-    
-    def get_name(self):
-        return self.name
-    
-    def get_destination(self):
-        return self.dest
+def methoddecl_collect_attribute(traits, describer):
+    for attrname in dir(describer):
+        attr = getattr(describer, attrname)
+        if attrname.startswith("__"):
+            continue
 
+        doc = getattr(attr, "__doc__", "")
+        if not doc:
+            continue
 
+        firstline, br, _ = doc.partition("\n")
+        if not br:
+            firstline = doc
+        
+        # メソッド宣言
+        firstline = firstline.strip()
+        method = None
+        if firstline.startswith("@method"):
+            method = Method(name=attrname, target=attrname)
+        elif firstline.startswith("@task"):
+            method = Method(name=attrname, target=attrname, is_task=True)
+        else:
+            continue
+        traits.add_method(method)
 
-"""
-class SomeObject:
-    def time(self):
-        ....
-    
-    def name(self):
-        ...
-    
-    def is_equal(self, right):
-        return True
-    
-    def make_index(self, root):
-        return make_index()
-    
-    @classmethod
-    def describe_object(cls, traits):
-        traits.describe(
+        # エイリアス宣言
+        aliasnames = []
+        if "[" in firstline and "]" in firstline:
+            _, _, aliasrow = firstline.partition("[")
+            aliasrow, _, _ = aliasrow.partition("]")
+            aliasnames.extend(aliasrow.strip().split())
 
-        )["member time"](
-
-        )["member name"](
-
-        )["operator is-equal"](
-            
-        )["task make-index: Index"](
-            traits.describe_method(
-                target=""
-            )["target page: int"](
-                doc='''対象頁番号'''
-            )["target bleed: int"](
-                doc='''裁ち落とし（mm）''',
-            )["target turtle: bool"](
-                doc='''タートルグラフィックス'''
-            )["-> int"](
-            )["-> "]
-        )
-
-
-
-
-
-
-
-
-"""
+        for aliasname in aliasnames:
+            traits.add_member_alias(aliasname, attrname)
