@@ -1,11 +1,13 @@
-from machaon.object.type import TypeTraits
-from machaon.object.method import Method
+from machaon.object.type import Type
+from machaon.object.method import normalize_method_target
 
 #
 # どんな型にも共通のメソッドを提供
 #
 def resolve_generic_method(name):
-    truename = "function_" + name
+    if name in operators:
+        name = operators[name]
+    truename = "function_" + normalize_method_target(name)
     fn = globals().get(truename, None)
     return fn
 
@@ -139,7 +141,34 @@ def function_or_less(left, right):
         return right
     return left
 
-def function_format(left, right: str) -> str:
+def function_in_format(left, right: str) -> str:
     fmt = "{0:" + right + "}"
     return fmt.format(left)
 
+#
+# 演算子と実装の対応
+#
+operators = {
+    "==" : "equal",
+    "!=" : "not-equal",
+    "<=" : "less-equal",
+    "<" : "less",
+    ">=" : "greater-equal",
+    ">" : "greater",
+    "+" : "add",
+    "-" : "sub",
+    "neg" : "negative",
+    "*" : "mul",
+    "**" : "pow",
+    "/" : "div",
+    "//" : "floordiv",
+    "%" : "mod",
+    "&" : "bitand",
+    "^" : "bitxor",
+    "|" : "bitor",
+    "~" : "bitinv",
+    ">>" : "rshift",
+    "<<" : "lshift",
+    "&&" : "and", 
+    "||" : "or",
+}

@@ -1,6 +1,6 @@
 import re
 
-from machaon.object.type import TypeTraits
+from machaon.object.type import Type
 from machaon.object.object import ObjectValue
 from machaon.object.message import MessageEngine
 
@@ -49,8 +49,15 @@ Window data column long
 """
 #-----------------------------------------------------------------------
 
-
-
+def assert_parsed(parser, lhs, rhs):
+    if lhs != rhs:
+        print("Assertion Failed: '{}' => {} is not equal to {}".format(parser.source, lhs, rhs))
+        print("")
+        print("Parser log: ")
+        parser.pprint_log()
+        return False
+    return True
+                
 def ptest(s, *rhs):
     from machaon.object.object import ObjectCollection
     from machaon.object.invocation import InvocationContext
@@ -64,14 +71,13 @@ def ptest(s, *rhs):
     
     parser = MessageEngine(s)
     parser.run(context, log=True)
-
-    assert [x.value for x in context.get_local_objects()] == list(rhs)
+    lhs = [x.value for x in context.clear_local_objects()]
+    assert_parsed(parser, tuple(lhs), tuple(rhs))
 
 def run(f):
     f()
 
 #
-@run
 def test_parse_literals():
     # static method
     ptest("1 add 2", 3)
@@ -80,38 +86,76 @@ def test_parse_literals():
     ptest("(5 add 6) neg", -11)
     ptest("(7 mul 8) add (9 mul 10) ", 7*8+9*10)
     ptest("(7 mul 8) add ((9 add (10 neg)) mul 11) ", 7*8+(9-10)*11)
-    ptest("42 format x", "2a")
+    ptest("7 mul 8 add 9 sub 10", (((7*8)+9)-10))
+    ptest("'573' length", 3)
+    ptest("42 in-format x", "2a")
     
     # dynamic method
     ptest("ABC startswith A", True)
     ptest("ABC ljust 5 _", "ABC__")
     ptest("ABC ljust (2 mul 2) _", "ABC_")
-    ptest("'ABCD{:04}HIJK{:02}OP' format 20 1", "ABCD0020HIJK01OP")
 
     # type method & string literal
     ptest("'9786' regmatch [0-9]+", True)
-    ptest("'9786' length", 4)
+    ptest("'ABCD{:04}HIJK{:02}OP' format 20 1", "ABCD0020HIJK01OP")
 
-    # object explicit ref
-    ptest("@this-year add 1", 2021)
-    ptest("@customer-name upper", "YOKOMIZO")
-    ptest("'Dr. ' + (@customer-name capitalize)", "Dr. Yokomizo")
+    # object ref
+    ptest("$this-year add 1", 2021)
+    ptest("$customer-name upper", "YOKOMIZO")
+    ptest("'Dr. ' + ($customer-name capitalize)", "Dr. Yokomizo")
+    ptest("$customer-name regmatch [a-zA-Z]+", True)
 
-    # object implicit ref
+    # constructor
+    ptest("Str -> 1) 'Beck' & 'Johny' Store ", "1) 'Beck' & 'Johny' Store ")
+    ptest("Int -> 0x98", 0x98)
 
 
-    """
-    assert p("0 add 2") == "(0 add 2)"
-    assert p("0 minus") == "(0 minus)"
-    assert p("0 add 1 minus") == "((0 add 1) minus)"
-    assert p("0 add 1 add 2 add 3") == "(((0 add 1) add 2) add 3)"
-    assert p("(0 add 1) add (2 add 3)") == "((0 add 1) add (2 add 3))"
-    assert p("((0 add 1) minus) add (2 add 3)") == "(((0 add 1) minus) add (2 add 3))"
-    #
-    assert p("0 add '1)skip'") == "(0 add 1)skip)"
-    assert p('''0 add "1) 'Beck' & 'Johny' Store "''') == '''(0 add 1) 'Beck' & 'Johny' Store )'''
-    """
-    
+def test_parse_function():
+    def ltest(s, subject, *rhs):
+        from machaon.object.object import ObjectCollection, Object
+        from machaon.object.invocation import InvocationContext
+        from machaon.object.fundamental import fundamental_type
+
+        context = InvocationContext(input_objects=ObjectCollection(), type_module=fundamental_type)
+        
+        engine = MessageEngine(s)
+        engine.run(context, log=True)
+        objs = context.clear_local_objects()
+        assert_parsed(engine, objs[0].get_typename() if objs else None, "Function")
+
+        fundamental_type.define(memberdefs={
+            "name" : "Str",
+            "type" : "Str",
+            "sex" : "Str",
+            "age" : "Int",
+        }, typename="Dog")
+
+        subcontext = context.inherit()
+        subj = Object(fundamental_type.Dog, subject)
+        fn = objs[0].value
+
+        lhs = fn.run(subj, subcontext, log=True)
+        assert_parsed(fn.message, tuple(x.value for x in lhs), rhs)
+        
+        # 再入
+        lhs = fn.run(subj, subcontext, log=True)
+        assert_parsed(fn.message, tuple(x.value for x in lhs), rhs)
+
+
+    lucky = {
+        "name" : "lucky",
+        "type" : "Golden retriever",
+        "sex" : "female",
+        "age" : 3,
+    }
+    ltest("Function new @name == lucky", lucky, True)
+    ltest("Function new @type startswith Golden", lucky, True)
+    ltest("Function new @age * 10", lucky, 30)
+    ltest("Function new (@age * 5) == 25 || @name == lucky", lucky, True)
+    ltest("@ -> 32 * 45 ", lucky, 32 * 45)
+
+    # $Sheet filter -> @name startswith -> Qliphort Genius [->] 直前のセレクタの要求する型を暗黙のレシーバとし、newを実行する
+
 
 
 

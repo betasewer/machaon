@@ -1,7 +1,7 @@
 import ast
 from typing import Dict, Any, List, Sequence, Optional
 
-from machaon.object.type import TypeTraits, TypeModule
+from machaon.object.type import Type, TypeModule
 from machaon.object.object import Object
 
 # imported from...
@@ -26,7 +26,7 @@ class FormulaParser:
             typemodule=None
         ):
         self.typemodule: Optional[TypeModule] = typemodule
-        self.subject_type: Optional[TypeTraits] = subject_type
+        self.subject_type: Optional[Type] = subject_type
         self.related_members: List[str] = [] 
         
     # 1. トークンを受け取る
@@ -251,7 +251,7 @@ class Formula():
 #
 # 式からパースする
 #
-def parse_formula(expression: str, typemodule: TypeModule = None, subject_type: TypeTraits = None) -> Formula:
+def parse_formula(expression: str, typemodule: TypeModule = None, subject_type: Type = None) -> Formula:
     parser = FormulaParser(subject_type, typemodule)
     tokens = tokenize_expression(expression)
     expr = parser.parse(tokens)

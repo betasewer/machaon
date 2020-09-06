@@ -1,26 +1,67 @@
 import re
 
-from machaon.object.type import TypeTraits, TypeModule
+from machaon.object.type import Type, TypeModule
+from machaon.object.object import Object
 
 fundamental_type = TypeModule()
 
 #
-#
-#
-@fundamental_type.definition()
-class Str(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        traits.describe(
-            doc="Python.str",
-            value_type=str
-        )["method"](
-            "regmatch",
-            "regsearch",
-            "format"
-        )
+class UnsupportedMethod(Exception):
+    pass
 
-    def construct_from_string(self, s):
+# ----------------------------------------------------------
+#
+#  基本型
+#
+# ----------------------------------------------------------
+@fundamental_type.definition(typename="Type")
+class TypeType():
+    """型。
+    """
+
+    def construct(self, s):
+        raise UnsupportedMethod()
+
+    def stringify(self, v):
+        raise UnsupportedMethod()
+
+    #
+    # 演算子
+    #
+    def new(self, type, parameter):
+        '''@method [->]
+        文字列からインスタンスを生成する。
+        Params:
+            type (Type): 型
+            parameter (str...): パラメータ文字列
+        Returns:
+            Object: オブジェクト
+        '''
+        value = type.construct_from_string(parameter)
+        return Object(type, value)
+
+
+@fundamental_type.definition(typename="Function")
+class FunctionType():
+    """引数を一つとるメッセージ。
+    ValueType: machaon.object.message.Function
+    """
+
+    def stringify(self, f):
+        return f.get_expr()
+
+# ----------------------------------------------------------
+#
+#  Pythonのビルトイン型
+#
+# ----------------------------------------------------------
+@fundamental_type.definition(typename="Str")
+class StrType():
+    """Python.str
+    文字列。
+    ValueType: str
+    """
+    def construct(self, s):
         return s
     
     def stringify(self, v):
@@ -30,13 +71,13 @@ class Str(TypeTraits):
     # 演算子
     #
     def regmatch(self, s, pattern):
-        '''
-        正規表現にマッチするかを調べる
-        
-        Str: 文字列
-        Str: 正規表現
-        ->
-        Bool: マッチ成功か
+        '''@method
+        正規表現に先頭から一致するかを調べる。
+        Params:
+            s (str): 文字列
+            pattern (str): 正規表現
+        Returns:
+            bool: 一致するか
         '''
         m = re.match(pattern, s)
         if m:
@@ -44,13 +85,13 @@ class Str(TypeTraits):
         return False
     
     def regsearch(self, s, pattern):
-        '''
-        正規表現に一部が適合するかを調べる
-
-        Str: 文字列
-        Str: 正規表現
-        -> 
-        Bool: 適合したか
+        '''@method
+        正規表現にいずれかの部分が一致するかを調べる。
+        Params:
+            s (str): 文字列
+            pattern (str): 正規表現
+        Returns:
+            bool: 一致するか
         '''
         m = re.search(pattern, s)
         if m:
@@ -58,29 +99,24 @@ class Str(TypeTraits):
         return False
     
     def format(self, s, *args):
-        """
-        引数から書式にしたがって文字列を作成する
-
-        Str: 書式
-        *Any: 引数
-        ->
-        Str: 文字列
+        """@method
+        引数から書式にしたがって文字列を作成する。
+        Params:
+            s (str): 文字列
+            *args: 任意の引数
+        Returns:
+            str: 文字列
         """
         return s.format(*args)
 
-#
-#
-#
-@fundamental_type.definition()
-class Bool(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        traits.describe(
-            doc="True/False",
-            value_type=bool
-        )
+@fundamental_type.definition(typename="Bool")
+class BoolType():
+    """Python.bool
+    真偽値。
+    ValueType: bool
+    """
 
-    def convert_from_string(self, s):
+    def construct(self, s):
         if s == "True":
             return True
         elif s == "False":
@@ -90,95 +126,67 @@ class Bool(TypeTraits):
         else:
             raise ValueError(s)
 
-#
-#
-#
-@fundamental_type.definition()
-class Int(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        traits.describe(
-            doc="整数",
-            value_type=int
-        )
+@fundamental_type.definition(typename="Int")
+class IntType():
+    """Python.int
+    整数。
+    ValueType: int
+    """
 
-    def convert_from_string(self, s):
+    def construct(self, s):
         return int(s, 0)
 
-#
-#
-#
-@fundamental_type.definition()
-class Float(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        traits.describe(
-            doc="浮動小数",
-            value_type=float
-        )
+@fundamental_type.definition(typename="Float")
+class FloatType():
+    """Python.float
+    浮動小数点。
+    ValueType: float
+    """
 
-    def convert_from_string(self, s):
-        return float(s)
 
-#
-#
-#
-@fundamental_type.definition()
-class Complex(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        traits.describe(
-            doc="複素数",
-            value_type=complex
-        )
+@fundamental_type.definition(typename="Complex")
+class ComplexType():
+    """Python.complex
+    複素数。
+    ValueType: complex
+    """
 
-    def convert_from_string(self, s):
-        return complex(s)
 
+# ----------------------------------------------------------
 #
+#  その他のデータ型
 #
-#
-@fundamental_type.definition()
-class DataviewType(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        from machaon.object.dataset import DataView
-        traits.describe(
-            typename="Dataview", 
-            doc="データビュー",
-            value_type=DataView
-        )
+# ----------------------------------------------------------
+@fundamental_type.definition(typename="Dataview")
+class DataviewType():    
+    """
+    データ集合。
+    ValueType: machaon.object.dataset.DataView
+    """
 
-    def convert_from_string(self, s):
-        raise ValueError("unsupported")
+    def construct(self, s):
+        raise UnsupportedMethod()
 
-    def convert_to_string(self, v):
-        raise ValueError("unsupported")
+    def stringify(self, v):
+        raise UnsupportedMethod()
 
     def make_summary(self, view):
         itemtype = view.itemtype
         col = ", ".join([x.get_name() for x in view.get_current_columns()])
         return "{}：{}\n({})\n{}件のアイテム".format(itemtype.typename, itemtype.description, col, view.count())
 
-#
-#
-#
-@fundamental_type.definition()
-class ProcessErrorType(TypeTraits):
-    @classmethod
-    def describe_object(self, traits):
-        from machaon.process import ProcessError
-        traits.describe(
-            "ProcessError", 
-            doc="プロセスで発生したエラー",
-            value_type=ProcessError
-        )
+@fundamental_type.definition(typename="ProcessError")
+class ProcessErrorType():
+    """
+    プロセスで発生したエラー。
+    ValueType: machaon.process.ProcessError
+    """
 
-    def convert_from_string(self, s):
-        raise ValueError("unsupported")
+    def construct(self, s):
+        raise UnsupportedMethod()
 
-    def convert_to_string(self, v):
-        raise ValueError("unsupported")
+    def stringify(self, v):
+        raise UnsupportedMethod()
 
     def make_summary(self, error):
         excep, _ = error.get_traces()

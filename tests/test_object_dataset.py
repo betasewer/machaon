@@ -9,6 +9,9 @@ from machaon.object.object import ObjectCollection
 from machaon.object.sort import ValueWrapper
 
 class Employee():
+    """
+    
+    """
     def __init__(self, name, postcode="000-0000"):
         self._name = name
         self._postcode = postcode

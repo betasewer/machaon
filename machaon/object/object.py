@@ -1,7 +1,8 @@
 from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
 from collections import OrderedDict, defaultdict
 
-from machaon.object.type import TypeTraits
+from machaon.object.type import Type
+from machaon.object.typename import normalize_typename
 
 # imported from...
 # desktop
@@ -22,33 +23,16 @@ class ObjectValue():
 class Object():
     def __init__(self, type, value): # デフォルトは空文字列
         self.value: Any = value
-        self.type: TypeTraits = type
-        if not isinstance(self.type, TypeTraits):
-            raise TypeError("'type' must be TypeTraits instance")
+        self.type: Type = type
+        if not isinstance(self.type, Type):
+            raise TypeError("'type' must be Type instance")
 
     def __repr__(self):
-        return "<Object {} '{}' = {}>".format(self.type.typename, self.name, self.value)
+        return "<Object {1} [{0}]>".format(self.type.typename, self.value)
     
     def get_typename(self):
         return self.type.typename
-    
-    # メソッド名を解決する
-    """
-    def resolve_method(self, method_name):
-        return ObjectOperator(method_name, self.type)
 
-    # メソッド名を解決し呼び出す
-    def call_method(self, method_name, *args, printer=False) -> ObjectValue:
-        method = self.resolve_method(method_name)
-        if printer:
-            spirit = args[0]
-            method(self.value, spirit, *args[1:])
-            return ObjectValue(None, None)
-        else:
-            ret = method(self.value, *args)
-            return ObjectValue(type(ret), ret)
-    """
-    
     #
     def to_string(self) -> str:
         return self.type.convert_to_string(self.value)
@@ -94,8 +78,8 @@ class ObjectCollection():
         self._typemap: DefaultDict[str, List[int]] = defaultdict(list)
     
     # コンストラクタを実行しつつオブジェクトを新規作成
-    def new(self, name: str, type: TypeTraits, *args, **kwargs) -> ObjectCollectionItem:
-        if not isinstance(name, str) or not isinstance(type, TypeTraits):
+    def new(self, name: str, type: Type, *args, **kwargs) -> ObjectCollectionItem:
+        if not isinstance(name, str) or not isinstance(type, Type):
             raise TypeError()
         value_type = type.get_value_type()
         if len(args)==1 and len(kwargs)==0 and isinstance(args[0], value_type):
@@ -127,6 +111,7 @@ class ObjectCollection():
 
     # 型名で検索する
     def pick_by_type(self, typename) -> Generator[ObjectCollectionItem, None, None]:
+        typename = normalize_typename(typename)
         for ident in self._typemap[typename]:
             yield self._items[ident]
             
