@@ -1,17 +1,10 @@
 import pytest
-#from machaon.process import ProcessHive, ProcessChamber, Process
+from machaon.process import ProcessHive, ProcessChamber, Process
 
-proc_ = 0
-def newproc() -> Process:
-    global proc_
-    proc_ += 1
-    return Process("process{}".format(proc_))
-
-def new_activate(hive, proc: Process) -> ProcessChamber:
-    chm = hive.new(proc) # 自動でactiveにする
-    return chm
-
-def test_activate():
+#
+#
+#
+def test_chamber_activate():
     hive = ProcessHive()
 
     # 空の状態
@@ -21,17 +14,17 @@ def test_activate():
     assert hive.get_previous_active() is None
 
     # new activate
-    chm1 = new_activate(hive, newproc())
+    chm1 = hive.addnew()
     assert hive.count() == 1
     assert hive.get_active() is chm1
     assert hive.get_previous_active() is None
 
-    chm2 = new_activate(hive, newproc())
+    chm2 = hive.addnew()
     assert hive.count() == 2
     assert hive.get_active() is chm2
     assert hive.get_previous_active() is chm1
 
-    chm3 = new_activate(hive, newproc())
+    chm3 = hive.addnew()
     assert hive.get_active() is chm3
     assert hive.get_previous_active() is chm2
 
@@ -59,9 +52,9 @@ def test_activate():
     assert hive.count() == 0
 
     # remove background
-    chm1 = new_activate(hive, newproc())
-    chm2 = new_activate(hive, newproc())
-    chm3 = new_activate(hive, newproc()) # active
+    chm1 = hive.addnew()
+    chm2 = hive.addnew()
+    chm3 = hive.addnew() # active
     assert list(hive.rhistory()) == [chm3.get_index(), chm2.get_index(), chm1.get_index()]
 
     assert hive.get_active() is chm3
@@ -85,11 +78,14 @@ def test_remove_empty():
     hive = ProcessHive()
     hive.remove()
 
-def test_getnextindex():
+#
+#
+#
+def test_chamber_index():
     hive = ProcessHive()
-    chm1 = new_activate(hive, newproc())
-    chm2 = new_activate(hive, newproc())
-    chm3 = new_activate(hive, newproc()) # active chm3
+    chm1 = hive.addnew()
+    chm2 = hive.addnew()
+    chm3 = hive.addnew() # active chm3
     
     # 
     assert hive.get_next_index() is None
@@ -104,10 +100,9 @@ def test_getnextindex():
     assert hive.get_next_index(delta=-1) is None
 
     hive.remove(chm3.get_index()) 
-    chm4 = hive.new(newproc())
-    chm5 = hive.new(newproc())
+    chm4 = hive.addnew()
+    chm5 = hive.addnew()
     hive.activate(chm1.get_index()) # active chm1 : 1 (2) (3) 4 5  
     assert hive.get_next_index(delta=1) == chm4.get_index()
     assert hive.get_next_index(delta=2) == chm5.get_index()
-
 

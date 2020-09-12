@@ -1,4 +1,5 @@
 import ast
+import sys
 from itertools import zip_longest
 from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
@@ -91,6 +92,11 @@ class Message:
             return self.selector.is_parameter_consumer()
         return False
     
+    def is_task(self):
+        if self.selector:
+            return self.selector.is_task()
+        return False
+    
     #
     def eval(self, context) -> Optional[Object]:
         if self.reciever is None or self.selector is None:
@@ -126,6 +132,12 @@ class Message:
             return self.reciever.get_object(context).type
         else:
             return self.reciever.type
+    
+    def get_result_type(self, context):
+        typenames = self.selector.get_result_typenames()
+        if typenames:
+            return context.get_type(typenames[0])
+        raise ValueError("返り値の型を導出できません")
 
     #
     # デバッグ用
@@ -207,19 +219,20 @@ def select_literal(context, string, tokentype) -> Object:
     return Object(context.get_type(typename), value)
 
 # 無名関数の引数参照
-def select_la_subject_value(context, key=None) -> Optional[Object]:
+def select_la_subject_value(subject, key=None) -> Union[Object, type]:
     if key is None:
-        obj = context.get_subject_object()
-        if obj is None:
+        if not isinstance(subject, Object):
             raise BadExpressionError("No object specified to lambda")
-        return obj
+        return subject
+    elif isinstance(subject, dict):
+        if key not in subject:
+            raise BadExpressionError("Object value '{}' does not exist".format(key))
+        return subject[key]
     else:
-        vs = context.get_subject_values()
-        if vs is not None:
-            if key not in vs:
-                raise BadExpressionError("Object value '{}' does not exist".format(key))
-            return vs[key]
-    return None
+        return DYNAMIC_SUBJECT_VALUE
+
+class DYNAMIC_SUBJECT_VALUE:
+    pass
 
 # メソッド
 def select_method(name, typetraits=None, *, modbits=None):
@@ -251,7 +264,7 @@ def select_method(name, typetraits=None, *, modbits=None):
             return TypeMethodInvocation(meth, modbits)
     
     # グローバル定義の関数
-    from machaon.object.generic import resolve_generic_method
+    from machaon.object.generic_method import resolve_generic_method
     genfn = resolve_generic_method(name)
     if genfn is not None:
         return StaticMethodInvocation(genfn, modbits)
@@ -296,11 +309,12 @@ SIGIL_LAMBDA_SUBJECT = "@"
 #
 #
 class MessageEngine():
-    def __init__(self, expression):
+    def __init__(self, expression="", *, codes=None):
         self.source = expression
         self._readings = []
         self._trailing_as_parameter = False
-        self._codes = []
+        self._codes = list(codes) if codes else []
+        self._temp_result_stack = []
         self.log = []
 
     # 入力文字列をトークンに
@@ -348,7 +362,7 @@ class MessageEngine():
                 raise SyntaxError("終わり括弧が足りません")
 
     # 構文を組み立てる
-    def build_message(self, token: str, tokentype: int, context: Any) -> Tuple: # (int, Any...)
+    def build_code(self, token: str, tokentype: int, context: Any) -> Tuple: # (int, Any...)
         reading = None # type: Optional[Message]
         if self._readings:
             reading = self._readings[-1]
@@ -425,22 +439,12 @@ class MessageEngine():
                 token = "Function"
                 # 型名として扱う
             else:
-                valobj = select_la_subject_value(context, key)
-                if valobj is not None:
-                    if expect == EXPECT_ARGUMENT:
-                        return (tokenbits | TERM_LAST_BLOCK_ARG, valobj) # 前のメッセージの引数になる
+                subj = context.get_subject()
+                if subj is None:
+                    raise BadExpressionError("無名関数の引数を参照しようとしましたが、与えられていません")
 
-                    if expect == EXPECT_RECIEVER:
-                        return (tokenbits | TERM_LAST_BLOCK_RECIEVER, valobj) # 前のメッセージのレシーバになる
-                    
-                    if expect == EXPECT_NOTHING:
-                        return (tokenbits | TERM_NEW_BLOCK_ISOLATED, valobj) # 新しいメッセージのレシーバになる
-
-                else:
-                    subj = context.get_subject_object()
-                    if subj is None:
-                        raise BadExpressionError("無名関数の引数を参照しようとしましたが、与えられていません")
-
+                valobj = select_la_subject_value(subj, key)
+                if valobj is DYNAMIC_SUBJECT_VALUE:
                     meth = select_method(key, subj.type)
                     
                     if expect == EXPECT_ARGUMENT:
@@ -451,6 +455,16 @@ class MessageEngine():
                     
                     if expect == EXPECT_NOTHING:
                         return (tokenbits | TERM_NEW_BLOCK_ISOLATED, subj, meth) # 新しいメッセージのレシーバになる
+
+                else:
+                    if expect == EXPECT_ARGUMENT:
+                        return (tokenbits | TERM_LAST_BLOCK_ARG, valobj) # 前のメッセージの引数になる
+
+                    if expect == EXPECT_RECIEVER:
+                        return (tokenbits | TERM_LAST_BLOCK_RECIEVER, valobj) # 前のメッセージのレシーバになる
+                    
+                    if expect == EXPECT_NOTHING:
+                        return (tokenbits | TERM_NEW_BLOCK_ISOLATED, valobj) # 新しいメッセージのレシーバになる
 
         # 型名
         tt = select_type_ref(context, token)
@@ -495,7 +509,7 @@ class MessageEngine():
         raise BadExpressionError("Could not parse")
 
     # 構文木を組みたてつつ、完成したところからどんどん実行
-    def send_message_step(self, code, values, context):
+    def reduce_step(self, code, values, context) -> Generator[Message, None, None]:
         code1 = code & 0x0F
         if code1 == TERM_LAST_BLOCK_RECIEVER:
             self._readings[-1].set_reciever(values[0])
@@ -535,22 +549,18 @@ class MessageEngine():
             self._trailing_as_parameter = True
 
         # 完成したメッセージをキューから取り出す
-        completes = []
+        completed = 0
         for msg in reversed(self._readings):
             if msg.is_specified():
-                # 実行する
-                result = msg.eval(context)
-                if result is None:
-                    return None # エラー発生
+                yield msg
+                result = self._temp_result_stack.pop()
                 context.push_local_object(result) # スタックに乗せる
-                completes.append(msg)
+                completed += 1
             else:
                 break
 
-        if completes:
-            del self._readings[-len(completes):]
-        
-        return completes
+        if completed>0:
+            del self._readings[-completed:]
     
     #
     def tokenizer(self, context, *, logger=None):
@@ -563,10 +573,11 @@ class MessageEngine():
                 logger(0, token, tokentype)
 
                 try:
-                    code, *values = self.build_message(token, tokentype, context)
+                    code, *values = self.build_code(token, tokentype, context)
                     logger(1, code, values)
                     yield (code, values)
                 except Exception as e:
+                    context.set_pre_invoke_error(e)
                     logger(-1, e)
                     break
         else:
@@ -576,37 +587,61 @@ class MessageEngine():
                 logger(1, code, values)
                 yield (code, values)
 
-    #
-    def run(self, context, *, log=False):
+    # メッセージを実行するジェネレータ。タスク関数が来ると止まる
+    def runner(self, context, *, log) -> Generator[Message, None, None]:
         self._trailing_as_parameter = False # リセット
         logger = self._begin_logger(dummy=not log)
         
         # コードから構文を組み立てつつ随時実行
         codes = []
         for code, values in self.tokenizer(context, logger=logger):
+            steps = self.reduce_step(code, values, context)
+            completemsgs = []
             try:
-                completes = self.send_message_step(code, values, context)
+                for msg in steps:
+                    yield msg
+                    result = msg.eval(context)
+                    if result is None:
+                        return # エラー発生
+                    self._temp_result_stack.append(result) # reduce_stepのジェネレータへの受け渡しにのみ使用するスタック
+                    completemsgs.append(msg)
             except Exception as e:
+                context.set_pre_invoke_error(e)
                 logger(-1, e)
-                return
+                break
 
-            if completes is None:
+            if completemsgs is None:
                 logger(-1, context.get_last_exception())
                 return
             else:
-                logger(2, completes)
+                logger(2, completemsgs)
             
             codes.append((code, *values))
 
-        self._codes = codes
+        if not context.is_failed():
+            self._codes = codes
+    
+    # 実行
+    def run(self, context, *, log=False, runner=None) -> Tuple[Any,...]:
+        if runner is None:
+            # タスク含め全てを同期で実行する
+            runner = self.runner(context, log=log)
+        for _ in runner: pass
 
-    #
+        # 返り値はローカルスタックに置かれている
+        returns = context.clear_local_objects()
+        return tuple(returns)
+
+    # トークン解析処理のみを行う
     def tokenize(self, context, *, logger=None):
-        self._codes = []
-        self._codes.extend(self.tokenizer(context, logger=logger))
+        self.set_codes(self.tokenizer(context, logger=logger))
         return self._codes
+    
+    def set_codes(self, codes):
+        self._codes = []
+        self._codes.extend(codes)
 
-    #
+    # ログを追記する
     def _logger(self, state, *values):
         if state == 0:
             self.log.append([])
@@ -627,7 +662,13 @@ class MessageEngine():
         elif state == -1:
             self.log.append([])
             err = values[0]
-            values = ("!!! Error occurred on evaluation: {} {}".format(type(err).__name__, err), )
+            msg = ["!!! Error occurred on evaluation: {} {}".format(type(err).__name__, err)]
+            import traceback
+            _, _, tb = sys.exc_info()
+            for line in traceback.format_tb(tb):
+                msg.append(line.rstrip())
+            
+            values = ("\n".join(msg), )
 
         self.log[-1].extend(values)
     
@@ -640,14 +681,19 @@ class MessageEngine():
             logger = self._logger
         return logger
 
+    # 蓄積されたログを出力する
     def pprint_log(self):
+        print("Message: {}".format(self.source))
+        if not self.log:
+            print(" --- no log ---")
+            return
+        
         rowtitles = ("token", "token-type", "meaning", "yielded", "done-branch")
         for i, logrow in enumerate(self.log):
             print("[{}]-----------------".format(i))
             for title, value in zip(rowtitles, logrow):
                 pad = 16-len(title)
                 print(" {}:{}{}".format(title, pad*" ", value))
-
 
 # ログ表示用に定数名を得る
 def _view_constant(prefix, code):
@@ -681,9 +727,34 @@ class Function():
     def compile(self, context):
         self.message.tokenize(context)
 
-    def run(self, subject, context, log=False):
+    def run(self, subject, context, log=False) -> Tuple[Any,...]:
         context.set_subject(subject)
-        self.message.run(context, log=True)
-        returns = context.clear_local_objects()
-        context.set_subject(None) # クリアする
-        return tuple(returns)
+        returns = self.message.run(context, log=log)
+        context.clear_subject() # 主題をクリアする
+        return returns
+
+#
+# 主題オブジェクトのメンバ（引数0のメソッド）を取得する
+#
+class MemberGetter():
+    def __init__(self, name, method):
+        self.name = name
+        self.method = method
+        self.message = None # 最後に実行されたメッセージが入る
+        
+    def get_expr(self):
+        return self.name
+    
+    def run(self, subject, context, log=False):
+        # 主題オブジェクトはコンテキストに載せない
+        value = select_la_subject_value(subject, self.name)
+        if value is DYNAMIC_SUBJECT_VALUE:
+            message = MessageEngine(codes=[
+                (TERM_NEW_BLOCK_ISOLATED + TERM_END_LAST_BLOCK, subject, self.method),
+            ]) # 直に取得コードを記述
+            returns = message.run(context, log=log)
+            self.message = message
+            return returns
+        else:
+            return (value,)
+

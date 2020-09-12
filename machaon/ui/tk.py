@@ -11,7 +11,6 @@ import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
 from machaon.ui.basic import Launcher
-from machaon.command import describe_command, describe_command_package
 from machaon.process import ProcessMessage, ProcessChamber
 from machaon.cui import get_text_width, ljust, composit_text, collapse_text
 import machaon.platforms
@@ -782,7 +781,7 @@ class tkLauncher(Launcher):
         self.chambermenu.configure(state='disable')
 
         # プロセスの状態を反映する
-        if chamber.is_running():
+        if not chamber.is_finished():
             self.update_chamber_menu(active=chamber)
         else:
             self.update_chamber_menu(active=chamber, ceased=chamber)
@@ -857,7 +856,7 @@ class tkLauncher(Launcher):
                     continue
                 chmindex = int(idx)
 
-        if chmindex is not None and chmindex != self.app.get_active_chamber_index():
+        if chmindex is not None and not self.app.is_active_chamber(chmindex):
             chm = self.app.select_chamber(chmindex, activate=True)
             self.update_active_chamber(chm)
 

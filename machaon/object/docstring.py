@@ -1,4 +1,5 @@
 from itertools import takewhile
+import os.path
 
 #
 class DocStringParseError(Exception):
@@ -14,16 +15,26 @@ class DocStringParser():
         lines = doc.splitlines()
         if not lines:
             raise DocStringParseError()
-        
+
+        # 無視するべき余分なインデント
+        indent = len(os.path.commonprefix(lines[1:]))
+
         sections["Summary"].append(lines[0])
 
         key = "Description"
         for line in lines[1:]:
+            line = line[indent:]
             part, sep, rest = line.partition(":")
-            if sep and part.strip() in sections:
-                key = part.strip()
-                if rest:
-                    sections[key].append(rest)
+            if sep:
+                newkey = part.strip()
+                if part.startswith("  ") or " " in newkey:
+                    sections[key].append(line) # 空白2つ以上ではじまるか、空白が語中に含まれているならセクション名とみなさない
+                elif newkey not in sections:
+                    raise DocStringParseError("Unknown section name: {}".format(newkey), doc)
+                else:
+                    if rest:
+                        sections[newkey].append(rest)
+                    key = newkey
             else:
                 sections[key].append(line)
         

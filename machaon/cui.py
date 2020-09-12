@@ -236,7 +236,7 @@ class MiniProgressDisplay:
             suma = 0
         else:
             suma += delta
-            self.spirit.delete_message()
+            self.spirit.post("delete-message")
 
         if self.marquee is not None:
             mq = self.marquee
@@ -259,7 +259,7 @@ class MiniProgressDisplay:
             bar = "[{}{}] {}% ({}/{})".format(head*"o", rest*"-", round(hund), isum, itot)
 
         bar = "{}: ".format(self.title) + bar
-        self.spirit.custom_message(self.tag, bar)
+        self.spirit.post(self.tag, bar)
         self.suma = suma
 
     #
@@ -268,4 +268,4 @@ class MiniProgressDisplay:
             self.spirit.delete_message()
         bar = "[{}] 完了 ({})".format("o"*self.width, total)
         bar = "{}: ".format(self.title) + bar
-        self.spirit.custom_message(self.tag, bar)
+        self.spirit.post(self.tag, bar)

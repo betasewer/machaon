@@ -33,6 +33,10 @@ class UnsupportedMember(Exception):
     pass
 
 #
+TYPE_METHODS_INSTANCE_BOUND = 0x01
+TYPE_METHODS_TYPE_BOUND = 0x02
+
+#
 #
 #
 class Type():
@@ -42,7 +46,7 @@ class Type():
         self.typename: str = None
         self.doc: str = ""
         self.flags = 0
-        self.value_type: Callable = str # デフォルト型は文字列
+        self.value_type: Callable = None
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, TypeMemberAlias] = {}
         self._implklass = implklass
@@ -109,10 +113,8 @@ class Type():
             meth.load(self)
         return meth
 
-    def enum_methods(self, arity=None):
+    def enum_methods(self):
         for meth in self._methods.values():
-            if arity is not None and meth.arity != arity:
-                continue
             yield meth
     
     def add_method(self, method):
@@ -132,6 +134,12 @@ class Type():
     
     def get_method_delegator(self):
         return self._implklass
+    
+    def is_method_bound(self, bound):
+        if bound == "TYPE":
+            return (self.flags & TYPE_METHODS_TYPE_BOUND) > 0
+        else: # bound == "INSTANCE"
+            return (self.flags & TYPE_METHODS_INSTANCE_BOUND) > 0
 
     #
     # メソッド名のエイリアスを取得する
@@ -267,6 +275,12 @@ class Type():
         
         if not self.value_type and isinstance(describer, type):
             self.value_type = describer
+        
+        # メソッドに渡すselfの意味
+        if self.value_type is describer:
+            self.flags |= TYPE_METHODS_INSTANCE_BOUND
+        else:
+            self.flags |= TYPE_METHODS_TYPE_BOUND
         
         if isinstance(describer, type):
             # typemodule.getで識別子として使用可能にする

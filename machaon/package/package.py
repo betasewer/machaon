@@ -9,7 +9,6 @@ import importlib
 from typing import Dict, Any, Union, List, Optional
 
 from machaon.milestone import milestone, milestone_msg
-from machaon.command import describe_command_package, describe_command, CommandPackage
 from machaon.package.repository import RepositoryURLError
 
 #
@@ -113,7 +112,7 @@ class package():
                 return False
         return True
 
-    def load_command_builder(self) -> CommandPackage:
+    def load_command_builder(self):
         spec = importlib.util.find_spec(self.entrymodule)
         if spec is None:
             raise ModuleNotFoundError(self.entrymodule)

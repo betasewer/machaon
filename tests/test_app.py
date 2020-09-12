@@ -1,11 +1,11 @@
-#from machaon.app import AppRoot
-#from machaon.process import Spirit
+from machaon.app import AppRoot
+from machaon.process import Spirit
 
 def test_spirit_currentdir(tmpdir):
     app = AppRoot()
     assert app.ui is None
-    assert app.cmdengine is None
     assert app.processhive is None
+
     # current directory
     assert not app.curdir
     spi = Spirit(app)

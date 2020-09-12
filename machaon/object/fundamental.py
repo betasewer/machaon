@@ -17,6 +17,7 @@ class UnsupportedMethod(Exception):
 @fundamental_type.definition(typename="Type")
 class TypeType():
     """型。
+    ValueType: machaon.object.type.Type
     """
 
     def construct(self, s):

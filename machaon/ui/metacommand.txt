@@ -1,0 +1,342 @@
+
+    #
+    def invoke_meta_command(self, command):
+        commandhead, _, commandtail = [x.strip() for x in command.partition(" ")]
+        
+        try:
+            if not commandhead:
+                msg = None
+
+            elif commandhead[0].isdigit():
+                # データのインデックスによる即時選択
+                procindex, itemindex = parse_procindex(commandhead)
+                try:
+                    index = int(itemindex)
+                except ValueError as e:
+                    msg = str(e)
+                else:
+                    msg = self.meta_command_select_dataview(index, procindex)
+                    if commandtail:
+                        msg = self.meta_command_show_dataview_item(None, procindex, commandtail, toinput=True)
+
+            elif command.startswith("v"):
+                # データビューのフィルター・ソートの指定
+                expr = command[1:]
+                msg = self.meta_command_dataview_operation(expr.strip())
+                
+            elif commandhead.startswith("a"):
+                # アクティブなコマンドの引数をコマンド欄に展開する
+                procindex, _ = parse_procindex(commandhead[len("a"):])
+                argname, _, restcommand = commandtail.partition(" ")
+                msg = self.meta_command_reinput_process_arg(argname, procindex, restcommand)
+
+            elif command.startswith("!"):
+                # Pythonの式を評価する
+                libnames, expr = parse_procindex(command[1:])
+                msg = self.meta_command_eval_py(expr, libnames.split())
+            
+            elif commandhead.startswith("put"):
+                # データビューの選択アイテムの値を画面に展開する
+                procindex, itemname = parse_procindex(commandhead[len("put"):])
+                msg = self.meta_command_show_dataview_item(itemname, procindex, "", toinput=False)
+            
+            elif commandhead.startswith("="):
+                # データビューの選択アイテムの値をコマンド欄に展開する
+                procindex, itemname = parse_procindex(commandhead[1:])
+                msg = self.meta_command_show_dataview_item(itemname, procindex, commandtail, toinput=True)
+            
+            elif command.startswith("sortby"):
+                # データビューのフィルター・ソートの指定
+                expr = "/sortby " + command[len("sortby"):]
+                msg = self.meta_command_dataview_operation(expr.strip())
+                
+            elif command.startswith("where"):
+                # データビューのフィルター・ソートの指定
+                expr = "/where " + command[len("where"):]
+                msg = self.meta_command_dataview_operation(expr.strip())
+
+            elif commandhead.startswith("pred"):
+                # データビューのカラムの一覧を現在のプロセスペインの末尾に表示する
+                procindex, keyword = parse_procindex(command[len("pred"):])
+                msg = self.meta_command_show_predicates(keyword, procindex)
+            
+            elif commandhead.startswith("arghelp"):
+                # 引数またはアクティブなコマンドのヘルプを末尾に表示する
+                procindex, _ = parse_procindex(commandhead[len("arghelp"):])
+                msg = self.meta_command_show_help(commandtail, procindex)
+            
+            elif command.startswith("what"):
+                # 文字列を解析し、コマンドとして可能な解釈をすべて示す
+                cmdstr = command[len("what"):].strip()
+                msg = self.meta_command_show_syntax(cmdstr)
+
+            elif command.startswith("invoke"):
+                # 呼び出し引数と結果を詳細に表示する
+                procindex, _ = parse_procindex(command[len("invoke"):])
+                msg = self.meta_command_show_invocation(procindex)
+            
+            elif command.startswith("savelog"):
+                msg = self.meta_command_savelog(command[len("savelog"):].strip())
+                
+            elif command.startswith("help"):
+                values = [
+                    ("(integer...)", "インデックスでアイテムを選択し入力欄に展開"),
+                    ("=", "現在の選択アイテムを入力欄に展開"),
+                    ("put", "現在の選択アイテムを画面に展開"),
+                    ("v", "データビューのフィルター・ソートの指定"),
+                    ("sort", "データビューのソートの指定"),
+                    ("where", "データビューのフィルタの指定"),
+                    ("pred", "データビューの述語の一覧を表示"),
+                    ("a", "プロセスの実引数を入力欄に展開"),
+                    ("invoke", "プロセスの実引数と実行結果を表示"),
+                    ("arghelp", "プロセスの引数ヘルプを表示"),
+                    ("savelog", "プロセスのログを保存する"),
+                    ("what", "コマンドの可能な解釈を全て表示"),
+                    ("!", "Pythonの式を評価して結果を表示"),
+                    ("help", "このヘルプを表示"),
+                ]
+                values = [(meta_command_sigil+x,y) for (x,y) in values]
+                self.insert_screen_appendix(values, title="メタコマンドの一覧")
+                msg = None
+            
+            else:
+                msg = "メタコマンド'{}'を解釈できません".format(command)
+        
+        except Exception as e:
+            msg = "エラー発生："
+            tb = sys.exc_info()[2]
+            msg += "".join(traceback.format_exception(type(e), e, tb))
+        
+        if msg:
+            self.insert_screen_appendix(msg, title=command)
+
+
+    #
+    #
+    #
+    def meta_command_select_dataview(self, index, procindex):
+        if procindex:
+            chm = self.app.select_chamber(procindex, activate=True)
+            if chm: 
+                self.update_active_chamber(chm)
+        try:
+            self.select_dataview_item(index)
+        except IndexError:
+            return "その番号のデータは存在しません"
+
+    def meta_command_show_dataview_item(self, predicate, procindex, restcommand, toinput):
+        item = None
+        chm = self.app.select_chamber(procindex)
+        if chm:
+            data = chm.get_bound_data()
+            if data:
+                item = data.selection_item()
+                
+        if item:
+            if not predicate:
+                pred = data.get_link_column()
+            else:
+                pred = data.find_column(predicate)
+            
+            if pred:
+                if toinput:
+                    value = pred.value_to_string(pred.get_value(item))
+                    if restcommand:
+                        value = value + " " + restcommand
+                    self.replace_input_text(value)
+                else:
+                    spirit = chm.get_bound_spirit()
+                    spirit.message("<{}>".format(pred.get_description()))
+                    pred.do_print(item, spirit)
+                    self.handle_chamber_message(chm)
+                    self.insert_screen_appendix((), "")
+            else:
+                return "選択アイテムに'{}'という述語はありません".format(predicate)
+        else:
+            return "何も選択されていません"
+        
+    def meta_command_dataview_operation(self, expression):  
+        chm = self.app.select_chamber()
+        if chm is None:
+            return
+
+        obj = None
+        objdesk = None
+        for msg in chm.get_message():
+            if msg.tag == "object-view":
+                obj = msg.argument("object")
+                deskchm = self.app.select_chamber("desktop") # 仮対応：実際には、オブジェクトデスクをチャンバーに紐づけておく
+                objdesk = deskchm.get_desktop()
+                break
+        else:
+            return
+
+        datas = obj.value
+        datas.assign(parse_dataview(objdesk, datas, expression))
+        # メッセージを再描画
+        self.replace_screen_message([])
+        self.update_active_chamber(chm)
+    
+    def meta_command_show_predicates(self, keyword, procindex):  
+        chm = self.app.select_chamber(procindex)
+        if chm:
+            data = chm.get_bound_data()
+            if data:
+                lines = []
+                for pred, keys in data.get_all_columns():
+                    if keyword and not any(x.startswith(keyword) for x in keys):
+                        continue
+                    lines.append((", ".join(keys), pred.get_description()))
+
+                if lines:                    
+                    self.insert_screen_appendix(lines, title="述語一覧")
+                else:
+                    return "該当する述語がありません"
+        else:
+            return "対象となるデータがありません"
+        
+    def meta_command_reinput_process_arg(self, argname, procindex, restcommand):
+        chm = self.app.select_chamber(procindex)
+        if chm:
+            proc = chm.get_process()
+            value, _context = proc.get_parsed_command().reproduce_arg(argname)
+            if value is None:
+                return "該当する引数がありません"
+            if restcommand:
+                value = value + " " + restcommand
+            self.replace_input_text(value)
+        else:
+            return "対象となるデータがありません"
+    
+    def meta_command_show_help(self, cmd, procindex):
+        if cmd:
+            result = self.app.search_command(cmd)
+            if not result:
+                return "該当するコマンドがありません"
+            target = result[0].load_target()
+        else:
+            chm = self.app.select_chamber(procindex)
+            if chm:
+                target = chm.get_process().get_target()
+            else:
+                return "プロセスがありません"
+
+        if target:
+            hlp = target.get_help()
+            self.insert_screen_appendix("\n".join(hlp), title="コマンド <{}> のヘルプ".format(target.get_prog()))
+    
+    def meta_command_show_syntax(self, cmdstr):
+        entries = self.app.parse_possible_commands(cmdstr)
+        if entries:
+            lines = "\n".join(["{}. {}".format(i+1,x.command_string()) for (i,x) in enumerate(entries)])
+        else:
+            lines = "有効なコマンドではありません"
+        self.insert_screen_appendix(lines, title="コマンド <{}> の解釈".format(cmdstr))
+
+    def meta_command_show_invocation(self, procindex):
+        chm = self.app.select_chamber(procindex)
+        if chm:
+            lines = []
+            def addline(level, line):
+                lines.append("  "*(level-1) + line)
+
+            addline(1, "<コマンド>")
+
+            try:
+                tg = chm.get_process().get_target()
+                typ, qualname, modname = tg.get_inspection()
+                addline(1, "{}: {}".format(typ, qualname))
+                addline(2, "{}で定義".format(modname))
+                addline(1, "")
+
+                labels = tg.get_valid_labels()
+
+                addline(1, "<引数>")
+                cmd = chm.get_process().get_parsed_command()
+
+                for label in labels:
+                    addline(1, "[{}]".format(label))
+                    for argname, value in cmd.get_values(label).items():
+                        addline(2, "{} = {}".format(argname, value))
+                
+            except NotExecutedYet:
+                addline(1, "'{}'".format(chm.get_process().get_command_string()))
+                addline(2, "プロセスは実行されていない")
+                labels = ("init",) # 初期化エラーが記録されているかもしれない
+
+            addline(1, "")
+
+            addline(1, "<実行>")
+            inv = chm.get_process().get_last_invocation()
+
+            for label in labels:
+                for i, entry in enumerate(inv.get_entries_of(label)):
+                    addline(1, "[{}][{}](".format(label, i))
+
+                    sig = []
+                    sig.extend(["{}".format(v) for v in entry.args])
+                    sig.extend(["{}={}".format(k,v) for (k,v) in entry.kwargs.items()])
+                    for a in sig:
+                        addline(2, "{},".format(a))
+                    addline(1, ")")
+
+                    if entry.exception:
+                        addline(1, "例外発生で中断:")
+                        for l in traceback.format_exception_only(type(entry.exception), entry.exception):
+                            addline(2, l)
+                    else:                    
+                        addline(2, "-> {}".format(entry.result))
+
+            self.insert_screen_appendix("\n".join(lines), title="実行結果の調査")
+        else:
+            return "対象となるプロセスがありません"
+    
+    def meta_command_savelog(self, path):
+        texts = self.get_screen_texts()
+        if not texts:
+            return "ログの保存が実装されていません"
+
+        if not path:
+            path = "log.txt"
+        p = os.path.join(self.app.get_current_dir(), path)
+        try:
+            with open(p, "w", encoding="utf-8") as fo:
+                for line in texts.splitlines():
+                    fo.write(line+"\n")
+            return "保存 --> {}".format(p)
+        except Exception as e:
+            return "エラー：{}".format(e)
+            
+    def meta_command_eval_py(self, expression, libnames):
+        if not expression:
+            return ""
+
+        # モジュールのロード
+        glo = {}
+        import math
+        glo["math"] = math # 数学モジュールはいつもロードする
+        if libnames:
+            import importlib
+            for libname in libnames: # module::member>name == from module import member as name
+                membername = None
+                if ">" in libname:
+                    libname, membername = libname.split(">")
+                if "::" in libname:
+                    modname, varname = libname.split("::")
+                    mod = importlib.import_module(modname)
+                    if membername is None:
+                        membername = varname
+                    glo[membername] = getattr(mod, varname)
+                else:
+                    if membername is None:
+                        membername = libname
+                    glo[membername] = importlib.import_module(libname)
+
+        try:
+            val = eval(expression, glo, {})
+        except Exception as e:
+            v = str(e)
+        else:
+            v = self.prettyformat(val)
+
+        self.insert_screen_appendix(v, title=expression.strip())

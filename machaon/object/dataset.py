@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from machaon.object.type import Type, TypeModule
 from machaon.object.object import Object
-from machaon.object.message import select_method
+from machaon.object.message import Function, MemberGetter, select_method
 from machaon.object.invocation import InvocationContext
 from machaon.object.sort import parse_sortkey
 from machaon.cui import get_text_width
@@ -32,29 +32,31 @@ class InvalidColumnNames(Exception):
 #
 #
 class DataColumn():
-    def __init__(self, method_inv, typename):
-        self.method_inv = method_inv
+    evallog = False
+
+    def __init__(self, expression, method_inv, typename):
+        self.getter = MemberGetter(expression, method_inv)
         self.typename = typename
-    
+        
     @property
     def method(self):
-        return self.method_inv.method
+        return self.getter.method.method
 
     def get_name(self):
         return self.method.get_name()
     
-    def get_help(self):
-        return self.method.get_help()
+    def get_doc(self):
+        return self.method.get_doc()
     
     def get_type(self, context):
         return context.get_type(self.typename)
     
-    def eval(self, context):
-        self.method_inv.invoke(context)
-        if context.is_failed():
-            return None
+    def eval(self, subject, context):
+        objs = self.getter.run(subject, context, log=DataColumn.evallog)
+        if objs:
+            return objs[0].value
         else:
-            return context.get_last_result()
+            return "<no-return>"
     
     def stringify(self, context, value):
         return self.get_type(context).convert_to_string(value)
@@ -71,17 +73,17 @@ class DataColumn():
         return inv
 
 #
-def make_data_columns(type, *member_names) -> List[DataColumn]:
+def make_data_columns(type, *expressions) -> List[DataColumn]:
     columns = []
     invalid_names = []
 
     names: List[str] = []
-    for member_name in member_names:
-        aliases = type.get_member_alias(member_name)
+    for expr in expressions:
+        aliases = type.get_member_group(expr)
         if aliases is not None:
             names.extend(aliases)
         else:
-            names.append(member_name)
+            names.append(expr)
 
     for member_name in names:
         methinv = select_method(member_name, type)
@@ -89,7 +91,7 @@ def make_data_columns(type, *member_names) -> List[DataColumn]:
             rtype = methinv.method.get_first_result_typename()
             if rtype is None:
                 raise ValueError("データカラムで参照中のメソッド'{}'は値を返しません".format(member_name))
-            columns.append(DataColumn(methinv, rtype))
+            columns.append(DataColumn(member_name, methinv, rtype))
         else:
             invalid_names.append(member_name)
 
@@ -196,7 +198,7 @@ class DataView():
                 return c
         return None
     
-    def new_current_column(self, name):
+    def add_current_column(self, name):
         cols = make_data_columns(self.itemtype, name)
         self.viewcolumns.append(cols[0])
     
@@ -204,8 +206,9 @@ class DataView():
         a = self.itemtype.get_member_group("view-top")
         if a is not None:
             return a[0]
-        for meth in self.itemtype.enum_methods(arity=1):
-            return meth.name
+        for meth in self.itemtype.enum_methods():
+            if meth.get_required_argument_min() == 0:
+                return meth.name
         return None
     
     def get_link_column_name(self) -> Optional[str]:
@@ -247,7 +250,7 @@ class DataView():
         context: InvocationContext,
         viewtype: str, 
         column_names=None, 
-        filterformula=None,
+        predicate=None,
         sortkey=None,
         *, 
         trunc=True
@@ -264,10 +267,10 @@ class DataView():
         cur_column_names = [x.get_name() for x in self.viewcolumns]
         rowindexer = DataViewRowIndexer(cur_column_names)
         _newcolumn_indices = rowindexer.create_column_indexmap(column_names)
-        if filterformula:
-            filter_col_indexmap = rowindexer.create_column_indexmap(filterformula.get_related_members())
+        if predicate:
+            filter_col_indexmap = rowindexer.create_column_indexmap(predicate.get_lambda_argument_names())
         if sortkey:
-            sort_col_indexmap = rowindexer.create_column_indexmap(sortkey.get_related_members())
+            sort_col_indexmap = rowindexer.create_column_indexmap(sortkey.get_lambda_argument_names())
         
         # 列を新規作成  使用しない列は削除？
         new_column_names = rowindexer.pop_new_columns()
@@ -289,8 +292,8 @@ class DataView():
             newrows = []
             for itemindex, currow in newrowlayout:
                 item = self.items[itemindex]
-                context.set_subject(Object(self.itemtype, item))
-                newrow = [col.eval(context) for col in newcolumns]
+                subject = Object(self.itemtype, item)
+                newrow = [col.eval(subject, context) for col in newcolumns]
                 newrows.append((itemindex, currow+newrow)) # 既存の行の後ろに結合
 
             rows = newrows
@@ -301,25 +304,24 @@ class DataView():
         dataview = DataView(self.itemtype, self.items, rows, viewtype, columns)
 
         # フィルタ・ソート関数評価用のコンテキスト
-        def formula_context(indicesmap, row):
+        def formula_subject(indicesmap, row):
             values = {}
             for k, i in indicesmap.items():
                 values[k] = Object(columns[i].get_type(context), row[i])
-            context.set_subject(values)
-            return context
+            return values
 
         # 関数を行に適用する
-        if filterformula:
+        if predicate:
             def fn(entry):
                 _index, row = entry
-                return filterformula(formula_context(filter_col_indexmap, row))
+                return predicate.run(formula_subject(filter_col_indexmap, row), context)
             rows = list(filter(fn, rows))
 
         if sortkey:
             sortkey.setup_operators(dataview) # 新しいカラムから演算子を決める
             def key(entry):
                 _index, row = entry
-                return sortkey(formula_context(sort_col_indexmap, row))
+                return sortkey.run(formula_subject(sort_col_indexmap, row), context)
             rows.sort(key=key)
         
         dataview.rows = rows
@@ -328,7 +330,7 @@ class DataView():
         if self._selection is not None:
             itemindex, _rowindex = self._selection
             dataview.select_by_item(itemindex)
-            
+
         return dataview
 
 #

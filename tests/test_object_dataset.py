@@ -3,57 +3,62 @@ import pytest
 import operator
 
 from machaon.object.type import TypeModule
-from machaon.object.object import ObjectCollection
-#from machaon.object.dataset import parse_new_dataview, parse_dataview, DataViewRowIndexer, DataView, make_data_columns
-#from machaon.object.formula import parse_formula
+from machaon.object.object import ObjectCollection, Object
+from machaon.object.invocation import InvocationContext
+from machaon.object.dataset import DataViewRowIndexer, DataView, make_data_columns, DataColumn
+from machaon.object.message import Function
 from machaon.object.sort import ValueWrapper
 
 class Employee():
     """
-    
     """
     def __init__(self, name, postcode="000-0000"):
         self._name = name
         self._postcode = postcode
 
     def name(self):
+        """ @method
+        名前
+        Returns: str
+        """
         return self._name
 
     def tall(self):
+        """ @method
+        身長
+        Returns: int
+        """
         return len(self._name)
     
     def postcode(self):
+        """ @method
+        郵便番号
+        Returns: str
+        """
         return self._postcode
 
-    @classmethod
-    def describe_object(cls, traits):
-        traits.describe(
-            typename="employee"
-        )["name"](
-            help="名前"
-        )["tall"](
-            help="身長",
-            return_type="int"
-        )["postcode"](
-            help="郵便番号"
-        )
 
 @pytest.fixture
 def objectdesk():
-    desk = ObjectDesktop()
-    from machaon.object.fundamental import fundamental_type
-    desk.add_types(fundamental_type)
+    typemod = TypeModule()
+    typemod.add_fundamental_types()
+    typemod.definition(typename="Employee")(Employee)
+    desk = InvocationContext(input_objects=ObjectCollection(), type_module=typemod)
     return desk
+
 
 #
 #
 #
 def test_column(objectdesk):
-    employee = objectdesk.get_type(Employee)
-    cols = make_data_columns(employee, objectdesk, "name", "postcode")
-    view = DataView(employee, [
-        Employee(x,y) for (x,y) in [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")]
-    ], viewcolumns=cols)
+    employee = objectdesk.get_type("Employee")
+    cols = make_data_columns(employee, "name", "postcode")
+    view = DataView(employee, 
+        items=[
+            Employee(x,y) for (x,y) in [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")]
+        ], 
+        viewcolumns=cols
+    )
 
     assert view.get_item_type() is employee
     assert view.get_current_columns() == cols
@@ -64,8 +69,27 @@ def test_column(objectdesk):
     assert view.find_current_column("name") is not None
     assert view.find_current_column("postcode") is not None
     assert view.find_current_column("tall") is None
-    view.new_current_column(objectdesk, "tall")
+    view.add_current_column("tall")
     assert view.find_current_column("tall") is not None
+
+    namecol = cols[0]
+    assert namecol.get_name() == "name"
+    assert namecol.get_type(objectdesk) is objectdesk.get_type("Str")
+    #assert namecol.get_doc() == ""
+
+    # カラムの値を得る
+    subject = Object(employee, view.items[0])
+    assert namecol.method
+    assert namecol.method.get_action()(subject.value) == "ken"
+    DataColumn.evallog = True
+    namecol.eval(subject, objectdesk) == "ken"
+    namecol.getter.message.pprint_log()
+
+    subject = Object(employee, view.items[2])
+    assert namecol.eval(subject, objectdesk) == "shin"
+
+    subject = Object(employee, view.items[1])
+    assert namecol.eval(subject, objectdesk) == "ren"
 
 #
 #
@@ -73,33 +97,33 @@ def test_column(objectdesk):
 def test_create_no_mod(objectdesk):
     datas = [Employee(x) for x in ("ken", "yuuji", "kokons")]
     
-    view = parse_new_dataview(objectdesk, datas)
-
+    employee = objectdesk.get_type("Employee")
+    view = DataView(employee, datas).create_view(objectdesk, "table")
+    
     assert view.count() == 3
     assert len(view.get_current_columns()) == 1
     assert view.get_current_columns()[0].get_name() == "name"
-    assert view.rows_to_string_table() == ([(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])], [6])
+
+    assert view.rows == [(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])]
+
+    assert view.rows_to_string_table(objectdesk) == ([(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])], [6])
     view.select(1)
     assert view.selection() == 1
     assert view.row(view.selection()) == ["yuuji"]
 
-    # column
-    name_col = view.get_current_columns()[0]
-    assert name_col.make_value(view.itemtype, view.items[0]) == "ken"
-
     
 def test_create_filtered(objectdesk):
     datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
+    employee = objectdesk.get_type("Employee")
 
-    f = parse_formula("(ke in @name) || (@tall == 5)", objectdesk, objectdesk.get_type(Employee))
-    bits = [f(f.create_values_context(x)) for x in datas]
+    f = Function("(ke in @name) || (@tall == 5)")
+    bits = [f.run(Object(objectdesk.get_type(Employee), x), objectdesk) for x in datas]
     assert bits == [True, False, True]
     
-    view = parse_new_dataview(objectdesk, datas,
-        "/where (ke in @name) || (@tall == 5)"
-    )
+    # TODO: get_lambda_argument_namesの実装
+    view = DataView(employee, datas).create_view(objectdesk, "table", filter=f)
     assert view.count() == 2
-    assert view.rows_to_string_table() == ([(0, ["ken","3"]), (2, ["yuuji","5"])], [5, 1])
+    assert view.rows_to_string_table(objectdesk) == ([(0, ["ken","3"]), (2, ["yuuji","5"])], [5, 1])
 
 
 def test_filtered_manytimes(objectdesk):
