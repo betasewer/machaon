@@ -15,7 +15,7 @@ from machaon.object.docstring import DocStringParser
 #
 METHOD_TASK = 0x0001
 METHOD_CONSUME_TRAILING_PARAMS = 0x0002
-METHOD_BIND_TYPEVAR = 0x0010
+METHOD_TYPE_BOUND = 0x0010
 
 #
 PARAMETER_REQUIRED = 0x0100
@@ -86,7 +86,7 @@ class Method():
         return (self.flags & METHOD_CONSUME_TRAILING_PARAMS) > 0
     
     def is_type_bound(self):
-        return (self.flags & METHOD_BIND_TYPEVAR) > 0
+        return (self.flags & METHOD_TYPE_BOUND) > 0
 
     # 仮引数を追加
     def add_parameter(self,
@@ -108,6 +108,9 @@ class Method():
             f |= PARAMETER_REQUIRED
         p = MethodParameter(name, typename, doc, default, f)
         self.params.append(p)
+    
+    def get_param_count(self):
+        return len(self.params)
 
     # 返り値宣言を追加
     def add_result(self, 
@@ -116,6 +119,9 @@ class Method():
     ):
         r = MethodResult(typename, doc)
         self.results.append(r)
+        
+    def get_result_count(self):
+        return len(self.results)
     
     # 受け入れ可能なスペース区切りの引数の数、Noneで無限を示す
     def get_acceptable_argument_max(self) -> Union[int, None]:
@@ -123,6 +129,15 @@ class Method():
         for p in self.params:
             if p.is_variable():
                 return None
+            cnt += 1
+        return cnt
+        
+    # 必要な最小の引数の数を得る
+    def get_required_argument_min(self) -> int:
+        cnt = 0
+        for p in self.params:
+            if not p.is_required():
+                break
             cnt += 1
         return cnt
 
@@ -160,7 +175,8 @@ class Method():
                 if typefn is not None:
                     callobj = typefn
                     source = "TypeMethod:{}".format(self.target)
-                    self.flags |= METHOD_BIND_TYPEVAR # 第一引数は型オブジェクトを渡す
+                    if this_type.is_method_bound("TYPE"):
+                        self.flags |= METHOD_TYPE_BOUND # 第一引数は型オブジェクトを渡す
             else:
                 # 2. 外部モジュールから定義をロードする
                 callobj = loader() # モジュールやメンバが見つからなければ例外が投げられる

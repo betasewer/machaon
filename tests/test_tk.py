@@ -1,8 +1,8 @@
 import pytest
 
-#from machaon.app import AppRoot
-#from machaon.process import ProcessMessage, Spirit, TempSpirit, Process
-#from machaon.ui.tk import tkLauncher
+from machaon.app import AppRoot
+from machaon.process import ProcessMessage, Spirit, TempSpirit, Process
+from machaon.ui.tk import tkLauncher
 
 def gettext(log):
     return log.get(1.0, "end")
@@ -30,11 +30,11 @@ def test_message_window(approot):
     assert "test-message\n\n" == gettext(wnd.log)
     assert "test-message" == getlastline(wnd.log)
 
-    wnd.insert_screen_message(spi.error.msg("test-error-message"))
+    wnd.insert_screen_message(spi.message("error", "test-error-message"))
     assert "test-error-message" == getlastline(wnd.log)
     assert ("error",) == getlasttag(wnd.log)
 
-    wnd.insert_screen_message(spi.hyperlink.msg("test-hyperlink", link="www.hellowork.go.jp", linktag="message_em"))
+    wnd.insert_screen_message(spi.message("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message_em"))
     assert "test-hyperlink" == getlastline(wnd.log)
     assert set(("message_em","clickable","hlink-1")) == set(getlasttag(wnd.log))
 
@@ -42,7 +42,7 @@ def test_message_window(approot):
     l1 = wnd.log.get("end linestart -2 lines", "end linestart -1 lines")
     l2 = wnd.log.get("end linestart -3 lines", "end linestart -2 lines")
 
-    wnd.message_handler(spi.delete_message.msg())
+    wnd.message_handler(spi.message("delete-message"))
     assert "test-error-message" == getlastline(wnd.log)
     
     #wnd.run_mainloop()

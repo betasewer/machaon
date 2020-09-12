@@ -3,6 +3,7 @@ import re
 from machaon.object.type import Type
 from machaon.object.object import ObjectValue
 from machaon.object.message import MessageEngine
+from machaon.object.fundamental import fundamental_type
 
 #-----------------------------------------------------------------------
 # スタブ

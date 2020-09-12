@@ -2,7 +2,6 @@
 # coding: utf-8
 
 from machaon.cui import test_yesno, composit_text
-from machaon.engine import NotYetInstalledCommandSet, LoadFailedCommandSet
 
 #
 # =================================================================
@@ -95,9 +94,9 @@ class NotAvailableItem(HelpItem):
 
 #
 def command_commandlist(spi):
-    spi.message("<< コマンド一覧 >>")
-    spi.message("各コマンドの詳細は <command> --help で")
-    spi.message("")
+    spi.post("message", "<< コマンド一覧 >>")
+    spi.post("message", "各コマンドの詳細は <command> --help で")
+    spi.post("message")
     
     items = []
     for cmdset in spi.get_app().get_command_sets():

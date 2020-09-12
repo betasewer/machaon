@@ -135,18 +135,17 @@ class InvocationContext:
     
     #
     def set_subject(self, subject: Union[Object, Dict[str, Object]]):
-        self.subject_object = subject
+        if isinstance(subject, Object) or isinstance(subject, dict):
+            self.subject_object = subject
+        else:
+            raise TypeError("subject Bad Type: " + str(subject))
     
-    def get_subject_values(self):
-        if isinstance(self.subject_object, dict):
-            return self.subject_object
-        return None
+    def clear_subject(self):
+        self.subject_object = None
     
-    def get_subject_object(self):
-        if isinstance(self.subject_object, Object):
-            return self.subject_object
-        return None
-
+    def get_subject(self):
+        return self.subject_object
+        
     #    
     def get_type(self, typename) -> Optional[Type]:
         return self.type_module.get(typename, fallback=True)
@@ -188,6 +187,7 @@ class InvocationContext:
         '''
 
     def set_pre_invoke_error(self, excep: BaseException):
+        # コマンド解析の失敗など、呼び出す前に起きたエラーを格納する
         entry = InvocationEntry((), {})
         entry.set_exception(excep)
         self.push_invocation(entry)

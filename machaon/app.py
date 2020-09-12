@@ -10,10 +10,8 @@ import subprocess
 
 from typing import Optional, List, Any
 
-from machaon.engine import CommandEngine, CommandEntry, NotYetInstalledCommandSet, LoadFailedCommandSet
 from machaon.object.object import Object, ObjectCollection
-from machaon.command import describe_command, CommandPackage
-from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber, ProcessBadCommand
+from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import package_manager, PackageEntryLoadError
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
@@ -29,7 +27,6 @@ import machaon.platforms
 class AppRoot:
     def __init__(self):
         self.ui = None
-        self.cmdengine = None
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
         self.pkgmanager = None
@@ -38,10 +35,8 @@ class AppRoot:
     def initialize(self, *, ui, directory):
         self.ui = ui
 
-        self.cmdengine = CommandEngine()
-
         self.processhive = ProcessHive()
-        self.processhive.new_desktop("desk1")
+        #self.processhive.new_desktop("desk1")
 
         self.pkgmanager = package_manager(directory)
         self.pkgmanager.add_to_import_path()
@@ -56,6 +51,7 @@ class AppRoot:
     # コマンドの追加
     #
     # パッケージを導入
+    """
     def setup_package(self, prefixes, package):
         # コマンドセットを構築して追加する
         if isinstance(package, CommandPackage):
@@ -100,7 +96,7 @@ class AppRoot:
     def get_package_status(self, package):
         self.pkgmanager.load_database()
         return self.pkgmanager.get_update_status(package)
-            
+
     # パッケージをローカルに展開する
     def operate_package(self, package, install=False, uninstall=False, update=False):
         self.pkgmanager.load_database()
@@ -134,6 +130,7 @@ class AppRoot:
         dumbcmdset = NotYetInstalledCommandSet(package.name, oldcmdset.prefixes)
         self.cmdengine.replace_command_set(cmdset_index, dumbcmdset)
         return dumbcmdset
+    """
 
     #
     # アプリの実行
@@ -141,11 +138,10 @@ class AppRoot:
     def run(self):
         if self.ui is None:
             raise ValueError("App UI must be initialized")
-        if self.cmdengine is None:
-            raise ValueError("App command engine must be initialized")
         self.mainloop()
 
     def exit(self):
+        # 停止指示を出す
         self.processhive.interrupt_all()
 
         # まだ走っているプロセスがあれば、強制終了する
@@ -177,101 +173,25 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    # プロセスをスレッドで実行しアクティブにする
-    def run_process(self, commandstr: str):
-        process = Process(commandstr)
-        chamber = self.processhive.new(process)
-        process.run(self)
-        return chamber
-    
-    # プロセスの実行フロー
-    def execute_process(self, process: Process):
-        commandstr = process.get_command_string()
+    def eval_object_message(self, message: str):        
+        if message == "exit":
+            # 終了コマンド
+            self.exit()
+            return
+        elif not message:
+            return
 
-        # メインスレッドへの伝達者
-        spirit = Spirit(self, process)
+        # 実行
+        chamber = self.processhive.new(self, message)
 
-        # コマンドを解析
-        execentry = None
-        try:
-            entries = self.cmdengine.parse_command(commandstr, spirit)
-            if len(entries) == 1:
-                execentry = entries[0]
-            elif len(entries) > 1:
-                # 一つ選択
-                # spirit.create_data(entries)
-                # spirit.dataview()
-                # self.ui.on_select_command(spirit, process, entries)
-                # 今はとりあえず先頭を採用
-                execentry = entries[0]
-
-        except Exception as parseexcep:
-            # コマンド解析中の例外（コマンド解析エラーではなく）
-            process.failed_before_execution(parseexcep)
-            self.ui.on_error_process(spirit, process, parseexcep, timing = "argparse")
-            return None
-        
-        if execentry is None:
-            error = ProcessBadCommand(target=None, reason="合致するコマンドが無かった")
-            process.failed_before_execution(error)
-            self.ui.on_bad_command(spirit, process, error)
-            return None
-
-        # 実行開始！
-        spirit = execentry.spirit
-        self.ui.on_exec_process(spirit, process)
-        
-        # オブジェクトを取得
-        deskchm = self.processhive.get_last_active_desktop()
-        if deskchm is None:
-            raise ValueError("No object desktop can be found")
-
-        # プロセスを実行する
-        result = None
-        invocation = None
-        try:
-            invocation = process.execute(execentry, deskchm.get_desktop())
-        except ProcessInterrupted:
-            self.ui.on_interrupt_process(spirit, process)
-        except Exception as execexcep:
-            # アプリコードの外からの例外
-            print(execexcep)
-            self.ui.on_error_process(spirit, process, execexcep, timing = "executing")
-            return None
-
-        if invocation:
-            # エラーが発生しているか
-            e = invocation.get_last_exception()
-            if e:
-                # アプリエラーはオブジェクトとして格納する
-                process.push_object((e, "execute", process), typename="process-error")
-
-            # 生成されたオブジェクトを配置する
-            for o in process.get_bound_objects(running=True):
-                deskchm.get_desktop().push(o)
-            
-            # 最後のtargetの返り値を返す
-            result = invocation.get_last_result()
-
-        self.ui.on_exit_process(spirit, process, invocation)
-        return result
-
-    # 可能な構文解釈の一覧を提示する
-    def parse_possible_commands(self, commandstr):
-        spirit = Spirit(self, None) # processはもちろん関連付けられていない
-        return self.cmdengine.parse_command(commandstr, spirit)
-    
-    # コマンドを検索する
-    def search_command(self, commandname) -> List[CommandEntry]:
-        return [entry for (entry, remained) in self.cmdengine.expand_command_head(commandname) if not remained]
-    
-    def get_command_sets(self):
-        return self.cmdengine.command_sets()
+        # 表示を更新する
+        self.ui.activate_new_chamber(chamber)
         
     # プロセスをスレッドで実行しアクティブにする
     def new_desktop(self, name: str):
-        chamber = self.processhive.new_desktop(name)
-        return chamber
+        #chamber = self.processhive.new_desktop(name)
+        #return chamber
+        return 
 
     #
     # プロセススレッド
@@ -280,8 +200,8 @@ class AppRoot:
     def get_active_chamber(self):
         return self.processhive.get_active()
         
-    def get_active_chamber_index(self):
-        return self.processhive.get_active_index()
+    def is_active_chamber(self, index: int):
+        return self.processhive.get_active_index() == index
 
     def get_previous_active_chamber(self):
         return self.processhive.get_previous_active()
