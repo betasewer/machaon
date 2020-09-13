@@ -11,8 +11,9 @@ import subprocess
 from typing import Optional, List, Any
 
 from machaon.object.object import Object, ObjectCollection
+from machaon.object.type import TypeModule
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
-from machaon.package.package import package_manager, PackageEntryLoadError
+from machaon.package.package import PackageManager, PackageEntryLoadError
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
 import machaon.platforms
@@ -31,6 +32,7 @@ class AppRoot:
         self.curdir = "" # 基本ディレクトリ
         self.pkgmanager = None
         self.cmdpackages = []
+        self.typemodule = None
 
     def initialize(self, *, ui, directory):
         self.ui = ui
@@ -38,17 +40,23 @@ class AppRoot:
         self.processhive = ProcessHive()
         #self.processhive.new_desktop("desk1")
 
-        self.pkgmanager = package_manager(directory)
-        self.pkgmanager.add_to_import_path()
+        #self.pkgmanager = PackageManager(directory)
+        #self.pkgmanager.add_to_import_path()
+
+        self.typemodule = TypeModule()
+        self.typemodule.add_fundamental_types()
         
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
     
     def get_ui(self):
         return self.ui
+
+    def get_type_module(self):
+        return self.typemodule
  
     #
-    # コマンドの追加
+    # クラスパッケージを走査する
     #
     # パッケージを導入
     """
@@ -182,10 +190,13 @@ class AppRoot:
             return
 
         # 実行
-        chamber = self.processhive.new(self, message)
+        chamber, newchm = self.processhive.new(self, message)
 
         # 表示を更新する
-        self.ui.activate_new_chamber(chamber)
+        if newchm:
+            self.ui.activate_new_chamber(chamber)
+        else:
+            self.ui.update_active_chamber(chamber, updatemenu=False)
         
     # プロセスをスレッドで実行しアクティブにする
     def new_desktop(self, name: str):

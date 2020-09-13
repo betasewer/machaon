@@ -30,14 +30,26 @@ def launch_sample_app(default_choice=None, directory=None):
 
     import machaon.commands.catalogue as catalogue
     
-    from machaon.package.repository import bitbucket_rep
-    from machaon.package.auth import basic_auth
+    from machaon.package.repository import BitbucketRepArchive
+    from machaon.package.auth import BasicAuth
     boo.commandset("test", 
-        source=bitbucket_rep("betasewer/test_module"), 
+        source=BitbucketRepArchive("betasewer/test_module"), 
         entrypoint="hello"
     )
     boo.shell_commandset()
     boo.go()
 
 #
-launch_sample_app("tk")
+#launch_sample_app("tk")
+
+
+def rawlaunch():
+    from machaon.app import AppRoot
+    from machaon.ui.tk import tkLauncher
+    ui = tkLauncher("test app")
+    root = AppRoot()
+    root.set_current_dir_desktop()
+    root.initialize(ui=ui, directory="C:/users/kenta/desktop")
+    root.run()
+
+rawlaunch()

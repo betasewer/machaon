@@ -134,7 +134,7 @@ class Typeset:
             if v is None:
                 values[k] = "？"
 
-        app.message_em("{q}Q, {llength}字詰 {lcount}行, 行間{space}H（歯送{leading}H）".format(**values))
+        app.message-em("{q}Q, {llength}字詰 {lcount}行, 行間{space}H（歯送{leading}H）".format(**values))
         tate = "  タテ：{total_length}H".format(**values)
         yoko = "  ヨコ：{total_width}H".format(**values)
         

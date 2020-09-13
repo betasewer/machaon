@@ -133,7 +133,7 @@ class ProcessListItem():
     def status(self):
         if self.chamber.is_waiting_input():
             return "稼働中：入力待ち"
-        elif self.chamber.is_running():
+        elif not self.chamber.is_finished():
             return "稼働中"
         elif self.chamber.is_failed():
             return "終了：失敗"
@@ -215,7 +215,7 @@ class TestProcess():
         if not templ.isdigit():
             self.app.error("数値が必要です")
         else:
-            self.app.message_em("\n".join([target for _ in range(int(templ))]))   
+            self.app.message-em("\n".join([target for _ in range(int(templ))]))   
 
     def exit_process(self):
         self.app.message("文字列を倍増するプロセスを終了.")
@@ -266,7 +266,7 @@ class ColorProcess():
     
     def process_target(self, text):
         self.app.message(text)
-        self.app.message_em("【強調】" + text)
+        self.app.message-em("【強調】" + text)
         self.app.custom_message("input", "【入力】" + text)
         self.app.custom_message("hyperlink", "【リンク】" + text)
         self.app.warn("【注意】" + text)
@@ -291,7 +291,7 @@ def progress_display(app):
     
 #
 def draw_graphic(app):
-    app.message_em("図形描画のテスト")
+    app.message-em("図形描画のテスト")
 
     with app.canvas("cv", width=200, height=400) as cv:
         cv.rectangle_frame(coord=(2,2,100,200), color="#00FF00")

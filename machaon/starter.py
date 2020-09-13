@@ -1,6 +1,6 @@
 from machaon.app import AppRoot
 from machaon.platforms import current
-from machaon.package.package import package
+from machaon.package.package import Package
 
 #
 #

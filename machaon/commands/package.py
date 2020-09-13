@@ -1,4 +1,4 @@
-from machaon.package.package import package_manager
+from machaon.package.package import PackageManager
 from machaon.engine import NotAvailableCommandSet
 
 #
@@ -12,7 +12,7 @@ def package_install(app, package_index, forceupdate=False):
     if package is None:
         return
 
-    app.message_em(" ====== パッケージ'{}'のインストール ====== ".format(package.name))
+    app.message-em(" ====== パッケージ'{}'のインストール ====== ".format(package.name))
     rep = package.get_repository()
     if rep:
         app.message("  --> {}".format(rep.get_source()))
@@ -20,7 +20,7 @@ def package_install(app, package_index, forceupdate=False):
     newinstall = False
     status = approot.get_package_status(package)
     if status == "none":
-        app.message_em("インストールします")
+        app.message-em("インストールします")
         newinstall = True
     elif status == "old":
         app.message("より新しいバージョンが存在します")
@@ -70,14 +70,14 @@ def package_install(app, package_index, forceupdate=False):
     if package.is_commandset():
         newcmdset = approot.build_commandset(package)
         if newinstall:
-            app.message_em("コマンドセット'{}'のインストールが完了".format(newcmdset.name))
+            app.message-em("コマンドセット'{}'のインストールが完了".format(newcmdset.name))
         else:
             if oldcmdset.name != newcmdset.name:
-                app.message_em("コマンドセット'{}' --> '{}'の更新が完了".format(oldcmdset.name, newcmdset.name))
+                app.message-em("コマンドセット'{}' --> '{}'の更新が完了".format(oldcmdset.name, newcmdset.name))
             else:
-                app.message_em("コマンドセット'{}'の更新が完了".format(newcmdset.name))
+                app.message-em("コマンドセット'{}'の更新が完了".format(newcmdset.name))
     else:
-        app.message_em("パッケージ'{}'のインストールが完了".format(package.name))
+        app.message-em("パッケージ'{}'のインストールが完了".format(package.name))
 
 #
 #
@@ -89,7 +89,7 @@ def package_uninstall(app, package_index):
     if package is None:
         return
         
-    app.message_em(" ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
+    app.message-em(" ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
     if package.is_commandset():
         app.message("  コマンドセット'{}' --> 削除".format(cmdset.name))
 

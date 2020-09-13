@@ -3,7 +3,7 @@ import zipfile
 import urllib.request
 import urllib.error
 import json
-from machaon.package.archive import basic_archive
+from machaon.package.archive import BasicArchive
 
 #
 class RepositoryURLError(Exception):
@@ -13,7 +13,7 @@ class RepositoryURLError(Exception):
 #
 #
 #
-class remote_repository(basic_archive):
+class RepositoryArchive(BasicArchive):
     is_remote = True
     is_archive = True
 
@@ -101,7 +101,7 @@ class remote_repository(basic_archive):
 #
 #
 #
-class github_rep(remote_repository):
+class GithubRepArchive(RepositoryArchive):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     
@@ -120,7 +120,7 @@ class github_rep(remote_repository):
 #
 #
 #
-class bitbucket_rep(remote_repository):
+class BitbucketRepArchive(RepositoryArchive):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     

@@ -41,7 +41,7 @@ def dark_classic_theme():
         "color.message" : "#CCCCCC",
         "color.background" : "#242428",
         "color.insertmarker" : "#CCCCCC",
-        "color.message_em" : "#FFFFFF",
+        "color.message-em" : "#FFFFFF",
         "color.warning" : "#FF00FF",
         "color.error" : "#FF0000",
         "color.hyperlink" : "#00FFFF",
@@ -56,7 +56,7 @@ def dark_classic_theme():
     
 def dark_blue_theme():
     return dark_classic_theme().extend({
-        "color.message_em" : "#00FFFF",
+        "color.message-em" : "#00FFFF",
         "color.warning" : "#D9FF00",
         "color.error" : "#FF0080",
         "color.hyperlink" : "#00FFFF",
@@ -69,7 +69,7 @@ def grey_green_theme():
         "color.background" : "#E8FFE8",
         "color.insertmarker" : "#000000",
         "color.message" : "#000000",
-        "color.message_em" : "#008000",
+        "color.message-em" : "#008000",
         "color.warning" : "#FF8000",
         "color.error" : "#FF0000",
         "color.hyperlink" : "#0000FF",
@@ -82,7 +82,7 @@ def grey_green_theme():
 def papilio_machaon_theme():
     return grey_green_theme().extend({
         "color.background" : "#88FF88",
-        "color.message_em" : "#FFA500",
+        "color.message-em" : "#FFA500",
         "color.message" : "#000000",
         "color.highlight" : "#FFA500",
         "color.sectionbackground" : "#B0FFB0",
@@ -114,7 +114,7 @@ class ShellThemeItem():
         return self._theme.getval("color.message")
     
     def message_em(self):
-        return self._theme.getval("color.message_em")
+        return self._theme.getval("color.message-em")
 
     def background(self):
         return self._theme.getval("color.background")
@@ -128,12 +128,12 @@ class ShellThemeItem():
     @classmethod
     def describe(cls, ref):
         ref.default_columns(
-            table = ("name", "message", "message_em", "background", "fontname")
+            table = ("name", "message", "message-em", "background", "fontname")
         )["name"](
             disp="名前"
         )["message"](
             disp="文字色"
-        )["message_em"](
+        )["message-em"](
             disp="強調文字色"
         )["background"](
             disp="背景色"
