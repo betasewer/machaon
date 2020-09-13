@@ -759,7 +759,7 @@ class tkLauncher(Launcher):
             maxspacing = max(*[len(x[0]) for x in valuelines], 0, 0)
             for value, desc in valuelines:
                 spacing = " " * (maxspacing - len(value) + 2)
-                for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message_em").expand():
+                for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message-em").expand():
                     self.insert_screen_message(msg)
 
         self.insert_screen_message(ProcessMessage(""))
@@ -898,7 +898,7 @@ class tkLauncher(Launcher):
 
         bg = theme.getval("color.background")
         msg = theme.getval("color.message")
-        msg_em = theme.getval("color.message_em", msg)
+        msg_em = theme.getval("color.message-em", msg)
         msg_wan = theme.getval("color.warning", msg_em)
         msg_err = theme.getval("color.error", msg)
         msg_inp = theme.getval("color.userinput", msg_em)
@@ -941,7 +941,7 @@ class tkLauncher(Launcher):
 
         self.log.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
         self.log.tag_configure("message", foreground=msg)
-        self.log.tag_configure("message_em", foreground=msg_em)
+        self.log.tag_configure("message-em", foreground=msg_em)
         self.log.tag_configure("warn", foreground=msg_wan)
         self.log.tag_configure("error", foreground=msg_err)
         self.log.tag_configure("input", foreground=msg_inp)
@@ -981,7 +981,7 @@ def screen_dataview_table_insert(ui, wnd, dataview, dataname):
     line = ""
     for col, width in zip(columns, colwidths):
         line += ljust(col, width)
-    wnd.insert("end", line+"\n", ("message_em",))
+    wnd.insert("end", line+"\n", ("message-em",))
 
     # 値
     for i, (itemindex, row) in enumerate(rows):

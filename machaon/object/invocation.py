@@ -54,10 +54,6 @@ class InvocationEntry():
 
     def set_exception(self, exception):
         self.exception = exception
-    
-    def set_arg_errors(self, missing_args, unused_args):
-        self.missing_args = missing_args
-        self.unused_args = unused_args
 
     def is_failed(self):
         if self.exception:

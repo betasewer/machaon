@@ -34,9 +34,9 @@ def test_message_window(approot):
     assert "test-error-message" == getlastline(wnd.log)
     assert ("error",) == getlasttag(wnd.log)
 
-    wnd.insert_screen_message(spi.message("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message_em"))
+    wnd.insert_screen_message(spi.message("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message-em"))
     assert "test-hyperlink" == getlastline(wnd.log)
-    assert set(("message_em","clickable","hlink-1")) == set(getlasttag(wnd.log))
+    assert set(("message-em","clickable","hlink-1")) == set(getlasttag(wnd.log))
 
     #wnd.log.mark_set("CURRENT", "end")
     l1 = wnd.log.get("end linestart -2 lines", "end linestart -1 lines")

@@ -11,7 +11,8 @@ import pprint
 from typing import Tuple, Sequence, List
 
 from machaon.cui import composit_text
-from machaon.process import ProcessMessage, NotExecutedYet
+from machaon.process import ProcessMessage, NotExecutedYet, ProcessChamber
+from machaon.object.message import MessageError
 
 #
 meta_command_sigil = "/"
@@ -53,7 +54,13 @@ class Launcher():
                 self.message_handler(msg)
         else:
             tag = msg.tag
-            if tag == "delete-message":
+            if tag == "new-objects":
+                objs = msg.argument("objects")
+                for obj in objs:    
+                    expr = " -> {} [{}]".format(obj.value, obj.get_typename())
+                    self.insert_screen_message(ProcessMessage(expr, tag="message"))
+                    
+            elif tag == "delete-message":
                 cnt = msg.argument("count")
                 lno = msg.argument("line")
                 self.delete_screen_message(lno, cnt)
@@ -63,7 +70,7 @@ class Launcher():
                 
                 # 見出し
                 text = "オブジェクト：{} [{}]\n".format(obj.name, obj.get_typename())
-                self.insert_screen_message(ProcessMessage(text, tag="message_em"))
+                self.insert_screen_message(ProcessMessage(text, tag="message-em"))
 
                 # 内容
                 if obj.get_typename() == "dataview":
@@ -83,6 +90,13 @@ class Launcher():
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
+            
+            elif tag == "new-chamber-launched":
+                self.insert_screen_prompt()
+            
+            elif tag == "finished":
+                self.insert_screen_message(ProcessMessage("", tag="message")) # 改行を1つ入れる
+                self.insert_screen_prompt()
 
             else:
                 # 適宜改行を入れる
@@ -115,7 +129,7 @@ class Launcher():
     def watch_chamber_message(self):        
         """ チャンバーの発するメッセージを読みに行く """
         procchamber = self.app.get_active_chamber()
-        running = procchamber.is_running()
+        running = not procchamber.is_finished()
         self.handle_chamber_message(procchamber)
         return running
 
@@ -150,10 +164,15 @@ class Launcher():
     # ログ保存用にテキストのみを取得する
     def get_screen_texts(self) -> str:
         raise NotImplementedError()
+
+    # 入力待ちを示す
+    def insert_screen_prompt(self):
+        prompt = ">>> "
+        self.insert_screen_message(ProcessMessage(prompt, tag="message-em", nobreak=True))
     
     #
     # 入力欄の操作
-    #    
+    #
     # 入力を取得
     def get_input(self, spirit, instr):
         instr += " >>> "
@@ -198,7 +217,7 @@ class Launcher():
     #
     #
     #
-    def activate_new_chamber(self, newchm):
+    def activate_new_chamber(self, newchm: ProcessChamber):
         """ チャンバーの新規作成時に呼ばれる """
         self.update_active_chamber(newchm, updatemenu=False)
         self.add_chamber_menu(newchm)
@@ -243,7 +262,7 @@ class Launcher():
             self.update_active_chamber(nchm)
 
         # 停止処理
-        if chm.is_running():
+        if not chm.is_finished():
             self.break_chamber_process(timeout=10, after=remove_and_shift)
         else:
             remove_and_shift(chm)
@@ -251,7 +270,7 @@ class Launcher():
     def break_chamber_process(self, timeout=10, after=None):
         """ アクティブな作動中のチャンバーを停止する """
         chm = self.app.get_active_chamber()
-        if not chm.is_running():
+        if chm.is_finished():
             return
         if chm.is_interrupted():
             return # 既に別箇所で中断が試みられている
@@ -262,9 +281,8 @@ class Launcher():
         
         def watcher():
             for _ in range(timeout):
-                if not chm.is_running():
-                    if after:
-                        after(chm)
+                if chm.is_finished():
+                    if after: after(chm)
                     break
                 chm.join(timeout=1)
             else:
@@ -275,15 +293,8 @@ class Launcher():
     
     def finish_chamber(self, chamber):
         """ 終了したチャンバーに対する処理 """
-        if chamber.is_failed() and chamber.get_process().is_failed_before_execution():
-            # チャンバーを削除
-            self.remove_chamber_menu(chamber)
-            self.app.remove_chamber(chamber.get_index())
-            # 前のチャンバーにフォーカス
-            self.update_active_chamber(self.app.get_active_chamber())
-        else:
-            # 文字色を実行中の色から戻す
-            self.update_chamber_menu(ceased=chamber)
+        # 文字色を実行中の色から戻す
+        self.update_chamber_menu(ceased=chamber)
 
     # メニューの更新
     def add_chamber_menu(self, chamber):
@@ -326,52 +337,37 @@ class Launcher():
     
     #
     # ハンドラ
-    #
-    def put_input_command(self, spirit, command):
-        tim = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
-        spirit.message_em("[{}] >>> ".format(tim), nobreak=True)
-        spirit.custom_message("input", command)
-    
+    #    
     def on_exec_process(self, spirit, process):
         """ プロセス実行時 """
-        #self.put_input_command(spirit, process.get_full_command())
-        pass
+        timestamp = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
+        spirit.post("message", "[{}] ".format(timestamp), nobreak=True) 
+        spirit.post("input", process.message.source)
     
     def on_interrupt_process(self, spirit, process):
         """ プロセス中断時 """
-        spirit.message_em("中断しました")
+        spirit.post("message-em", "中断しました")
     
     def on_error_process(self, spirit, process, excep, timing):
         """ プロセスのエラーによる終了時 """
-        if timing == "argparse":
-            tim = "引数の解析中に"
-        elif timing == "executing":
-            tim = "プロセス実行の前後に"
+        if timing == "onexec":
+            tim = "実行時に"
         else:
-            tim = "不明な時空間'{}'にて".format(timing)
-        spirit.error("{}エラーが発生し、失敗しました。".format(tim))
+            tim = "不明なタイミング'{}'で".format(timing)
+        spirit.post("error", "{}エラーが発生し、失敗しました。".format(tim))
         
-        details = traceback.format_exception(type(excep), excep, excep.__traceback__)
-        spirit.error(details[-1])
-        spirit.message_em("スタックトレース：")
-        spirit.message("".join(details[1:-1]))        
-        print(''.join(details))
+        if isinstance(excep, MessageError):
+            spirit.post("message-em", "メッセージ解決：")
+            excep.message.pprint_log(lambda x: spirit.post("message", x))
+        else:
+            details = traceback.format_exception(type(excep), excep, excep.__traceback__)
+            spirit.post("error", details[-1])
+            spirit.post("message-em", "スタックトレース：")
+            spirit.post("message", "".join(details[1:-1]))    
 
     def on_exit_process(self, spirit, process, invocation):
         """ プロセスの正常終了時 """
-        if invocation is not None:
-            spirit.message_em("実行終了\n")
-        
-            # 引数エラーを報告
-            for label, missings, unuseds in invocation.arg_errors():
-                if missings:
-                    spirit.warn("[{}] 以下の引数は与えられませんでした：".format(label))
-                    for name in missings:
-                        spirit.warn("  {}".format(name))
-                if unuseds:
-                    spirit.warn("[{}] 以下の引数は使用されませんでした：".format(label))
-                    for name in unuseds:
-                        spirit.warn("  {}".format(name))
+        pass
     
     def on_bad_command(self, spirit, process, excep):
         """ 不明なコマンド """

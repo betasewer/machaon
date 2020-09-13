@@ -9,7 +9,7 @@ class ArchiveNotOpenedError(Exception):
 #
 # アーカイブファイル
 #
-class basic_archive():
+class BasicArchive():
     is_remote = False
     is_archive = True
 
@@ -91,7 +91,7 @@ class basic_archive():
 #
 #
 #
-class local_archive(basic_archive):
+class LocalArchive(BasicArchive):
     def __init__(self, filepath, *, name):
         super().__init__()
         self.filepath = filepath
@@ -109,7 +109,7 @@ class local_archive(basic_archive):
 #
 #
 #
-class local_file():
+class LocalFile():
     is_remote = False
     is_archive = False
 

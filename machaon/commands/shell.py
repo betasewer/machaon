@@ -52,7 +52,7 @@ def execprocess(spi, target, split=False, shell=False):
             spi.message(msg.text)
         
         if msg.is_finished():
-            spi.message_em("プロセスはコード={}で終了しました".format(msg.returncode))
+            spi.message-em("プロセスはコード={}で終了しました".format(msg.returncode))
         
 #
 #
@@ -208,7 +208,7 @@ def get_text_content(app, target, encoding=None, head=0, tail=0, all=False):
         head, tail = 0, 0
     pth = app.abspath(target)
 
-    app.message_em("ファイル名：[%1%]", embed=[
+    app.message-em("ファイル名：[%1%]", embed=[
         app.hyperlink.msg(pth)
     ])
 
@@ -216,10 +216,10 @@ def get_text_content(app, target, encoding=None, head=0, tail=0, all=False):
         # 自動検出
         encoding = detect_text_encoding(pth)
 
-    app.message_em("エンコーディング：%1%", embed=[
+    app.message-em("エンコーディング：%1%", embed=[
         app.message.msg(encoding or "unknown")
     ])
-    app.message_em("--------------------")
+    app.message-em("--------------------")
 
     tails = []
     with open(pth, "r", encoding=encoding) as fi:
@@ -235,7 +235,7 @@ def get_text_content(app, target, encoding=None, head=0, tail=0, all=False):
             for l in tails[-tail:]:
                 app.message(l, nobreak=True)
     
-    app.message_em("\n--------------------")
+    app.message-em("\n--------------------")
 
 #
 def detect_text_encoding(fpath):
@@ -281,22 +281,22 @@ def detect_text_encoding(fpath):
 #
 #
 def get_binary_content(app, target, size=128, width=16):
-    app.message_em("ファイル名：[%1%]", embed=[
+    app.message-em("ファイル名：[%1%]", embed=[
         app.hyperlink.msg(target)
     ])
-    app.message_em("--------------------")
+    app.message-em("--------------------")
     with open(app.abspath(target), "rb") as fi:
         bits = fi.read(size)
     j = 0
-    app.message_em("        |" + " ".join(["{:0>2X}".format(x) for x in range(width)]))
+    app.message-em("        |" + " ".join(["{:0>2X}".format(x) for x in range(width)]))
     for i, bit in enumerate(bits):
         if i % width == 0:
-            app.message_em("00000{:02X}0|".format(j), nobreak=True)
+            app.message-em("00000{:02X}0|".format(j), nobreak=True)
         app.message("{:02X} ".format(bit), nobreak=True)
         if i % width == width-1:
             app.message("")
             j += 1
-    app.message_em("\n--------------------")
+    app.message-em("\n--------------------")
 
 #
 #

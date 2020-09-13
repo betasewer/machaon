@@ -32,6 +32,11 @@ from machaon.object.invocation import (
 class BadExpressionError(Exception):
     pass
 
+class MessageError(Exception):
+    def __init__(self, error, message):
+        self.error = error
+        self.message = message
+
 #
 #
 #
@@ -577,12 +582,14 @@ class MessageEngine():
                     logger(1, code, values)
                     yield (code, values)
                 except Exception as e:
-                    context.set_pre_invoke_error(e)
+                    err = MessageError(e, self) # コード情報を付加する
+                    err.with_traceback(e.__traceback__) # 引き継ぐ
+                    context.set_pre_invoke_error(err)
                     logger(-1, e)
                     break
         else:
             # キャッシュを利用する
-            for code, *values in self._codes:
+            for code, values in self._codes:
                 logger(0, "", TOKEN_NOTHING)
                 logger(1, code, values)
                 yield (code, values)
@@ -590,7 +597,7 @@ class MessageEngine():
     # メッセージを実行するジェネレータ。タスク関数が来ると止まる
     def runner(self, context, *, log) -> Generator[Message, None, None]:
         self._trailing_as_parameter = False # リセット
-        logger = self._begin_logger(dummy=not log)
+        logger = self._begin_logger()
         
         # コードから構文を組み立てつつ随時実行
         codes = []
@@ -606,7 +613,9 @@ class MessageEngine():
                     self._temp_result_stack.append(result) # reduce_stepのジェネレータへの受け渡しにのみ使用するスタック
                     completemsgs.append(msg)
             except Exception as e:
-                context.set_pre_invoke_error(e)
+                err = MessageError(e, self) # コード情報を付加する
+                err.with_traceback(e.__traceback__) # 引き継ぐ
+                context.set_pre_invoke_error(err)
                 logger(-1, e)
                 break
 
@@ -616,7 +625,7 @@ class MessageEngine():
             else:
                 logger(2, completemsgs)
             
-            codes.append((code, *values))
+            codes.append((code, values))
 
         if not context.is_failed():
             self._codes = codes
@@ -646,23 +655,17 @@ class MessageEngine():
         if state == 0:
             self.log.append([])
             token, tokentype = values
-            typeflags = _view_bitflag("TOKEN_", tokentype)
-            values = (token, typeflags)
+            values = (token, tokentype)
         elif state == 1:
             code, vals = values
-            code1 = code & 0x0F
-            code2 = code & 0xF0
-            codename = _view_constant("TERM_", code1)
-            if code2:
-                codename += "+" + _view_constant("TERM_", code2)
-            values = (codename, ", ".join([str(x) for x in vals]))
+            values = (code, vals)
         elif state == 2:
             completes = values[0]
-            values = ("".join([x.sexprs() for x in completes]),)
+            values = (completes,)
         elif state == -1:
             self.log.append([])
             err = values[0]
-            msg = ["!!! Error occurred on evaluation: {} {}".format(type(err).__name__, err)]
+            msg = ["!!! Error occurred on evaluation:", "{} {}".format(type(err).__name__, err)]
             import traceback
             _, _, tb = sys.exc_info()
             for line in traceback.format_tb(tb):
@@ -672,7 +675,7 @@ class MessageEngine():
 
         self.log[-1].extend(values)
     
-    def _begin_logger(self, *, dummy):
+    def _begin_logger(self, *, dummy=False):
         self.log = []
         if dummy:
             def logger(state, *values):
@@ -682,18 +685,40 @@ class MessageEngine():
         return logger
 
     # 蓄積されたログを出力する
-    def pprint_log(self):
-        print("Message: {}".format(self.source))
-        if not self.log:
-            print(" --- no log ---")
+    def pprint_log(self, printer=None, *, logs=None, columns=None):
+        if printer is None: printer = print
+        if logs is None: logs = self.log
+        if columns is None: 
+            columns = range(5)
+        else:
+            columns = range(columns[0], columns[1])
+
+        printer("Message: {}".format(self.source))
+        if not logs:
+            printer(" --- no log ---")
             return
         
-        rowtitles = ("token", "token-type", "meaning", "yielded", "done-branch")
-        for i, logrow in enumerate(self.log):
-            print("[{}]-----------------".format(i))
-            for title, value in zip(rowtitles, logrow):
+        for i, logrow in enumerate(logs):
+            printer("[{}]-----------------".format(i))
+            for i, value in zip(columns, logrow):
+                if i == 0:
+                    title = "token"
+                    s = value
+                elif i == 1:
+                    title = "token-type"
+                    s = view_tokentypes(value)
+                elif i == 2:
+                    title = "meaning"
+                    s = view_term_constant(value)
+                elif i == 3:
+                    title = "yielded"
+                    s = ", ".join([str(x) for x in value])
+                elif i == 4:
+                    title = "done-branch"
+                    s = "".join([x.sexprs() for x in value])
+
                 pad = 16-len(title)
-                print(" {}:{}{}".format(title, pad*" ", value))
+                printer(" {}:{}{}".format(title, pad*" ", s))
 
 # ログ表示用に定数名を得る
 def _view_constant(prefix, code):
@@ -703,6 +728,16 @@ def _view_constant(prefix, code):
     else:
         return "<定数=0x{0X}（{}***）の名前は不明です>".format(code, prefix)
 
+# TERM_XXX 
+def view_term_constant(code):
+    code1 = code & 0x0F
+    code2 = code & 0xF0
+    codename = _view_constant("TERM_", code1)
+    if code2:
+        codename += "+" + _view_constant("TERM_", code2)
+    return codename
+
+# ビットフラグ
 def _view_bitflag(prefix, code):
     c = code
     n = []
@@ -713,6 +748,9 @@ def _view_bitflag(prefix, code):
     if c!=0:
         n.append("0x{0X}".format(c))
     return "+".join(n)
+    
+def view_tokentypes(flags):
+    return _view_bitflag("TOKEN_", flags)
 
 #
 # 引数を一つとりメッセージを実行する

@@ -35,34 +35,39 @@ class _internal_entrypoint:
 #
 #
 #
-class package():
-    COMMANDSET_MODULE = 1
+class Package():
+    CLASS_MODULE = 1
     DEPENDENCY_MODULE = 2
     DATASTORE = 3
 
-    def __init__(self, source, name=None, entrypoint=None, std=False, hashval=None, dependency=False, datastore=False):
+    def __init__(self, 
+        source: Any, 
+        name: Optional[str] = None, 
+        entrypoint: Optional[str] = None, 
+        pysyspackage = False, 
+        hashval = None, 
+        dependency = False, 
+        datastore = False
+    ):
         if not name:
             name = source.name
         self.name = name
         self.source = source
-        self.separate = not std
+        self.separate = not pysyspackage
         
-        self._type = package.COMMANDSET_MODULE
+        self._type = Package.CLASS_MODULE
         if dependency:
-            self._type = package.DEPENDENCY_MODULE
+            self._type = Package.DEPENDENCY_MODULE
         if datastore:
-            self._type = package.DATASTORE
+            self._type = Package.DATASTORE
 
         # エントリポイントとなるモジュールを探す
-        if self._type == package.COMMANDSET_MODULE:
-            if not entrypoint:
-                entrypoint = name
-            entrypoint += ".__commands__"
+        self.entrymodule: Optional[str] = None
+        if self._type == Package.CLASS_MODULE:
+            if not entrypoint: entrypoint = "{}.__init__".format(name)
             self.entrymodule = entrypoint
-        else:
-            self.entrymodule = None
 
-        self._icmdset = None
+        self._classname = None
         self._hash = hashval
     
     @property
@@ -87,11 +92,11 @@ class package():
             self._hash = "" if _hash is None else _hash
         return self._hash
 
-    def is_commandset(self) -> bool:
-        return self._type == package.COMMANDSET_MODULE
+    def is_class(self) -> bool:
+        return self._type == Package.CLASS_MODULE
     
     def attach_commandset(self, index):
-        if self._type != package.COMMANDSET_MODULE:
+        if self._type != Package.COMMANDSET_MODULE:
             raise ValueError("Not a commandset module package")
         if self._icmdset is not None:
             raise ValueError("Commandset has been attached already")
@@ -100,9 +105,12 @@ class package():
     def get_attached_commandset(self) -> Optional[int]:
         return self._icmdset
     
-    def is_installed_module(self) -> bool:
-        if self._type == package.DATASTORE:
+    def is_installed(self) -> bool:
+        if self._type == Package.DATASTORE:
             return False
+        if self.entrymodule is None:
+            raise ValueError("entrymodule")
+
         # 親モジュールから順に確認する
         mparts = self.entrymodule.split(".")
         for i in range(len(mparts)):
@@ -110,9 +118,11 @@ class package():
             spec = importlib.util.find_spec(mp)
             if spec is None:
                 return False
+        
         return True
 
     def load_command_builder(self):
+        """ パッケージクラスをロードする """
         spec = importlib.util.find_spec(self.entrymodule)
         if spec is None:
             raise ModuleNotFoundError(self.entrymodule)
@@ -135,7 +145,7 @@ class PackageEntryLoadError(Exception):
 #
 #
 #
-class package_manager():    
+class PackageManager():    
     ALREADY_INSTALLED = milestone()
     DOWNLOAD_START = milestone_msg("total")
     DOWNLOADING = milestone_msg("size")
@@ -152,7 +162,7 @@ class package_manager():
 
     def __init__(self, directory, database="packages.ini"):
         self.dir = directory
-        self.database = None
+        self.database = None # type: configparser.ConfigParser
         self._dbpath = os.path.join(directory, database)
     
     def load_database(self, force=False):
@@ -211,7 +221,7 @@ class package_manager():
         return pkg_name in self.database
                 
     #
-    def install(self, pkg: package, newinstall: bool):
+    def install(self, pkg: Package, newinstall: bool):
         rep = pkg.get_repository()
 
         tmpdir = ''
@@ -224,16 +234,16 @@ class package_manager():
             if not tmpdir: tmpdir = tempfile.mkdtemp()
             try:
                 total = rep.query_download_size()
-                yield package_manager.DOWNLOAD_START.bind(total=total)
+                yield PackageManager.DOWNLOAD_START.bind(total=total)
 
                 arcfilepath = rep.get_arcfilepath(tmpdir)
                 for size in rep.download_iter(arcfilepath):
-                    yield package_manager.DOWNLOADING.bind(size=size, total=total)
+                    yield PackageManager.DOWNLOADING.bind(size=size, total=total)
                     
-                yield package_manager.DOWNLOAD_END.bind(total=total)
+                yield PackageManager.DOWNLOAD_END.bind(total=total)
 
             except RepositoryURLError as e:
-                yield package_manager.DOWNLOAD_ERROR.bind(error=e.get_basic())
+                yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
                 tmpdir = cleanup_tmpdir(tmpdir)
                 return
             except Exception:
@@ -257,7 +267,7 @@ class package_manager():
             localpath = rep.get_local_path()
             
         # pipにインストールさせる
-        yield package_manager.PIP_INSTALLING
+        yield PackageManager.PIP_INSTALLING
         try:
             if newinstall:
                 yield from _run_pip(
@@ -270,7 +280,7 @@ class package_manager():
                     private_reqs = _read_private_requirements(localpath)
                     private_reqs = [name for name in private_reqs if not self.is_installed(name)]
                     if private_reqs:
-                        yield package_manager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
+                        yield PackageManager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
                 
                 # pipが作成したデータを見に行く
                 distinfo: Dict[str, str] = {}
@@ -299,14 +309,14 @@ class package_manager():
         separate = self.database.getboolean(pkg.name, "separate", fallback=False)
         if separate:
             # 手動でディレクトリを削除する
-            yield package_manager.UNINSTALLING
+            yield PackageManager.UNINSTALLING
             toplevel = self.database[pkg.name]["toplevel"]
             shutil.rmtree(os.path.join(self.dir, toplevel))
             infodir = self.database[pkg.name]["infodir"]
             shutil.rmtree(os.path.join(self.dir, infodir))
         else:
             # pipにアンインストールさせる
-            yield package_manager.PIP_UNINSTALLING
+            yield PackageManager.PIP_UNINSTALLING
             yield from _run_pip(
                 uninstalltarget=pkg.name,
                 options=["--yes"]
@@ -353,9 +363,9 @@ def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=
     proc = popen_capture(cmd)
     for msg in proc:
         if msg.is_finished():
-            yield package_manager.PIP_END.bind(returncode=msg.returncode())
+            yield PackageManager.PIP_END.bind(returncode=msg.returncode())
         elif msg.is_output():
-            yield package_manager.PIP_MSG.bind(msg=msg.text())
+            yield PackageManager.PIP_MSG.bind(msg=msg.text())
         
 
 #

@@ -49,6 +49,7 @@ class Process:
     def run_object_message(self, context, routine=None):
         self.message.run(context, runner=routine)
         post_send_message_process(self, context)
+        self.finish()
     
     # 番号を指定する
     def set_index(self, index):
@@ -95,7 +96,7 @@ class Process:
     
     def finish(self):
         self._finished = True
-        self.post_message(ProcessMessage("finished"))
+        self.post_message(ProcessMessage(tag="finished"))
     
     def is_finished(self):
         return self._finished
@@ -208,7 +209,7 @@ class Spirit():
 
     # ファイル対象に使用するとよい...
     def print_target(self, target):
-        self.post("message_em", '対象 --> [{}]'.format(target))
+        self.post("message-em", '対象 --> [{}]'.format(target))
 
     #
     def message_io(self, tag="message", *, oneliner=False, **options):
@@ -590,6 +591,11 @@ class ProcessChamber:
 
     def get_last_process_index(self): # -
         return self.last_process.get_index()
+    
+    def get_input_string(self):
+        if not self._prlist:
+            return ""
+        return self.last_process.message.source
 
 #
 #
@@ -629,6 +635,9 @@ class DesktopChamber():
     def get_title(self): # -
         title = "机{}. {}".format(self._index+1, self._name)
         return title
+    
+    def get_input_string(self):
+        return ""
 
 
 #
@@ -641,19 +650,18 @@ class ProcessHive:
         self._nextindex: int = 0
     
     # メッセージを実行し必要ならチャンバーを作成
-    def new(self, app, message: str) -> ProcessChamber:    
+    def new(self, app, message: str) -> Tuple[ProcessChamber, bool]:    
         process = send_object_message(app, message) # メッセージを実行する
-        if not process.is_finished():
-            # 非同期タスク：新しいチャンバーを用意
-            chamber = self.addnew()
+
+        chamber = self.get_active()
+        if process.is_finished() and chamber and chamber.is_finished():
+            newchm = False
         else:
-            chamber = self.get_active()
-            if not chamber: 
-                chamber = self.addnew() # チャンバーが一つもない
-            elif not chamber.is_finished():
-                chamber = self.addnew() # 現在のプロセスが終了していないなら、追加せず新規作成
+            chamber = self.addnew()
+            newchm = True
+        
         chamber.add(process)
-        return chamber
+        return chamber, newchm
 
     # 新しいチャンバーを作成して返す
     def addnew(self, activate=True, *, chamber=None) -> ProcessChamber:
@@ -749,7 +757,7 @@ class ProcessHive:
     #
     #
     def get_runnings(self):
-        return [x for x in self.chambers.values() if x.is_running()]
+        return [x for x in self.chambers.values() if not x.is_finished()]
 
     def interrupt_all(self):
         for cha in self.get_runnings():
@@ -785,7 +793,7 @@ class ProcessError():
     def print_traceback(self, spi):
         excep, traces = self.get_traces()
         spi.error(excep)
-        spi.message_em("スタックトレース：")
+        spi.message-em("スタックトレース：")
         spi.message("".join(traces))
 
 #
@@ -806,20 +814,19 @@ def send_object_message(root, expression: str):
     # オブジェクトを取得
     deskchm = root.processhive.get_last_active_desktop()
     if deskchm is None:
-        raise ValueError("No object desktop can be found")
+        inputobjs = ObjectCollection()
+        #raise ValueError("No object desktop can be found")
+    else:
+        inputobjs = deskchm.get_objects()
 
     # コマンドを解析
     context = InvocationContext(
-        input_objects=deskchm.get_objects(), 
+        input_objects=inputobjs, 
         type_module=root.get_type_module(),
         spirit=spirit
     )
     process.set_last_invocation_context(context)
     msgroutine = message.runner(context, log=False)
-    if context.is_failed():
-        # 解析中の例外（構文エラー等）
-        root.ui.on_error_process(spirit, process, context.get_last_exception(), timing = "onparse")
-        return None
 
     # 実行
     for nextmsg in msgroutine:
@@ -830,6 +837,7 @@ def send_object_message(root, expression: str):
     
     # 同期実行の終わり
     post_send_message_process(process, context)
+    process.finish()
     return process
 
 
@@ -849,11 +857,11 @@ def post_send_message_process(process, context):
         return False
 
     # 返り値をオブジェクトとして配置する
-    returns = process.message.get_returns()
-    context.spirit.post("new-objects", returns)
+    returns = context.clear_local_objects()
+    context.spirit.post("new-objects", objects=returns)
 
     # プロセス終了を表示する
     app.ui.on_exit_process(context.spirit, process, context.get_last_invocation())
-    process.finish()
+    return True
 
 
