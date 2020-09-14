@@ -49,7 +49,7 @@ class DataColumn():
         return self.method.get_doc()
     
     def get_type(self, context):
-        return context.get_type(self.typename)
+        return context.select_type(self.typename)
     
     def eval(self, subject, context):
         objs = self.getter.run(subject, context, log=DataColumn.evallog)

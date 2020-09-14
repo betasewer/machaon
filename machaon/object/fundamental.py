@@ -40,6 +40,30 @@ class TypeType():
         '''
         value = type.construct_from_string(parameter)
         return Object(type, value)
+    
+    def query(self, type):
+        '''@method
+        使用可能なメソッドを列挙する。
+        Params:
+            type (Type): 型
+        Returns:
+            str: 文字列
+        '''
+        lines = []
+        from machaon.object.message import enum_selectable_method
+        for inv in enum_selectable_method(type):
+            lines.append(str(inv))
+        return "\n".join(lines)
+
+
+@fundamental_type.definition(typename="Any")
+class AnyType():
+    """あらゆる型を受け入れる型。
+    ValueType: machaon.Any
+    """
+
+    def construct(self, s):
+        raise UnsupportedMethod()
 
 
 @fundamental_type.definition(typename="Function")
