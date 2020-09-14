@@ -237,7 +237,9 @@ class Type():
             self.doc = doc.strip()
 
         valtypename = sections.get_value("ValueType")
-        if valtypename:
+        if valtypename == "machaon.Any":
+            self.value_type = None # Any型
+        elif valtypename:
             loader = attribute_loader(valtypename, implicit_syntax=True)
             self.value_type = loader() # 例外発生の可能性
         

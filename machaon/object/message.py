@@ -11,7 +11,7 @@ from machaon.object.invocation import (
     BasicInvocation,
     TypeMethodInvocation,
     InstanceMethodInvocation,
-    StaticMethodInvocation
+    GenericMethodInvocation
 )
 
 
@@ -124,7 +124,7 @@ class Message:
         # 返り値（一つだけ）
         ret = context.get_last_result()
         if ret is not None:
-            rettype = context.get_type(ret.typecode)
+            rettype = context.select_type(ret.typecode)
             return Object(rettype, ret.value)
 
         return None
@@ -141,7 +141,7 @@ class Message:
     def get_result_type(self, context):
         typenames = self.selector.get_result_typenames()
         if typenames:
-            return context.get_type(typenames[0])
+            return context.select_type(typenames[0])
         raise ValueError("返り値の型を導出できません")
 
     #
@@ -221,6 +221,7 @@ def select_literal(context, string, tokentype) -> Object:
     typename = type(value).__name__
     if typename not in python_builtin_typenames:
         raise BadExpressionError("Unsupported literal type: {}".format(typename))
+    
     return Object(context.get_type(typename), value)
 
 # 無名関数の引数参照
@@ -260,7 +261,7 @@ def select_method(name, typetraits=None, *, modbits=None):
     if loader:
         modfn = loader(fallback=True)
         if modfn:
-            return StaticMethodInvocation(modfn, modbits)
+            return GenericMethodInvocation(modfn, modbits)
 
     # 型メソッド
     if typetraits is not None:
@@ -272,10 +273,24 @@ def select_method(name, typetraits=None, *, modbits=None):
     from machaon.object.generic_method import resolve_generic_method
     genfn = resolve_generic_method(name)
     if genfn is not None:
-        return StaticMethodInvocation(genfn, modbits)
+        return GenericMethodInvocation(genfn, modbits)
     
     # インスタンスメソッド
     return InstanceMethodInvocation(name, modbits)
+
+
+#
+def enum_selectable_method(typetraits):
+    # 型メソッドの列挙
+    for meth in typetraits.enum_methods():
+        yield TypeMethodInvocation(meth)
+    
+    # インスタンスメソッド
+    valtype = typetraits.get_value_type()
+    for name in dir(valtype):
+        if not name.startswith("__"):
+            yield InstanceMethodInvocation(name)
+
 
 
 # --------------------------------------------------------------------

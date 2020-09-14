@@ -357,11 +357,13 @@ class Launcher():
         spirit.post("error", "{}エラーが発生し、失敗しました。".format(tim))
         
         if isinstance(excep, MessageError):
+            errortype = traceback.format_exception_only(type(excep.error), excep.error)
+            spirit.post("error", errortype[0] if errortype else "")
             spirit.post("message-em", "メッセージ解決：")
             excep.message.pprint_log(lambda x: spirit.post("message", x))
         else:
             details = traceback.format_exception(type(excep), excep, excep.__traceback__)
-            spirit.post("error", details[-1])
+            spirit.post("error", details[-1] if details else "")
             spirit.post("message-em", "スタックトレース：")
             spirit.post("message", "".join(details[1:-1]))    
 

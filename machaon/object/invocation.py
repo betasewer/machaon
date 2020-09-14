@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from machaon.object.type import Type, TypeModule
 from machaon.object.object import Object, ObjectValue, ObjectCollection
+from machaon.object.method import normalize_method_target
 
 #
 # 
@@ -145,6 +146,13 @@ class InvocationContext:
     #    
     def get_type(self, typename) -> Optional[Type]:
         return self.type_module.get(typename, fallback=True)
+    
+    def select_type(self, typename) -> Type:
+        t = self.type_module.get(typename, fallback=True)
+        if t is None:
+            return self.type_module.get("Any")
+        else:
+            return t
         
     def new_type(self, typename) -> Type:
         return self.type_module.new(typename)
@@ -351,7 +359,7 @@ class TypeMethodInvocation(BasicInvocation):
 class InstanceMethodInvocation(BasicInvocation):
     def __init__(self, attrname, modifier=0):
         super().__init__(modifier)
-        self.attrname = attrname
+        self.attrname = normalize_method_target(attrname)
 
     def __str__(self):
         return "<InstanceMethodInvocation '{}' {}>".format(self.attrname, self.modifier_name())
@@ -371,7 +379,7 @@ class InstanceMethodInvocation(BasicInvocation):
 #
 # グローバルな関数を呼び出す
 #
-class StaticMethodInvocation(BasicInvocation):
+class GenericMethodInvocation(BasicInvocation):
     def __init__(self, function, modifier=0):
         super().__init__(modifier)
         self.fn = function
@@ -388,7 +396,7 @@ class StaticMethodInvocation(BasicInvocation):
 
     def __str__(self):
         name = ".".join([self.fn.__module__, self.fn.__name__])
-        return "<StaticMethodInvocation '{}' {}>".format(name, self.modifier_name())
+        return "<GenericMethodInvocation '{}' {}>".format(name, self.modifier_name())
     
     def prepare_invoke(self, invocations, *argobjects):
         # そのままの引数で
