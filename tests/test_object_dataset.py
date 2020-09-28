@@ -83,7 +83,6 @@ def test_column(objectdesk):
     assert namecol.method.get_action()(subject.value) == "ken"
     DataColumn.evallog = True
     namecol.eval(subject, objectdesk) == "ken"
-    namecol.getter.message.pprint_log()
 
     subject = Object(employee, view.items[2])
     assert namecol.eval(subject, objectdesk) == "shin"
@@ -111,7 +110,8 @@ def test_create_no_mod(objectdesk):
     assert view.selection() == 1
     assert view.row(view.selection()) == ["yuuji"]
 
-    
+
+@pytest.mark.skip()
 def test_create_filtered(objectdesk):
     datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
     employee = objectdesk.get_type("Employee")
@@ -126,6 +126,7 @@ def test_create_filtered(objectdesk):
     assert view.rows_to_string_table(objectdesk) == ([(0, ["ken","3"]), (2, ["yuuji","5"])], [5, 1])
 
 
+@pytest.mark.skip()
 def test_filtered_manytimes(objectdesk):
     datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
     
@@ -151,6 +152,7 @@ def test_filtered_manytimes(objectdesk):
 #
 #
 #
+@pytest.mark.skip()
 def test_sorted(objectdesk):
     datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
     

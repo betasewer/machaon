@@ -1,5 +1,5 @@
 from machaon.object.type import Type
-from machaon.object.method import normalize_method_target
+from machaon.object.symbol import normalize_method_target
 
 #
 # どんな型にも共通のメソッドを提供
@@ -145,6 +145,19 @@ def function_in_format(left, right: str) -> str:
     fmt = "{0:" + right + "}"
     return fmt.format(left)
 
+
+#
+def function_identical(obj):
+    return obj
+
+def function_bind(spirit, left, right: str):
+    # spirit: (but not task function)
+    # left: Object
+
+    # return spirit.put_object(right, left)
+    pass
+
+
 #
 # 演算子と実装の対応
 #
@@ -171,4 +184,159 @@ operators = {
     "<<" : "lshift",
     "&&" : "and", 
     "||" : "or",
+    "=" : "identical",
+    "=>" : "bind"
 }
+
+#
+#
+#
+class GenericTraits:
+    """ @no-instance-method
+    """
+
+    # 比較
+    def equal(self, left, right) -> bool:
+        return left == right
+        
+    def not_equal(self, left, right) -> bool:
+        return left != right
+        
+    def less_equal(self, left, right) -> bool:
+        return left <= right
+        
+    def less(self, left, right) -> bool:
+        return left < right
+        
+    def greater_equal(self, left, right) -> bool:
+        return left >= right
+        
+    def greater(self, left, right) -> bool:
+        return left > right
+        
+    def is_(self, left, right) -> bool:
+        return left is right
+        
+    def is_not(self, left, right) -> bool:
+        return left is not right
+
+    # 論理
+    def logand(self, left, right) -> bool:
+        return left and right
+
+    def logior(self, left, right) -> bool:
+        return left or right
+
+    def lognot(self, left) -> bool:
+        return not left
+
+    def truth(self, left) -> bool:
+        return bool(left)
+
+    # 数学
+    def add(self, left, right):
+        return left + right
+
+    def sub(self, left, right):
+        return left - right
+
+    def mul(self, left, right):
+        return left * right
+        
+    def matmul(self, left, right):
+        return left @ right
+
+    def div(self, left, right):
+        return left / right
+        
+    def floordiv(self, left, right):
+        return left // right
+
+    def mod(self, left, right):
+        return left % right
+
+    def negative(self, left):
+        return -left
+
+    def positive(self, left):
+        return +left
+
+    def abs(self, left):
+        return abs(left)
+
+    def pow(self, left, right):
+        return pow(left, right)
+
+    def round(self, left: float, right: int = None) -> float:
+        return round(left, right)
+
+    # ビット演算
+    def bitand(self, left: int, right: int) -> int:
+        return left & right
+
+    def bitor(self, left: int, right: int) -> int:
+        return left | right
+        
+    def bitxor(self, left: int, right: int) -> int:
+        return left ^ right
+        
+    def bitinv(self, left: int) -> int:
+        return ~left
+        
+    def lshift(self, left: int, right: int) -> int:
+        return left << right
+        
+    def rshift(self, left: int, right: int) -> int:
+        return left >> right
+        
+    # リスト関数
+    def seqcontain(self, left, right) -> bool:
+        return right in left 
+
+    def seqin(self, left, right) -> bool:
+        return left in right
+
+    def seqat(self, left, right: int):
+        return left[right]
+
+    def seqslice(self, left, start: int=None, end: int=None):
+        return left[start:end]
+        
+    def seqconcat(self, left, right) -> bool:
+        return left + right
+        
+    # その他の組み込み関数
+    def length(self, left) -> int:
+        return len(left)
+
+    def or_greater(self, left, right):
+        if left < right:
+            return right
+        return left
+
+    def or_less(self, left, right):
+        if left > right:
+            return right
+        return left
+
+    def in_format(self, left, right: str) -> str:
+        fmt = "{0:" + right + "}"
+        return fmt.format(left)
+
+    # オブジェクト
+    def identical(self, obj):
+        """
+        レシーバオブジェクトと同一のオブジェクトを返す。
+        Arguments:
+            obj: Object
+        Returns:
+            Object: レシーバオブジェクト
+        """
+        return obj
+
+    def bind(self, spirit, left, right: str):
+        # spirit: (but not task function)
+        # left: Object
+
+        # return spirit.put_
+        pass

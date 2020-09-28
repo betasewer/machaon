@@ -18,6 +18,7 @@ def approot():
     app.initialize(ui=wnd, directory="C:\\codes\\python\\machaon\\tests\\sample\\pkg")
     return app
 
+@pytest.mark.skip()
 def test_cmdset_setup(approot):
     approot.setup_package(("shell",), shell_commands())
     assert len(approot.cmdengine.commandsets) == 1

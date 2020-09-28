@@ -5,7 +5,8 @@ from collections import defaultdict
 
 from machaon.object.type import Type, TypeModule
 from machaon.object.object import Object, ObjectValue, ObjectCollection
-from machaon.object.method import normalize_method_target
+from machaon.object.method import Method
+from machaon.object.symbol import normalize_method_target, normalize_method_name
 
 #
 # 
@@ -29,7 +30,9 @@ class BadMethodInvocation(Exception):
 #
 #
 class InvocationEntry():
-    def __init__(self, args, kwargs):
+    def __init__(self, invocation, action, args, kwargs):
+        self.invocation = invocation
+        self.action = action
         self.args = args
         self.kwargs = kwargs
         self.results = [] # ObjectValue
@@ -38,7 +41,7 @@ class InvocationEntry():
         self.exception = None
     
     def clone(self):
-        inv = InvocationEntry(self.args, self.kwargs)
+        inv = InvocationEntry(self.invocation, self.action, self.args, self.kwargs)
         inv.results = self.results
         inv.missing_args = self.missing_args
         inv.unused_args = self.unused_args
@@ -60,6 +63,37 @@ class InvocationEntry():
         if self.exception:
             return True
         return False
+    
+    def invoke(self):
+        modifier = self.invocation.modifier
+        if modifier & INVOCATION_REVERSE_ARGS:
+            self.reverse_args()
+
+        # 実行
+        from machaon.process import ProcessInterrupted
+        result = None
+        try:
+            result = self.action(*self.args, **self.kwargs)
+        except ProcessInterrupted as e:
+            raise e
+        except Exception as e:
+            self.set_exception(e)
+        
+        # 返り値をまとめる
+        if result is not None:
+            typenames = self.invocation.get_result_typenames()
+            if not isinstance(result, tuple):
+                result = (result,)
+            for i, value in enumerate(result):
+                if isinstance(value, Object):
+                    self.push_result(value.get_typename(), value.value)
+                elif i<len(typenames):
+                    self.push_result(typenames[i], value)
+                else:
+                    self.push_result(type(value).__name__, value)
+        
+        if modifier & INVOCATION_NEGATE_RESULT:
+            self.negate_result()
 
 #
 #
@@ -131,26 +165,20 @@ class InvocationContext:
         self.input_objects.push(name, obj)
     
     #
-    def set_subject(self, subject: Union[Object, Dict[str, Object]]):
-        if isinstance(subject, Object) or isinstance(subject, dict):
-            self.subject_object = subject
-        else:
-            raise TypeError("subject Bad Type: " + str(subject))
-    
+    def set_subject(self, subject: Object):
+        self.subject_object = subject
+
     def clear_subject(self):
         self.subject_object = None
     
-    def get_subject(self):
-        return self.subject_object
-        
     #    
     def get_type(self, typename) -> Optional[Type]:
-        return self.type_module.get(typename, fallback=True)
+        return self.type_module.get(typename)
     
     def select_type(self, typename) -> Type:
-        t = self.type_module.get(typename, fallback=True)
+        t = self.type_module.get(typename)
         if t is None:
-            return self.type_module.get("Any")
+            return self.type_module["Any"]
         else:
             return t
         
@@ -192,7 +220,7 @@ class InvocationContext:
 
     def set_pre_invoke_error(self, excep: BaseException):
         # コマンド解析の失敗など、呼び出す前に起きたエラーを格納する
-        entry = InvocationEntry((), {})
+        entry = InvocationEntry(None, None, (), {})
         entry.set_exception(excep)
         self.push_invocation(entry)
         
@@ -212,50 +240,19 @@ class BasicInvocation():
         self.modifier = modifier
         self.result_typehint = None
 
-    def modifier_name(self):
+    def modifier_name(self, straight=False):
         m = []
         if self.modifier & INVOCATION_REVERSE_ARGS:
             m.append("arg-reversed")
         if self.modifier & INVOCATION_NEGATE_RESULT:
             m.append("result-negated")
-        if not m:
+        if not m and straight:
             m.append("straight")
         return " ".join(m)
     
-    def invoke(self, context: InvocationContext, *args):
-        # 引数とアクションを生成
-        action, inventry = self.prepare_invoke(context, *args)
-
-        if self.modifier & INVOCATION_REVERSE_ARGS:
-            inventry.reverse_args()
-
-        # 実行
-        from machaon.process import ProcessInterrupted
-        result = None
-        try:
-            result = action(*inventry.args, **inventry.kwargs)
-        except ProcessInterrupted as e:
-            raise e
-        except Exception as e:
-            inventry.set_exception(e)
-        
-        # 返り値をまとめる
-        if result is not None:
-            typenames = self.get_result_typenames()
-            if not isinstance(result, tuple):
-                result = (result,)
-            for i, value in enumerate(result):
-                if isinstance(value, Object):
-                    inventry.push_result(value.get_typename(), value.value)
-                elif i<len(typenames):
-                    inventry.push_result(typenames[i], value)
-                else:
-                    inventry.push_result(type(value).__name__, value)
-        
-        if self.modifier & INVOCATION_NEGATE_RESULT:
-            inventry.negate_result()
-        
-        # 格納
+    def invoke(self, context: InvocationContext, *argobjects: Object):
+        inventry = self.prepare_invoke(context, *argobjects)
+        inventry.invoke()
         context.push_invocation(inventry)
     
     def set_result_typehint(self, typename: str):
@@ -267,13 +264,8 @@ class BasicInvocation():
     #
     # これらをオーバーロードする
     #
-    def prepare_invoke(self, context: InvocationContext, *args):
+    def prepare_invoke(self, context: InvocationContext, *args) -> InvocationEntry:
         raise NotImplementedError()
-    
-    def result_invoke(self, result, entry: InvocationEntry):
-        # 返り値を設定する
-        typename = type(result).__name__
-        entry.push_result(typename, result)
     
     def get_result_typenames(self):
         return []
@@ -297,9 +289,17 @@ class TypeMethodInvocation(BasicInvocation):
     def __init__(self, method, modifier=0):
         super().__init__(modifier)
         self.method = method
+    
+    def display(self):
+        return ("TypeMethod", self.method.get_name(), self.modifier_name())
 
     def __str__(self):
-        return "<TypeMethodInvocation '{}' {}>".format(self.method.get_name(), self.modifier_name())
+        inv = " ".join([x for x in self.display() if x])
+        return "<Invocation {}>".format(inv)
+    
+    def query_method(self, this_type):
+        self.method.load(this_type)
+        return self.method
     
     def is_task(self):
         return self.method.is_task()
@@ -336,10 +336,9 @@ class TypeMethodInvocation(BasicInvocation):
                 elif not param.is_required():
                     kwargs[param.name] = param.get_default() # デフォルト引数で埋めておく
         
-        # 実行
-        entry = InvocationEntry(args, kwargs)
-        return self.method.get_action(), entry
-
+        action = self.method.get_action()
+        return InvocationEntry(self, action, args, kwargs)
+    
     def get_result_typenames(self):
         return [x.typename for x in self.method.results]
     
@@ -354,58 +353,89 @@ class TypeMethodInvocation(BasicInvocation):
 
 
 #
-# 定義のわからないメソッドを実行するたびに呼び出す
+# 名前だけで定義のわからないメソッドを呼び出す
 #
 class InstanceMethodInvocation(BasicInvocation):
     def __init__(self, attrname, modifier=0):
         super().__init__(modifier)
         self.attrname = normalize_method_target(attrname)
+    
+    def display(self):
+        return ("InstanceMethod", self.attrname, self.modifier_name())
 
     def __str__(self):
-        return "<InstanceMethodInvocation '{}' {}>".format(self.attrname, self.modifier_name())
+        inv = " ".join([x for x in self.display() if x])
+        return "<Invocation {}>".format(inv)
     
-    def prepare_invoke(self, context, *argobjects):
-        selfval, *args = [x.value for x in argobjects]
+    def query_method(self, this_type):
+        value_type = this_type.get_value_type()
+        fn = getattr(value_type, self.attrname, None)
+        if fn is None:
+            raise BadMethodInvocation(self.attrname)
+        
+        if not callable(fn):
+            return None
+            
+        if getattr(fn,"__self__",None) is not None:
+            # クラスメソッドを排除する
+            return None
 
-        # 値に定義されたメソッドを取得
-        method = getattr(selfval, self.attrname, None)
+        mth = Method(normalize_method_name(self.attrname))
+        mth.load_syntax_from_function(fn)
+        return mth
+    
+    def resolve_instance_method(self, args):
+        instance, *trailingargs = args
+        method = getattr(instance, self.attrname, None)
         if method is None:
             raise BadMethodInvocation(self.attrname)
-
-        # 実行
-        entry = InvocationEntry(args, {})
-        return method, entry
+        return method, instance, trailingargs
+    
+    def prepare_invoke(self, context, *argobjects):
+        method, _inst, args = self.resolve_instance_method([x.value for x in argobjects])
+        return InvocationEntry(self, method, args, {})
     
 #
 # グローバルな関数を呼び出す
 #
-class GenericMethodInvocation(BasicInvocation):
-    def __init__(self, function, modifier=0):
+class FunctionInvocation(BasicInvocation):
+    def __init__(self, function, modifier=0, *, do_inspect=True):
         super().__init__(modifier)
         self.fn = function
-        try:
-            sig = inspect.signature(self.fn)
-            minarg = 0
-            for p in sig.parameters.values():
-                if p.default != inspect.Parameter.empty:
-                    break
-                minarg += 1
-            self.arity = (minarg, len(sig.parameters))
-        except ValueError:
-            self.arity = (0, 0xFFFF)
+        self.arity = (0, 0xFFFF) # (min, max)
+        if do_inspect:
+            try:
+                sig = inspect.signature(self.fn)
+                minarg = 0
+                for p in sig.parameters.values():
+                    if p.default != inspect.Parameter.empty:
+                        break
+                    minarg += 1
+                self.arity = (minarg, len(sig.parameters))
+            except ValueError:
+                pass
 
-    def __str__(self):
+    def display(self):
         name = ".".join([self.fn.__module__, self.fn.__name__])
-        return "<GenericMethodInvocation '{}' {}>".format(name, self.modifier_name())
+        return ("Function", name, self.modifier_name())
+    
+    def __str__(self):
+        inv = " ".join([x for x in self.display() if x])
+        return "<Invocation {}>".format(inv)
+    
+    def query_method(self, _this_type):
+        mth = Method(self.fn.__name__)
+        mth.load_syntax_from_function(self.fn)
+        return mth
     
     def prepare_invoke(self, invocations, *argobjects):
         # そのままの引数で
         args = [x.value for x in argobjects]
-        entry = InvocationEntry(args, {})
-        return self.fn, entry
+        return InvocationEntry(self, self.fn, args, {})
     
     def get_max_arity(self):
         return self.arity[1]
 
     def get_min_arity(self):
         return self.arity[0]
+

@@ -16,7 +16,7 @@ class Dummy_Rabbit():
 def test_typemodule_get():
     assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
     assert fundamental_type.get(Dummy_Rabbit).typename == "Dummy-Rabbit"
-    assert fundamental_type.Dummy_Rabbit.get_method_delegator().describe_count == 1
+    assert fundamental_type.Dummy_Rabbit.method_delegate_class.describe_count == 1
     
 def test_typemodule_move():
     new_typeset = TypeModule()
@@ -29,7 +29,7 @@ def test_typemodule_move():
     assert fundamental_type.get("AltString").typename == "AltString"
     assert fundamental_type.Dummy_Rabbit.typename == "Dummy-Rabbit"
     assert fundamental_type.Second_Rabbit.typename == "Second-Rabbit"
-    assert fundamental_type.Dummy_Rabbit.get_method_delegator().describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
+    assert fundamental_type.Dummy_Rabbit.method_delegate_class.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
 
 def test_fundamental():
     assert fundamental_type.Int.typename == "Int"

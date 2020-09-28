@@ -22,7 +22,7 @@ def test_valuetype_define():
     t = fundamental_type.define(SomeValue)
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト"
-    assert not t.is_method_bound("TYPE")
+    assert not t.is_methods_type_bound()
 
 def test_method_docstring():
     def plus(a, b):
@@ -63,7 +63,7 @@ def test_method_loading():
     assert newmethod.is_loaded()
     assert newmethod.get_name() == "new"
     assert newmethod.get_result_count() == 1
-    assert newmethod.get_required_argument_min() == 2
+    assert newmethod.get_required_argument_min() == 1
     assert newmethod.get_acceptable_argument_max() == 2
     assert newmethod.is_type_bound() is True
 

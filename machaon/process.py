@@ -6,6 +6,7 @@ import threading
 import queue
 import time
 import traceback
+import datetime
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
 
 #from machaon.action import ActionInvocation
@@ -96,7 +97,6 @@ class Process:
     
     def finish(self):
         self._finished = True
-        self.post_message(ProcessMessage(tag="finished"))
     
     def is_finished(self):
         return self._finished
@@ -308,7 +308,7 @@ class TempSpirit(Spirit):
     
     def printout(self):
         for msg in self.msgs:
-            kwargs = str(msg.kwargs) if msg.kwargs else ""
+            kwargs = str(msg.args) if msg.args else ""
             print("[{}]{} {}".format(msg.tag, msg.text, kwargs))
         self.msgs.clear()
     
@@ -347,29 +347,20 @@ class TempSpirit(Spirit):
 #  メッセージクラス
 #
 class ProcessMessage():
-    def __init__(self, text=None, tag="message", embed=None, **kwargs):
+    def __init__(self, text=None, tag="message", embed=None, **args):
         self.text = text
         self.tag = tag
         self.embed_ = embed or []
-        self.kwargs = kwargs
+        self.args = args
 
     def argument(self, name, default=None):
-        return self.kwargs.get(name, default)
+        return self.args.get(name, default)
 
     def set_argument(self, name, value):
-        self.kwargs[name] = value
+        self.args[name] = value
     
-    def get_text(self):
+    def get_text(self) -> str:
         return str(self.text)
-    
-    def get_hyperlink_link(self):
-        l = self.kwargs.get("link")
-        if l is not None:
-            return l
-        return self.text
-    
-    def get_hyperlink_label(self):
-        return self.kwargs.get("label")
     
     def is_embeded(self):
         return len(self.embed_) > 0
@@ -386,7 +377,7 @@ class ProcessMessage():
 
         def partmsg(msg=None, text=None, withbreak=False):
             if text is not None:
-                msg = ProcessMessage(text, self.tag, None, **self.kwargs)
+                msg = ProcessMessage(text, self.tag, None, **self.args)
             if not withbreak:
                 msg.set_argument("nobreak", True)
             return msg
@@ -509,6 +500,7 @@ class ProcessChamber:
     def __init__(self, index):
         self._index = index
         self._prlist = []
+        self.prelude_msgs = []
         self.handled_msgs = []
     
     def add(self, process):
@@ -566,14 +558,17 @@ class ProcessChamber:
     
     def handle_process_messages(self):
         if not self._prlist:
-            return
-        msgs = self.last_process.handle_post_message()
-        for msg in msgs:
-            self.handled_msgs.append(msg)
+            msgs = self.prelude_msgs
+        else:
+            msgs = self.last_process.handle_post_message()
+        self.handled_msgs.extend(msgs)
         return msgs
 
     def get_process_messages(self): # -
         return self.handled_msgs
+    
+    def add_initial_prompt(self, prompt):
+        self.prelude_msgs.append(ProcessMessage(prompt, tag="message-em", nobreak=True))
     
     def get_title(self): # -
         title = "Chamber"
@@ -639,7 +634,6 @@ class DesktopChamber():
     def get_input_string(self):
         return ""
 
-
 #
 #
 #
@@ -650,35 +644,37 @@ class ProcessHive:
         self._nextindex: int = 0
     
     # メッセージを実行し必要ならチャンバーを作成
-    def new(self, app, message: str) -> Tuple[ProcessChamber, bool]:    
+    def new(self, app, message: str) -> Tuple[ProcessChamber, bool]:
         process = send_object_message(app, message) # メッセージを実行する
 
         chamber = self.get_active()
         if process.is_finished() and chamber and chamber.is_finished():
             newchm = False
         else:
-            chamber = self.addnew()
+            chamber = self.addnew(app.ui.get_input_prompt())
             newchm = True
         
         chamber.add(process)
         return chamber, newchm
 
     # 新しいチャンバーを作成して返す
-    def addnew(self, activate=True, *, chamber=None) -> ProcessChamber:
-        if chamber is None: 
-            newindex = self._nextindex
-            chamber = ProcessChamber(newindex)
+    def addnew(self, initial_prompt=None):
+        newindex = self._nextindex
+        chamber = ProcessChamber(newindex)
+        if initial_prompt:
+            chamber.add_initial_prompt(initial_prompt)
         self.chambers[newindex] = chamber
         self._nextindex += 1
-        if activate:
-            self.activate(newindex)
+        self.activate(newindex)
         return chamber
     
     def addnew_desktop(self, name: str, *, activate=True) -> DesktopChamber:
         newindex = self._nextindex
-        chm = DesktopChamber(name, newindex)
-        self.addnew(activate=activate, chamber=chm)
-        return chm
+        chamber = DesktopChamber(name, newindex)
+        self.chambers[newindex] = chamber
+        self._nextindex += 1
+        self.activate(newindex)
+        return chamber
     
     # 既存のチャンバーをアクティブにする
     def activate(self, index: int) -> bool:
@@ -792,9 +788,9 @@ class ProcessError():
 
     def print_traceback(self, spi):
         excep, traces = self.get_traces()
-        spi.error(excep)
-        spi.message-em("スタックトレース：")
-        spi.message("".join(traces))
+        spi.post("error", excep)
+        spi.post("message-em", "スタックトレース：")
+        spi.post("message", "".join(traces))
 
 #
 #
@@ -809,7 +805,8 @@ def send_object_message(root, expression: str):
     spirit = Spirit(root, process)
 
     # 実行開始
-    root.ui.on_exec_process(spirit, process)
+    timestamp = datetime.datetime.now()
+    spirit.post("on-exec-process", "begin", spirit=spirit, process=process, timestamp=timestamp)
 
     # オブジェクトを取得
     deskchm = root.processhive.get_last_active_desktop()
@@ -828,7 +825,7 @@ def send_object_message(root, expression: str):
     process.set_last_invocation_context(context)
     msgroutine = message.runner(context, log=False)
 
-    # 実行
+    # 実行開始
     for nextmsg in msgroutine:
         if nextmsg.is_task():
             # 非同期実行へ移行する
@@ -837,31 +834,27 @@ def send_object_message(root, expression: str):
     
     # 同期実行の終わり
     post_send_message_process(process, context)
-    process.finish()
     return process
 
 
 # メッセージ実行後のフロー
 def post_send_message_process(process, context):
-    app = context.spirit.get_app()
-
     # 実行時に発生した例外を確認する
     excep = context.get_last_exception()
     if excep is None:
-        pass
+        # 返り値をオブジェクトとして配置する
+        returns = context.clear_local_objects()
+        context.spirit.post("on-exec-process", "success", process=process, returns=returns, last_invocation=context.get_last_invocation())
+        success = True
     elif isinstance(excep, ProcessInterrupted):
-        app.ui.on_interrupt_process(context.spirit, process)
-        return False
+        context.spirit.post("on-exec-process", "interrupted", process=process)
+        success = False
     else:
-        app.ui.on_error_process(context.spirit, process, excep, timing = "onexec")
-        return False
+        context.spirit.post("on-exec-process", "error", process=process, error=excep)
+        success = False
 
-    # 返り値をオブジェクトとして配置する
-    returns = context.clear_local_objects()
-    context.spirit.post("new-objects", objects=returns)
-
-    # プロセス終了を表示する
-    app.ui.on_exit_process(context.spirit, process, context.get_last_invocation())
-    return True
+    # プロセス終了
+    process.finish()
+    return success
 
 
