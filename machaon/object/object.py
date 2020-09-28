@@ -2,7 +2,7 @@ from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
 from collections import OrderedDict, defaultdict
 
 from machaon.object.type import Type
-from machaon.object.typename import normalize_typename
+from machaon.object.symbol import normalize_typename
 
 # imported from...
 # desktop
@@ -33,12 +33,15 @@ class Object():
     def get_typename(self):
         return self.type.typename
 
+    def get_method_value(self, name):
+        pass
+
     #
-    def to_string(self) -> str:
-        return self.type.convert_to_string(self.value)
+    #def to_string(self) -> str:
+    #    return self.type.convert_to_string(self.value)
     
-    def get_summary(self) -> str:
-        return self.type.make_summary(self.value)
+    #def get_summary(self) -> str:
+    #    return self.type.make_summary(self.value)
 
 #
 #

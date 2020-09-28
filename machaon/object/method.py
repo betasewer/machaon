@@ -3,7 +3,7 @@ from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Option
 import inspect
 from collections import defaultdict
 
-from machaon.object.typename import normalize_typename
+from machaon.object.symbol import normalize_typename, normalize_method_target, normalize_method_name
 from machaon.object.docstring import DocStringParser
 
 # imported from...
@@ -16,22 +16,21 @@ from machaon.object.docstring import DocStringParser
 METHOD_TASK = 0x0001
 METHOD_CONSUME_TRAILING_PARAMS = 0x0002
 METHOD_TYPE_BOUND = 0x0010
+METHOD_PARAMETER_UNSPECIFIED = 0x1000
+METHOD_RESULT_UNSPECIFIED = 0x2000
+METHOD_KEYWORD_PARAMETER = 0x4000
+METHOD_UNSPECIFIED_MASK = 0xF000
 
 #
 PARAMETER_REQUIRED = 0x0100
 PARAMETER_VARIABLE = 0x0200
 
 #
-class BadMethodName(Exception):
-    pass
 class BadMethodDeclaration(Exception):
     pass
 class UnloadedMethod(Exception):
     pass
 
-#
-def normalize_method_target(name):
-    return name.replace("-","_") # ハイフンはアンダースコア扱いにする
 
 #
 class MethodParameterNoDefault:
@@ -109,6 +108,9 @@ class Method():
         p = MethodParameter(name, typename, doc, default, f)
         self.params.append(p)
     
+    def get_params(self):
+        return self.params
+    
     def get_param_count(self):
         return len(self.params)
 
@@ -166,21 +168,22 @@ class Method():
         action = None
         source = None
         while True:
-            loader = attribute_loader(self.target)
             callobj = None
-
-            if loader is None:
-                # 1. 型定義のメソッドを取り出す
-                typefn = this_type.method_delegation(self.target)
+            if self.target.startswith("."):                
+                # 外部モジュールから定義をロードする
+                loader = attribute_loader(self.target)
+                callobj = loader() # モジュールやメンバが見つからなければ例外が投げられる
+                source = "ImportedMethod:{}".format(self.target)
+            else:
+                # クラスに定義されたメソッドが実装となる
+                typefn = this_type.delegate_method(self.target)
                 if typefn is not None:
                     callobj = typefn
                     source = "TypeMethod:{}".format(self.target)
-                    if this_type.is_method_bound("TYPE"):
-                        self.flags |= METHOD_TYPE_BOUND # 第一引数は型オブジェクトを渡す
-            else:
-                # 2. 外部モジュールから定義をロードする
-                callobj = loader() # モジュールやメンバが見つからなければ例外が投げられる
-                source = "ImportedMethod:{}".format(self.target)
+                    if this_type.is_methods_type_bound():
+                        self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
+                    else:
+                        pass # 第1引数からインスタンスを渡す
             
             # アクションオブジェクトの初期化処理
             if hasattr(callobj, "describe_method"):
@@ -200,8 +203,11 @@ class Method():
                 break
             
             raise ValueError("無効なアクションです：{}".format(self.target))
-
-        self._action = action
+        
+        if self.flags & METHOD_UNSPECIFIED_MASK:
+            self._action = None
+        else:
+            self._action = action
         self.target = source
     
     def is_loaded(self):
@@ -270,7 +276,8 @@ class Method():
                 flags |= PARAMETER_REQUIRED
             
             if p.kind == p.VAR_KEYWORD or p.kind == p.KEYWORD_ONLY:
-                raise BadMethodDeclaration("キーワード引数には未対応です")
+                flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                break
             
             typename = normalize_typename(typename)
             self.add_parameter(name, typename, doc, default, flags=flags)
@@ -281,10 +288,74 @@ class Method():
             typename, _, doc = [x.strip() for x in line.partition(":")]
             typename = normalize_typename(typename)
             self.add_result(typename, doc)
+            
+    # 関数か引数を追加する
+    def load_syntax_from_function(self, fn):
+        self.doc = fn.__doc__ or ""
+        
+        # 戻り値
+        self.flags |= METHOD_RESULT_UNSPECIFIED # 不明
+
+        # シグネチャを関数から取得
+        try:
+            sig = inspect.signature(fn)
+        except ValueError:
+            # ビルトイン関数なので情報を取れなかった
+            self.flags |= METHOD_PARAMETER_UNSPECIFIED
+            return 
+        
+        # 引数
+        for p in sig.parameters.values():
+            flags = 0
+            
+            typename = "Any" # 型注釈から推定できるかもしれないが、不明とする
+
+            if p.default == inspect.Parameter.empty:
+                flags |= PARAMETER_REQUIRED
+                default = None
+            else:
+                default = p.default
+
+            if p.kind == inspect.Parameter.VAR_POSITIONAL:
+                flags |= PARAMETER_VARIABLE
+            elif p.kind == p.VAR_KEYWORD or p.kind == p.KEYWORD_ONLY:
+                flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                break
+
+            self.add_parameter(p.name, typename, "", default, flags=flags)
     
     # 直に設定
     def set_action(self, action):
         self._action = action
+    
+    # マニュアル用に構文を表示する
+    def display_signature(self) -> str:
+        params = []
+        for p in self.params:
+            name = p.name
+            if p.is_variable():
+                name = "*" + p.name
+
+            pa = "{}".format(name)
+            if not p.is_required():
+                pa += "={}".format(repr(p.default))
+            
+            params.append(pa)
+        
+        par = ",".join(params)
+        if self.flags & METHOD_PARAMETER_UNSPECIFIED:
+            par = "..."
+        
+        results = []
+        for r in self.results:
+            re = r.typename
+            results.append(re)
+        
+        ret = ",".join(results)
+        if self.flags & METHOD_RESULT_UNSPECIFIED:
+            ret = "..."
+
+        return "{}({}) -> {}".format(self.name, par, ret)
 
         
 #
@@ -309,9 +380,6 @@ class MethodParameter():
     
     def is_any(self):
         return self.typename == "Any"
-
-    def is_raw_string(self):
-        return self.typename == "RawString"
 
     def is_required(self):
         return (self.flags & PARAMETER_REQUIRED) > 0

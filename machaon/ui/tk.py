@@ -241,7 +241,10 @@ class tkLauncher(Launcher):
         self.log.tag_bind("clickable", "<Control-Button-1>", self.hyper_open)
         self.log.tag_bind("clickable", "<Double-Button-1>", self.hyper_copy_input_text)
 
-        # エラーログウィンドウ
+        # オブジェクトウィンドウ
+        self.objdesk = tk.Text(self.frame, wrap=wrap_option, font="TkFixedFont", relief="solid", width=50)
+        self.objdesk.configure(state='disabled')
+
         #self.errlog = tk.Text(self.frame, width=30, wrap="word", font="TkFixedFont", relief="solid")
         #self.errlog.configure(state='disabled')
         
@@ -268,9 +271,10 @@ class tkLauncher(Launcher):
             b.pack(side=tk.RIGHT, padx=padx)
     
         # メインウィジェットの配置
-        self.commandline.grid(column=0, row=0, sticky="news", padx=padx, pady=pady)
-        self.chambermenu.grid(column=0, row=1, sticky="news", padx=padx, pady=pady)
-        self.log.grid(column=0, row=2, columnspan=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        self.commandline.grid(column=0, row=0, columnspan=2, sticky="news", padx=padx, pady=pady)
+        self.chambermenu.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady)
+        self.log.grid(column=0, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
     
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
@@ -308,16 +312,6 @@ class tkLauncher(Launcher):
             self.log.focus_set() # 選択モードへ
             return "break"
         
-        @bind_event(self.commandline)
-        def cmdline_on_Alt_Right(e):
-            self.rollback_command_input()
-            return "break"
-        
-        @bind_event(self.commandline)
-        def cmdline_on_Alt_Left(e):
-            self.replace_input_text("")
-            return "break"
-        
         # ログウィンドウ
         @bind_event(self.log)
         def log_on_Return(e):
@@ -334,12 +328,12 @@ class tkLauncher(Launcher):
         # ログスクロール
         # コマンドモード
         @bind_event(self.commandline)
-        def on_Control_Up(e):
+        def on_Control_Shift_Up(e):
             self.scroll_page(-1)
             return "break"
 
         @bind_event(self.commandline)
-        def on_Control_Down(e):
+        def on_Control_Shift_Down(e):
             self.scroll_page(1)
             return "break"
 
@@ -355,11 +349,21 @@ class tkLauncher(Launcher):
             
         @bind_event(self.commandline, self.log, self.root)
         def on_Control_Left(e):
-            self.on_commandline_down()
+            self.replace_input_text("")
             return "break"
 
         @bind_event(self.commandline, self.log, self.root)
         def on_Control_Right(e):
+            self.rollback_input_text()
+            return "break"
+            
+        @bind_event(self.commandline, self.log, self.root)
+        def on_Control_Down(e):
+            self.on_commandline_down()
+            return "break"
+
+        @bind_event(self.commandline, self.log, self.root)
+        def on_Control_Up(e):
             self.on_commandline_up()
             return "break"
             
@@ -389,7 +393,7 @@ class tkLauncher(Launcher):
             self.scroll_page(1)
 
         @bind_event(self.root, self.commandline, self.log)
-        def on_Control_c(e):
+        def on_Control_q(e):
             self.app.interrupt_process()
             return "break"
 
@@ -419,18 +423,21 @@ class tkLauncher(Launcher):
     #
     # ログの操作
     #
-    def insert_screen_message(self, msg):
+    def insert_screen_message(self, tag, text, **args):
         """ メッセージをログ欄に追加する """
-        if msg.tag == "hyperlink":
-            tags = self.new_hyper_tags(msg.get_hyperlink_link(), msg.get_hyperlink_label(), msg.argument("linktag"))
+        if tag == "hyperlink":
+            link = args.get("link", text)
+            label = args.get("label")
+            linktag = args.get("linktag")
+            tags = self.new_hyper_tags(link, label, linktag)
         else:
-            tags = (msg.tag or "message",)
+            tags = (tag or "message",)
         
         self.log.configure(state='normal')
         
         # メッセージの挿入
-        self.log.insert("end", msg.get_text(), tags)
-        if not msg.argument("nobreak", False):
+        self.log.insert("end", text, tags)
+        if not args.get("nobreak", False):
             self.log.insert("end", "\n")
 
         self.log.configure(state='disabled')
@@ -519,15 +526,15 @@ class tkLauncher(Launcher):
     # key handler
     #
     def on_commandline_return(self):
-        if self.execute_command_input():
-            self.commandline.mark_set("INSERT", 0.0)
+        self.execute_input_text()
+        self.commandline.mark_set("INSERT", 0.0)
 
     def on_commandline_up(self):
-        self.shift_active_chamber(1)
+        self.shift_history(-1)
         self.commandline.mark_set("INSERT", 0.0)
 
     def on_commandline_down(self):
-        self.shift_active_chamber(-1)
+        self.shift_history(1)
         self.commandline.mark_set("INSERT", 0.0)
 
     #
@@ -750,19 +757,19 @@ class tkLauncher(Launcher):
     #
     def insert_screen_appendix(self, valuelines, title=""):
         if title:
-            self.insert_screen_message(ProcessMessage(">>> {}".format(title)))
+            self.insert_screen_message("message", ">>> {}".format(title))
 
         if isinstance(valuelines, str):
-            self.insert_screen_message(ProcessMessage(valuelines))
+            self.insert_screen_message("message", valuelines)
         else:
             # シーケンスが渡されたなら、簡単な表形式にする
             maxspacing = max(*[len(x[0]) for x in valuelines], 0, 0)
             for value, desc in valuelines:
                 spacing = " " * (maxspacing - len(value) + 2)
                 for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message-em").expand():
-                    self.insert_screen_message(msg)
+                    self.insert_screen_message("message", msg)
 
-        self.insert_screen_message(ProcessMessage(""))
+        self.insert_screen_message("message", "")
         self.log.yview_moveto(1.0)
 
     #
@@ -872,10 +879,10 @@ class tkLauncher(Launcher):
         """ 入力文字列をカーソル位置に挿入する """
         self.commandline.insert("insert", text)
     
-    def pop_input_text(self, nopop=False):
+    def get_input_text(self, pop=False):
         """ 入力文字列を取り出しクリアする """
         text = self.commandline.get(1.0, tk.END)
-        if not nopop:
+        if pop:
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
 
@@ -948,9 +955,12 @@ class tkLauncher(Launcher):
         self.log.tag_configure("hyperlink", foreground=msg_hyp)
         self.log.tag_configure("log-selection", background=highlight, foreground=msg)
         self.log.tag_configure("log-item-selection", foreground=msg_em)
-        self.log.tag_configure("object-frame", foreground="#888888")
-        self.log.tag_configure("object-metadata", foreground=msg_inp)
-        self.log.tag_configure("object-selection", foreground=msg_wan)
+
+        self.objdesk.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
+        self.objdesk.tag_configure("message", foreground=msg)
+        self.objdesk.tag_configure("object-frame", foreground="#888888")
+        self.objdesk.tag_configure("object-metadata", foreground=msg_inp)
+        self.objdesk.tag_configure("object-selection", foreground=msg_wan)
 
         self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
         self.chambermenu.tag_configure("chamber", foreground=msg)

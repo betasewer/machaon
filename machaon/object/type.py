@@ -2,10 +2,10 @@ import os
 import re
 from inspect import signature
 
-from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional
+from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple
 
-from machaon.object.typename import normalize_typename, BadTypename
-from machaon.object.method import Method, methoddecl_setter_chain, methoddecl_collect_attribute, UnloadedMethod, BadMethodName
+from machaon.object.symbol import normalize_typename, BadTypename, BadMethodName
+from machaon.object.method import Method, methoddecl_setter_chain, methoddecl_collect_attribute, UnloadedMethod
 from machaon.object.importer import attribute_loader
 from machaon.object.docstring import DocStringParser
 
@@ -35,6 +35,7 @@ class UnsupportedMember(Exception):
 #
 TYPE_METHODS_INSTANCE_BOUND = 0x01
 TYPE_METHODS_TYPE_BOUND = 0x02
+TYPE_NO_INSTANCE_METHOD = 0x04
 
 #
 #
@@ -75,7 +76,7 @@ class Type():
     #
     #
     def construct_from_string(self, arg: str):
-        m = self.method_delegation("construct", fallback=True)
+        m = self.delegate_method("construct")
         if m:
             return m(self, arg)
         else:
@@ -83,7 +84,7 @@ class Type():
             return self.get_value_type()(arg)
 
     def convert_to_string(self, v: Any):
-        m = self.method_delegation("stringify", fallback=True)
+        m = self.delegate_method("stringify")
         if m:
             return m(self, v)
         else:
@@ -124,7 +125,7 @@ class Type():
         self._methods[name] = method
     
     # メソッドの実装を解決する
-    def method_delegation(self, attrname, *, fallback=False):
+    def delegate_method(self, attrname, *, fallback=True):
         fn = getattr(self._implklass, attrname, None)
         if fn is None:
             if not fallback:
@@ -132,14 +133,18 @@ class Type():
             return None
         return fn
     
-    def get_method_delegator(self):
+    @property
+    def method_delegate_class(self):
         return self._implklass
+
+    def is_methods_type_bound(self):
+        return (self.flags & TYPE_METHODS_TYPE_BOUND) > 0
     
-    def is_method_bound(self, bound):
-        if bound == "TYPE":
-            return (self.flags & TYPE_METHODS_TYPE_BOUND) > 0
-        else: # bound == "INSTANCE"
-            return (self.flags & TYPE_METHODS_INSTANCE_BOUND) > 0
+    def is_methods_instance_bound(self):
+        return (self.flags & TYPE_METHODS_INSTANCE_BOUND) > 0
+
+    def has_no_instance_method(self):
+        return (self.flags & TYPE_NO_INSTANCE_METHOD) > 0
 
     #
     # メソッド名のエイリアスを取得する
@@ -208,7 +213,7 @@ class Type():
     #
     def describe_from_docstring(self, doc):
         # structure of type docstring
-        """ summary
+        """ @type (no-value-method) summary
         detailed description...
         .......................
         ....
@@ -232,7 +237,15 @@ class Type():
         if typename:
             self.typename = typename.capitalize()
     
-        doc = sections.get_string("Summary", "Description")
+        doc = ""
+        sumline = sections.get_string("Summary")
+        for line in sumline.split():
+            if line == "@no-instance-method":
+                self.flags |= TYPE_NO_INSTANCE_METHOD
+            else:
+                doc += line
+
+        doc += sections.get_string("Description")
         if doc:
             self.doc = doc.strip()
 
@@ -240,7 +253,7 @@ class Type():
         if valtypename == "machaon.Any":
             self.value_type = None # Any型
         elif valtypename:
-            loader = attribute_loader(valtypename, implicit_syntax=True)
+            loader = attribute_loader(valtypename)
             self.value_type = loader() # 例外発生の可能性
         
         aliases = sections.get_lines("MemberAlias")
@@ -294,11 +307,12 @@ class Type():
 # 型の取得時まで定義の読み込みを遅延する
 #
 class TypeDelayLoader():
-    def __init__(self, traits, typename):
+    def __init__(self, traits, typename, doc=""):
         self.traits = traits
         self.typename = typename
         if not isinstance(typename, str):
             raise ValueError("型名を文字列で指定してください")
+        self.doc = doc
 
 #
 #
@@ -346,7 +360,7 @@ class TypeModule():
     #
     # 型を取得する
     #
-    def get(self, typecode: Any, fallback = False) -> Optional[Type]:
+    def get(self, typecode: Any, fallback=True) -> Optional[Type]:
         if self._typelib is None:
             raise ValueError("No type library set up")
 
@@ -365,25 +379,34 @@ class TypeModule():
             raise BadTypename(typecode)
 
         # 遅延された読み込みを実行する
-        if isinstance(t, TypeDelayLoader):
-            t = self.define(t.traits, typename=t.typename)
+        if t is not None and isinstance(t, TypeDelayLoader):
+            t = self.define(t.traits, typename=t.typename, doc=t.doc)
         
         return t
 
     # objtypes[<typename>] -> Type
-    def __getitem__(self, typecode) -> Optional[Type]:
-        return self.get(typecode)
+    def __getitem__(self, typecode) -> Type:
+        return self.get(typecode, fallback=False)
 
     # objtypes.<typename> -> Type
-    def __getattr__(self, name) -> Optional[Type]:
+    def __getattr__(self, name) -> Type:
         typename = normalize_typename(name)
-        return self.get(typename)
+        return self.get(typename, fallback=False)
+    
+    def enum(self) -> Generator[Union[Type, TypeDelayLoader], None, None]:
+        l = {}
+        for ancs in self._ancestors:
+            for k, t in ancs._typelib.items():
+                l[k] = t
+        for k, t in self._typelib.items():
+            l[k] = t
+        yield from l.values()
     
     #
     # 取得し、無ければ定義する
     #
     def new(self, typecode):
-        tt = self.get(typecode, fallback=True)
+        tt = self.get(typecode)
         if tt is None:
             if isinstance(typecode, str):
                 # 実質は文字列と同一の新しい型を作成
@@ -429,9 +452,9 @@ class TypeModule():
         return t
     
     # 遅延登録デコレータ
-    def definition(self, *, typename):
+    def definition(self, *, typename, doc=""):
         def _deco(traits):
-            self.define(traits=TypeDelayLoader(traits, typename))
+            self.define(traits=TypeDelayLoader(traits, typename, doc))
             return traits
         return _deco
     

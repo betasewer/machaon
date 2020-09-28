@@ -34,13 +34,19 @@ class AppRoot:
         self.cmdpackages = []
         self.typemodule = None
 
-    def initialize(self, *, ui, directory):
+    def initialize(self, *, ui, module_dir="", current_dir=None):
         self.ui = ui
 
+        if current_dir is None:
+            self.set_current_dir_desktop()
+        else:
+            self.set_current_dir(current_dir)
+
         self.processhive = ProcessHive()
+        chamber = self.processhive.addnew(self.ui.get_input_prompt())
         #self.processhive.new_desktop("desk1")
 
-        #self.pkgmanager = PackageManager(directory)
+        #self.pkgmanager = PackageManager(module_dir)
         #self.pkgmanager.add_to_import_path()
 
         self.typemodule = TypeModule()
@@ -48,6 +54,8 @@ class AppRoot:
         
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
+        
+        self.ui.activate_new_chamber(chamber)
     
     def get_ui(self):
         return self.ui

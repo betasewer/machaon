@@ -48,8 +48,7 @@ def rawlaunch():
     from machaon.ui.tk import tkLauncher
     ui = tkLauncher("test app")
     root = AppRoot()
-    root.set_current_dir_desktop()
-    root.initialize(ui=ui, directory="C:/users/kenta/desktop")
+    root.initialize(ui=ui, module_dir="C:/users/kenta/desktop")
     root.run()
 
 rawlaunch()

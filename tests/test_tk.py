@@ -18,23 +18,23 @@ def getlasttag(log):
 def approot():
     app = AppRoot()
     wnd = tkLauncher("test")
-    app.initialize(ui=wnd, directory="")
+    app.initialize(ui=wnd)
     return app
 
 def test_message_window(approot):
     spi = Spirit(approot)
     wnd = approot.get_ui()
 
-    assert "\n" == gettext(wnd.log)
-    wnd.insert_screen_message(ProcessMessage("test-message"))
-    assert "test-message\n\n" == gettext(wnd.log)
-    assert "test-message" == getlastline(wnd.log)
+    assert ">>> \n" == gettext(wnd.log)
+    wnd.insert_screen_message("message", "test-message")
+    assert ">>> test-message\n\n" == gettext(wnd.log)
+    assert ">>> test-message" == getlastline(wnd.log)
 
-    wnd.insert_screen_message(spi.message("error", "test-error-message"))
+    wnd.insert_screen_message("error", "test-error-message")
     assert "test-error-message" == getlastline(wnd.log)
     assert ("error",) == getlasttag(wnd.log)
 
-    wnd.insert_screen_message(spi.message("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message-em"))
+    wnd.insert_screen_message("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message-em")
     assert "test-hyperlink" == getlastline(wnd.log)
     assert set(("message-em","clickable","hlink-1")) == set(getlasttag(wnd.log))
 
@@ -42,7 +42,7 @@ def test_message_window(approot):
     l1 = wnd.log.get("end linestart -2 lines", "end linestart -1 lines")
     l2 = wnd.log.get("end linestart -3 lines", "end linestart -2 lines")
 
-    wnd.message_handler(spi.message("delete-message"))
+    wnd.message_handler(ProcessMessage(tag="delete-message"))
     assert "test-error-message" == getlastline(wnd.log)
     
     #wnd.run_mainloop()
