@@ -7,4 +7,8 @@ build/*
 dist/* 
 *.egg-info/*
 dist.ps1
-
+.vscode/*
+test.json
+w.txt
+*.html
+.vscode/launch.json

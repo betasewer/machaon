@@ -29,7 +29,7 @@ def launch_sample_app(default_choice=None, directory=None):
         sys.exit()
 
     import machaon.commands.catalogue as catalogue
-    
+
     from machaon.package.repository import BitbucketRepArchive
     from machaon.package.auth import BasicAuth
     boo.commandset("test", 
@@ -48,7 +48,19 @@ def rawlaunch():
     from machaon.ui.tk import tkLauncher
     ui = tkLauncher("test app")
     root = AppRoot()
-    root.initialize(ui=ui, module_dir="C:/users/kenta/desktop")
+    root.initialize(ui=ui, module_dir="C:/codes/machaon")
+    
+    from machaon.package.repository import BitbucketRepArchive
+    from machaon.package.auth import BasicAuth
+    root.add_package(
+        "machaon.shell",
+        entrypoint="machaon.types.shell"
+    )
+    root.add_package(
+        "hello",
+        source=BitbucketRepArchive("betasewer/test_module")
+    )
+    
     root.run()
 
 rawlaunch()

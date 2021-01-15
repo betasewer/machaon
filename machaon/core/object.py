@@ -1,8 +1,9 @@
 from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
 from collections import OrderedDict, defaultdict
+from copy import copy
 
-from machaon.object.type import Type
-from machaon.object.symbol import normalize_typename
+from machaon.core.type import Type
+from machaon.core.symbol import normalize_typename
 
 # imported from...
 # desktop
@@ -17,11 +18,15 @@ class ObjectValue():
         self.typecode = typecode
         self.value = value
 
+
+class EMPTY_OBJECT:
+    pass
+
 #
 #
 #
 class Object():
-    def __init__(self, type, value): # デフォルトは空文字列
+    def __init__(self, type, value=EMPTY_OBJECT):
         self.value: Any = value
         self.type: Type = type
         if not isinstance(self.type, Type):
@@ -32,16 +37,32 @@ class Object():
     
     def get_typename(self):
         return self.type.typename
-
-    def get_method_value(self, name):
-        pass
-
-    #
-    #def to_string(self) -> str:
-    #    return self.type.convert_to_string(self.value)
     
-    #def get_summary(self) -> str:
-    #    return self.type.make_summary(self.value)
+    def copy(self):
+        return Object(self.type, copy(self.value))
+    
+    def to_string(self) -> str:
+        return self.type.convert_to_string(self.value)
+
+    def summary(self) -> str:
+        return self.type.summarize_value(self.value)
+
+    def pprint(self, spirit):
+        self.type.pprint_value(spirit, self.value)
+    
+    def pretty_view(self):
+        return Object(self.type, ObjectPrettyView(self))
+    
+    def is_pretty_view(self):
+        return isinstance(self.value, ObjectPrettyView)
+
+#
+class ObjectPrettyView():
+    def __init__(self, o):
+        self.object = o
+    
+    def get_object(self):
+        return self.object
 
 #
 #
@@ -53,7 +74,7 @@ class ObjectCollectionItem:
         self.selected = False
         self.object = obj
         if self.object is None:
-            raise ValueError("object must be None")
+            raise ValueError("object must be not None")
     
     @property
     def value(self):

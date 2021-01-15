@@ -1,5 +1,5 @@
-from machaon.object.fundamental import fundamental_type
-from machaon.object.type import Type, TypeModule
+from machaon.types.fundamental import fundamental_type
+from machaon.core.type import Type, TypeModule
 
 def run(fn):
     fn()
@@ -12,12 +12,15 @@ class Dummy_Rabbit():
     def describe_object(cls, traits):
         traits.describe(doc="うさぎ")
         cls.describe_count += 1
+    
+def test_fundamental_find():
+    assert fundamental_type.find("Int") is not None
 
 def test_typemodule_get():
     assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
     assert fundamental_type.get(Dummy_Rabbit).typename == "Dummy-Rabbit"
-    assert fundamental_type.Dummy_Rabbit.method_delegate_class.describe_count == 1
-    
+    assert fundamental_type.get(Dummy_Rabbit).describer.describe_count == 1
+
 def test_typemodule_move():
     new_typeset = TypeModule()
     new_typeset.define(typename="AltString")
@@ -27,38 +30,45 @@ def test_typemodule_move():
     
     assert fundamental_type.get("Int").construct_from_string("0x35") == 0x35
     assert fundamental_type.get("AltString").typename == "AltString"
-    assert fundamental_type.Dummy_Rabbit.typename == "Dummy-Rabbit"
-    assert fundamental_type.Second_Rabbit.typename == "Second-Rabbit"
-    assert fundamental_type.Dummy_Rabbit.method_delegate_class.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
+    assert fundamental_type.get("Dummy_Rabbit") is not None
+    assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
+    assert fundamental_type.get("Dummy_Rabbit").describer.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
+    assert fundamental_type.get("Second_Rabbit") is not None
+    assert fundamental_type.get("Second_Rabbit").typename == "Second-Rabbit"
 
 def test_fundamental():
-    assert fundamental_type.Int.typename == "Int"
-    assert fundamental_type.Int.construct_from_string("32") == 32
-    assert fundamental_type.Int.convert_to_string(32) == "32"
-    assert fundamental_type.Int.convert_to_string(0xFF) == "255"
+    Int = fundamental_type.get("int")
+    assert Int.typename == "Int"
+    assert Int.construct_from_string("32") == 32
+    assert Int.convert_to_string(32) == "32"
+    assert Int.convert_to_string(0xFF) == "255"
 
-    assert fundamental_type.Bool.typename == "Bool"
-    assert fundamental_type.Bool.construct_from_string("False") is False
+    Bool = fundamental_type.get("bool")
+    assert Bool.typename == "Bool"
+    assert Bool.construct_from_string("False") is False
 
-    assert fundamental_type.Float.typename == "Float"
-    assert fundamental_type.Float.construct_from_string("-0.05") == -0.05
+    Float = fundamental_type.get("float")
+    assert Float.typename == "Float"
+    assert Float.construct_from_string("-0.05") == -0.05
 
-    assert fundamental_type.Complex.typename == "Complex"
-    assert fundamental_type.Complex.construct_from_string("2+3j") == 2+3j
+    Complex = fundamental_type.get("complex")
+    assert Complex.typename == "Complex"
+    assert Complex.construct_from_string("2+3j") == 2+3j
 
-    assert fundamental_type.Str.typename == "Str"
-    assert fundamental_type.Str.construct_from_string("AAA") == "AAA"
+    Str = fundamental_type.get("str")
+    assert Str.typename == "Str"
+    assert Str.construct_from_string("AAA") == "AAA"
 
 @run
 def test_method():
-    regmatch = fundamental_type.Str.select_method("regmatch")
+    regmatch = fundamental_type.get("Str").select_method("reg-match")
     assert regmatch is not None
-    assert regmatch.name == "regmatch"
-    assert regmatch.get_first_result_typename() == "Bool"
+    assert regmatch.name == "reg-match"
+    assert regmatch.get_results()[0].get_typename() == "Bool"
 
     act = regmatch.get_action()
     assert act(None, "0123.txt", "[0-9]+")
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
-    assert regmatch.get_action_target() == "TypeMethod:regmatch"
+    assert regmatch.get_action_target() == "machaon.types.fundamental.StrType:reg_match"
 

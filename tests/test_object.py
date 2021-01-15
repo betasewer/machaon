@@ -1,16 +1,20 @@
 import pytest
-from machaon.object.object import Object, ObjectValue, ObjectCollection
-from machaon.object.fundamental import fundamental_type
+from machaon.core.object import Object, ObjectValue, ObjectCollection
+from machaon.types.fundamental import fundamental_type
+
+Int = fundamental_type.get("Int")
+Float = fundamental_type.get("Float")
+Complex = fundamental_type.get("Complex")
 
 def run(f):
     f()
-
+@run
 def test_desktop():
     desk = ObjectCollection()
 
-    desk.push("obj-1", Object(fundamental_type.Int, 100))
-    desk.push("obj-2", Object(fundamental_type.Int, 7))
-    desk.push("obj-3", Object(fundamental_type.Complex, 3+5j))
+    desk.push("obj-1", Object(Int, 100))
+    desk.push("obj-2", Object(Int, 7))
+    desk.push("obj-3", Object(Complex, 3+5j))
     desk.push("obj-4", Object(fundamental_type.new("IpAddress"), "128.0.0.1"))
 
     assert desk.get_by_name("obj-1").value == 100
@@ -22,17 +26,17 @@ def test_desktop():
 
     # まだオブジェクトは追加されていない
     assert desk.get_by_type("float") is None
-    o = desk.push("obj-5", Object(fundamental_type.Float, 33.3))
+    o = desk.push("obj-5", Object(Float, 33.3))
     assert desk.get_by_type("float") is o
 
 
 def test_object_new():
     desk = ObjectCollection()
 
-    o = desk.new("obj-new", fundamental_type.Int, 128)
+    o = desk.new("obj-new", Int, 128)
     assert o.name == "obj-new"
     assert o.value == 128
-    assert o.type == fundamental_type.Int
+    assert o.type == Int
     
 """
 def test_object_method():

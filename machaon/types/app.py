@@ -3,14 +3,83 @@
 
 from machaon.cui import test_yesno, composit_text
 
+class RootObject:
+    """ @type
+    アプリケーションを表すグローバルなオブジェクト。
+    """
+
+    def __init__(self, context):
+        self.context = context
+
+    #
+    # メソッド
+    #
+    def types(self, spirit):
+        '''@method spirit
+        使用可能な型を列挙する。
+        Params:
+        Returns:
+            Set[Type]: (name,doc) 型のリスト
+        '''
+        types = []
+        for t in self.context.type_module.enum():
+            types.append(t)
+        return types
+    
+    def var(self, name):
+        '''@method
+        変数を参照する。
+        Params:
+            name(str): 引数名
+        Returns:
+            Object: 変数
+        '''
+        item = self.context.input_objects.get_by_name(name)
+        if item is None:
+            raise ValueError(name)
+        return item.object
+
+    def packages(self):
+        ''' @method
+        パッケージを取得する。
+        Returns:
+            Set[Package]: (name, source, scope) パッケージリスト
+        '''
+        return list(self.context.root.enum_packages())
+    
+    def chamber(self):
+        ''' @method
+        現在のチャンバーを取得する。
+        Params:
+        Returns:
+            AppChamber: プロセス
+        '''
+        chm = self.context.root.get_active_chamber()
+        return chm
+
 #
-# =================================================================
-#
-# アプリ基幹コマンド
-# 
-# =================================================================
 #
 #
+class AppChamber:
+    """ @type
+    プロセスとその結果を保持するチャンバーオブジェクト
+    ValueType:
+        machaon.process.ProcessChamber
+    """
+    def dump_message(self, chm, app):
+        """ @method spirit
+        処理済みのメッセージを詳細な形式で表示する。
+        """
+        for msg in chm.get_process_messages():
+            app.post("message", msg.text)
+            app.post("message", "tag={}".format(msg.tag))
+            for k, v in msg.args.items():
+                app.post("message", "{}={}".format(k, v))
+
+
+
+"""
+
 class HelpItem():
     def __init__(self, cmdset, command_entry):
         self.cmdset = cmdset
@@ -304,4 +373,4 @@ def draw_graphic(app):
         cv.rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
         cv.rectangle(coord=(10,100,90,300), color="#0000FF")
 
-    
+"""

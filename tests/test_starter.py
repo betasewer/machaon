@@ -40,10 +40,10 @@ def worker_shift_table(spi):
         WorkerShift("井上", 3),
         WorkerShift("林", 2),
     ]
-    spi.push_dataview(workers, "name day")
+    spi.push_setview(workers, "name day")
 
 def empty_table(spi):
-    spi.push_dataview([], itemtype=WorkerShift)
+    spi.push_setview([], itemtype=WorkerShift)
 
 """
 obj = describe_object(

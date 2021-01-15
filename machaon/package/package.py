@@ -8,6 +8,7 @@ import re
 import importlib
 from typing import Dict, Any, Union, List, Optional
 
+from machaon.core.importer import module_loader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
 
@@ -15,75 +16,81 @@ from machaon.package.repository import RepositoryURLError
 class DatabaseNotLoadedError(Exception):
     pass
 
-#
-#
-#
-class _internal_entrypoint:
-    def __init__(self):
-        self.pkg = None
-    
-    def describe(self, *args, **kwargs):
-        self.pkg = describe_command_package(*args, **kwargs)
-        return self.pkg
-
-    def command(self, *args, **kwargs):
-        return describe_command(*args, **kwargs)
-
-    def get(self):
-        return self.pkg
+PACKAGE_TYPE_MODULES = 0x1
+PACKAGE_TYPE_DEPENDENCY = 0x2
+PACKAGE_TYPE_RESOURCE = 0x3
+PACKAGE_TYPE_UNDEFINED = 0x4
+PACKAGE_LOADED = 0x10
 
 #
 #
 #
 class Package():
-    CLASS_MODULE = 1
-    DEPENDENCY_MODULE = 2
-    DATASTORE = 3
+    MODULES = PACKAGE_TYPE_MODULES
+    DEPENDENCY = PACKAGE_TYPE_DEPENDENCY
+    RESOURCE = PACKAGE_TYPE_RESOURCE
+    UNDEFINED = PACKAGE_TYPE_UNDEFINED
 
     def __init__(self, 
+        name: str, 
         source: Any, 
-        name: Optional[str] = None, 
+        type: int = None,
+        separate = True, 
         entrypoint: Optional[str] = None, 
-        pysyspackage = False, 
         hashval = None, 
-        dependency = False, 
-        datastore = False
     ):
-        if not name:
-            name = source.name
-        self.name = name
+        self.name: str = name
         self.source = source
-        self.separate = not pysyspackage
+        self.scope = self.name
+        self.separate = separate
         
-        self._type = Package.CLASS_MODULE
-        if dependency:
-            self._type = Package.DEPENDENCY_MODULE
-        if datastore:
-            self._type = Package.DATASTORE
+        if not type: type = Package.MODULES
+        self._type = type
 
-        # エントリポイントとなるモジュールを探す
-        self.entrymodule: Optional[str] = None
-        if self._type == Package.CLASS_MODULE:
-            if not entrypoint: entrypoint = "{}.__init__".format(name)
-            self.entrymodule = entrypoint
+        if not entrypoint: 
+            if self._type == Package.MODULES:
+                entrypoint = "{}.__init__".format(self.name)
+        self.entrypoint: Optional[str] = entrypoint
 
-        self._classname = None
         self._hash = hashval
+
+        self._loaded: List[Exception] = []
+    
+    def assign_definition(self, pkg):
+        if not self.is_undefined():
+            raise ValueError("既に定義されているパッケージです")
+        self.name = pkg.name
+        self.source = pkg.source
+        self.scope = pkg.scope
+        self.separate = pkg.separate
+        self.entrypoint = pkg.entrypoint
+        self._type = pkg._type
+        self._hash = pkg._hash
+        return self
     
     @property
-    def dist_package_name(self):
-        return self.source.name
-    
-    def get_source_signature(self) -> str:
+    def source_name(self):
+        if self.source is None:
+            return None
+        return self.source.name 
+
+    def get_source_signature(self):
+        if self.source is None:
+            return None
         return self.source.get_source()
     
-    def get_repository(self):
+    def get_source(self):
         return self.source
+    
+    def get_hash(self):
+        return self._hash
 
     def is_installation_separated(self) -> bool:
         return self.separate
     
     def load_hash(self) -> Optional[str]:
+        if self.source is None:
+            return None
         if self._hash is None:
             try:
                 _hash = self.source.query_hash()
@@ -92,27 +99,20 @@ class Package():
             self._hash = "" if _hash is None else _hash
         return self._hash
 
-    def is_class(self) -> bool:
-        return self._type == Package.CLASS_MODULE
+    def is_modules(self) -> bool:
+        return self._type == Package.MODULES
     
-    def attach_commandset(self, index):
-        if self._type != Package.COMMANDSET_MODULE:
-            raise ValueError("Not a commandset module package")
-        if self._icmdset is not None:
-            raise ValueError("Commandset has been attached already")
-        self._icmdset = index
-    
-    def get_attached_commandset(self) -> Optional[int]:
-        return self._icmdset
+    def is_undefined(self) -> bool:
+        return self._type == Package.UNDEFINED
     
     def is_installed(self) -> bool:
-        if self._type == Package.DATASTORE:
+        if self._type == Package.RESOURCE:
             return False
-        if self.entrymodule is None:
-            raise ValueError("entrymodule")
+        if self.entrypoint is None:
+            raise ValueError("entrypoint")
 
-        # 親モジュールから順に確認する
-        mparts = self.entrymodule.split(".")
+        # エントリパスの親モジュールから順に確認する
+        mparts = self.entrypoint.split(".")
         for i in range(len(mparts)):
             mp = ".".join(mparts[0:i+1])
             spec = importlib.util.find_spec(mp)
@@ -121,26 +121,79 @@ class Package():
         
         return True
 
-    def load_command_builder(self):
-        """ パッケージクラスをロードする """
-        spec = importlib.util.find_spec(self.entrymodule)
-        if spec is None:
-            raise ModuleNotFoundError(self.entrymodule)
-        mod = importlib.util.module_from_spec(spec)
-        entrypoint = _internal_entrypoint()
-        setattr(mod, "commands", entrypoint)
+    def load(self, typemodule):
+        """ パッケージに定義されたすべての型をロードする """
+        if self._type == PACKAGE_TYPE_UNDEFINED:
+            raise PackageLoadError("パッケージの定義がありません")
 
-        try:
-            spec.loader.exec_module(mod)
-        except Exception as e:
-            raise PackageEntryLoadError(e)
+        if self._loaded:
+            return not self.is_load_failed()
+
+        if self._type == PACKAGE_TYPE_MODULES:
+            # __init__を読みに行く
+            spec = importlib.util.find_spec(self.entrypoint)
+            if spec is None:
+                raise ModuleNotFoundError(self.entrypoint)
+            mod = importlib.util.module_from_spec(spec)
+
+            try:
+                spec.loader.exec_module(mod)
+            except Exception as e:
+                self._loaded.append(PackageLoadError(e))
+
+            # 型が定義されたモジュールをロードする
+            moduleindex = getattr(mod, "machaon_modules", None)
+            if moduleindex:
+                modules = [module_loader(x) for x in modules]
+            else:
+                modules = [module_loader(self.entrypoint)]
+
+            scopename = self.scope
+            for modloader in modules:
+                try:
+                    for klass in modloader.enum_type_describers():
+                        typemodule.define(klass, scope=scopename)
+                except Exception as e:
+                    ex = PackageTypeDefLoadError(e, modloader.entrypoint())
+                    self._loaded.append(ex)
+                    continue
         
-        return entrypoint.get()
+        self._loaded.append(True)
+        return not self.is_load_failed()
     
+    def is_loaded(self):
+        return len(self._loaded) > 0
+    
+    def is_load_failed(self):
+        if not self._loaded:
+            return False
+        return self._loaded[0] is not True
+    
+    def unload(self, typemodule):
+        if self._type == PACKAGE_TYPE_UNDEFINED:
+            raise PackageLoadError("パッケージの定義がありません")
+
+        if not self._loaded:
+            return
+
+        if self._type == PACKAGE_TYPE_MODULES:
+            typemodule.remove_scope(self.scope)
+    
+
 #
-class PackageEntryLoadError(Exception):
+class PackageNotFoundError(Exception):
+    pass
+
+class PackageLoadError(Exception):
     def get_basic(self):
         return super().args[0]
+
+class PackageTypeDefLoadError(Exception):
+    def get_basic(self):
+        return super().args[0]
+    
+    def get_module_name(self):
+        return super().args[1]
 
 #
 #
@@ -164,7 +217,7 @@ class PackageManager():
         self.dir = directory
         self.database = None # type: configparser.ConfigParser
         self._dbpath = os.path.join(directory, database)
-    
+
     def load_database(self, force=False):
         if not force and self.database is not None:
             return
@@ -172,7 +225,7 @@ class PackageManager():
         if not os.path.isfile(self._dbpath):
             self.database = configparser.ConfigParser()
             self.save_database()
-            
+
         cfg = None
         with open(self._dbpath, "r", encoding="utf-8") as fi:
             cfg = configparser.ConfigParser()
@@ -180,7 +233,7 @@ class PackageManager():
 
         self.database = cfg
         return True
-    
+
     def add_database(self, pkg, toplevel=None, infodir=None):
         self.check_database()
         if pkg.name not in self.database:
@@ -210,6 +263,21 @@ class PackageManager():
         with open(self._dbpath, "w", encoding="utf-8") as fo:
             self.database.write(fo)
     
+    def create_undefined_empty_packages(self):
+        pkgs = []
+        for pkgname, section in self.database.items():
+            if pkgname == "DEFAULT":
+                continue
+            pkg = Package(
+                pkgname, 
+                section["source"],
+                PACKAGE_TYPE_UNDEFINED,
+                section["separate"],
+                hashval=section["hash"]
+            )
+            pkgs.append(pkg)
+        return pkgs
+    
     def check_database(self):
         if self.database is None:
             raise DatabaseNotLoadedError()
@@ -219,10 +287,10 @@ class PackageManager():
         if not isinstance(pkg_name, str):
             raise TypeError("pkg_name")
         return pkg_name in self.database
-                
+
     #
     def install(self, pkg: Package, newinstall: bool):
-        rep = pkg.get_repository()
+        rep = pkg.get_source()
 
         tmpdir = ''
         def cleanup_tmpdir(d):
@@ -285,7 +353,7 @@ class PackageManager():
                 # pipが作成したデータを見に行く
                 distinfo: Dict[str, str] = {}
                 if pkg.is_installation_separated():
-                    distinfo = _read_pip_dist_info(self.dir, pkg.dist_package_name)
+                    distinfo = _read_pip_dist_info(self.dir, pkg.source_name)
             
                 # データベースに書き込む
                 self.add_database(pkg, **distinfo)
@@ -359,14 +427,13 @@ def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=
     if options:
         cmd.extend(options)
 
-    from machaon.commands.shellpopen import popen_capture
+    from machaon.shellpopen import popen_capture
     proc = popen_capture(cmd)
     for msg in proc:
         if msg.is_finished():
-            yield PackageManager.PIP_END.bind(returncode=msg.returncode())
+            yield PackageManager.PIP_END.bind(returncode=msg.returncode)
         elif msg.is_output():
-            yield PackageManager.PIP_MSG.bind(msg=msg.text())
-        
+            yield PackageManager.PIP_MSG.bind(msg=msg.text)
 
 #
 #
