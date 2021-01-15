@@ -10,7 +10,7 @@ class DocStringParseError(Exception):
 #
 class DocStringParser():
     def __init__(self, doc, section_names):
-        sections = {k:[] for k in section_names + ("Summary", "Description")}
+        sections = {k:[] for k in section_names + ("Decl", "Description")}
 
         lines = doc.splitlines()
         if not lines:
@@ -19,7 +19,7 @@ class DocStringParser():
         # 無視するべき余分なインデント
         indent = len(os.path.commonprefix(lines[1:]))
 
-        sections["Summary"].append(lines[0])
+        sections["Decl"].append(lines[0])
 
         key = "Description"
         for line in lines[1:]:

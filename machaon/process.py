@@ -10,9 +10,9 @@ import datetime
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
 
 #from machaon.action import ActionInvocation
-from machaon.object.object import Object, ObjectCollection
-from machaon.object.message import MessageEngine
-from machaon.object.invocation import InvocationContext
+from machaon.core.object import Object, ObjectCollection
+from machaon.core.message import MessageEngine, MessageError
+from machaon.core.invocation import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 
 #
@@ -23,8 +23,8 @@ from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit
 # スレッドの実行、停止、操作を行う 
 #
 class Process:
-    def __init__(self, message):
-        self.index = None
+    def __init__(self, index, message):
+        self.index: int = index
         # 
         self.message: MessageEngine = message
         self.routine = None
@@ -41,39 +41,84 @@ class Process:
         self.event_inputend = threading.Event()
         self.last_input = None
 
-    # 非同期実行の開始
-    def run_async(self, context, routine):
-        self.thread = threading.Thread(target=self.run_object_message, args=(context, routine), daemon=True)
-        self._interrupted = False
-        self.thread.start()
+    #
+    #
+    # プロセスの実行フロー
+    #
+    #
+    def start_process(self, root):
+        # メインスレッドへの伝達者
+        spirit = Spirit(root, self)
 
-    def run_object_message(self, context, routine=None):
-        self.message.run(context, runner=routine)
-        post_send_message_process(self, context)
+        # 実行開始
+        timestamp = datetime.datetime.now()
+        spirit.post("on-exec-process", "begin", spirit=spirit, process=self, timestamp=timestamp)
+
+        # オブジェクトを取得
+        inputobjs = root.select_object_collection()
+
+        # コマンドを解析
+        context = InvocationContext(
+            input_objects=inputobjs, 
+            type_module=root.get_type_module(),
+            spirit=spirit
+        )
+        self.last_context = context
+        msgroutine = self.message.runner(context, log=False)
+
+        # 実行開始
+        for nextmsg in msgroutine:
+            if nextmsg.is_task():
+                # 非同期実行へ移行する
+                self.thread = threading.Thread(
+                    target=self.run_process_async, 
+                    args=(context, msgroutine), 
+                    daemon=True
+                )
+                self._interrupted = False
+                self.thread.start()
+                return
+        
+        # 同期実行の終わり
+        self.on_finish_process(context)
+
+    # メッセージ実行後のフロー
+    def on_finish_process(self, context):
+        # 実行時に発生した例外を確認する
+        excep = context.get_last_exception()
+        if excep is None:
+            # 返り値をオブジェクトとして配置する
+            returns = context.clear_local_objects()
+            ret = returns[0] if returns else None
+            if ret:
+                context.push_object(str(self.index), ret)
+            context.spirit.post("on-exec-process", "success", process=self, ret=ret, context=context)
+            success = True
+        elif isinstance(excep, ProcessInterrupted):
+            context.spirit.post("on-exec-process", "interrupted", process=self)
+            success = False
+        else:
+            error = context.new_type(ProcessError).new_object(ProcessError(self, excep))
+            context.push_object(str(self.index), error)
+            context.spirit.post("on-exec-process", "error", process=self, error=error)
+            success = False
+
+        # プロセス終了
         self.finish()
+        return success
+
+    def run_process_async(self, context, routine=None):
+        self.message.run(context, runner=routine)
+        self.on_finish_process(context)
     
-    # 番号を指定する
-    def set_index(self, index):
-        if self.index is not None:
-            raise ValueError("Process.index has already set.")
-        self.index = index
-    
+    # プロセスID
     def get_index(self):
         return self.index
 
-    # 実行済みコンテキストを紐づけ
-    def set_last_invocation_context(self, context):
-        self.last_context = context
-
+    # 紐づけられた実行中／実行済みコンテキスト
     def get_last_invocation_context(self):
         return self.last_context
     
-    # 
-    def is_failed(self):
-        if self.last_context:
-            return self.last_context.is_failed()
-        return False
-
     #
     # スレッド
     #
@@ -95,11 +140,18 @@ class Process:
     def get_thread_ident(self):
         return self.thread.ident
     
-    def finish(self):
-        self._finished = True
-    
+    # 動作が終わっているか（未開始の場合は真）
     def is_finished(self):
         return self._finished
+        
+    def finish(self):
+        self._finished = True
+
+    # 一度でも失敗したか（未開始の場合は偽）
+    def is_failed(self):
+        if self.last_context:
+            return self.last_context.is_failed()
+        return False
 
     #
     # メッセージ
@@ -504,11 +556,12 @@ class ProcessChamber:
         self.handled_msgs = []
     
     def add(self, process):
-        newindex = len(self._prlist)
-        process.set_index(newindex)
         if self._prlist and not self.last_process.is_finished():
             return
         self._prlist.append(process)
+    
+    def add_prelude_messages(self, messages):
+        self.prelude_msgs.extend(messages)
     
     @property
     def last_process(self):
@@ -642,20 +695,21 @@ class ProcessHive:
         self.chambers: Dict[int, Union[ProcessChamber,DesktopChamber]] = {}
         self._allhistory: List[int] = []
         self._nextindex: int = 0
+        self._nextprocindex: int = 0
     
-    # メッセージを実行し必要ならチャンバーを作成
-    def new(self, app, message: str) -> Tuple[ProcessChamber, bool]:
-        process = send_object_message(app, message) # メッセージを実行する
+    # 新しい開始前のプロセスを作成する
+    def new_process(self, expression: str):
+        procindex = self._nextprocindex + 1
+        message = MessageEngine(expression)
+        process = Process(procindex, message)
+        self._nextprocindex = procindex
+        return process
 
+    # 既存のチャンバーに追記する
+    def append_to_active(self, process) -> ProcessChamber:
         chamber = self.get_active()
-        if process.is_finished() and chamber and chamber.is_finished():
-            newchm = False
-        else:
-            chamber = self.addnew(app.ui.get_input_prompt())
-            newchm = True
-        
         chamber.add(process)
-        return chamber, newchm
+        return chamber
 
     # 新しいチャンバーを作成して返す
     def addnew(self, initial_prompt=None):
@@ -667,7 +721,7 @@ class ProcessHive:
         self._nextindex += 1
         self.activate(newindex)
         return chamber
-    
+
     def addnew_desktop(self, name: str, *, activate=True) -> DesktopChamber:
         newindex = self._nextindex
         chamber = DesktopChamber(name, newindex)
@@ -763,98 +817,44 @@ class ProcessHive:
 #
 #
 class ProcessError():
-    def __init__(self, excep, timing, process):
-        self._timing = timing
-        self._excep = excep
-        self._proc = process
+    """@type
+    プロセスの実行時に起きたエラー。
+    Typename: ProcessError
+    """
+    def __init__(self, process, error):
+        self.error = error
+        self.process = process
     
-    def explain_process(self):
-        return "プロセス[{}] {}".format(self._proc.get_index(), self._proc.get_command_string())
-    
-    def explain_timing(self):
-        if self._timing == "argparse":
-            tim = "引数の解析"
-        elif self._timing == "executing":
-            tim = "実行前後での"
-        elif self._timing == "execute":
-            tim = "実行"
+    def get_error_typename(self):
+        if isinstance(self.error, MessageError):
+            err = self.error.error
         else:
-            tim = "不明な時空間'{}'での".format(self._timing)
-        return "{}エラー".format(tim)
-    
-    def get_traces(self):
-        traces = traceback.format_exception(type(self._excep), self._excep, self._excep.__traceback__)
-        return traces[-1], traces[1:-1]
+            err = self.error
+        return err.__class__.__name__
 
-    def print_traceback(self, spi):
-        excep, traces = self.get_traces()
-        spi.post("error", excep)
-        spi.post("message-em", "スタックトレース：")
-        spi.post("message", "".join(traces))
+    def summarize(self):
+        if isinstance(self.error, MessageError):
+            error = self.error.error
+            return "文法エラー：{}".format(str(error))
+        else:
+            error = self.error
+            return "実行エラー：{}".format(str(error))
 
-#
-#
-# プロセスの実行フロー
-#
-#
-def send_object_message(root, expression: str):
-    message = MessageEngine(expression)
-    process = Process(message)
+    def pprint(self, app):
+        if isinstance(self.error, MessageError):
+            error = self.error.error
+            errortype = traceback.format_exception_only(type(error), error)
+            app.post("error", errortype[0] if errortype else "")
+            app.post("message-em", "メッセージ解決：")
+            self.error.message.pprint_log(lambda x: app.post("message", x))
+        else:
+            excep = self.error
+            details = traceback.format_exception(type(excep), excep, excep.__traceback__)
+            app.post("error", details[-1] if details else "")
+            app.post("message-em", "スタックトレース：")
+            app.post("message", "".join(details[1:-1]) + "\n")
+            app.post("message-em", "メッセージ解決：")
+            self.process.message.pprint_log(lambda x: app.post("message", x))
 
-    # メインスレッドへの伝達者
-    spirit = Spirit(root, process)
-
-    # 実行開始
-    timestamp = datetime.datetime.now()
-    spirit.post("on-exec-process", "begin", spirit=spirit, process=process, timestamp=timestamp)
-
-    # オブジェクトを取得
-    deskchm = root.processhive.get_last_active_desktop()
-    if deskchm is None:
-        inputobjs = ObjectCollection()
-        #raise ValueError("No object desktop can be found")
-    else:
-        inputobjs = deskchm.get_objects()
-
-    # コマンドを解析
-    context = InvocationContext(
-        input_objects=inputobjs, 
-        type_module=root.get_type_module(),
-        spirit=spirit
-    )
-    process.set_last_invocation_context(context)
-    msgroutine = message.runner(context, log=False)
-
-    # 実行開始
-    for nextmsg in msgroutine:
-        if nextmsg.is_task():
-            # 非同期実行へ移行する
-            process.run_async(msgroutine, context)
-            return
-    
-    # 同期実行の終わり
-    post_send_message_process(process, context)
-    return process
-
-
-# メッセージ実行後のフロー
-def post_send_message_process(process, context):
-    # 実行時に発生した例外を確認する
-    excep = context.get_last_exception()
-    if excep is None:
-        # 返り値をオブジェクトとして配置する
-        returns = context.clear_local_objects()
-        context.spirit.post("on-exec-process", "success", process=process, returns=returns, last_invocation=context.get_last_invocation())
-        success = True
-    elif isinstance(excep, ProcessInterrupted):
-        context.spirit.post("on-exec-process", "interrupted", process=process)
-        success = False
-    else:
-        context.spirit.post("on-exec-process", "error", process=process, error=excep)
-        success = False
-
-    # プロセス終了
-    process.finish()
-    return success
 
 

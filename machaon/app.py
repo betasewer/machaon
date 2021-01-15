@@ -10,10 +10,10 @@ import subprocess
 
 from typing import Optional, List, Any
 
-from machaon.object.object import Object, ObjectCollection
-from machaon.object.type import TypeModule
+from machaon.core.object import Object, ObjectCollection
+from machaon.core.type import TypeModule
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
-from machaon.package.package import PackageManager, PackageEntryLoadError
+from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
 import machaon.platforms
@@ -31,8 +31,9 @@ class AppRoot:
         self.processhive = None
         self.curdir = "" # 基本ディレクトリ
         self.pkgmanager = None
-        self.cmdpackages = []
+        self.pkgs = []
         self.typemodule = None
+        self.objcol = ObjectCollection()
 
     def initialize(self, *, ui, module_dir="", current_dir=None):
         self.ui = ui
@@ -46,8 +47,10 @@ class AppRoot:
         chamber = self.processhive.addnew(self.ui.get_input_prompt())
         #self.processhive.new_desktop("desk1")
 
-        #self.pkgmanager = PackageManager(module_dir)
-        #self.pkgmanager.add_to_import_path()
+        self.pkgmanager = PackageManager(module_dir)
+        self.pkgmanager.load_database()
+        self.pkgmanager.add_to_import_path()
+        self.pkgs = self.pkgmanager.create_undefined_empty_packages()[:]
 
         self.typemodule = TypeModule()
         self.typemodule.add_fundamental_types()
@@ -66,87 +69,49 @@ class AppRoot:
     #
     # クラスパッケージを走査する
     #
-    # パッケージを導入
-    """
-    def setup_package(self, prefixes, package):
-        # コマンドセットを構築して追加する
-        if isinstance(package, CommandPackage):
-            cmdset = package.create_commands(self, prefixes)
-            package = None
+    # パッケージ概要を追加
+    def add_package(self, name, source=None, **packagekwargs):
+        newpkg = Package(name, source, **packagekwargs)
+        for pkg in self.pkgs:
+            if pkg.name == newpkg.name:
+                pkg.assign_definition(newpkg)
+                break
         else:
-            if not package.is_installed_module():
-                # ダミーのコマンドセットを設置
-                cmdset = NotYetInstalledCommandSet(package.name, prefixes)
-            else:
-                try:
-                    cmdbuilder = package.load_command_builder()
-                except PackageEntryLoadError as e:
-                    cmdset = LoadFailedCommandSet(package.name, prefixes, error=e.get_basic())
-                else:
-                    cmdset = cmdbuilder.create_commands(self, prefixes)
+            self.pkgs.append(newpkg)
 
-        # パッケージ／コマンドビルダを格納する
-        cmdset_index = self.cmdengine.add_command_set(cmdset)
-        if package:
-            package.attach_commandset(cmdset_index)
-            self.cmdpackages.append(package)
+    # パッケージ概要を取得する
+    def get_package(self, name, *, fallback=True):
+        for pkg in self.pkgs:
+            if pkg.name == name:
+                return pkg
+        if not fallback:
+            raise PackageNotFoundError(name)
+        return None
     
-    def setup_dependency_package(self, package):
-        self.cmdpackages.append(package)
+    def enum_packages(self):
+        for pkg in self.pkgs:
+            yield pkg
     
-    # パッケージとコマンドセットの組を取得する
-    def get_package_and_commandset(self, package_index):
-        # パッケージを取得
-        if package_index < 0 or len(self.cmdpackages) <= package_index:
-            raise IndexError("package_index") 
-        package = self.cmdpackages[package_index]
-        # コマンドセット
-        cmdset_index = package.get_attached_commandset()
-        if cmdset_index is None:
-            return package, None
-        else:
-            cmdset = self.cmdengine.get_command_set(cmdset_index)
-            return package, cmdset
-
+    # パッケージをローカル上で展開・削除・更新する
+    def install_package(self, package):
+        yield from self.pkgmanager.install(package, newinstall=True)
+    
+    def uninstall_package(self, package):
+        yield from self.pkgmanager.uninstall(package)
+    
+    def update_package(self, package):
+        yield from self.pkgmanager.install(package, newinstall=False)
+    
     # パッケージにアップデートが必要か
     def get_package_status(self, package):
-        self.pkgmanager.load_database()
         return self.pkgmanager.get_update_status(package)
 
-    # パッケージをローカルに展開する
-    def operate_package(self, package, install=False, uninstall=False, update=False):
-        self.pkgmanager.load_database()
-        if install:
-            yield from self.pkgmanager.install(package, newinstall=True)
-        elif uninstall:
-            yield from self.pkgmanager.uninstall(package)
-        elif update:
-            yield from self.pkgmanager.install(package, newinstall=False)
+    # パッケージに定義された型をすべて抽出する
+    def load_package(self, package):
+        return package.load(self.typemodule)
     
-    def count_package(self):
-        return len(self.cmdpackages)
-    
-    # パッケージからコマンドセットを構築し、差し替える
-    def build_commandset(self, package):
-        cmdset_index = package.get_attached_commandset()
-        oldcmdset = self.cmdengine.get_command_set(cmdset_index)
-        try:        
-            cmdbuilder = package.load_command_builder()
-        except PackageEntryLoadError as e:
-            newcmdset = LoadFailedCommandSet(package.name, oldcmdset.prefixes, error=e.get_basic())
-        else:
-            newcmdset = cmdbuilder.create_commands(self, oldcmdset.prefixes)
-        self.cmdengine.replace_command_set(cmdset_index, newcmdset)
-        return newcmdset
-    
-    # コマンドセットを未インストール状態に差し替える
-    def disable_commandset(self, package):
-        cmdset_index = package.get_attached_commandset()
-        oldcmdset = self.cmdengine.get_command_set(cmdset_index)
-        dumbcmdset = NotYetInstalledCommandSet(package.name, oldcmdset.prefixes)
-        self.cmdengine.replace_command_set(cmdset_index, dumbcmdset)
-        return dumbcmdset
-    """
+    def unload_package(self, package):
+        package.unload(self.typemodule)
 
     #
     # アプリの実行
@@ -190,21 +155,30 @@ class AppRoot:
     # コマンド処理の流れ
     #
     def eval_object_message(self, message: str):        
-        if message == "exit":
+        if not message:
+            return
+        elif message == "exit":
             # 終了コマンド
             self.exit()
             return
-        elif not message:
+        
+        head, *_tails = message.split(maxsplit=1)
+        if head == "+":
+            # 新規チャンバーを追加してアクティブにする
+            chamber = self.processhive.addnew(self.ui.get_input_prompt())
+            self.ui.activate_new_chamber(chamber)
+            message = message[1:].lstrip()
+        
+        if not message:
             return
 
         # 実行
-        chamber, newchm = self.processhive.new(self, message)
+        process = self.processhive.new_process(message)
+        process.start_process(self) # メッセージを実行する
+        chamber = self.processhive.append_to_active(process)
 
         # 表示を更新する
-        if newchm:
-            self.ui.activate_new_chamber(chamber)
-        else:
-            self.ui.update_active_chamber(chamber, updatemenu=False)
+        self.ui.update_active_chamber(chamber, updatemenu=False)
         
     # プロセスをスレッドで実行しアクティブにする
     def new_desktop(self, name: str):
@@ -283,11 +257,6 @@ class AppRoot:
         return chm
     
     #
-    def select_desktop(self, index=None):
-        if index is None:
-            chm = self.select_chamber("desktop")
-        else:
-            chm = self.select_chamber(index)
-        if chm is None:
-            raise ValueError("Desktop Chamber is not found")
-        return chm.get_desktop()
+    def select_object_collection(self):
+        return self.objcol
+

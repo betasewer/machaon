@@ -154,7 +154,7 @@ class tkLauncher(Launcher):
         self.hyperlabels = []
         self.chambermenu_active = None
         self.focusbg = (None, None)
-        self.does_stick_bottom = tk.BooleanVar(value=False)
+        self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
 
     def openfilename_dialog(self, *, 
@@ -242,8 +242,8 @@ class tkLauncher(Launcher):
         self.log.tag_bind("clickable", "<Double-Button-1>", self.hyper_copy_input_text)
 
         # オブジェクトウィンドウ
-        self.objdesk = tk.Text(self.frame, wrap=wrap_option, font="TkFixedFont", relief="solid", width=50)
-        self.objdesk.configure(state='disabled')
+        #self.objdesk = tk.Text(self.frame, wrap=wrap_option, font="TkFixedFont", relief="solid", width=50)
+        #self.objdesk.configure(state='disabled')
 
         #self.errlog = tk.Text(self.frame, width=30, wrap="word", font="TkFixedFont", relief="solid")
         #self.errlog.configure(state='disabled')
@@ -274,7 +274,7 @@ class tkLauncher(Launcher):
         self.commandline.grid(column=0, row=0, columnspan=2, sticky="news", padx=padx, pady=pady)
         self.chambermenu.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady)
         self.log.grid(column=0, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
-        self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        #self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
     
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
@@ -285,7 +285,7 @@ class tkLauncher(Launcher):
         #self.root.overrideredirect(True)
         from machaon.ui.theme import dark_classic_theme
         self.apply_theme(dark_classic_theme())
-            
+
         # イベント
         def bind_event(*widgets):
             def _deco(fn):
@@ -297,7 +297,7 @@ class tkLauncher(Launcher):
                 for w in widgets:
                     w.bind(sequence, fn)
             return _deco
-        
+
         @bind_event(self.commandline)
         def cmdline_on_Return(e):
             self.on_commandline_return()        
@@ -415,7 +415,7 @@ class tkLauncher(Launcher):
         @bind_event(self.commandline, self.log)
         def on_FocusIn(e):
             e.widget.configure(background=self.focusbg[0])
-            
+
         @bind_event(self.commandline, self.log)
         def on_FocusOut(e):
             e.widget.configure(background=self.focusbg[1])
@@ -607,7 +607,7 @@ class tkLauncher(Launcher):
         if label is DataItemTag.HYPERLABEL:
             # データビューのアイテム
             dataname, itemindex = DataItemTag.parse(link)
-            if self.select_screen_dataview_item(dataname, itemindex, charindex=index):
+            if self.select_screen_setview_item(dataname, itemindex, charindex=index):
                 return True
 
         elif label is ObjectTag.HYPERLABEL:
@@ -690,31 +690,26 @@ class tkLauncher(Launcher):
     #
     #
     #
-    def insert_screen_dataview(self, data, viewtype, dataname):
-        insert = screen_get_dataview_method(viewtype, "insert")
-        if insert is None:
+    def insert_screen_setview(self, data, viewtype, dataid, context):
+        generate = screen_get_setview_method(viewtype, "generate")
+        if generate is None:
             raise ValueError("表示形式'{}'には未対応です".format(viewtype))
         
+        dataname = viewtype + "@" + dataid
+
         self.log.configure(state='normal')
-        insert(self, self.log, data, dataname)
+        generate(self, self.log, data, dataname, context)
         self.log.insert("end", "\n")
         self.log.configure(state='disabled')
     
-    def select_screen_dataview_item(self, dataname, index, charindex):
-        # 現在のデータセットのアイテムを選択する
-        dataobj = self.app.select_desktop().pick(dataname)
-        if dataobj is None:
-            return False
-        datas = dataobj.value
-        datas.select(index)
-
-        viewtype = datas.get_viewtype()
-        select_item = screen_get_dataview_method(viewtype, "select_item")
+    def select_screen_setview_item(self, dataname, index, charindex):
+        viewtype, dataid = dataname.split("@")
+        select_item = screen_get_setview_method(viewtype, "select_item")
         if select_item is None:
             raise ValueError("表示形式'{}'には未対応です".format(viewtype))
 
         self.log.configure(state='normal')
-        select_item(self, self.log, charindex, dataname)
+        select_item(self, self.log, charindex, dataid)
         self.log.configure(state='disabled')
         return True
     
@@ -737,21 +732,6 @@ class tkLauncher(Launcher):
         self.log.configure(state='disabled')
         return True
 
-    def select_dataview_item(self, index):
-        # リンクの場所を探す
-        ranges = self.log.tag_ranges("hyperlink")
-        for linkbeg, linkend in text_iter_coord_pair(ranges):
-            link, label = self.hyper_resolve_link(linkbeg)
-            if label is DataItemTag.HYPERLABEL:
-                dataname, itemindex = DataItemTag.parse(link)
-                if itemindex == index:
-                    break
-        else:
-            raise IndexError("invalid dataview index")
-
-        self.log_set_selection(linkbeg, linkend)
-        self.select_screen_dataview_item(dataname, index, charindex=linkbeg)
-    
     #
     #
     #
@@ -914,6 +894,14 @@ class tkLauncher(Launcher):
         label = theme.getval("color.label", msg_em)
         highlight = theme.getval("color.highlight", msg_em)
         secbg = theme.getval("color.sectionbackground", bg)
+        col_red = theme.getval("color.red")
+        col_gre = theme.getval("color.green")
+        col_blu = theme.getval("color.blue")
+        col_yel = theme.getval("color.yellow")
+        col_cya = theme.getval("color.cyan")
+        col_mag = theme.getval("color.magenta")
+        col_bla = theme.getval("color.black")
+        col_gry = theme.getval("color.gray", theme.getval("color.grey"))
 
         insecbg = theme.getval("color.inactivesectionbackground", bg)
         self.focusbg = (secbg, insecbg)
@@ -955,12 +943,20 @@ class tkLauncher(Launcher):
         self.log.tag_configure("hyperlink", foreground=msg_hyp)
         self.log.tag_configure("log-selection", background=highlight, foreground=msg)
         self.log.tag_configure("log-item-selection", foreground=msg_em)
+        self.log.tag_configure("black", foreground=col_bla)
+        self.log.tag_configure("grey", foreground=col_gry)
+        self.log.tag_configure("red", foreground=col_red)
+        self.log.tag_configure("blue", foreground=col_blu)
+        self.log.tag_configure("green", foreground=col_gre)
+        self.log.tag_configure("cyan", foreground=col_cya)
+        self.log.tag_configure("yellow", foreground=col_yel)
+        self.log.tag_configure("magenta", foreground=col_mag)
 
-        self.objdesk.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
-        self.objdesk.tag_configure("message", foreground=msg)
-        self.objdesk.tag_configure("object-frame", foreground="#888888")
-        self.objdesk.tag_configure("object-metadata", foreground=msg_inp)
-        self.objdesk.tag_configure("object-selection", foreground=msg_wan)
+        #self.objdesk.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
+        #self.objdesk.tag_configure("message", foreground=msg)
+        #self.objdesk.tag_configure("object-frame", foreground="#888888")
+        #self.objdesk.tag_configure("object-metadata", foreground=msg_inp)
+        #self.objdesk.tag_configure("object-selection", foreground=msg_wan)
 
         self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
         self.chambermenu.tag_configure("chamber", foreground=msg)
@@ -979,10 +975,10 @@ class tkLauncher(Launcher):
 #
 # Dataview Table
 #
-def screen_dataview_table_insert(ui, wnd, dataview, dataname):
-    rows, colmaxwidths = dataview.rows_to_string_table()
+def screen_setview_table_generate(ui, wnd, setview, dataname, context):
+    rows, colmaxwidths = setview.rows_to_string_table(context, "summarize")
     
-    columns = [x.get_help() for x in dataview.get_current_columns()]
+    columns = [x.get_name() for x in setview.get_current_columns()]
     colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colmaxwidths)]
 
     # ヘッダー
@@ -1001,20 +997,15 @@ def screen_dataview_table_insert(ui, wnd, dataview, dataname):
 
         index = str(i)
         itemkey = DataItemTag.make(dataname, itemindex)
-        if i == dataview.selection():
-            head = ">> " + " "*(2-len(index))
-            tags = ("message", "log-item-selection")
-            linktags = ui.new_hyper_tags(itemkey, DataItemTag.HYPERLABEL) + ("log-selection",)
-        else:   
-            head = " "*(5-len(index))
-            tags = ("message",)
-            linktags = ui.new_hyper_tags(itemkey, DataItemTag.HYPERLABEL)
+        head = " "*(5-len(index))
+        tags = ("message",)
+        linktags = ui.new_hyper_tags(itemkey, DataItemTag.HYPERLABEL)
 
         wnd.insert("end", head, tags) # ヘッダー
         wnd.insert("end", index, linktags) # No. リンク
         wnd.insert("end", line+"\n", tags) # 行本体
     
-def screen_dataview_table_select_item(ui, wnd, charindex, dataname):
+def screen_setview_table_select_item(ui, wnd, charindex, _dataid):
     wnd.configure(state='normal')
     
     selpoints = wnd.tag_ranges("log-item-selection")
@@ -1028,28 +1019,40 @@ def screen_dataview_table_select_item(ui, wnd, charindex, dataname):
     linehead = TextIndex(charindex).move(char=0)
     wnd.tag_add("log-item-selection", str(linehead), str(linehead.moved(char="end")))
     wnd.delete(str(linehead), str(linehead.moved(char=2)))
-    wnd.insert(str(linehead), ">>", "log-item-selection")
+    wnd.insert(str(linehead), "->", "log-item-selection")
     
     wnd.configure(state='disabled')
 
 #
 # Dataview Wide
 #
-def screen_dataview_wide_insert(ui, wnd):
+def screen_setview_wide_generate(ui, wnd):
     raise NotImplementedError()
 
-def screen_dataview_wide_select_item(ui, wnd):
+def screen_setview_wide_select_item(ui, wnd):
     raise NotImplementedError()
 
 #
 # Dataview List
 #
 
+#
+# Tuple 
+#
+def screen_setview_tuple_generate(ui, wnd, tpl, dataname, context):
+    # 値
+    for i, obj in enumerate(tpl):
+        line = "{} [{}]".format(obj.summary(), obj.get_typename())
+        index = str(i)
+        head = " "*(5-len(index))
+        tags = ("message",)
+        wnd.insert("end", head + index + " | " + line + "\n", tags)
+
+
 # 実装関数を取得する
-def screen_get_dataview_method(viewtype, name):
-    viewtype = {
-    }.get(viewtype, viewtype).lower()
-    return globals().get("screen_dataview_{}_{}".format(viewtype, name), None)
+def screen_get_setview_method(viewtype, name):
+    viewtype = viewtype.lower()
+    return globals().get("screen_setview_{}_{}".format(viewtype, name), None)
 
 #
 #

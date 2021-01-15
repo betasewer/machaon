@@ -225,7 +225,7 @@ class MiniProgressDisplay:
         self.spirit = spirit
         self.total = total
         self.suma = None
-        self.tag = tag
+        self.tag = tag or "message"
         self.width = width
         self.title = title or "進行中"
         self.marquee = None if total is not None else 0
@@ -265,7 +265,7 @@ class MiniProgressDisplay:
     #
     def finish(self, total):
         if self.suma is not None:
-            self.spirit.delete_message()
+            self.spirit.post("delete-message")
         bar = "[{}] 完了 ({})".format("o"*self.width, total)
         bar = "{}: ".format(self.title) + bar
         self.spirit.post(self.tag, bar)

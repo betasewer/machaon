@@ -4,7 +4,7 @@ import base64
 #
 #
 #
-class basic_auth():
+class BasicAuth():
     def __init__(self, password, raw=False):
         if not raw:
             password = base64.b64decode(password).decode("utf-8")

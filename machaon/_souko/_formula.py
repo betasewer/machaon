@@ -1,8 +1,8 @@
 import ast
 from typing import Dict, Any, List, Sequence, Optional
 
-from machaon.object.type import Type, TypeModule
-from machaon.object.object import Object
+from machaon.core.type import Type, TypeModule
+from machaon.core.object import Object
 
 # imported from...
 # desktop

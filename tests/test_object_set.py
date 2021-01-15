@@ -2,12 +2,12 @@ import pytest
 
 import operator
 
-from machaon.object.type import TypeModule
-from machaon.object.object import ObjectCollection, Object
-from machaon.object.invocation import InvocationContext
-from machaon.object.dataset import DataViewRowIndexer, DataView, make_data_columns, DataColumn
-from machaon.object.message import Function
-from machaon.object.sort import ValueWrapper
+from machaon.core.type import TypeModule
+from machaon.core.object import ObjectCollection, Object
+from machaon.core.invocation import InvocationContext
+from machaon.types.objectset import ObjectSet, make_data_columns, DataColumn
+from machaon.core.message import Function
+from machaon.core.sort import ValueWrapper
 
 class Employee():
     """
@@ -46,41 +46,34 @@ def objectdesk():
     desk = InvocationContext(input_objects=ObjectCollection(), type_module=typemod)
     return desk
 
-
 #
 #
 #
 def test_column(objectdesk):
     employee = objectdesk.get_type("Employee")
-    cols = make_data_columns(employee, "name", "postcode")
-    view = DataView(employee, 
-        items=[
+    view = ObjectSet([
             Employee(x,y) for (x,y) in [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")]
         ], 
-        viewcolumns=cols
+        employee,
+        objectdesk,
+        ["name", "postcode"]
     )
 
     assert view.get_item_type() is employee
-    assert view.get_current_columns() == cols
     assert view.get_top_column_name() == "name"
-    assert view.get_default_column_names() == ["name"]
     assert view.get_link_column_name() is None
 
-    assert view.find_current_column("name") is not None
-    assert view.find_current_column("postcode") is not None
-    assert view.find_current_column("tall") is None
-    view.add_current_column("tall")
-    assert view.find_current_column("tall") is not None
+    view.add_column("tall")
+    assert view.get_current_column_names() == ["name", "postcode", "tall"]
 
-    namecol = cols[0]
+    namecol = view.get_current_columns()[0]
     assert namecol.get_name() == "name"
     assert namecol.get_type(objectdesk) is objectdesk.get_type("Str")
-    #assert namecol.get_doc() == ""
 
     # カラムの値を得る
     subject = Object(employee, view.items[0])
-    assert namecol.method
-    assert namecol.method.get_action()(subject.value) == "ken"
+    assert namecol.invocation
+    assert namecol.invocation.get_action()(subject.value) == "ken"
     DataColumn.evallog = True
     namecol.eval(subject, objectdesk) == "ken"
 
@@ -95,9 +88,9 @@ def test_column(objectdesk):
 #
 def test_create_no_mod(objectdesk):
     datas = [Employee(x) for x in ("ken", "yuuji", "kokons")]
-    
     employee = objectdesk.get_type("Employee")
-    view = DataView(employee, datas).create_view(objectdesk, "table")
+
+    view = ObjectSet(datas, employee, objectdesk, ["name"])
     
     assert view.count() == 3
     assert len(view.get_current_columns()) == 1
@@ -110,6 +103,21 @@ def test_create_no_mod(objectdesk):
     assert view.selection() == 1
     assert view.row(view.selection()) == ["yuuji"]
 
+#
+#
+#
+def test_expand_view(objectdesk):
+    items = [Employee(x, y) for (x,y) in (("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333"))]
+    employee = objectdesk.get_type("Employee")
+
+    view = ObjectSet(items, employee, objectdesk, ["name", "postcode"])
+    view.expand_view(objectdesk, ["tall"])
+
+    assert view.get_current_column_names() == ["name", "postcode", "tall"]
+    assert view.count() == 3
+    assert view.row(0) == ["ken", "111-1111", 3]
+
+
 
 @pytest.mark.skip()
 def test_create_filtered(objectdesk):
@@ -121,7 +129,7 @@ def test_create_filtered(objectdesk):
     assert bits == [True, False, True]
     
     # TODO: get_lambda_argument_namesの実装
-    view = DataView(employee, datas).create_view(objectdesk, "table", filter=f)
+    view = ObjectSet(datas, employee).view(objectdesk, "table", predicate=f)
     assert view.count() == 2
     assert view.rows_to_string_table(objectdesk) == ([(0, ["ken","3"]), (2, ["yuuji","5"])], [5, 1])
 
@@ -130,23 +138,23 @@ def test_create_filtered(objectdesk):
 def test_filtered_manytimes(objectdesk):
     datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
     
-    view = parse_new_dataview(objectdesk, datas, "name postcode")
+    view = parse_new_setview(objectdesk, datas, "name postcode")
     view.select(1)
     assert view.count() == 3
     assert view.row(view.selection()) == ["ishulalmandij", "000-0000"]
     
-    view2 = parse_dataview(objectdesk, view, "/where @tall < 10")
+    view2 = parse_setview(objectdesk, view, "/where @tall < 10")
     assert view2.count() == 2
     assert view2.rows_to_string_table() == ([(0, ["ken","000-0000", "3"]), (2, ["yuuji", "000-0000", "5"])], [5, 8, 1])
 
-    view3 = parse_dataview(objectdesk, view2, "/where @name == ken")
+    view3 = parse_setview(objectdesk, view2, "/where @name == ken")
     assert view3.count() == 1
     assert view3.rows_to_string_table() == ([(0, ["ken","000-0000", "3"])], [3, 8, 1])
 
-    view4 = parse_dataview(objectdesk, view3, "/where @postcode == 777-7777")
+    view4 = parse_setview(objectdesk, view3, "/where @postcode == 777-7777")
     assert view4.count() == 0
     
-    view5 = parse_dataview(objectdesk, view4, "/where @name == batman")
+    view5 = parse_setview(objectdesk, view4, "/where @name == batman")
     assert view5.count() == 0
 
 #
@@ -156,15 +164,15 @@ def test_filtered_manytimes(objectdesk):
 def test_sorted(objectdesk):
     datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
     
-    view = parse_new_dataview(objectdesk, datas, "name")
+    view = parse_new_setview(objectdesk, datas, "name")
     view.select(1)
     assert view.selection_row() == ["ishulalmandij"]
 
-    view2 = parse_dataview(objectdesk, view, "/sortby name")
+    view2 = parse_setview(objectdesk, view, "/sortby name")
     assert view2.rows_to_string_table() == ([(1, ["ishulalmandij"]), (0, ["ken"]), (2, ["yuuji"])], [13])
     assert view2.selection_row() == ["ishulalmandij"]
     
-    view3 = parse_dataview(objectdesk, view, "/sortby !tall")
+    view3 = parse_setview(objectdesk, view, "/sortby !tall")
     assert view3.rows_to_string_table() == ([(1, ["ishulalmandij", '13']), (2, ["yuuji", "5"]), (0, ["ken", "3"])], [13, 2])
     assert view3.selection_row() == ["ishulalmandij", 13]
     
@@ -177,12 +185,3 @@ def test_sortkey_wrapper():
     assert wrap(3) < wrap(5)
     assert (wrap(3), wrap(10)) < (wrap(3), wrap(15))   
 
-#
-#
-#
-def test_rowindexer():
-    indexer = DataViewRowIndexer(["column-1", "column-2", "column-3"])
-    assert indexer.create_column_indexmap(["column-1", "column-4"]) == {"column-1": 0, "column-4": 3}
-    assert indexer.create_column_indexmap(["column-4", "column-5"]) == {"column-4": 3, "column-5": 4}
-    assert indexer.create_column_indexmap(["column-2", "column-5"]) == {"column-2": 1, "column-5": 4}
-    assert indexer.pop_new_columns() == ["column-4", "column-5"]

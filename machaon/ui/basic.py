@@ -9,8 +9,8 @@ import pprint
 from typing import Tuple, Sequence, List, Optional
 
 from machaon.cui import composit_text
-from machaon.process import ProcessMessage, NotExecutedYet, ProcessChamber
-from machaon.object.message import MessageError
+from machaon.process import ProcessMessage, NotExecutedYet, ProcessChamber, TempSpirit
+from machaon.core.message import MessageError
 
 #
 meta_command_sigil = "/"
@@ -63,14 +63,22 @@ class Launcher():
                     self.on_interrupt_process(process)
                     self.on_end_process(process)
                 elif code == "error":
-                    error = msg.argument("error")
+                    error = msg.argument("error") # error はProcessError型のオブジェクト
+                    expr = " -> {} [{}<{}>]".format(error.summary(), error.get_typename(), error.value.get_error_typename())
+                    self.insert_screen_message("message", expr)
                     self.on_error_process(process, error)
                     self.on_end_process(process)
                 elif code == "success":
-                    objs = msg.argument("returns")
-                    for obj in objs:    
-                        expr = " -> {} [{}]".format(obj.value, obj.get_typename())
-                        self.insert_screen_message("message", expr)
+                    obj = msg.argument("ret")
+                    process = msg.argument("process")
+                    context = msg.argument("context")
+                    if obj:
+                        if obj.is_pretty_view():
+                            m = ProcessMessage(tag="object-pretty-view", process=process, object=obj.value.get_object(), context=context)
+                            self.message_handler(m)
+                        else:
+                            expr = " -> {} [{}]".format(obj.summary(), obj.get_typename())
+                            self.insert_screen_message("message", expr)
                     self.on_success_process(process)
                     self.on_end_process(process)
                 else:
@@ -81,28 +89,29 @@ class Launcher():
                 lno = msg.argument("line")
                 self.delete_screen_message(lno, cnt)
 
-            elif tag == "object-view":
+            elif tag == "object-pretty-view":
                 obj = msg.argument("object")
-                
-                # 見出し
-                text = "オブジェクト：{} [{}]\n".format(obj.name, obj.get_typename())
-                self.insert_screen_message("message-em", text)
-
-                # 内容
-                if obj.get_typename() == "dataview":
-                    datas = obj.value
-                    if datas.nothing():
-                        text = "結果は0件です" + "\n"
-                        self.insert_screen_message("message", text)
-                    else:
-                        viewtype = datas.get_viewtype()
-                        self.insert_screen_dataview(datas, viewtype, obj.name)
-                else:
-                    text = "値：\n  {}\n".format(obj.to_string())
-                    self.insert_screen_message("message", text)
+                process = msg.argument("process")
+                context = msg.argument("context")
+                # pprintメソッドを呼ぶ
+                obj.pprint(context.spirit)
+                # ただちにメッセージを取得し処理する
+                for msg in process.handle_post_message():
+                    self.message_handler(msg)
             
             elif tag == "object-summary":
                 self.insert_screen_object_summary(msg)
+            
+            elif tag == "object-setview":
+                data = msg.argument("data")
+                viewtype = data.get_viewtype()
+                context = msg.argument("context")
+                self.insert_screen_setview(data, viewtype, "testdata", context)
+            
+            elif tag == "object-tupleview":
+                data = msg.argument("data")
+                context = msg.argument("context")
+                self.insert_screen_setview(data, "tuple", "", context)
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
@@ -155,7 +164,7 @@ class Launcher():
         return curstates
         
     # 
-    def insert_screen_dataview(self, dataview, viewtype, dataname):
+    def insert_screen_setview(self, setview, viewtype, dataname, context):
         raise NotImplementedError()
     
     #
@@ -220,7 +229,6 @@ class Launcher():
     def get_input_prompt(self) -> str:
         """ 入力プロンプト """
         return ">>> "
-    
 
     #
     # チャンバーの操作
@@ -349,7 +357,7 @@ class Launcher():
     #
     #
     #
-    def select_dataview_item(self, index):
+    def select_setview_item(self, index):
         raise NotImplementedError()
     
     #
@@ -364,22 +372,11 @@ class Launcher():
     
     def on_interrupt_process(self, process):
         """ プロセス中断時 """
-        self.insert_screen_message("message-em", "中断しました")
+        self.insert_screen_message("message-em", "中断しました。")
     
     def on_error_process(self, process, excep):
         """ プロセスの異常終了時 """
-        self.insert_screen_message("error", "実行中にエラーが発生し、失敗しました。")
-        
-        if isinstance(excep, MessageError):
-            errortype = traceback.format_exception_only(type(excep.error), excep.error)
-            self.insert_screen_message("error", errortype[0] if errortype else "")
-            self.insert_screen_message("message-em", "メッセージ解決：")
-            excep.message.pprint_log(lambda x: self.insert_screen_message("message", x))
-        else:
-            details = traceback.format_exception(type(excep), excep, excep.__traceback__)
-            self.insert_screen_message("error", details[-1] if details else "")
-            self.insert_screen_message("message-em", "スタックトレース：")
-            self.insert_screen_message("message", "".join(details[1:-1]))
+        #self.insert_screen_message("error", "実行中にエラーが発生し、失敗しました。")
 
     def on_success_process(self, process):
         """ プロセスの正常終了時 """
