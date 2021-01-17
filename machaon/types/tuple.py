@@ -87,37 +87,23 @@ class ObjectTuple():
             objs.append(o.copy())
         return ObjectTuple(objs)
     
-    def convertas(self, type):
-        """ @method alias-name [as]
+    def convertas(self, context, type):
+        """ @method context alias-name [as]
         すべての値を指定の型に変換する。
         Params:
             type(Type): 新しい型
         Returns:
             Tuple: 結果のタプル
         """
-        # 一度文字列に変換する
-        strs = [x.to_string() for x in self.objects]
-
-        # 文字列から要素を構築する
-        newvalues = [type.construct_from_string(s) for s in strs]
-        
-        return ObjectTuple([Object(type, v) for v in newvalues])
-    
-    def convertas_literals(self, context):
-        """ @method context alias-name [as-literals]
-        すべての値を適当な型に変換する。
-        Params:
-        Returns:
-            Tuple: 結果のタプル
-        """
-        # 一度文字列に変換する
-        strs = [x.to_string() for x in self.objects]
-
-        # 文字列から要素を構築する
-        from machaon.core.message import select_literal
-        newobjs = [select_literal(context, s) for s in strs]
-        
-        return ObjectTuple(newobjs)
+        objs = []
+        for x in self.objects:
+            # 変換コンストラクタを呼び出す
+            try:
+                v = type.conversion_construct(context, x.value)
+            except:
+                continue
+            objs.append(Object(type, v))
+        return ObjectTuple(objs)
 
     #
     # アルゴリズム関数
@@ -242,7 +228,10 @@ class ObjectTuple():
         # 型を値から推定する
         objs = []
         for val in value:
-            valtype = context.deduce_type(type(val))
-            objs.append(Object(valtype, val))
+            if isinstance(val, Object):
+                objs.append(val)
+            else:
+                valtype = context.deduce_type(val)
+                objs.append(Object(valtype, val))
 
         return ObjectTuple(objs)

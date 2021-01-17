@@ -106,12 +106,11 @@ class AppRoot:
     def get_package_status(self, package):
         return self.pkgmanager.get_update_status(package)
 
-    # パッケージに定義された型をすべて抽出する
-    def load_package(self, package):
-        return package.load(self.typemodule)
-    
-    def unload_package(self, package):
-        package.unload(self.typemodule)
+    # パッケージを名前で読み込む
+    def load_package(self, name):
+        pkg = self.get_package(name, fallback=False)
+        if not pkg.load(self):
+            raise pkg.get_last_load_error()
 
     #
     # アプリの実行

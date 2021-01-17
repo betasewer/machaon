@@ -121,7 +121,7 @@ class Package():
         
         return True
 
-    def load(self, typemodule):
+    def load(self, root):
         """ パッケージに定義されたすべての型をロードする """
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
@@ -152,7 +152,7 @@ class Package():
             for modloader in modules:
                 try:
                     for klass in modloader.enum_type_describers():
-                        typemodule.define(klass, scope=scopename)
+                        root.typemodule.define(klass, scope=scopename)
                 except Exception as e:
                     ex = PackageTypeDefLoadError(e, modloader.entrypoint())
                     self._loaded.append(ex)
@@ -169,7 +169,14 @@ class Package():
             return False
         return self._loaded[0] is not True
     
-    def unload(self, typemodule):
+    def get_last_load_error(self) -> Optional[Exception]:
+        for v in reversed(self._loaded):
+            if v is True:
+                continue
+            return v
+        return None
+
+    def unload(self, root):
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
 
@@ -177,7 +184,7 @@ class Package():
             return
 
         if self._type == PACKAGE_TYPE_MODULES:
-            typemodule.remove_scope(self.scope)
+            root.typemodule.remove_scope(self.scope)
     
 
 #

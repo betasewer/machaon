@@ -182,7 +182,7 @@ class StrType():
     # メソッド
     #
     def convertas(self, s, type):
-        '''@method [as]
+        '''@method alias-name [as]
         指定の型の値へと変換する。
         stringfyメソッドを使用。
         Params:
@@ -192,6 +192,16 @@ class StrType():
         '''
         value = type.construct_from_string(s)
         return Object(type, value)
+    
+    def convertas_literals(self, s, context):
+        """ @method context alias-name [as-literal]
+        すべての値を適当な型に変換する。
+        Params:
+        Returns:
+            Object: 新たな型の値
+        """
+        from machaon.core.message import select_literal
+        return select_literal(context, s)
 
     def reg_match(self, s, pattern):
         '''@method
@@ -285,6 +295,7 @@ class StrType():
         """
         from machaon.types.shell import special_name_to_path
         return special_name_to_path(s)
+
 
 @fundamental_type.definition(typename="Bool", doc="""
 Python.bool 真偽値。

@@ -109,7 +109,7 @@ class AppPackageType:
                     app.message("  " + name)
 
         # 型をロードする
-        approot.load_package(package)
+        package.unload(approot)
 
         if operation is approot.install_package:
             if package.is_modules():
@@ -142,7 +142,7 @@ class AppPackageType:
 
         if package.is_modules():
             app.post("message", "スコープ'{}'を取り除きます".format(package.scope))
-            approot.unload_package(package)
+            package.unload(approot)
 
         app.post("message", "削除完了")
     
@@ -150,5 +150,5 @@ class AppPackageType:
         """ @method context
         パッケージに定義された全ての型を読み込む。
         """
-        context.root.load_package(package)
+        package.load(context.root)
 

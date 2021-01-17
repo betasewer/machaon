@@ -113,7 +113,7 @@ class InvocationEntry():
 
                 # Any型の場合は値から推定する
                 if rettype is None or rettype.is_any():
-                    deducedtype = context.deduce_type(type(value))
+                    deducedtype = context.deduce_type(value)
                     if deducedtype is not None:
                         rettype = deducedtype
                     else:
@@ -227,9 +227,7 @@ class InvocationContext:
             scope, _, typename = typename.rpartition(".")
 
         if scope:
-            # スコープをロードする
-            pkg = self.root.get_package(scope, fallback=True)
-            if pkg: self.root.load_package(pkg)
+            self.root.load_package(scope) # スコープをロードする
         
         t = self.type_module.get(typename, scope=scope)
         if t is None:
@@ -244,17 +242,27 @@ class InvocationContext:
         """ 型定義クラス／型名を渡し、無ければ新たに定義して返す """
         return self.type_module.new(typecode, scope=scope)
     
-    def deduce_type(self, value_type: type) -> Optional[Type]:
+    def deduce_type(self, value: Any) -> Optional[Type]:
         """ 値から型を推定する """
+        if isinstance(value, Object):
+            return value.type
+        
+        value_type = type(value) 
         return self.type_module.deduce(value_type)
     
     def new_object(self, typename, value) -> Object:
         """ 型名と値からオブジェクトを作る """
         if typename is None:
-            valtype = self.deduce_type(type(value))
+            valtype = self.deduce_type(value)
         else:
             valtype = self.select_type(typename)
         return Object(valtype, value)
+    
+    def new_process_error_object(self, exception):
+        """ 現在のプロセスで発生したエラーオブジェクトを作る """
+        process = self.spirit.get_process()
+        from machaon.process import ProcessError
+        return self.new_type(ProcessError).new_object(ProcessError(process, exception))
 
     #
     def push_invocation(self, entry: InvocationEntry):
@@ -410,11 +418,12 @@ class TypeMethodInvocation(BasicInvocation):
             # 型オブジェクトを渡す
             args.append(selfobj.type)
 
-        # インスタンスを渡す    
+        # インスタンスを渡す
+        selfvalue = get_object_value(selfobj)
         if self.method.is_delegated():
-            args.append(selfobj.value["/delegate"])
+            args.append(selfvalue["/delegate"])
         else:
-            args.append(selfobj.value)
+            args.append(selfvalue)
     
         if self.method.is_context_bound():
             # コンテクストを渡す

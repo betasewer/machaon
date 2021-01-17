@@ -210,9 +210,12 @@ class Type():
         fn = self.delegate_method(attrname) # 実装クラスから探す
         if fn:
             if self.is_methods_instance_bound():
-                return (fn(instance, *args, **kwargs),)
+                args = (instance, *args)
             elif self.is_methods_type_bound():
-                return (fn(self, instance, *args, **kwargs),)
+                args = (self, instance, *args)
+                
+            r = (fn(*args, **kwargs),)
+            return r
 
         return None
     
