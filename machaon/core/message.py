@@ -223,26 +223,22 @@ def select_object(context, *, name=None, typename=None) -> Object:
 
 #
 def select_type(context, typeexpr) -> Type:
-    if SIGIL_IMPORT_TARGET in typeexpr:
-        # 定義モジュールを指定してロード
-        typename, _, modpath = typeexpr.partition(SIGIL_IMPORT_TARGET)
-
-        from machaon.core.importer import module_loader
-        loader = module_loader(modpath)
-        for desc in loader.enum_type_describers():
-            atype = context.new_type(desc)
-            if atype.typename == typename:
-                return atype
-        else:
-            raise BadExpressionError("モジュール'{}'が見つからないか、モジュールのなかに'{}'の定義が見つかりません".format(modpath, typename))
-
-    elif SIGIL_SCOPE_RESOLUTION in typeexpr:
-        # パッケージ名を指定してロード
+    if SIGIL_SCOPE_RESOLUTION in typeexpr:
         typename, _, scope = typeexpr.partition(SIGIL_SCOPE_RESOLUTION)
-        if not context.load_scope(scope):
-            raise ValueError("パッケージのロードに失敗")
-        return context.select_type(typename, scope=scope)
 
+        if scope.startswith(SIGIL_IMPORT_TARGET):
+            # 定義モジュールを指定してロード
+            modpath = scope[1:]
+            from machaon.core.importer import module_loader
+            loader = module_loader(modpath)
+            for desc in loader.enum_type_describers():
+                atype = context.new_type(desc)
+                if atype.typename == typename:
+                    return atype
+            raise BadExpressionError("モジュール'{}'が見つからないか、モジュールのなかに'{}'の定義が見つかりません".format(modpath, typename))
+        else:
+            # パッケージ名を指定する
+            return context.select_type(typename, scope=scope)
     else:
         # 型名のみ
         return context.select_type(typeexpr)
@@ -423,7 +419,7 @@ TERM_END_ALL_BLOCK = 0x040000
 SIGIL_OBJECT_ID = "@"
 SIGIL_OBJECT_LAMBDA_MEMBER = "_"
 SIGIL_OBJECT_SPEC_NAME = "/"
-SIGIL_IMPORT_TARGET = "."
+SIGIL_IMPORT_TARGET = "#"
 SIGIL_SCOPE_RESOLUTION = "/"
 SIGIL_END_OF_KEYWORDS = ";"
 SIGIL_RIGHTFIRST_EVALUATION = "$"

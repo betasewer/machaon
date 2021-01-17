@@ -279,16 +279,19 @@ class ObjectSet():
         _itemindex, row = self.rows[index]
         return row
     
-    def row_from_item(self, itemindex) -> int:
+    def get_row_from_item(self, itemindex) -> int:
         """ アイテムIDから行番号を取得する。 線形探索を行う。"""
         for irow, (iitem, _row) in enumerate(self.rows):
             if iitem == itemindex:
                 return irow
         raise ValueError("Invalid item index")
     
-    def item_from_row(self, rowindex) -> int:
-        """ 行番号からアイテムIDを取得する。 """
-        return self.rows[rowindex][0]
+    def get_current_items(self):
+        """ 現在あるすべての行のアイテムを取得する。 """
+        items = []
+        for itemindex, _ in self.rows:
+            items.append(self.items[itemindex])
+        return items
     
     def count(self):
         """ @method
@@ -323,7 +326,7 @@ class ObjectSet():
             bool: 選択できたか
         """
         if 0 <= itemindex < len(self.items):
-            rowindex = self.row_from_item(itemindex)
+            rowindex = self.get_row_from_item(itemindex)
             if rowindex is not None:
                 self._selection = (itemindex, rowindex)
                 return True
@@ -534,8 +537,73 @@ class ObjectSet():
         return r
 
     #
-    # アルゴリズム関数
+    # アイテム関数
     #
+    def map(self, context, predicate):
+        """ @method context
+        アイテムに値に関数を適用し、タプルとして返す。
+        Params:
+            predicate(Function): 述語関数
+        Returns:
+            Tuple:
+        """
+        values = []
+        for item in self.get_current_items():
+            o = Object(self.itemtype, item)
+            v = predicate.run_return(o, context)
+            values.append(v)
+        return values
+
+    def collect(self, context, predicate):
+        """ @method context
+        アイテムに関数を適用し、同じ型の有効な返り値のみを集めたタプルを返す。
+        Params:
+            predicate(Function): 述語関数
+        Returns:
+            Tuple:
+        """
+        values = []
+        for item in self.get_current_items():
+            o = Object(self.itemtype, item)
+            v = predicate.run_return(o, context)
+            if v.type is self.itemtype:
+                values.append(v)
+        return values
+    
+    def convertas(self, context, type):
+        """ @method context alias-name [as]
+        アイテムを新しい型に変換し、変換に成功した値のみを集めたタプルを返す。
+        Params:
+            type(Type): 新しい型
+        Returns:
+            Tuple:
+        """
+        if type is self.itemtype:
+            return self.getitems()
+        values = []
+        for item in self.get_current_items():
+            try:
+                v = type.conversion_construct(context, item)
+            except Exception as e:
+                values.append(context.new_process_error_object(e))
+            else:
+                values.append(Object(type, v))
+        return values
+    
+    #
+    # 行関数
+    #
+    def foreach(self, context, predicate):
+        """ @method context
+        行に関数を適用する。
+        Params:
+            predicate(Function): 関数
+        """
+        converter = RowToObject(self, context)
+        for entry in self.rows:
+            subject = converter.row_object(*entry)
+            predicate.run(subject, context)
+    
     def filter(self, context, predicate):
         """ @method context
         行を絞り込む。
@@ -569,39 +637,36 @@ class ObjectSet():
         # 選択を引き継ぐ
         self._reselect()
     
-    def foreach(self, context, predicate):
-        """ @method context
-        関数を適用する。
-        Params:
-            predicate(Function): 関数
-        """
-        converter = RowToObject(self, context)
-        for entry in self.rows:
-            subject = converter.row_object(*entry)
-            predicate.run(subject, context)
-
     # any
     
     #
-    def getitems(self):
+    def getallitems(self):
         """ @method alias-name [items]
-        アイテムオブジェクトのタプルを得る。
+        全アイテムオブジェクトのタプルを得る。
         Returns:
             Tuple: 
         """
-        items = [Object(self.itemtype, x) for x in self.items]
-        return ObjectTuple(items)
+        return [Object(self.itemtype, x) for x in self.items]
+
+    #
+    def getitems(self):
+        """ @method alias-name [curitems]
+        現在の行のアイテムをタプルで得る。
+        Returns:
+            Tuple
+        """
+        return [Object(self.itemtype, x) for x in self.get_current_items()]
     
     #
     def column(self, context, column):
         """ @method context
-        ある列をタプルで得る。
+        ある列をタプルにして得る。
         Params:
             column(Str): カラム名
         Returns:
             Tuple:
         """
-        _icol, col = self.select_column(column)
+        icol, col = self.select_column(column)
         if icol == -1:
             # 新しいカラムを増やす
             self.generate_rows_concat(context, [col])

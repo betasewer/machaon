@@ -1041,7 +1041,7 @@ def screen_setview_wide_select_item(ui, wnd):
 #
 def screen_setview_tuple_generate(ui, wnd, tpl, dataname, context):
     # 値
-    for i, obj in enumerate(tpl):
+    for i, obj in enumerate(tpl.objects):
         line = "{} [{}]".format(obj.summary(), obj.get_typename())
         index = str(i)
         head = " "*(5-len(index))

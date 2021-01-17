@@ -98,7 +98,7 @@ class Process:
             context.spirit.post("on-exec-process", "interrupted", process=self)
             success = False
         else:
-            error = context.new_type(ProcessError).new_object(ProcessError(self, excep))
+            error = context.new_process_error_object(excep)
             context.push_object(str(self.index), error)
             context.spirit.post("on-exec-process", "error", process=self, error=error)
             success = False
