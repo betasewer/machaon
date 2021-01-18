@@ -84,23 +84,23 @@ class Process:
 
     # メッセージ実行後のフロー
     def on_finish_process(self, context):
+        # 返り値をオブジェクトとして配置する
+        returns = context.clear_local_objects()
+        if not returns:
+            raise ValueError("No objects on the return stack")
+        ret = returns[0]
+        context.push_object(str(self.index), ret)
+        
         # 実行時に発生した例外を確認する
         excep = context.get_last_exception()
         if excep is None:
-            # 返り値をオブジェクトとして配置する
-            returns = context.clear_local_objects()
-            ret = returns[0] if returns else None
-            if ret:
-                context.push_object(str(self.index), ret)
             context.spirit.post("on-exec-process", "success", process=self, ret=ret, context=context)
             success = True
         elif isinstance(excep, ProcessInterrupted):
             context.spirit.post("on-exec-process", "interrupted", process=self)
             success = False
         else:
-            error = context.new_process_error_object(excep)
-            context.push_object(str(self.index), error)
-            context.spirit.post("on-exec-process", "error", process=self, error=error)
+            context.spirit.post("on-exec-process", "error", process=self, error=ret)
             success = False
 
         # プロセス終了

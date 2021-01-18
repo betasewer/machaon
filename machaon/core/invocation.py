@@ -258,9 +258,10 @@ class InvocationContext:
             valtype = self.select_type(typename)
         return Object(valtype, value)
     
-    def new_process_error_object(self, exception):
+    def new_current_process_error_object(self, exception=None):
         """ 現在のプロセスで発生したエラーオブジェクトを作る """
         process = self.spirit.get_process()
+        if exception is None: exception = self.get_last_exception()
         from machaon.process import ProcessError
         return self.new_type(ProcessError).new_object(ProcessError(process, exception))
 

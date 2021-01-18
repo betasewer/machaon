@@ -133,9 +133,9 @@ class Message:
                 args.append(argobj.pick_object(context))
             else:
                 args.append(argobj)
+        args.reverse() # 元の順番に戻す
 
         # 実行する
-        args.reverse() # 元の順番に戻す
         self.selector.invoke(context, *args)
 
         # 返り値（最初の一つだけ）
@@ -969,23 +969,23 @@ class MessageEngine():
                     yield msg
                     logger(3, msg)
                     result = msg.eval(context)
-                    if context.is_failed(): # エラー発生
-                        raise context.get_last_exception()
+                    if context.is_failed(): 
+                        # 実行エラー発生
+                        error = context.new_current_process_error_object()
+                        context.push_local_object(error) # エラーオブジェクトを作り、スタックに乗せる
+                        logger(-1, error.value.error)
+                        return 
 
                     self._temp_result_stack.append(result) # reduce_stepのジェネレータへの受け渡しにのみ使用するスタック
                     completemsgs.append(msg)
 
             except Exception as e:
-                err = MessageError(e, self) # コード情報を付加する
-                err.with_traceback(e.__traceback__) # 引き継ぐ
-                context.set_pre_invoke_error(err)
+                # メッセージ実行以外の場所でエラーが起きた
+                err = MessageError(e,self).with_traceback(e.__traceback__) # コード情報を付加し、トレース情報を引き継ぐ
+                context.push_local_object(context.new_current_process_error_object(err)) # スタックに乗せる
                 logger(-1, e)
                 return
 
-            if completemsgs is None:
-                logger(-1, context.get_last_exception())
-                return
-            
             codes.append((code, values))
         
         logger(0, "<end-of-message>", 0)
@@ -1023,13 +1023,7 @@ class MessageEngine():
         elif state == -1:
             self.log.append([])
             err = values[0]
-            msg = ["!!! Error occurred on evaluation:", "{} {}".format(type(err).__name__, err)]
-            import traceback
-            _, _, tb = sys.exc_info()
-            for line in traceback.format_tb(tb):
-                msg.append(line.rstrip())
-            
-            values = ("\n".join(msg), )
+            values = (None, err,)
 
         self.log[-1].extend(values)
     
@@ -1058,25 +1052,39 @@ class MessageEngine():
         
         for i, logrow in enumerate(logs):
             printer("[{}]-----------------".format(i))
-            for i, value in zip(columns, logrow):
-                if i == 0:
-                    title = "token"
-                    s = value
-                elif i == 1:
-                    title = "token-type"
-                    s = view_tokentypes(value)
-                elif i == 2:
-                    title = "meaning"
-                    s = view_term_constant(value)
-                elif i == 3:
-                    title = "yielded"
-                    s = ", ".join([str(x) for x in value])
-                elif i == 4:
-                    title = "done-branch"
-                    s = value.sexprs()
 
-                pad = 16-len(title)
-                printer(" {}:{}{}".format(title, pad*" ", s))
+            if logrow[0] is None:
+                err = logrow[1]
+                msg = [
+                    "!!! エラー発生:", 
+                    "{} {}".format(type(err).__name__, err)
+                ]
+                import traceback
+                for line in traceback.format_tb(err.__traceback__):
+                    msg.append(line.rstrip())
+                
+                printer("\n".join(msg))
+            
+            else:
+                for i, value in zip(columns, logrow):
+                    if i == 0:
+                        title = "token"
+                        s = value
+                    elif i == 1:
+                        title = "token-type"
+                        s = view_tokentypes(value)
+                    elif i == 2:
+                        title = "meaning"
+                        s = view_term_constant(value)
+                    elif i == 3:
+                        title = "yielded"
+                        s = ", ".join([str(x) for x in value])
+                    elif i == 4:
+                        title = "done-branch"
+                        s = value.sexprs()
+
+                    pad = 16-len(title)
+                    printer(" {}:{}{}".format(title, pad*" ", s))
 
 # ログ表示用に定数名を得る
 def _view_constant(prefix, code):
