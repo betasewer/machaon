@@ -90,8 +90,8 @@ def test_method_loading():
 #
 def test_method_alias():
     Str = fundamental_type.get("Str")
-    newmethod1 = Str.select_method("convertas")
-    newmethod2 = Str.select_method("as")
+    newmethod1 = Str.select_method("location")
+    newmethod2 = Str.select_method("loc")
     assert newmethod1 is newmethod2
 
 
@@ -101,4 +101,7 @@ def test_method_return_self():
     m = t.select_method("modify")
     assert m.get_result_count() == 1
     assert m.get_results()[0].is_return_self()
-    
+
+#
+def test_method_failure():
+    pass

@@ -287,7 +287,7 @@ class StrType():
     # その他
     #
     def location(self, s):
-        """ @method
+        """ @method [loc]
         特別なフォルダ・ファイルを名前で指定してパスを得る。
         Params:
         Returns:
