@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
-from machaon.core.message import Function, MemberGetter, select_method
+from machaon.core.message import MessageEngine, MemberGetter, select_method
 from machaon.core.invocation import InvocationContext
 from machaon.core.sort import parse_sortkey
 from machaon.cui import get_text_width
@@ -116,7 +116,7 @@ class ObjectTuple():
         """
         # 関数を行に適用する
         def fn(subject):
-            return predicate.run_return(subject, context).value
+            return predicate.run_function(subject, context).value
         
         self.objects = list(filter(fn, self.objects))
     
@@ -127,7 +127,7 @@ class ObjectTuple():
             key(Function): 並べ替え関数
         """
         def sortkey(subject):
-            return key.run_return(subject, context).value
+            return key.run_function(subject, context).value
 
         self.objects.sort(key=sortkey)
         
@@ -150,7 +150,7 @@ class ObjectTuple():
         """
         rets: List[Object] = []
         for o in self.objects:
-            r = predicate.run_return(o, context)
+            r = predicate.run_function(o, context)
             rets.append(r)
         return ObjectTuple(rets)
     
@@ -179,7 +179,7 @@ class ObjectTuple():
         }).load()
         for o in objs:
             subject = subject_type.new_object({"0": cur, "1": o})
-            cur = predicate.run_return(subject, context)
+            cur = predicate.run_function(subject, context)
             
         return cur
 

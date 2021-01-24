@@ -46,12 +46,12 @@ TYPE_LOADED = 0x1000
 class Type():
     __mark = True
 
-    def __init__(self, describer=None, name=None):
+    def __init__(self, describer=None, name=None, value_type=None, scope=None):
         self.typename: str = name
         self.doc: str = ""
         self.flags = 0
-        self.value_type: Callable = None
-        self.scope: Optional[str] = None
+        self.value_type: Callable = value_type
+        self.scope: Optional[str] = scope
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, TypeMemberAlias] = {}
         self._describer = describer
@@ -397,7 +397,7 @@ class Type():
             if hasattr(describer, "__doc__"):
                 self.doc = describer.__doc__
         
-        if not self.value_type:
+        if self.value_type is None:
             if isinstance(describer, type):
                 self.value_type = describer # describerを値型にする
             else:

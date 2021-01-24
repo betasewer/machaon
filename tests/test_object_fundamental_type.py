@@ -59,7 +59,6 @@ def test_fundamental():
     assert Str.typename == "Str"
     assert Str.construct_from_string("AAA") == "AAA"
 
-@run
 def test_method():
     regmatch = fundamental_type.get("Str").select_method("reg-match")
     assert regmatch is not None

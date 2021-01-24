@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
-from machaon.core.message import Function, MemberGetter, select_method
+from machaon.core.message import MessageEngine, MemberGetter, select_method
 from machaon.core.invocation import InvocationContext
 from machaon.cui import get_text_width
 from machaon.types.tuple import ObjectTuple
@@ -36,8 +36,6 @@ DATASET_STRINGIFY_SUMMARIZE = 1
 #
 #
 class DataColumn():
-    evallog = False
-
     def __init__(self, expression, method_inv, typename):
         self.getter = MemberGetter(expression, method_inv)
         self.typename = typename
@@ -59,11 +57,8 @@ class DataColumn():
         return self._t
     
     def eval(self, subject, context):
-        objs = self.getter.run(subject, context, log=DataColumn.evallog)
-        if objs:
-            return objs[0].value
-        else:
-            return "<no-return>"
+        obj = self.getter.run_function(subject, context)
+        return obj.value
     
     def stringify(self, context, value, method):
         if method == DATASET_STRINGIFY_SUMMARIZE:
@@ -550,7 +545,7 @@ class ObjectSet():
         values = []
         for item in self.get_current_items():
             o = Object(self.itemtype, item)
-            v = predicate.run_return(o, context)
+            v = predicate.run_function(o, context)
             values.append(v)
         return values
 
@@ -565,7 +560,7 @@ class ObjectSet():
         values = []
         for item in self.get_current_items():
             o = Object(self.itemtype, item)
-            v = predicate.run_return(o, context)
+            v = predicate.run_function(o, context)
             if v.type is self.itemtype:
                 values.append(v)
         return values
@@ -614,7 +609,7 @@ class ObjectSet():
         converter = RowToObject(self, context)
         def fn(entry):
             subject = converter.row_object(*entry)
-            return predicate.run_return(subject, context).value
+            return predicate.run_function(subject, context).value
         
         self.rows = list(filter(fn, self.rows))
 
@@ -630,7 +625,7 @@ class ObjectSet():
         converter = RowToObject(self, context)
         def sortkey(entry):
             subject = converter.row_object(*entry)
-            return key.run_return(subject, context).value
+            return key.run_function(subject, context).value
 
         self.rows.sort(key=sortkey)
         

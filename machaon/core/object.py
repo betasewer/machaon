@@ -33,7 +33,10 @@ class Object():
             raise TypeError("'type' must be Type instance")
 
     def __repr__(self):
-        return "<Object {1} [{0}]>".format(self.type.typename, self.value)
+        return "<Object {1} [{0}]>".format(self.type.typename, repr(self.value))
+    
+    def __str__(self):
+        return "{1} [{0}]".format(self.type.typename, self.summary())
     
     def get_typename(self):
         return self.type.typename
@@ -55,6 +58,10 @@ class Object():
     
     def is_pretty_view(self):
         return isinstance(self.value, ObjectPrettyView)
+    
+    def is_error(self):
+        from machaon.process import ProcessError
+        return isinstance(self.value, ProcessError)
 
 #
 class ObjectPrettyView():

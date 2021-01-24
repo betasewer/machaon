@@ -13,15 +13,15 @@ from machaon.core.invocation import (
     GenericTypeMethodInvocation,
     InstanceMethodInvocation,
     FunctionInvocation,
-    INVOCATION_RETURN_RECIEVER
+    INVOCATION_RETURN_RECIEVER,
+    LOG_MESSAGE_BEGIN,
+    LOG_MESSAGE_CODE,
+    LOG_MESSAGE_EVAL,
+    LOG_MESSAGE_EVALRET,
+    LOG_MESSAGE_END,
+    LOG_RUN_FUNCTION
 )
 
-
-# imported from...
-# desktop
-# object
-#
-#
 
 #
 # ----------------------------------------------------------------------------
@@ -39,11 +39,12 @@ class BadMessageError(Exception):
     """ メッセージが実行できない場合のエラー """
     pass
 
-class MessageError(Exception):
+class InternalMessageError(Exception):
     """ メッセージの実行中に起きたエラー """
     def __init__(self, error, message):
         self.error = error
         self.message = message
+        self.with_traceback(self.error.__traceback__) # トレース情報を引き継ぐ
 
 #
 #
@@ -138,7 +139,11 @@ class Message:
         # 実行する
         self.selector.invoke(context, *args)
 
-        # 返り値（最初の一つだけ）
+        # 返り値
+        if context.is_failed(): # 実行エラー発生
+            return context.new_invocation_error_object() # エラーオブジェクトを返す
+
+        # 最初の一つだけを採用
         retobj = next(context.last_result_objects(), None)
         if retobj is None:
             raise BadMessageError("返り値がありません")
@@ -304,7 +309,7 @@ def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
     if typetraits is not None:
         meth = typetraits.select_method(name)
         if meth is not None:
-            return meth.get_invocation(modbits)
+            return meth.get_invocation(typetraits, modbits)
     
     # グローバル定義の関数
     from machaon.types.generic import resolve_generic_method_invocation
@@ -324,7 +329,7 @@ def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
 def enum_selectable_method(typetraits) -> Generator[Method, None, None]:
     # 型メソッドの列挙
     for meth in typetraits.enum_methods():
-        tinv = TypeMethodInvocation(meth)
+        tinv = TypeMethodInvocation(typetraits, meth)
         yield tinv.query_method(typetraits)
     
     if not typetraits.is_using_instance_method():
@@ -515,10 +520,19 @@ class MessageEngine():
         self._codes = []     # type: List[Tuple[int, Tuple[Any,...]]]
 
         self._temp_result_stack = []
-        self.log = []
+        
+    def get_expression(self) -> str:
+        """ コード文字列を返す """
+        return self.source
 
-    # 入力文字列をトークンに
     def read_token(self, source) -> Generator[Tuple[str, int], None, None]:
+        """ 
+        入力文字列をトークンへと変換する 
+        Params:
+            source(str): 入力文字列
+        Yields:
+            Tuple[str, int]: 文字列, トークンの意味を示す整数値
+        """
         buffer = MessageTokenBuffer()
         user_quote_prelude = ""
         paren_count = 0
@@ -542,29 +556,37 @@ class MessageEngine():
                     if paren_count < 0:
                         raise SyntaxError("始め括弧が足りません")
                 elif len(user_quote_prelude) == 2:
+                    # エスケープを開始する
                     if user_quote_prelude == "->":
                         buffer.begin_quote("->", None)
                         buffer.add(ch)
                     elif user_quote_prelude == "--":
                         if ch.isspace():
-                            buffer.begin_quote("--", " ")
+                            buffer.begin_quote(" ", " ")
                         else:
                             buffer.begin_quote(ch, QUOTE_ENDPARENS.get(ch,ch))
                     else:
                         raise ValueError("Unknown Quote Prelude:" + user_quote_prelude)
                     user_quote_prelude = ""
-                elif ch.isspace():
-                    if buffer.flush(): 
-                        yield buffer.token(TOKEN_TERM)
+                elif ch == "-" and len(user_quote_prelude) < 2:
+                    # エスケープ表現の途中
+                    user_quote_prelude += ch
+                elif ch == ">" and len(user_quote_prelude) == 1:
+                    # エスケープ表現の途中
+                    user_quote_prelude += ch
                 else:
-                    if ch == "-" and len(user_quote_prelude) < 2:
-                        user_quote_prelude += ch
-                    elif ch == ">" and len(user_quote_prelude) == 1:
-                        user_quote_prelude += ch
+                    # その他すべての文字
+                    if len(user_quote_prelude) > 0:
+                        # エスケープ表現ではなかった -> バッファに追加
+                        for cch in user_quote_prelude: buffer.add(cch)
+                        user_quote_prelude = ""
+                    
+                    if ch.isspace():
+                        # 空白ならバッファを書き出す
+                        if buffer.flush(): 
+                            yield buffer.token(TOKEN_TERM)
                     else:
-                        if len(user_quote_prelude) > 0:
-                            for cch in user_quote_prelude: buffer.add(cch)
-                            user_quote_prelude = ""
+                        # それ以外はバッファに追記する
                         buffer.add(ch)
 
             if buffer.check_quote_end():
@@ -810,7 +832,7 @@ class MessageEngine():
             
         elif objcode == TERM_OBJ_FUNCTION:
             expr = values[0]
-            fn = Function(expr)
+            fn = MessageEngine(expr)
             obj = context.new_object("Function", fn)
 
         elif objcode == TERM_OBJ_LITERAL:
@@ -936,14 +958,11 @@ class MessageEngine():
             yield from self._tokens
 
     # メッセージを実行するジェネレータ。実行前にメッセージを返す
-    def runner(self, context, *, log) -> Generator[Message, None, None]:
-        logger = self._begin_logger()
-        
+    def runner(self, context) -> Generator[Message, None, None]:        
         # コードから構文を組み立てつつ随時実行
         if not self._codes:
             def build_run_codes():
                 for token, tokentype in self.tokenize(self.source):
-                    logger(0, token, tokentype)
                     reading = self._readings[-1] if self._readings else None
                     code, *values = self.build_message(reading, token, tokentype)
                     yield (code, values)
@@ -951,8 +970,9 @@ class MessageEngine():
             # キャッシュを利用する
             def build_run_codes():
                 for code, values in self._codes:
-                    logger(0, "", TOKEN_NOTHING)
                     yield (code, values)
+                    
+        context.add_log(LOG_MESSAGE_BEGIN, self.source)
 
         coderuniter = build_run_codes()
         codes = []
@@ -963,150 +983,93 @@ class MessageEngine():
                 if code is None:
                     break
 
-                logger(1, code, values)
+                context.add_log(LOG_MESSAGE_CODE, ConstantLog(code), *values)
 
                 for msg in self.reduce_step(code, values, context):
                     yield msg
-                    logger(3, msg)
+
+                    context.add_log(LOG_MESSAGE_EVAL, msg)
+
                     result = msg.eval(context)
-                    if context.is_failed(): 
-                        # 実行エラー発生
-                        error = context.new_current_process_error_object()
-                        context.push_local_object(error) # エラーオブジェクトを作り、スタックに乗せる
-                        logger(-1, error.value.error)
-                        return 
+                    
+                    context.add_log(LOG_MESSAGE_EVALRET, result)
+
+                    if result.is_error(): # エラーオブジェクトが返った
+                        context.push_local_object(result)
+                        return
 
                     self._temp_result_stack.append(result) # reduce_stepのジェネレータへの受け渡しにのみ使用するスタック
                     completemsgs.append(msg)
 
             except Exception as e:
                 # メッセージ実行以外の場所でエラーが起きた
-                err = MessageError(e,self).with_traceback(e.__traceback__) # コード情報を付加し、トレース情報を引き継ぐ
-                context.push_local_object(context.new_current_process_error_object(err)) # スタックに乗せる
-                logger(-1, e)
+                err = InternalMessageError(e,self) # コード情報を付加し、トレース情報を引き継ぐ
+                context.push_local_object(context.new_invocation_error_object(err)) # スタックに乗せる
+                context.push_extra_exception(err)
                 return
 
             codes.append((code, values))
-        
-        logger(0, "<end-of-message>", 0)
 
-        if not context.is_failed():
-            self._codes = codes
+        context.add_log(LOG_MESSAGE_END)
+
+        self._codes = codes # type: ignore
     
-    # 実行
-    def run(self, context, *, log=False, runner=None) -> Tuple[Any,...]:
+    def run(self, context, *, runner=None) -> Tuple[Any,...]:
+        """ 実行 """
         if runner is None:
             # タスク含め全てを同期で実行する
-            runner = self.runner(context, log=log)
+            runner = self.runner(context)
         for _ in runner: pass
 
         # 返り値はローカルスタックに置かれている
         returns = context.clear_local_objects()
         return tuple(returns)
-
-    # ログを追記する
-    def _logger(self, state, *values):
-        if state == 0:
-            self.log.append([])
-            token, tokentype = values
-            values = (token, tokentype)
-        elif state == 1:
-            code, vals = values
-            values = (code, vals)
-        elif state == 2:
-            completes, readings = values
-            values = (completes, [x.snapshot() for x in readings])
-        elif state == 3:
-            self.log.append([])
-            msg = values[0]
-            values = ("<eval>", 0, 0, [], msg.snapshot(),)
-        elif state == -1:
-            self.log.append([])
-            err = values[0]
-            values = (None, err,)
-
-        self.log[-1].extend(values)
     
-    def _begin_logger(self, *, dummy=False):
-        self.log = []
-        if dummy:
-            def logger(state, *values):
-                pass
-        else:
-            logger = self._logger
-        return logger
+    def run_function(self, subject, context) -> Object:
+        """ メッセージを実行し、返り値を一つ返す """
+        subcontext = context.inherit(subject) # ここでコンテキストが入れ子になる
 
-    # 蓄積されたログを出力する
-    def pprint_log(self, printer=None, *, logs=None, columns=None):
-        if printer is None: printer = print
-        if logs is None: logs = self.log
-        if columns is None: 
-            columns = range(6)
-        else:
-            columns = range(columns[0], columns[1])
-
-        printer("Message: {}".format(self.source))
-        if not logs:
-            printer(" --- no log ---")
-            return
+        returns = self.run(subcontext)
+        if not returns:
+            raise BadExpressionError("値を返さなければいけません")
         
-        for i, logrow in enumerate(logs):
-            printer("[{}]-----------------".format(i))
+        context.add_log(LOG_RUN_FUNCTION, subcontext)
+        return returns[-1] # Objectを返す
 
-            if logrow[0] is None:
-                err = logrow[1]
-                msg = [
-                    "!!! エラー発生:", 
-                    "{} {}".format(type(err).__name__, err)
-                ]
-                import traceback
-                for line in traceback.format_tb(err.__traceback__):
-                    msg.append(line.rstrip())
-                
-                printer("\n".join(msg))
-            
-            else:
-                for i, value in zip(columns, logrow):
-                    if i == 0:
-                        title = "token"
-                        s = value
-                    elif i == 1:
-                        title = "token-type"
-                        s = view_tokentypes(value)
-                    elif i == 2:
-                        title = "meaning"
-                        s = view_term_constant(value)
-                    elif i == 3:
-                        title = "yielded"
-                        s = ", ".join([str(x) for x in value])
-                    elif i == 4:
-                        title = "done-branch"
-                        s = value.sexprs()
+#
+# ログ表示用に定数名を出力する
+#
+class ConstantLog():
+    def __init__(self, code):
+        self._code = code
 
-                    pad = 16-len(title)
-                    printer(" {}:{}{}".format(title, pad*" ", s))
+    @property    
+    def code(self):
+        return self._code
+    
+    def as_tokentype_flags(self) -> str:
+        return _view_bitflag("TOKEN_", self._code)
+    
+    def as_term_flags(self) -> str:
+        astcode = self._code & 0x000F
+        astinstr = self._code & 0x00F0
+        objcode = self._code & 0xFF00
+        codename = _view_constant("TERM_", astcode)
+        codename += "+" + _view_constant("TERM_", objcode)
+        if astinstr:
+            codename += "+" + _view_bitflag("TERM_", astinstr)
+        return codename
 
-# ログ表示用に定数名を得る
 def _view_constant(prefix, code):
+    """ 定数 """
     for k, v in globals().items():
         if k.startswith(prefix) and v==code:
             return k
     else:
         return "<定数=0x{:0X}（{}***）の名前は不明です>".format(code, prefix)
 
-# TERM_XXX 
-def view_term_constant(code):
-    astcode = code & 0x000F
-    astinstr = code & 0x00F0
-    objcode = code & 0xFF00
-    codename = _view_constant("TERM_", astcode)
-    codename += "+" + _view_constant("TERM_", objcode)
-    if astinstr:
-        codename += "+" + _view_bitflag("TERM_", astinstr)
-    return codename
-
-# ビットフラグ
 def _view_bitflag(prefix, code):
+    """ 重なったビットフラグ """
     c = code
     n = []
     for k, v in globals().items():
@@ -1116,38 +1079,7 @@ def _view_bitflag(prefix, code):
     if c!=0:
         n.append("0x{0X}".format(c))
     return "+".join(n)
-    
-def view_tokentypes(flags):
-    return _view_bitflag("TOKEN_", flags)
 
-#
-# 引数を一つとりメッセージを実行する
-#
-class Function():
-    def __init__(self, expr: str):
-        self.message = MessageEngine(expr)
-    
-    def get_expr(self):
-        return self.message.source
-    
-    def compile(self, context):
-        for _ in self.message.tokenize(context): pass
-
-    def run(self, subject, context, log=False) -> Tuple[Any,...]:
-        if subject:
-            context.set_subject(subject)
-        returns = self.message.run(context, log=log)
-        context.clear_subject() # 主題をクリアする
-        return returns
-    
-    def run_return(self, subject, context, log=False):
-        returns = self.run(subject, context, log=log)
-        if context.is_failed():
-            e = context.get_last_exception()
-            raise e
-        if not returns:
-            raise BadExpressionError("値を返さなければいけません")
-        return returns[0] # Objectを返す
 
 #
 # 主題オブジェクトのメンバ（引数0のメソッド）を取得する
@@ -1158,14 +1090,29 @@ class MemberGetter():
         self.name = name
         self.method = method
         
-    def get_expr(self):
+    def get_expression(self) -> str:
         return self.name
     
-    def run(self, subject, context, log=False):
-        # 直にメッセージを記述
+    def run_function(self, subject, context):
+        """ その場でメッセージを構築し実行 """
+        subcontext = context.inherit(subject)
         message = Message(subject, self.method)
-        result = message.eval(context)
-        return (result,)
-    
+        result = message.eval(subcontext)
 
+        context.add_log(LOG_RUN_FUNCTION, subcontext)
+        return result
+    
+def run_function(expression: str, subject, context) -> Object:
+    """
+    文字列をメッセージとして実行する。
+    Params:
+        expression(str): メッセージ
+        subject(Object): *引数
+        context(InvocationContext): コンテキスト
+    Returns:
+        Object: 実行の戻り値
+    """
+    f = MessageEngine(expression)
+    return f.run_function(subject, context)
+    
 

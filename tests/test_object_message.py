@@ -3,8 +3,9 @@ import re
 
 from machaon.core.type import Type
 from machaon.core.object import ObjectValue
-from machaon.core.message import MessageEngine, MessageTokenBuffer
+from machaon.core.message import MessageEngine, MessageTokenBuffer, run_function
 from machaon.types.fundamental import fundamental_type
+from machaon.process import TempSpirit
 
 #-----------------------------------------------------------------------
 # スタブ
@@ -55,17 +56,14 @@ def parse_test(parser, context, lhs, rhs):
         print("Assertion Failed: '{}' => {} is not equal to {}".format(parser.source, lhs, rhs))
         print("")
         if context.is_failed():
-            e = context.get_last_exception()
-            print("Exception was thrown while invocation: ")
-            import traceback, sys
-            print("".join(traceback.format_exception(type(e), e, e.__traceback__)))
-            print("")
-        print("Parser log: ")
-        parser.pprint_log()
+            error = context.new_invocation_error_object()
+            spi = TempSpirit()
+            error.pprint(spi)
+            spi.printout()
         return False
     return True
-                
-def ptest(s, *rhs):
+
+def test_context():
     from machaon.core.object import ObjectCollection
     from machaon.core.invocation import InvocationContext
     from machaon.types.fundamental import fundamental_type
@@ -75,14 +73,19 @@ def ptest(s, *rhs):
     inputs.new("this-month", fundamental_type.get("Int"), 8) 
     inputs.new("customer-name", fundamental_type.get("Str"), "Yokomizo")
     context = InvocationContext(input_objects=inputs, type_module=fundamental_type)
-    
+    return context
+                
+def ptest(s, *rhs):
+    context = test_context()
     parser = MessageEngine(s)
-    returns = parser.run(context, log=True)
+    returns = parser.run(context)
     lhs = [x.value for x in returns]
     assert parse_test(parser, context, tuple(lhs), tuple(rhs))
 
 def run(f):
     f()
+
+#-----------------------------------------------------------------------
 
 def test_tokenbuffer():
     from machaon.core.message import TOKEN_TERM, TOKEN_FIRSTTERM
@@ -140,6 +143,12 @@ def test_message_engine():
         "2", TOKEN_TERM|TOKEN_ALL_BLOCK_END
     )
 
+    assert reads("3 - 4") == (
+        "3", TOKEN_TERM|TOKEN_FIRSTTERM, 
+        "-", TOKEN_TERM, 
+        "4", TOKEN_TERM|TOKEN_ALL_BLOCK_END
+    )
+
     # かっこ
     assert reads("1 add (2 mul 3)") == (
         "1", TOKEN_TERM|TOKEN_FIRSTTERM, 
@@ -170,7 +179,7 @@ def test_message_engine():
     )
 
 #
-def test_parse_literals():
+def test_generic_methods():
     # static method
     ptest("1 add 2", 3)
     ptest("1 add 2 add 3", 6)
@@ -183,21 +192,23 @@ def test_parse_literals():
     ptest("'573' length", 3)
     ptest("42 in-format x", "2a")
     ptest("GODZILLA slice (9 sub 8) -1", "ODZILL")
+
+#
+def test_generic_methods_operators():
+    ptest("1 + 2", 3)
+    ptest("77 - 44", 33)
+    ptest("3 * -4", -12)
     
+def test_dynamic_methods():
     # dynamic method
     ptest("ABC startswith: A", True)
     ptest("ABC ljust: 5 '_'", "ABC__")
     ptest("ABC ljust: (2 mul 2) '_'", "ABC_")
 
+def test_string_literals():
     # type method & string literal
     ptest("'9786' reg-match [0-9]+", True)
     ptest("'ABCD{:04}HIJK{:02}OP' format: 20 1", "ABCD0020HIJK01OP")
-
-    # object ref
-    ptest("@this-year add 1", 2021)
-    ptest("@customer-name upper", "YOKOMIZO")
-    ptest("'Dr. ' + (@customer-name capitalize)", "Dr. Yokomizo")
-    ptest("@customer-name reg-match [a-zA-Z]+", True)
 
     # construct from string (Type.forge)
     ptest("Str parse -> 1) 'Beck' & 'Johny' Store ", " 1) 'Beck' & 'Johny' Store ")
@@ -211,6 +222,13 @@ def test_parse_literals():
     # construct from string (Str.as)
     ptest("--/0x7F/ as Int", 0x7F)
     ptest("--/3+5j/ as Complex", 3+5j)
+
+def test_object_ref():
+    # object ref
+    ptest("@this-year add 1", 2021)
+    ptest("@customer-name upper", "YOKOMIZO")
+    ptest("'Dr. ' + (@customer-name capitalize)", "Dr. Yokomizo")
+    ptest("@customer-name reg-match [a-zA-Z]+", True)
 
 @pytest.mark.xfail
 def test_double_block_is_denied():    
@@ -226,7 +244,7 @@ def test_parse_function():
         context = InvocationContext(input_objects=ObjectCollection(), type_module=fundamental_type)
         
         engine = MessageEngine(s)
-        returns = engine.run(context, log=True)
+        returns = engine.run(context)
         assert parse_test(engine, context, returns[0].get_typename() if returns else None, "Function")
 
         fundamental_type.define({
@@ -241,14 +259,14 @@ def test_parse_function():
         subj = Object(fundamental_type.get("Dog"), subject)
         fn = returns[0].value
 
-        lhso = fn.run_return(subj, subcontext, log=True)
+        lhso = fn.run_function(subj, subcontext)
         lhs = lhso.value
-        assert parse_test(fn.message, subcontext, lhs, rhs[0])
+        assert parse_test(fn, subcontext, lhs, rhs[0])
         
         # 再入
-        lhso = fn.run_return(subj, subcontext, log=True)
+        lhso = fn.run_function(subj, subcontext)
         lhs = lhso.value
-        assert parse_test(fn.message, subcontext, lhs, rhs[0])
+        assert parse_test(fn, subcontext, lhs, rhs[0])
 
     lucky = {}
     ltest("Function new: -> @ name == lucky", lucky, True)
@@ -256,4 +274,25 @@ def test_parse_function():
     ltest("Function new: -> @ age * 10", lucky, 30)
     ltest("Function new: -> (@ age * 5) == 25 || $ $ @ name == lucky", lucky, True)
     ltest("Function new: -> 32 * 45 ", lucky, 32 * 45)
+
+
+#
+def test_message_failure():
+    # エラーが起きた時点で実行は中止される
+    context = test_context()
+    r = run_function("2 / 0 + 5 non-exisitent-method 0", None, context)
+    assert r.is_error() # zero division error
+    assert r.value.get_error_typename() == "ZeroDivisionError"
+
+    context = test_context()
+    r = run_function("2 * 3 + 5 non-exisitent-method 0", None, context)
+    assert r.is_error() # bad method
+    assert r.value.get_error_typename() == "BadInstanceMethodInvocation"
+
+    # 関数の実行中のエラー
+    context = test_context()
+    r = run_function("2 * 3 + 5 - (--[10 / 0] eval) + 9 non-existent-method", None, context)
+    assert r.is_error() # bad method
+    assert r.value.get_error_typename() == "ZeroDivisionError"
+
 
