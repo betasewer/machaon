@@ -20,7 +20,7 @@ METHOD_TYPE_BOUND = 0x0010
 METHOD_CONSUME_TRAILING_PARAMS = 0x0020
 
 METHOD_LOADED = 0x0100
-METHOD_FUNC_PARAMETERS = 0x0200 # レシーバオブジェクトもパラメータとして扱う
+METHOD_HAS_RECIEVER_PARAM = 0x0200 # レシーバオブジェクトもパラメータとして扱う
 METHOD_OBJECT_GETTER = 0x0400
 METHOD_DELEGATED = 0x0800
 
@@ -166,6 +166,10 @@ class Method():
         """
         return (self.flags & METHOD_CONSUME_TRAILING_PARAMS) > 0
     
+    def has_reciever_param(self):
+        """ レシーバオブジェクトの引数情報があるか """
+        return (self.flags & METHOD_HAS_RECIEVER_PARAM) > 0
+
     def is_delegated(self):
         """ 基底クラスのメソッドか """
         return (self.flags & METHOD_DELEGATED) > 0
@@ -212,6 +216,16 @@ class Method():
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
         return self.params
+    
+    def get_param(self, index):
+        """ 引数の定義を得る。 """
+        if self.flags & METHOD_HAS_RECIEVER_PARAM: # func指定に対応
+            if index == -1:
+                return self.params[0]
+            index = index + 1
+        if index<0 or len(self.params)<=index:
+            return None
+        return self.params[index]
     
     def get_param_count(self):
         """ 仮引数の数 """
@@ -269,7 +283,7 @@ class Method():
             if p.is_variable():
                 return None
             cnt += 1
-        if self.flags & METHOD_FUNC_PARAMETERS:
+        if self.flags & METHOD_HAS_RECIEVER_PARAM:
             cnt -= 1
         return cnt
         
@@ -287,7 +301,7 @@ class Method():
             if not p.is_required():
                 break
             cnt += 1
-        if self.flags & METHOD_FUNC_PARAMETERS:
+        if self.flags & METHOD_HAS_RECIEVER_PARAM:
             cnt -= 1
         return cnt
     
@@ -380,12 +394,12 @@ class Method():
             raise BadMethodDeclaration("いずれかのメソッドタイプ指定が必要です：@method @task")
         
         declparts = decl.split()
-        if "func" in declparts:
-            self.flags |= METHOD_FUNC_PARAMETERS
         if "spirit" in declparts:
             self.flags |= METHOD_SPIRIT_BOUND
         if "context" in declparts:
             self.flags |= METHOD_CONTEXT_BOUND
+        if "reciever-param" in declparts:
+            self.flags |= METHOD_HAS_RECIEVER_PARAM
 
         # 説明
         desc = sections.get_string("Description")
@@ -538,7 +552,7 @@ class Method():
         self.target = "getter: {}".format(key)
         self.flags |= METHOD_LOADED | METHOD_OBJECT_GETTER
     
-    def get_invocation(self, modbits):
+    def get_invocation(self, type, modbits):
         """
         基本的にTypeMethodInvocationを返し、
         OBJECT_GETTER指定時のみObjectGetterInvocationを返す。
@@ -547,7 +561,7 @@ class Method():
         if self.flags & METHOD_OBJECT_GETTER:
             return ObjectGetterInvocation(self, modbits)
         else:
-            return TypeMethodInvocation(self, modbits)
+            return TypeMethodInvocation(type, self, modbits)
     
     def get_signature(self):
         """ @method alias-name [signature]
@@ -621,6 +635,15 @@ class MethodParameter():
         self.flags = flags
         self.typeparams = typeparams
     
+    def __str__(self):
+        name = self.name
+        if self.is_variable():
+            name = "*" + name
+        line = "Param '{}' [{}]".format(name, self.typename)
+        if self.default:
+            line = line + "= {}".format(self.default)
+        return line
+
     def get_name(self):
         return self.name
 
@@ -663,6 +686,10 @@ class MethodResult:
         self.doc = doc
         self.typeparams = typeparams
 
+    def __str__(self):
+        line = "Return [{}]".format(self.typename)
+        return line
+    
     def get_typename(self):
         return self.typename    
     

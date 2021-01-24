@@ -130,19 +130,28 @@ class InvocationEntry():
         if self.exception:
             return True
         return False
-    
+
+#    
+LOG_MESSAGE_BEGIN = 1
+LOG_MESSAGE_CODE = 2
+LOG_MESSAGE_EVAL = 3
+LOG_MESSAGE_EVALRET = 4
+LOG_MESSAGE_END = 10
+LOG_RUN_FUNCTION = 11
+
 #
 #
 #
 class InvocationContext:
-    def __init__(self, *, input_objects, type_module, spirit=None):
+    def __init__(self, *, input_objects, type_module, spirit=None, subject=None):
         self.type_module: TypeModule = type_module
         self.input_objects: ObjectCollection = input_objects # 外部のオブジェクト参照
-        self.subject_object: Union[None, Object, Dict[str, Object]] = None  # 無名関数の引数とするオブジェクト
+        self.subject_object: Union[None, Object, Dict[str, Object]] = subject  # 無名関数の引数とするオブジェクト
         self.local_objects: List[Object] = []                # メソッドの返り値を置いておく
         self.spirit = spirit
         self.invocations: List[InvocationEntry] = []
         self._last_exception = None
+        self._log = []
     
     def get_spirit(self):
         return self.spirit
@@ -152,9 +161,13 @@ class InvocationContext:
         return self.spirit.app
     
     #
-    def inherit(self):
-        cxt = InvocationContext(input_objects=self.input_objects, type_module=self.type_module, spirit=self.spirit)
-        return cxt
+    def inherit(self, subject=None):
+        return InvocationContext(
+            input_objects=self.input_objects, 
+            type_module=self.type_module, 
+            spirit=self.spirit,
+            subject=subject
+        )
 
     # 
     def push_local_object(self, obj: Object):
@@ -258,12 +271,12 @@ class InvocationContext:
             valtype = self.select_type(typename)
         return Object(valtype, value)
     
-    def new_current_process_error_object(self, exception=None):
-        """ 現在のプロセスで発生したエラーオブジェクトを作る """
-        process = self.spirit.get_process()
-        if exception is None: exception = self.get_last_exception()
+    def new_invocation_error_object(self, exception=None):
+        """ エラーオブジェクトを作る """
+        if exception is None: 
+            exception = self.get_last_exception()
         from machaon.process import ProcessError
-        return self.new_type(ProcessError).new_object(ProcessError(process, exception))
+        return self.new_type(ProcessError).new_object(ProcessError(self, exception))
 
     #
     def push_invocation(self, entry: InvocationEntry):
@@ -288,11 +301,64 @@ class InvocationContext:
     
     def is_failed(self):
         return self._last_exception is not None
+    
+    def push_extra_exception(self, exception):
+        """ 呼び出し以外の場所で起きた例外を保存する """
+        self._last_exception = exception
 
-    def set_pre_invoke_error(self, excep: BaseException):
-        # コマンド解析の失敗など、呼び出す前に起きたエラーを格納する
-        entry = InvocationEntry(None, None, (), {}, exception=excep)
-        self.push_invocation(entry)
+    #
+    def add_log(self, logcode, *args):
+        """ 実行ログの収集 """
+        self._log.append((logcode, *args))
+    
+    def pprint_log(self, printer=None):
+        """ 蓄積されたログを出力する """
+        if printer is None: 
+            printer = print
+
+        if not self._log:
+            printer(" --- no log ---")
+            return
+        
+        for code, *args in self._log:
+            if code == LOG_MESSAGE_BEGIN:
+                source = args[0]
+                title = "message"
+                line = source
+            elif code == LOG_MESSAGE_CODE:
+                ccode, *values = args
+                if len(values)>0:
+                    term, *values = values
+                else:
+                    term = " "
+                title = "term"
+                line = "{} -> {}".format(term, ", ".join([ccode.as_term_flags()] + [str(x) for x in values]))
+            elif code == LOG_MESSAGE_EVAL:
+                msg = args[0]
+                title = "evaluating"
+                line = msg.sexprs()
+            elif code == LOG_MESSAGE_EVALRET:
+                value = args[0]
+                title = "return"
+                line = str(value)
+            elif code == LOG_MESSAGE_END:
+                title = "end-of-message"
+                line = ""
+            elif code == LOG_RUN_FUNCTION:
+                printer(" -- function begin --------------")
+                cxt = args[0]
+                cxt.pprint_log(printer=printer)
+                printer(" -- function end ----------------")
+                continue
+            else:
+                raise ValueError("不明なログコード:"+",".join([code,*args]))
+
+            pad = 16-len(title)
+            printer(" {}:{}{}".format(title, pad*" ", line))
+
+        if self._last_exception:
+            err = self._last_exception
+            printer(" ERROR: {}".format(type(err).__name__))
     
         
 #
@@ -375,8 +441,10 @@ class BasicInvocation():
         return None # 不明
 
 #
-def get_object_value(obj):
-    if obj.is_pretty_view():
+def get_object_value(obj, spec=None):
+    if spec and spec.is_object():
+        return obj
+    elif obj.is_pretty_view():
         return obj.value.get_object().value
     else:
         return obj.value
@@ -385,8 +453,9 @@ def get_object_value(obj):
 # 型に定義されたメソッドの呼び出し 
 #
 class TypeMethodInvocation(BasicInvocation):
-    def __init__(self, method, modifier=0):
+    def __init__(self, type, method, modifier=0):
         super().__init__(modifier)
+        self.type = type
         self.method = method
     
     def get_method_name(self):
@@ -412,15 +481,15 @@ class TypeMethodInvocation(BasicInvocation):
         selfobj, *argobjs = argobjects
         
         # メソッドの実装を読み込む
-        self.method.load(selfobj.type)
+        self.method.load(self.type)
 
         args = []
         if self.method.is_type_bound():
             # 型オブジェクトを渡す
-            args.append(selfobj.type)
+            args.append(self.type)
 
         # インスタンスを渡す
-        selfvalue = get_object_value(selfobj)
+        selfvalue = get_object_value(selfobj, self.get_parameter_spec(-1))
         if self.method.is_delegated():
             args.append(selfvalue["/delegate"])
         else:
@@ -434,20 +503,14 @@ class TypeMethodInvocation(BasicInvocation):
             # spiritを渡す
             args.append(context.get_spirit())
         
-        return self._prepare_invoke_entry(args, argobjs)
-    
-    def _prepare_invoke_entry(self, args, argobjs):
         # 引数オブジェクトを整理する
         for i, argobj in enumerate(argobjs):
             argspec = self.get_parameter_spec(i)
-            if argspec and argspec.is_object():
-                a = argobj
-            else:
-                a = get_object_value(argobj)
+            a = get_object_value(argobj, argspec)
             args.append(a)
         
         action = self.method.get_action()
-        return InvocationEntry(self, action, args, {})        
+        return InvocationEntry(self, action, args, {})   
     
     def get_action(self):
         return self.method.get_action()
@@ -465,12 +528,10 @@ class TypeMethodInvocation(BasicInvocation):
         return self.method.get_required_argument_min()
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        if 0 <= index and index < self.method.get_param_count():
-            p = self.method.params[index]
-        elif self.is_parameter_consumer():
+        if self.is_parameter_consumer():
             p = self.method.params[-1]
         else:
-            return None
+            p = self.method.get_param(index)
         return p
 
 #
@@ -489,6 +550,10 @@ class GenericTypeMethodInvocation(TypeMethodInvocation):
         args = []
         args.append(self.klass)
 
+        # 左辺オブジェクトを先に渡す
+        leftobject, *restobjs = argobjects
+        args.append(get_object_value(leftobject, self.get_parameter_spec(0)))
+
         if self.method.is_context_bound():
             # コンテクストを渡す
             args.append(context)
@@ -497,7 +562,14 @@ class GenericTypeMethodInvocation(TypeMethodInvocation):
             # spiritを渡す
             args.append(context.get_spirit())
 
-        return self._prepare_invoke_entry(args, argobjects)
+        # 引数オブジェクトを整理する
+        for i, argobj in enumerate(restobjs, start=1): # ずれる
+            argspec = self.get_parameter_spec(i)
+            a = get_object_value(argobj, argspec)
+            args.append(a)
+        
+        action = self.method.get_action()
+        return InvocationEntry(self, action, args, {}) 
 
 #
 # 名前だけで定義のわからないメソッドを呼び出す

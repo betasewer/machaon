@@ -102,6 +102,3 @@ def test_method_return_self():
     assert m.get_result_count() == 1
     assert m.get_results()[0].is_return_self()
 
-#
-def test_method_failure():
-    pass

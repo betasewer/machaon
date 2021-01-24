@@ -11,7 +11,7 @@ from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, U
 
 #from machaon.action import ActionInvocation
 from machaon.core.object import Object, ObjectCollection
-from machaon.core.message import MessageEngine, MessageError
+from machaon.core.message import MessageEngine, InternalMessageError
 from machaon.core.invocation import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 
@@ -64,7 +64,7 @@ class Process:
             spirit=spirit
         )
         self.last_context = context
-        msgroutine = self.message.runner(context, log=False)
+        msgroutine = self.message.runner(context)
 
         # 実行開始
         for nextmsg in msgroutine:
@@ -821,19 +821,19 @@ class ProcessError():
     プロセスの実行時に起きたエラー。
     Typename: ProcessError
     """
-    def __init__(self, process, error):
+    def __init__(self, context, error):
         self.error = error
-        self.process = process
+        self.context = context
     
     def get_error_typename(self):
-        if isinstance(self.error, MessageError):
+        if isinstance(self.error, InternalMessageError):
             err = self.error.error
         else:
             err = self.error
         return err.__class__.__name__
 
     def summarize(self):
-        if isinstance(self.error, MessageError):
+        if isinstance(self.error, InternalMessageError):
             error = self.error.error
             return "文法エラー：{}".format(str(error))
         else:
@@ -841,20 +841,20 @@ class ProcessError():
             return "実行エラー：{}".format(str(error))
 
     def pprint(self, app):
-        if isinstance(self.error, MessageError):
-            error = self.error.error
-            errortype = traceback.format_exception_only(type(error), error)
-            app.post("error", errortype[0] if errortype else "")
-            app.post("message-em", "メッセージ解決：")
-            self.error.message.pprint_log(lambda x: app.post("message", x))
+        if isinstance(self.error, InternalMessageError):
+            excep = self.error.error
+            title = "（内部エラー）"
         else:
             excep = self.error
-            details = traceback.format_exception(type(excep), excep, excep.__traceback__)
-            app.post("error", details[-1] if details else "")
-            app.post("message-em", "スタックトレース：")
-            app.post("message", "".join(details[1:-1]) + "\n")
-            app.post("message-em", "メッセージ解決：")
-            self.process.message.pprint_log(lambda x: app.post("message", x))
+            title = ""
+        
+        details = traceback.format_exception(type(excep), excep, excep.__traceback__)
+        app.post("error", details[-1] if details else "")
+        app.post("message-em", "スタックトレース{}：".format(title))
+        app.post("message", "".join(details[1:-1]) + "\n")
+
+        app.post("message-em", "メッセージ解決：")
+        self.context.pprint_log(lambda x: app.post("message", x))
 
 
 

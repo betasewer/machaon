@@ -10,10 +10,6 @@ from typing import Tuple, Sequence, List, Optional
 
 from machaon.cui import composit_text
 from machaon.process import ProcessMessage, NotExecutedYet, ProcessChamber, TempSpirit
-from machaon.core.message import MessageError
-
-#
-meta_command_sigil = "/"
 
 #
 #

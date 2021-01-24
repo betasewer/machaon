@@ -136,29 +136,27 @@ class AnyType():
 """)
 class FunctionType():
     """@type
-    ValueType: machaon.core.message.Function
+    ValueType: machaon.core.message.MessageEngine
     """
-
     def construct(self, s):
-        from machaon.core.message import Function
-        return Function(s)
+        return self.value_type(s)
 
     def stringify(self, f):
-        return f.get_expr()
+        return f.get_expression()
     
     #
     #
     #
-    def eval(self, f, context, subject):
+    def eval(self, f, context, subject=None):
         """ @method context
         関数を実行する。
         Params:
-            subject(Object): 引数
+            subject(Object): *引数
         Returns:
             Object: 返り値
         """
-        rets = f.run(subject, context)
-        return rets[0]
+        return f.run_function(subject, context)
+
 
 # ----------------------------------------------------------
 #
@@ -253,17 +251,16 @@ class StrType():
     #
     # 制御構文
     #
-    def eval(self, s, context, subject):
+    def eval(self, s, context, subject=None):
         """ @method context
         文字列を関数として評価する。
         Params:
-            subject(Object): 引数
+            subject(Object): *引数
         Returns:
             Object: 返り値
         """
-        from machaon.core.message import Function
-        f = Function(s)
-        return f.run_return(subject, context)
+        from machaon.core.message import run_function
+        return run_function(s, subject, context)
     
     def if_then(self, s, context, if_, else_):
         """ @method context
@@ -275,13 +272,12 @@ class StrType():
         Returns:
             Object: 返り値
         """
-        from machaon.core.message import Function
-        f = Function(s)
-        if f.run_return(None, context).value:
-            body = Function(if_)
+        from machaon.core.message import run_function
+        if run_function(s, None, context).value:
+            body = if_
         else:
-            body = Function(else_)
-        return body.run_return(None, context)
+            body = else_
+        return run_function(body, None, context)
     
     #
     # その他

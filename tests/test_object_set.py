@@ -6,7 +6,7 @@ from machaon.core.type import TypeModule
 from machaon.core.object import ObjectCollection, Object
 from machaon.core.invocation import InvocationContext
 from machaon.types.objectset import ObjectSet, make_data_columns, DataColumn
-from machaon.core.message import Function
+from machaon.core.message import MessageEngine
 from machaon.core.sort import ValueWrapper
 
 class Employee():
