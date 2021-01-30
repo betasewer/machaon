@@ -6,9 +6,7 @@ tests/sample/*
 build/*
 dist/* 
 *.egg-info/*
-dist.ps1
 .vscode/*
-test.json
-w.txt
+dist.ps1
+packages.ini
 *.html
-.vscode/launch.json

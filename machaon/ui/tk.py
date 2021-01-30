@@ -140,7 +140,7 @@ def menukeytag(index):
 class tkLauncher(Launcher):
     wrap_width = 144
 
-    def __init__(self, title="", geometry=(900,400)):
+    def __init__(self, title="", geometry=(850,550)):
         super().__init__(title, geometry)
         # GUI
         self.root = tkinter.Tk() #

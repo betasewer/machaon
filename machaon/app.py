@@ -45,7 +45,14 @@ class AppRoot:
 
         self.processhive = ProcessHive()
         chamber = self.processhive.addnew(self.ui.get_input_prompt())
-        #self.processhive.new_desktop("desk1")
+        
+        if not module_dir:
+            module_dir = os.path.join(os.getcwd(), "machaon")
+            if not os.path.isdir(module_dir):
+                os.mkdir(module_dir)
+        
+        if not os.path.isdir(module_dir):
+            raise ValueError("ディレクトリが存在しません: " + module_dir)
 
         self.pkgmanager = PackageManager(module_dir)
         self.pkgmanager.load_database()

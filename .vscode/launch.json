@@ -10,10 +10,7 @@
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            //"args": ["C:/Users/kenta/Desktop/スラバザデータ/スラバザ＿念校.idml", "--list", "C:/Users/kenta/Desktop/スラバザデータ/スラバザ.txt"]
-            "args": ["F:/赤いナデシコ＿念校.idml", "--list", "F:/赤いナデシコ.txt"]
-            // "--list", "F:\\赤いナデシコ.txt"
-            // "--list", "C:\\Users\\kenta\\Desktop\\歴史のなかのスペイン_words.txt"
+            "args": []
         }
     ]
 }
