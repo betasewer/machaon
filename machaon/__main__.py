@@ -43,7 +43,7 @@ def launch_sample_app(default_choice=None, directory=None):
 #launch_sample_app("tk")
 
 
-def rawlaunch():
+def launch():
     from machaon.app import AppRoot
     from machaon.ui.tk import tkLauncher
     ui = tkLauncher("test app")
@@ -54,7 +54,8 @@ def rawlaunch():
     from machaon.package.auth import BasicAuth
     root.add_package(
         "machaon.shell",
-        entrypoint="machaon.types.shell"
+        entrypoint="machaon.types.shell",
+        preload=True
     )
     root.add_package(
         "hello",
@@ -63,4 +64,4 @@ def rawlaunch():
     
     root.run()
 
-rawlaunch()
+launch()

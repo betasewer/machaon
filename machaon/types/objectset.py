@@ -597,7 +597,7 @@ class ObjectSet():
         converter = RowToObject(self, context)
         for entry in self.rows:
             subject = converter.row_object(*entry)
-            predicate.run(subject, context)
+            predicate.run_function(subject, context)
     
     def filter(self, context, predicate):
         """ @method context

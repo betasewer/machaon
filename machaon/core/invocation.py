@@ -535,43 +535,6 @@ class TypeMethodInvocation(BasicInvocation):
         return p
 
 #
-#
-#
-class GenericTypeMethodInvocation(TypeMethodInvocation):
-    def __init__(self, method, klass, modifier=0):
-        super().__init__(method, modifier)
-        self.klass = klass
-    
-    def prepare_invoke(self, context: InvocationContext, *argobjects):
-        # メソッドの実装を読み込む
-        self.method.load(self.klass)
-
-        # 第一オブジェクトはクラスをそのまま渡す
-        args = []
-        args.append(self.klass)
-
-        # 左辺オブジェクトを先に渡す
-        leftobject, *restobjs = argobjects
-        args.append(get_object_value(leftobject, self.get_parameter_spec(0)))
-
-        if self.method.is_context_bound():
-            # コンテクストを渡す
-            args.append(context)
-
-        if self.method.is_spirit_bound():
-            # spiritを渡す
-            args.append(context.get_spirit())
-
-        # 引数オブジェクトを整理する
-        for i, argobj in enumerate(restobjs, start=1): # ずれる
-            argspec = self.get_parameter_spec(i)
-            a = get_object_value(argobj, argspec)
-            args.append(a)
-        
-        action = self.method.get_action()
-        return InvocationEntry(self, action, args, {}) 
-
-#
 # 名前だけで定義のわからないメソッドを呼び出す
 #
 class InstanceMethodInvocation(BasicInvocation):

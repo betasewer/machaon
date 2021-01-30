@@ -70,7 +70,7 @@ class AppRoot:
     # クラスパッケージを走査する
     #
     # パッケージ概要を追加
-    def add_package(self, name, source=None, **packagekwargs):
+    def add_package(self, name, source=None, preload=False, **packagekwargs):
         newpkg = Package(name, source, **packagekwargs)
         for pkg in self.pkgs:
             if pkg.name == newpkg.name:
@@ -78,6 +78,9 @@ class AppRoot:
                 break
         else:
             self.pkgs.append(newpkg)
+        
+        if preload: # この時点でロードしておく
+            newpkg.load(self)
 
     # パッケージ概要を取得する
     def get_package(self, name, *, fallback=True):

@@ -262,36 +262,41 @@ class StrType():
         from machaon.core.message import run_function
         return run_function(s, subject, context)
     
-    def if_then(self, s, context, if_, else_):
+    def invoke(self, symbol, context, *args):
         """ @method context
-        文字列を評価し、真なら実行する。
-        "@ == 32" if-then: "nekkedo" :else "hekkeo"
+        外部モジュールの関数あるいは変数を評価する。
         Params:
-            if(Function): true 節
-            else(Function): false 節 
+            args(Any): 引数
         Returns:
-            Object: 返り値
+            Any:
         """
-        from machaon.core.message import run_function
-        if run_function(s, None, context).value:
-            body = if_
+        from machaon.core.importer import attribute_loader
+        loader = attribute_loader(symbol)
+        imported = loader(fallback=False)
+        if not args and not callable(imported):
+            return imported # 変数
         else:
-            body = else_
-        return run_function(body, None, context)
+            return imported(*args) # 関数実行
     
     #
     # その他
     #
-    def location(self, s):
-        """ @method [loc]
-        特別なフォルダ・ファイルを名前で指定してパスを得る。
+    def path(self, s):
+        """ @method
+        フォルダ・ファイルを名前で指定してパスを得る。
+        名前でなければパスと見なす。
         Params:
         Returns:
             machaon.shell.Path: パス
         """
-        from machaon.types.shell import special_name_to_path
-        return special_name_to_path(s)
-
+        from machaon.types.shell import Path
+        try:
+            return Path.from_location_name(s)
+        except Exception as e:
+            import os
+            if os.path.exists(s):
+                return Path(s)
+            raise e
 
 @fundamental_type.definition(typename="Bool", doc="""
 Python.bool 真偽値。
@@ -310,6 +315,26 @@ class BoolType():
             return False
         else:
             raise ValueError(s)
+
+    #
+    # if
+    #
+    def if_true(self, b, context, if_, else_):
+        """ @method context [if]
+        文字列を評価し、真なら実行する。
+        @ == 32 if-true: "nekkedo" "hekkeo"
+        Params:
+            if(Function): true 節
+            else(Function): false 節 
+        Returns:
+            Object: 返り値
+        """
+        from machaon.core.message import run_function
+        if b:
+            body = if_
+        else:
+            body = else_
+        return run_function(body, None, context)
 
 @fundamental_type.definition(typename="Int", doc="""
 整数型。

@@ -104,7 +104,7 @@ class Type():
     #
     #
     def construct_from_string(self, arg: str):
-        r = self.call_internal_method("construct", arg)
+        r = self.call_internal_method("construct", "t", arg)
         if r:
             return r[0]
         else:
@@ -112,7 +112,7 @@ class Type():
             raise UnsupportedMethod("construct")
 
     def convert_to_string(self, v: Any):
-        r = self.call_internal_method("stringify", v)
+        r = self.call_internal_method("stringify", "i", v)
         if r:
             return r[0]
         else:
@@ -120,7 +120,7 @@ class Type():
             return str(v) if v is not None else ""
 
     def summarize_value(self, v: Any):
-        r = self.call_internal_method("summarize", v)
+        r = self.call_internal_method("summarize", "i", v)
         if r:
             return r[0]
         else:
@@ -132,7 +132,7 @@ class Type():
             return s[0:50]+"..." if len(s)>50 else s
 
     def pprint_value(self, app, v: Any):
-        r = self.call_internal_method("pprint", v, app)
+        r = self.call_internal_method("pprint", "i", v, app)
         if r:
             return None
         else:
@@ -143,7 +143,9 @@ class Type():
             app.post("message", s)
     
     def conversion_construct(self, context, value, *params):
-        r = self.call_internal_method("conversion_construct", None, context, value, *params)
+        if isinstance(value, self.value_type):
+            return value 
+        r = self.call_internal_method("conversion_construct", "t", context, value, *params)
         if r:
             return r[0]
         else:
@@ -206,14 +208,19 @@ class Type():
     
     # 内部実装で使うメソッドを実行する
     #  -> タプルで返り値を返す。見つからなければNone
-    def call_internal_method(self, attrname, instance=None, *args, **kwargs):
+    def call_internal_method(self, attrname, calltype, *args, **kwargs):
         fn = self.delegate_method(attrname) # 実装クラスから探す
         if fn:
-            if self.is_methods_instance_bound():
-                args = (instance, *args)
-            elif self.is_methods_type_bound():
-                args = (self, instance, *args)
-                
+            if calltype == "i":
+                if self.is_methods_instance_bound():
+                    pass
+                elif self.is_methods_type_bound():
+                    args = (self, *args)
+            elif calltype == "t":
+                args = (self, *args)
+            else:
+                raise ValueError("bad calltype")
+
             r = (fn(*args, **kwargs),)
             return r
 
