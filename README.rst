@@ -1,2 +1,2 @@
-Machaon is a small framework for interactive CLI-like application.
+Machaon is a Python app launcher which has Smalltalk-like syntax.
 
