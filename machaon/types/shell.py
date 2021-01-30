@@ -5,6 +5,7 @@ import re
 import time
 import datetime
 import math
+import sys
 from collections import defaultdict
 
 from typing import Optional
@@ -14,32 +15,19 @@ from machaon.shellpopen import popen_capture
 #
 #
 #
-_specname_path = {
-    "desktop" : ""
-}
-def _special_name_to_path(name: str):
-    name = name.lower()
-    if os.name == "nt":
-        # windows
-        home = os.environ['USERPROFILE']
-        if name == "home":
-            return home
-        elif name == "desktop":
-            return os.path.join(home, "Desktop")
-        elif name == "documents":
-            return os.path.join(home, "Documents")
-        elif name == "downloads":
-            return os.path.join(home, "Downloads")
-
-    raise ValueError("Unknwon spec name")
-
-def special_name_to_path(name: str):
+def shell_platform():
     """
-    特殊なフォルダ・ファイルの名前からパスを得る。
+    プラットフォームごとの実装を呼び出す
     """
-    p = _special_name_to_path(name)
-    return Path(p)
-
+    module = None 
+    system = sys.platform
+    if system == "win32":
+        import machaon.types.shellplatform.win32 as module
+    elif system == "darwin":
+        import machaon.types.shellplatform.darwin as module
+    else:
+        raise ValueError("Unsupported system: "+system)
+    return module
 
 #
 #
@@ -57,6 +45,13 @@ class Path():
     def __str__(self):
         return self._path
     
+    @classmethod
+    def from_location_name(cls, name):
+        p = shell_platform().location_name_to_path(name)
+        if p is None:
+            raise ValueError("不明なフォルダ名："+name)
+        return cls(p)
+    
     @property
     def stat(self):
         if self._stat is None:
@@ -64,7 +59,7 @@ class Path():
         return self._stat
 
     #
-    #
+    # 要素を調査する
     #
     def path(self):
         """ @method
@@ -126,6 +121,14 @@ class Path():
             self._isdir = os.path.isdir(self._path)
         return self._isdir
     
+    def isfile(self):
+        """ @method
+        ファイルのパスかどうか
+        Returns:
+            Bool:
+        """
+        return os.path.isfile(self._path)
+    
     def modtime(self):
         """ @method
         変更日時
@@ -160,9 +163,64 @@ class Path():
         return stat.filemode(self.stat.st_mode)
     
     #
-    # シェル機能
+    # パス操作
     #
     def dir(self):
+        """ @method
+        ファイルならそのディレクトリを返す。ディレクトリはそのまま。
+        Returns:
+            Path:
+        """
+        if self.isfile():
+            return self.up()
+        return self
+
+    def up(self):
+        """ @method
+        一つ上のディレクトリを返す。
+        Returns:
+            Path:
+        """
+        up, _basename = os.path.split(self._path)
+        return Path(up)
+    
+    def append(self, path):
+        """ @method
+        パスを付け足す。
+        Params:
+            path(Path):
+        Returns:
+            Path:
+        """
+        p = os.path.join(self._path, path._path)
+        return Path(p)
+    
+    def with_name(self, name):
+        """ @method
+        ファイル・ディレクトリ名だけ変更する。
+        Params:
+            name(str):
+        Returns:
+            Path:
+        """
+        up, _basename = os.path.split(self._path)
+        return Path(os.path.join(up, name))
+    
+    def with_ext(self, extension):
+        """ @method
+        拡張子だけ変更する。
+        Params:
+            extension(str):
+        Returns:
+            Path:
+        """
+        up, _ext = os.path.splitext(self._path)
+        return Path(os.path.join(up, extension))
+
+    #
+    # シェル機能
+    #
+    def listdir(self):
         """ @method [ls]
         ディレクトリに含まれるファイルとサブディレクトリの一覧を返す。
         Returns:
@@ -173,17 +231,34 @@ class Path():
         items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
         return items
     
-    def exec(self, app, params=None, shell=False):
+    def find(self, context, predicate):
+        """ @method context
+        ファイルを再帰的に検索する。
+        Returns:
+            Set[Path]: (name, extension, modtime, size)
+        """
+        basedir = self.dir()
+        for dirpath, dirname, filenames in os.walk(basedir):
+            for filename in filenames:
+                subj = context.get_type()
+                if predicate.run_function(subj, context).value:
+                    return 
+    
+    def run(self, app, params=None, shell=False):
         """ @method spirit
-        ファイルを実行する。
+        ファイルを実行し、終わるまで待つ。
         Params:
             params(Tuple): *コマンド引数文字列のタプル
             shell(Bool): *シェル上で実行する
         """
         if self.isdir():
-            raise ValueError("このパスは実行できません")
+            raise ValueError("ディレクトリは実行できません")
 
-        proc = popen_capture(params, shell=shell)
+        pa = []
+        pa.append(self._path)
+        pa.extend(params or [])
+
+        proc = popen_capture(pa, shell=shell)
         for msg in proc:
             if msg.is_waiting_input():
                 if not app.interruption_point(noexception=True):
@@ -204,6 +279,14 @@ class Path():
             
             if msg.is_finished():
                 app.post("message-em", "プロセスはコード={}で終了しました".format(msg.returncode))
+    
+    def start(self, operation=None):
+        """ @method
+        ファイル・フォルダをデフォルトの方法で開く。
+        Params:
+            operation(str): *動作のカテゴリ。[open|print|edit|explore|find|...]
+        """
+        shell_platform().start_file(self._path, operation)
     
     #
     # 型の振る舞い

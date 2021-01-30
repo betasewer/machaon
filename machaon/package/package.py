@@ -144,7 +144,7 @@ class Package():
             # 型が定義されたモジュールをロードする
             moduleindex = getattr(mod, "machaon_modules", None)
             if moduleindex:
-                modules = [module_loader(x) for x in modules]
+                modules = [module_loader(x) for x in moduleindex]
             else:
                 modules = [module_loader(self.entrypoint)]
 

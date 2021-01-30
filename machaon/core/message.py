@@ -6,11 +6,10 @@ from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 from machaon.core.symbol import python_builtin_typenames, normalize_method_name
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
-from machaon.core.method import Method
+from machaon.core.method import Method, MethodParameter
 from machaon.core.invocation import (
     BasicInvocation,
     TypeMethodInvocation,
-    GenericTypeMethodInvocation,
     InstanceMethodInvocation,
     FunctionInvocation,
     INVOCATION_RETURN_RECIEVER,
@@ -115,10 +114,15 @@ class Message:
         return False
     
     def get_next_parameter_spec(self):
-        if self.selector:
-            index = len(self.args) # 次に入る引数
-            return self.selector.get_parameter_spec(index)
-        return None
+        if self.selector is None:
+            raise BadMessageError("セレクタがありません")
+    
+        index = len(self.args) # 次に入る引数
+        spec = self.selector.get_parameter_spec(index)
+        if spec:
+            return spec
+        else:
+            return MethodParameter("param{}".format(index), "Any", "")
     
     #
     def eval(self, context) -> Object:
@@ -229,21 +233,8 @@ def select_object(context, *, name=None, typename=None) -> Object:
 #
 def select_type(context, typeexpr) -> Type:
     if SIGIL_SCOPE_RESOLUTION in typeexpr:
-        typename, _, scope = typeexpr.partition(SIGIL_SCOPE_RESOLUTION)
-
-        if scope.startswith(SIGIL_IMPORT_TARGET):
-            # 定義モジュールを指定してロード
-            modpath = scope[1:]
-            from machaon.core.importer import module_loader
-            loader = module_loader(modpath)
-            for desc in loader.enum_type_describers():
-                atype = context.new_type(desc)
-                if atype.typename == typename:
-                    return atype
-            raise BadExpressionError("モジュール'{}'が見つからないか、モジュールのなかに'{}'の定義が見つかりません".format(modpath, typename))
-        else:
-            # パッケージ名を指定する
-            return context.select_type(typename, scope=scope)
+        typename, _, scope = typeexpr.partition(SIGIL_SCOPE_RESOLUTION) # パッケージ名を指定する
+        return context.select_type(typename, scope=scope)
     else:
         # 型名のみ
         return context.select_type(typeexpr)
@@ -295,15 +286,6 @@ def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
         name, modbits = startsmod("!", BasicInvocation.MOD_NEGATE_RESULT, name, modbits)
 
     name = normalize_method_name(name)
-
-    # 外部関数
-    if name.startswith(SIGIL_IMPORT_TARGET):
-        from machaon.core.importer import attribute_loader
-        loader = attribute_loader(name[1:].strip())
-        if loader:
-            modfn = loader(fallback=True)
-            if modfn:
-                return FunctionInvocation(modfn, modbits)
 
     # 型メソッド
     if typetraits is not None:
@@ -410,10 +392,9 @@ TERM_OBJ_LITERAL = 0x0800
 TERM_OBJ_CONSTANT = 0x0900
 TERM_OBJ_NOTHING = 0x0A00
 TERM_OBJ_TYPE = 0x0B00
-TERM_OBJ_BOOLEAN = 0x0C00
+TERM_OBJ_SPECIFIED_TYPE = 0x0C00
 TERM_OBJ_REF_ROOT = 0x0D00
 TERM_OBJ_TUPLE = 0x0E00
-TERM_OBJ_FUNCTION = 0x0F00
 #  - アクションの指示
 TERM_INSTR_MASK = 0xFF0000
 TERM_START_KEYWORD_ARGS = 0x010000
@@ -422,10 +403,9 @@ TERM_END_ALL_BLOCK = 0x040000
 
 # メッセージで用いる記号
 SIGIL_OBJECT_ID = "@"
-SIGIL_OBJECT_LAMBDA_MEMBER = "_"
-SIGIL_OBJECT_SPEC_NAME = "/"
-SIGIL_IMPORT_TARGET = "#"
-SIGIL_SCOPE_RESOLUTION = "/"
+SIGIL_OBJECT_LAMBDA_MEMBER = "/"
+SIGIL_OBJECT_SPEC_NAME = "#"
+SIGIL_SCOPE_RESOLUTION = "::"
 SIGIL_END_OF_KEYWORDS = ";"
 SIGIL_RIGHTFIRST_EVALUATION = "$"
 QUOTE_ENDPARENS = {
@@ -669,7 +649,7 @@ class MessageEngine():
 
         #
         # 以下、メッセージの要素として解析
-        #
+        # 
 
         # オブジェクト参照
         if not isstringtoken and token.startswith(SIGIL_OBJECT_ID):
@@ -681,20 +661,23 @@ class MessageEngine():
                 # ラムダ関数のメインオブジェクト
                 tokenbits |= TERM_OBJ_LAMBDA_ARG
             
-            elif objid[0] == SIGIL_OBJECT_LAMBDA_MEMBER:
+            elif SIGIL_OBJECT_LAMBDA_MEMBER in objid:
                 # メインオブジェクトのメンバ参照
                 tokenbits |= TERM_OBJ_LAMBDA_ARG_MEMBER
-                objid = token[2:]
+                objid, _, memberid = token.partition(SIGIL_OBJECT_LAMBDA_MEMBER)
+
+                if not memberid:
+                    raise BadExpressionError("")
 
                 # 新たなブロックを生成する
                 if expect == EXPECT_ARGUMENT:
-                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, objid)
+                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, memberid)
                 
                 if expect == EXPECT_RECIEVER:
-                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, objid)
+                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, memberid)
                 
                 if expect == EXPECT_NOTHING:
-                    return (tokenbits | TERM_NEW_BLOCK_RECIEVER, objid)
+                    return (tokenbits | TERM_NEW_BLOCK_RECIEVER, memberid)
                 
             elif objid[0] == SIGIL_OBJECT_SPEC_NAME:
                 objid = token[2:]
@@ -724,24 +707,6 @@ class MessageEngine():
             if expect == EXPECT_NOTHING:
                 return (tokenbits | TERM_NEW_BLOCK_RECIEVER, objid) # 新しいメッセージのレシーバになる
 
-        # 外部関数呼び出し
-        if not isstringtoken and token.startswith(SIGIL_IMPORT_TARGET):
-            if expect == EXPECT_SELECTOR:
-                tokenbits |= TERM_OBJ_SELECTOR
-                return (tokenbits | TERM_LAST_BLOCK_SELECTOR, token) # SIGILはselect_methodで取り除く（モディファイアに対応）
-                
-            # 定数表現として扱い、引数なしで呼び出される
-            path = token[1:]
-            tokenbits |= TERM_OBJ_CONSTANT
-            if expect == EXPECT_ARGUMENT:
-                return (tokenbits | TERM_LAST_BLOCK_ARG, path) # 前のメッセージの引数になる
-            
-            if expect == EXPECT_RECIEVER:
-                return (tokenbits | TERM_LAST_BLOCK_RECIEVER, path) # 新しいメッセージのレシーバになる
-            
-            if expect == EXPECT_NOTHING:
-                return (tokenbits | TERM_NEW_BLOCK_RECIEVER, path) # 新しいメッセージのレシーバになる
-
         # 何も印のない文字列
         #  => メソッドかリテラルか、文脈で判断
         if expect == EXPECT_SELECTOR and reading:
@@ -754,19 +719,15 @@ class MessageEngine():
             typename = spec.typename if spec else None
             if typename == "Type":
                 tokenbits |= TERM_OBJ_TYPE
-            elif typename == "Str":
-                tokenbits |= TERM_OBJ_STRING
-            elif typename == "Bool":
-                tokenbits |= TERM_OBJ_BOOLEAN
             elif typename == "Tuple":
-                tokenbits |= TERM_OBJ_TUPLE
-            elif typename == "Function":
-                tokenbits |= TERM_OBJ_FUNCTION
-            else:
+                tokenbits |= TERM_OBJ_TUPLE                
+            elif spec.is_any():                
                 if isstringtoken:
                     tokenbits |= TERM_OBJ_STRING
                 else:
                     tokenbits |= TERM_OBJ_LITERAL
+            else:
+                tokenbits |= TERM_OBJ_SPECIFIED_TYPE
             return (tokenbits | TERM_LAST_BLOCK_ARG, token, spec) # 前のメッセージの引数になる
 
         if expect == EXPECT_RECIEVER:
@@ -819,21 +780,18 @@ class MessageEngine():
             tt = select_type(context, typeexpr)
             obj = context.get_type("Type").new_object(tt)
 
-        elif objcode == TERM_OBJ_BOOLEAN:
-            bt = context.get_type("Boolean")
-            b = bt.construct_from_string(values[0])
-            obj = bt.new_object(b)
+        elif objcode == TERM_OBJ_SPECIFIED_TYPE:
+            val = values[0]
+            spec = values[1]
+            paramtype = context.get_type(spec.get_typename())
+            convval = paramtype.conversion_construct(context, val, *spec.get_typeparams())
+            obj = paramtype.new_object(convval)
         
         elif objcode == TERM_OBJ_TUPLE:
             from machaon.types.tuple import ObjectTuple
             elems = values[0].split() # 文字列を空白で区切る
             tpl = ObjectTuple.conversion_construct(None, context, elems)
             obj = context.new_object("Tuple", tpl)
-            
-        elif objcode == TERM_OBJ_FUNCTION:
-            expr = values[0]
-            fn = MessageEngine(expr)
-            obj = context.new_object("Function", fn)
 
         elif objcode == TERM_OBJ_LITERAL:
             obj = select_literal(context, values[0])
