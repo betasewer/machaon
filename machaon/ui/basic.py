@@ -289,7 +289,7 @@ class Launcher():
 
         chm.interrupt() # 中断をプロセスに通知する
 
-        self.insert_screen_appendix("プロセス[{}]の中断を試みます...({}秒)".format(chm.get_index(), timeout))
+        self.insert_screen_appendix("プロセス[{}]の終了を待ちます...({}秒)".format(chm.get_index(), timeout))
         
         def watcher():
             for _ in range(timeout):
@@ -300,7 +300,7 @@ class Launcher():
             else:
                 self.insert_screen_appendix("プロセス[{}]を終了できません".format(chm.get_index()))
 
-        wch = threading.Thread(None, watcher, daemon=True)
+        wch = threading.Thread(None, watcher, daemon=True, name="Process{}Killer".format(chm.get_index()))
         wch.start() # 一定時間、終了を待つ
     
     def finish_chamber(self, chamber):

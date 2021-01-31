@@ -1,12 +1,14 @@
 *.log
 *.bak
+*.pytest_cache
 *.mypy_cache
+*.vscode
 __pycache__/
 tests/sample/*
 build/*
 dist/* 
+__souko__/
 *.egg-info/*
-.vscode/*
 dist.ps1
 packages.ini
 *.html

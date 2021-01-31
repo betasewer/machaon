@@ -400,6 +400,8 @@ class Method():
             self.flags |= METHOD_CONTEXT_BOUND
         if "reciever-param" in declparts:
             self.flags |= METHOD_HAS_RECIEVER_PARAM
+        if "task" in declparts:
+            self.flags |= METHOD_TASK # こちらでもよい
 
         # 説明
         desc = sections.get_string("Description")

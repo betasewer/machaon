@@ -47,7 +47,7 @@ class Path():
     
     @classmethod
     def from_location_name(cls, name):
-        p = shell_platform().location_name_to_path(name)
+        p = shell_platform().location_name_to_path(*name.split(":",maxsplit=1))
         if p is None:
             raise ValueError("不明なフォルダ名："+name)
         return cls(p)
@@ -95,6 +95,17 @@ class Path():
         _n, ext = os.path.splitext(self._path)
         return ext
     
+    def filetype(self):
+        """ @method
+        ファイルタイプ名（フォルダまたは拡張子）
+        Returns:
+            Str:
+        """
+        if self.isdir():
+            return "<DIR>"
+        else:
+            return self.extension().lstrip(".")
+    
     def hasext(self, names):
         """ @method
         いずれかの拡張子を持っているか
@@ -128,6 +139,14 @@ class Path():
             Bool:
         """
         return os.path.isfile(self._path)
+    
+    def exists(self):
+        """ @method
+        ファイル・フォルダとして存在するか
+        Returns:
+            Bool:
+        """
+        return os.path.exists(self._path)
     
     def modtime(self):
         """ @method
@@ -224,7 +243,7 @@ class Path():
         """ @method [ls]
         ディレクトリに含まれるファイルとサブディレクトリの一覧を返す。
         Returns:
-            Set[Path]: (name, extension, modtime, size)
+            Set[Path]: (name, filetype, modtime, size)
         """
         if not self.isdir():
             return [Path(self._path)]
@@ -244,12 +263,11 @@ class Path():
                 if predicate.run_function(subj, context).value:
                     return 
     
-    def run(self, app, params=None, shell=False):
-        """ @method spirit
+    def run(self, app, params=None):
+        """ @task
         ファイルを実行し、終わるまで待つ。
         Params:
             params(Tuple): *コマンド引数文字列のタプル
-            shell(Bool): *シェル上で実行する
         """
         if self.isdir():
             raise ValueError("ディレクトリは実行できません")
@@ -258,7 +276,7 @@ class Path():
         pa.append(self._path)
         pa.extend(params or [])
 
-        proc = popen_capture(pa, shell=shell)
+        proc = popen_capture(pa)
         for msg in proc:
             if msg.is_waiting_input():
                 if not app.interruption_point(noexception=True):
@@ -287,6 +305,21 @@ class Path():
             operation(str): *動作のカテゴリ。[open|print|edit|explore|find|...]
         """
         shell_platform().start_file(self._path, operation)
+    
+    def explore(self):
+        """ @method
+        ファイル・フォルダをエクスプローラで開く。
+        """
+        p = self.dir()
+        shell_platform().start_file(p._path, "explore")
+
+    def print(self):
+        """ @method
+        ファイル・フォルダを印刷する。
+        """
+        if self.isdir():
+            raise ValueError("Unsupported")
+        shell_platform().start_file(self._path, "print")
     
     #
     # 型の振る舞い
@@ -344,14 +377,18 @@ class TextFile(Path):
     """
     def __init__(self, p):
         super().__init__(p)
+        self._enc = None
 
     def detect_encoding(self):
         """ @method
-        文字エンコーディング形式を取得する。
+        文字エンコーディング形式を推定する。
         Returns:
             Str: 文字エンコーディングの名前
         """
+        if self._enc is None:
+            return self._enc
         encoding = detect_text_encoding(self._path)
+        self._enc = encoding
         return encoding
 
     #

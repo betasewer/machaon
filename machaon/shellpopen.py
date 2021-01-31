@@ -5,10 +5,13 @@ import queue
 from typing import Any, List, Sequence, Optional
 
 #
-class _stdout_reader():
+class StdoutReader():
     def __init__(self):
         self.endevent = False
         self.readlines = queue.Queue()
+    
+    def stop(self):
+        self.endevent = True
 
     def read(self, buf, encoding):
         linebuf = ""
@@ -55,8 +58,8 @@ def popen_capture(cmds, shell=False):
     shell_encoding = 'cp932'
     proc = subprocess.Popen(cmds, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=shell)
     
-    stdoutreader = _stdout_reader()
-    readthread = threading.Thread(None, target=stdoutreader.read, args=(proc.stdout, shell_encoding), daemon=True)
+    stdoutreader = StdoutReader()
+    readthread = threading.Thread(None, target=stdoutreader.read, args=(proc.stdout, shell_encoding), daemon=True, name="POpenCapture_StdIOReader")
     readthread.start()
     
     while True:
@@ -67,6 +70,7 @@ def popen_capture(cmds, shell=False):
         elif inputmsg:
             if inputmsg.mode == POPEN_KILLED:
                 proc.kill()
+                stdoutreader.stop()
                 yield PopenMessage(mode=POPEN_KILLED) # send用に吐く最後のメッセージ
                 break
             elif inputmsg.value is not None:
@@ -81,13 +85,12 @@ def popen_capture(cmds, shell=False):
             # プロセス終了
             returncode = proc.poll()
             if returncode is not None:
+                stdoutreader.stop()
                 yield PopenMessage(value=returncode, mode=POPEN_FINISHED)
                 break
             else:
                 yield PopenMessage(mode=POPEN_OUTPUT_EMPTY) # inputとoutputでメッセージの数をそろえるための空メッセージ
 
-    # 出力読み取りスレッドを停止させる
-    stdoutreader.endevent = True
     readthread.join(timeout=10) # タイムアウト後はデーモンスレッドなので強制終了となる
 
 #

@@ -73,6 +73,7 @@ class Process:
                 self.thread = threading.Thread(
                     target=self.run_process_async, 
                     args=(context, msgroutine), 
+                    name="Process{}_Worker".format(self.index),
                     daemon=True
                 )
                 self._interrupted = False
@@ -107,8 +108,8 @@ class Process:
         self.finish()
         return success
 
-    def run_process_async(self, context, routine=None):
-        self.message.run(context, runner=routine)
+    def run_process_async(self, context, routine):
+        for _ in routine: pass # 残りの処理を全て実行する
         self.on_finish_process(context)
     
     # プロセスID
@@ -308,6 +309,9 @@ class Spirit():
     
     def raise_interruption(self):
         raise ProcessInterrupted()
+    
+    def is_interrupted(self):
+        return self.process and self.process.is_interrupted()
 
     # プログレスバーを開始する
     def start_progress_display(self, *, total=None):
