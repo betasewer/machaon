@@ -410,9 +410,9 @@ class BasicInvocation():
     def modifier_name(self, straight=False):
         m = []
         if self.modifier & INVOCATION_REVERSE_ARGS:
-            m.append("arg-reversed")
+            m.append("reverse-args")
         if self.modifier & INVOCATION_NEGATE_RESULT:
-            m.append("result-negated")
+            m.append("negate")
         if not m and straight:
             m.append("straight")
         return " ".join(m)
@@ -477,7 +477,7 @@ class TypeMethodInvocation(BasicInvocation):
         return self.method.get_doc()
     
     def display(self):
-        return ("TypeMethod", self.method.get_name(), self.modifier_name())
+        return ("TypeMethod", self.method.get_action_target(), self.modifier_name())
     
     def query_method(self, this_type):
         self.method.load(this_type)
@@ -573,9 +573,6 @@ class InstanceMethodInvocation(BasicInvocation):
         if fn is None:
             raise BadInstanceMethodInvocation(self.attrname)
         
-        if not callable(fn):
-            return None
-            
         if getattr(fn,"__self__",None) is not None:
             # クラスメソッドを排除する
             return None
@@ -590,6 +587,15 @@ class InstanceMethodInvocation(BasicInvocation):
         method = getattr(instance, self.attrname, None)
         if method is None:
             raise BadInstanceMethodInvocation(self.attrname)
+
+        if not callable(method):
+            # 引数なしの関数に変換する
+            def nullary(v):
+                def _method():
+                    return v
+                return _method
+            method = nullary(method)
+        
         return method, instance, trailingargs
     
     def prepare_invoke(self, context, *argobjects):
@@ -628,7 +634,7 @@ class FunctionInvocation(BasicInvocation):
         return self.fn.__doc__
     
     def display(self):
-        name = ".".join([self.fn.__module__, self.fn.__name__])
+        name = ".".join([self.fn.__module__, self.fn.__qualname__])
         return ("Function", name, self.modifier_name())
     
     def query_method(self, _this_type):

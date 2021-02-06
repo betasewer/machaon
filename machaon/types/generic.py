@@ -63,10 +63,10 @@ operators = {
     "~" : "bitinv",
     ">>" : "rshift",
     "<<" : "lshift",
-    "in" : "exists_in",
-    "greater?" : "get_greater",
-    "less?" : "get_less",
-    "truth?" : "get_truth",
+    "in" : "is-in",
+    "greater?" : "get-greater",
+    "less?" : "get-less",
+    "truth?" : "get-truth",
     "=" : "identical",
     "?" : "pretty",
     "as" : "convertas",
@@ -399,7 +399,7 @@ class GenericMethods:
         return left >> right
         
     # リスト関数
-    def exists_in(self, left, right):
+    def is_in(self, left, right):
         """ @method reciever-param
         二項in演算子。（集合に含まれるか）
         Arguments:

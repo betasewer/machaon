@@ -262,7 +262,6 @@ def test_message_failure():
     assert r.value.get_error_typename() == "ZeroDivisionError"
 
 
-
 #
 def test_message_reenter():
     context = test_context()

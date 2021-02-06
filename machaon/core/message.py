@@ -288,7 +288,8 @@ def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
     name = normalize_method_name(name)
 
     # 型メソッド
-    if typetraits is not None:
+    using_type_method = typetraits and not typetraits.is_any()
+    if using_type_method:
         meth = typetraits.select_method(name)
         if meth is not None:
             return meth.get_invocation(typetraits, modbits)
@@ -299,7 +300,7 @@ def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
     if inv is not None:
         return inv 
 
-    if typetraits is not None and not typetraits.is_using_instance_method():
+    if using_type_method and not typetraits.is_using_instance_method():
         raise BadExpressionError("Method '{}' is not found in '{}' (instance method is excluded)".format(name, typetraits.typename))
     
     # インスタンスメソッド

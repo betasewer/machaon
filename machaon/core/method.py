@@ -331,7 +331,7 @@ class Method():
                 typefn = this_type.delegate_method(self.target)
                 if typefn is not None:
                     callobj = typefn
-                    source = "{}:{}".format(this_type.get_describer_qualname(), self.target)
+                    source = "{}:{}".format(this_type.get_describer_qualname(), self.name)
                     if this_type.is_methods_type_bound():
                         self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
             
@@ -519,7 +519,7 @@ class Method():
             self.add_parameter(p.name, typename, "", default, flags=flags)
         
         self._action = fn
-        self.target = "function: {}".format(fn.__name__)
+        self.target = "function:{}".format(fn.__name__)
         self.flags |= METHOD_LOADED
 
     def load_from_string(self, doc, action):
@@ -539,14 +539,14 @@ class Method():
         self.parse_syntax_from_docstring(doc)
 
         self._action = action
-        self.target = "function: {}".format(str(action))
+        self.target = "function:{}".format(str(action))
         self.flags |= METHOD_LOADED
 
-    def load_from_getter_string(self, typename):
+    def load_as_getter(self, typename):
         """
-        オブジェクトを返す引数のないメソッドとしてロードする。
+        引数のないメソッドとしてロードする。
         Params:
-            object(Object): 返すオブジェクト
+            typename(str): 返り値の型名
         """
         if self.flags & METHOD_LOADED:
             return 
@@ -556,7 +556,7 @@ class Method():
 
         key = normalize_method_target(self.name)
         self._action = key
-        self.target = "getter: {}".format(key)
+        self.target = "getter:{}".format(key)
         self.flags |= METHOD_LOADED | METHOD_OBJECT_GETTER
     
     def get_invocation(self, type, modbits):

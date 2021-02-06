@@ -69,5 +69,10 @@ def test_method():
     assert act(None, "0123.txt", "[0-9]+")
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
-    assert regmatch.get_action_target() == "machaon.types.fundamental.StrType:reg_match"
+    assert regmatch.get_action_target() == "machaon.types.fundamental.StrType:reg-match"
 
+def test_any():
+    anytype = fundamental_type.get("Any")
+    assert anytype.is_loaded()
+    assert anytype.is_any()
+    

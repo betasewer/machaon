@@ -51,6 +51,9 @@ class DataColumn():
     def get_function(self):
         return self._getter
     
+    def is_nonstring_column(self):
+        return self._typename and self._typename != "Str" and self._typename != "Any"
+    
     def eval(self, subject, context):
         obj = self._getter.run_function(subject, context)
         if self._typename is None and not obj.is_error(): # 型を記憶する
@@ -97,6 +100,9 @@ class DataItemItselfColumn():
     
     def eval(self, subject, _context):
         return subject
+    
+    def is_nonstring_column(self):
+        return not self.type.is_any() and self.type.get_typename() != "Str"
     
     def stringify(self, context, value, method=DATASET_STRINGIFY):
         if method == DATASET_STRINGIFY_SUMMARIZE:
@@ -250,8 +256,8 @@ class Sheet():
         valtype = col.get_type(context)
         return Object(valtype, val)
     
-    def find(self, context, column, value):
-        """ @method context
+    def find(self, context, app, column, value):
+        """ @method task context
         値をカラム名とインデックスで指定して取得する。
         Params:
             column(str): 列名+一致タイプ指定（前方*／*後方／*部分*）
@@ -260,10 +266,10 @@ class Sheet():
             ElemObject: 値
         """
         # 一致タイプ
-        method = SEARCH_METHOD_EQUAL
+        method = SEARCH_METHOD_PARTIAL_MATCH
         if len(column)>1:
-            if column[0] == "*" and column[-1] == "*": 
-                method = SEARCH_METHOD_PARTIAL_MATCH
+            if column[0] == "#": 
+                method = SEARCH_METHOD_EQUAL
                 column = column[1:-1]
             elif column[0] == "*":
                 method = SEARCH_METHOD_BACKWARD_MATCH
@@ -273,12 +279,16 @@ class Sheet():
                 column = column[:-1]
         
         icol, col = self.select_column(column)
+        if col.is_nonstring_column():
+            method = SEARCH_METHOD_EQUAL
+
         pred = make_data_search_predicate(method, col, context)
         
         # 順に検索
         for ival, obj in enumerate(self.column_values(context, icol, col)):
             if pred(obj.value, value):
-                return ElemObject("Int", ival, obj)
+                item = self.items[self.get_item_from_row(ival)]
+                return ElemObject("Int", ival, item)
 
         raise NotFound() # 見つからなかった
 
@@ -293,6 +303,11 @@ class Sheet():
             if iitem == itemindex:
                 return irow
         raise ValueError("Invalid item index")
+    
+    def get_item_from_row(self, rowindex) -> int:
+        """ 行番号からアイテムIDを取得する。"""
+        iitem, _row = self.rows[rowindex]
+        return iitem
 
     def current_rows(self):
         """ 現在あるすべての行を取得する。 """

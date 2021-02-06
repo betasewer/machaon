@@ -34,10 +34,11 @@ class UnsupportedMethod(Exception):
     pass
 
 #
-TYPE_METHODS_INSTANCE_BOUND = 0x01
-TYPE_METHODS_TYPE_BOUND = 0x02
-TYPE_USE_INSTANCE_METHOD = 0x04
-TYPE_HAS_DELEGATE_OBJECT = 0x08
+TYPE_ANYTYPE = 0x1
+TYPE_METHODS_INSTANCE_BOUND = 0x100
+TYPE_METHODS_TYPE_BOUND = 0x200
+TYPE_USE_INSTANCE_METHOD = 0x400
+TYPE_HAS_DELEGATE_OBJECT = 0x800
 TYPE_LOADED = 0x1000
 
 #
@@ -46,10 +47,10 @@ TYPE_LOADED = 0x1000
 class Type():
     __mark = True
 
-    def __init__(self, describer=None, name=None, value_type=None, scope=None):
+    def __init__(self, describer=None, name=None, value_type=None, scope=None, *, bits = 0):
         self.typename: str = name
         self.doc: str = ""
-        self.flags = 0
+        self.flags = bits
         self.value_type: Callable = value_type
         self.scope: Optional[str] = scope
         self._methods: Dict[str, Method] = {}
@@ -70,7 +71,7 @@ class Type():
         return self.flags & TYPE_LOADED > 0
     
     def is_any(self):
-        return self.typename == "Any"
+        return self.flags & TYPE_ANYTYPE > 0
     
     def get_value_type(self):
         return self.value_type
@@ -275,7 +276,8 @@ class Type():
         typename = "",
         doc = "",
         value_type = None,
-        scope = None
+        scope = None,
+        bits = 0,
     ):
         if typename:
             self.typename = normalize_typename(typename)
@@ -285,6 +287,8 @@ class Type():
             self.value_type = value_type
         if scope:
             self.scope = scope
+        if bits:
+            self.flags |= bits
         return self
     
     #
@@ -371,8 +375,9 @@ class Type():
                     # メソッド定義
                     from machaon.core.object import Object
                     if isinstance(value, str):
+                        valuetype = value
                         mth = Method(key)
-                        mth.load_from_getter_string(value)
+                        mth.load_as_getter(valuetype)
                     elif len(value)>1 and callable(value[-1]):                      
                         *docs, action = value
                         mth = Method(key)
@@ -433,13 +438,14 @@ class Type():
 # 型の取得時まで定義の読み込みを遅延する
 #
 class TypeDelayLoader():
-    def __init__(self, traits: Union[str, Any], typename: str, doc="", scope=None):
+    def __init__(self, traits: Union[str, Any], typename: str, doc, scope, bits):
         self.traits = traits
         self.typename = typename
         if not isinstance(typename, str):
             raise ValueError("型名を文字列で指定してください")
         self.doc = doc
         self.scope = scope
+        self.bits = bits
         self._t = None
     
     def get_describer_qualname(self):
@@ -470,7 +476,7 @@ class TypeDelayLoader():
             self._t = typemodule.define(
                 traits, 
                 typename=self.typename, 
-                doc=self.doc, scope=self.scope, 
+                doc=self.doc, scope=self.scope, bits=self.bits,
                 delayedload=True
             )
             self.traits = None
@@ -633,6 +639,7 @@ class TypeModule():
         typename = None, 
         doc = "",
         scope = None,
+        bits = 0,
         delayedload = False
     ) -> Type:
         # 登録処理
@@ -652,7 +659,7 @@ class TypeModule():
             raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__name__))
         
         if isinstance(t, Type):
-            t.describe(typename=typename, doc=doc, scope=scope)
+            t.describe(typename=typename, doc=doc, scope=scope, bits=bits)
             t.load()
 
         if not delayedload:
@@ -661,9 +668,9 @@ class TypeModule():
         return t
     
     # 遅延登録デコレータ
-    def definition(self, *, typename, doc="", scope=None):
+    def definition(self, *, typename, doc="", scope=None, bits=0):
         def _deco(traits):
-            self.define(traits=TypeDelayLoader(traits, typename, doc, scope))
+            self.define(traits=TypeDelayLoader(traits, typename, doc, scope, bits))
             return traits
         return _deco
     

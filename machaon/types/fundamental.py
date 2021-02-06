@@ -1,6 +1,6 @@
 import re
 
-from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod
+from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod, TYPE_ANYTYPE
 from machaon.core.object import Object
 
 fundamental_type = TypeModule()
@@ -124,7 +124,8 @@ class TypeType():
         from machaon.types.sheet import Sheet
         return Object(context.get_type("Sheet"), Sheet([], type))
 
-@fundamental_type.definition(typename="Any", doc="""
+
+@fundamental_type.definition(typename="Any", bits=TYPE_ANYTYPE, doc="""
 あらゆる型を受け入れる型。
 """)
 class AnyType():
