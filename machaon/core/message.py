@@ -784,7 +784,10 @@ class MessageEngine():
             val = values[0]
             spec = values[1]
             paramtype = context.get_type(spec.get_typename())
-            convval = paramtype.conversion_construct(context, val, *spec.get_typeparams())
+            if isinstance(val, str):
+                convval = paramtype.construct_from_string(val)
+            else:
+                convval = paramtype.conversion_construct(context, val, *spec.get_typeparams())
             obj = paramtype.new_object(convval)
         
         elif objcode == TERM_OBJ_TUPLE:
@@ -972,27 +975,31 @@ class MessageEngine():
 
         self._codes = codes # type: ignore
     
-    def run(self, context, *, runner=None) -> Tuple[Any,...]:
-        """ 実行 """
-        if runner is None:
-            # タスク含め全てを同期で実行する
-            runner = self.runner(context)
+    def finish(self, context) -> Object:
+        """ 結果を取得し、スタックをクリアする """
+        returns = context.clear_local_objects() # 返り値はローカルスタックに置かれている
+        if not returns:
+            raise BadExpressionError("At least 1 result must be returned, but none on stack")
+        ret = returns[-1]
+
+        self._readings.clear()
+        self._temp_result_stack.clear()
+        return ret
+    
+    def run(self, context) -> Object:
+        """ このコンテキストでメッセージを実行し、返り値を一つ返す """
+        runner = self.runner(context)
         for _ in runner: pass
 
-        # 返り値はローカルスタックに置かれている
-        returns = context.clear_local_objects()
-        return tuple(returns)
+        ret = self.finish(context)
+        
+        context.add_log(LOG_RUN_FUNCTION, context)
+        return ret # Objectを返す
     
     def run_function(self, subject, context) -> Object:
-        """ メッセージを実行し、返り値を一つ返す """
+        """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
         subcontext = context.inherit(subject) # ここでコンテキストが入れ子になる
-
-        returns = self.run(subcontext)
-        if not returns:
-            raise BadExpressionError("値を返さなければいけません")
-        
-        context.add_log(LOG_RUN_FUNCTION, subcontext)
-        return returns[-1] # Objectを返す
+        return self.run(subcontext)
 
 #
 # ログ表示用に定数名を出力する

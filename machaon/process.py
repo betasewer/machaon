@@ -86,10 +86,7 @@ class Process:
     # メッセージ実行後のフロー
     def on_finish_process(self, context):
         # 返り値をオブジェクトとして配置する
-        returns = context.clear_local_objects()
-        if not returns:
-            raise ValueError("No objects on the return stack")
-        ret = returns[0]
+        ret = self.message.finish(context)
         context.push_object(str(self.index), ret)
         
         # 実行時に発生した例外を確認する

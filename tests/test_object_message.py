@@ -2,56 +2,25 @@ import pytest
 import re
 
 from machaon.core.type import Type
-from machaon.core.object import ObjectValue
-from machaon.core.message import MessageEngine, MessageTokenBuffer, run_function
+from machaon.core.object import Object, ObjectValue
+from machaon.core.message import MessageEngine, MessageTokenBuffer, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_type
 from machaon.process import TempSpirit
 
 #-----------------------------------------------------------------------
 # スタブ
-#
-
-"""
-fundamental types -- 
-
-  primitives:
-Int
-Float
-Str
-Bool
-Complex
-List
-Dataset
-
-  system:
-Object
-Window
-Invocation
-
-Window data add-column Range new 5 start: 2 step: 2
-Window last-invocation what
-
-Constants search 闇
-
-Ygodev.Api search class Card
-
-Ygodev.Cards search where 
-
-Window last-invocation 
-
-Indexer new add-pattern Indexer get-pattern 漢数字
-@[Indexer] add-pattern Indexer get-pattern カタカナ
-@[Indexer] add-pattern Indexer get-pattern 「」囲み
-@[file] foreach -> @[Indexer] make-index @_ ラムダ式の実装；これがフィルタ・ソート関数にもなる
-@[Indexer] create-report out.txt encoding: utf-8
-
-Window data filter -> @filename == bad and @modtime between 2018/09/05 2019/04/05
-Window data sortby !datetime name nani
-Window data column long
-
-"""
 #-----------------------------------------------------------------------
 def parse_test(parser, context, lhs, rhs):
+    if isinstance(lhs, Object):
+        if lhs.is_error():
+            print("Error occurred on the left side:")
+            print("")
+            spi = TempSpirit()
+            lhs.pprint(spi)
+            spi.printout()
+            return False
+        lhs = lhs.value
+
     if lhs != rhs:
         print("Assertion Failed: '{}' => {} is not equal to {}".format(parser.source, lhs, rhs))
         print("")
@@ -61,6 +30,7 @@ def parse_test(parser, context, lhs, rhs):
             error.pprint(spi)
             spi.printout()
         return False
+    
     return True
 
 def test_context():
@@ -75,12 +45,11 @@ def test_context():
     context = InvocationContext(input_objects=inputs, type_module=fundamental_type)
     return context
                 
-def ptest(s, *rhs):
+def ptest(s, rhs):
     context = test_context()
     parser = MessageEngine(s)
-    returns = parser.run(context)
-    lhs = [x.value for x in returns]
-    assert parse_test(parser, context, tuple(lhs), tuple(rhs))
+    lhso = parser.run(context)
+    assert parse_test(parser, context, lhso.value, rhs)
 
 def run(f):
     f()
@@ -183,14 +152,13 @@ def test_generic_methods():
     # static method
     ptest("1 add 2", 3)
     ptest("1 add 2 add 3", 6)
-    ptest("4 neg", -4)
-    ptest("(5 add 6) neg", -11)
+    ptest("4 negative", -4)
+    ptest("(5 add 6) negative", -11)
     ptest("(7 mul 8) add (9 mul 10) ", 7*8+9*10)
     ptest("(7 mul 8) add ((9 sub 10) mul 11) ", 7*8+(9-10)*11)
     ptest("7 mul 8 add $ $ 9 sub 10 mul 11 ", 7*8+(9-10)*11) # 同じ結果に
     ptest("7 mul 8 add 9 sub 10", (((7*8)+9)-10))
     ptest("'573' length", 3)
-    ptest("42 in-format x", "2a")
     ptest("GODZILLA slice (9 sub 8) -1", "ODZILL")
 
 #
@@ -244,8 +212,8 @@ def test_parse_function():
         context = InvocationContext(input_objects=ObjectCollection(), type_module=fundamental_type)
         
         engine = MessageEngine(s)
-        returns = engine.run(context)
-        assert parse_test(engine, context, returns[0].get_typename() if returns else None, "Function")
+        returned = engine.run(context)
+        assert parse_test(engine, context, returned.get_typename(), "Function")
 
         fundamental_type.define({
             "Typename" : "Dog",
@@ -257,16 +225,14 @@ def test_parse_function():
 
         subcontext = context.inherit()
         subj = Object(fundamental_type.get("Dog"), subject)
-        fn = returns[0].value
+        fn = returned.value
 
         lhso = fn.run_function(subj, subcontext)
-        lhs = lhso.value
-        assert parse_test(fn, subcontext, lhs, rhs[0])
+        assert parse_test(fn, subcontext, lhso, rhs[0])
         
         # 再入
         lhso = fn.run_function(subj, subcontext)
-        lhs = lhso.value
-        assert parse_test(fn, subcontext, lhs, rhs[0])
+        assert parse_test(fn, subcontext, lhso, rhs[0])
 
     lucky = {}
     ltest("Function new: -> @ name == lucky", lucky, True)
@@ -278,7 +244,7 @@ def test_parse_function():
 
 #
 def test_message_failure():
-    # エラーが起きた時点で実行は中止される
+    # エラーが起きた時点で実行は中止され、エラーオブジェクトが返される
     context = test_context()
     r = run_function("2 / 0 + 5 non-exisitent-method 0", None, context)
     assert r.is_error() # zero division error
@@ -296,3 +262,21 @@ def test_message_failure():
     assert r.value.get_error_typename() == "ZeroDivisionError"
 
 
+
+#
+def test_message_reenter():
+    context = test_context()
+    func = MessageEngine("210 / @")
+
+    # 1.
+    r = func.run_function(context.get_type("Int").new_object(7), context)
+    assert r.value == 30
+    # 2.
+    r = func.run_function(context.get_type("Int").new_object(5), context)
+    assert r.value == 42
+    # 3. (error)
+    r = func.run_function(context.get_type("Int").new_object(0), context)
+    assert r.is_error()
+    # 4. 
+    r = func.run_function(context.get_type("Int").new_object(2), context)
+    assert r.value == 105

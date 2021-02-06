@@ -11,25 +11,16 @@ from machaon.core.symbol import normalize_method_target, normalize_method_name, 
 #
 # 
 #
-class MissingArgumentError(Exception):
-    def __init__(self, fnqualname, missings):
-        self.fnqualname = fnqualname
-        self.missings = missings
-        
-#
-class InvocationError(Exception):
-    def __init__(self, context):
-        self.context = context
-
-#
 class BadInstanceMethodInvocation(Exception):
     def __init__(self, name):
         self.name = name
 
-#
 class BadFunctionInvocation(Exception):
     def __init__(self, name):
         self.name = name
+    
+class MessageNoReturn(Exception):
+    pass
 
 #
 INVOCATION_RETURN_RECIEVER = "<reciever>"
@@ -106,9 +97,11 @@ class InvocationEntry():
                 if retspec and retspec.is_return_self():
                     # <return-self>
                     yield Object(rettype, INVOCATION_RETURN_RECIEVER)
+                    continue
                 elif value is None:
                     # 例外発生による中断
-                    yield Object(context.select_type("Any"), "<no-return>")
+                    err = MessageNoReturn()
+                    yield context.new_invocation_error_object(err)
                     continue
 
                 # Any型の場合は値から推定する
@@ -145,9 +138,9 @@ LOG_RUN_FUNCTION = 11
 class InvocationContext:
     def __init__(self, *, input_objects, type_module, spirit=None, subject=None):
         self.type_module: TypeModule = type_module
-        self.input_objects: ObjectCollection = input_objects # 外部のオブジェクト参照
-        self.subject_object: Union[None, Object, Dict[str, Object]] = subject  # 無名関数の引数とするオブジェクト
-        self.local_objects: List[Object] = []                # メソッドの返り値を置いておく
+        self.input_objects: ObjectCollection = input_objects  # 外部のオブジェクト参照
+        self.subject_object: Union[None, Object, Dict[str, Object]] = subject       # 無名関数の引数とするオブジェクト
+        self.local_objects: List[Object] = []                                       # メソッドの返り値を置いておく
         self.spirit = spirit
         self.invocations: List[InvocationEntry] = []
         self._last_exception = None
@@ -255,6 +248,10 @@ class InvocationContext:
         """ 型定義クラス／型名を渡し、無ければ新たに定義して返す """
         return self.type_module.new(typecode, scope=scope)
     
+    def new_temp_type(self, describer: Any) -> Type:
+        """ 新しい型を作成するが、モジュールに登録しない """
+        return Type.from_dict(describer)
+    
     def deduce_type(self, value: Any) -> Optional[Type]:
         """ 値から型を推定する """
         if isinstance(value, Object):
@@ -359,7 +356,22 @@ class InvocationContext:
         if self._last_exception:
             err = self._last_exception
             printer(" ERROR: {}".format(type(err).__name__))
+
+
+def instant_context(subject=None):
+    """ 即席実行用のコンテキスト """
+    t = TypeModule()
+    t.add_fundamental_types()
+
+    from machaon.process import TempSpirit
+    spi = TempSpirit()
     
+    return InvocationContext(
+        input_objects=ObjectCollection(),
+        type_module=t,
+        subject=subject,
+        spirit=spi
+    )
         
 #
 #

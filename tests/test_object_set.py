@@ -72,8 +72,8 @@ def test_column(objectdesk):
 
     # カラムの値を得る
     subject = Object(employee, view.items[0])
-    assert namecol.invocation
-    assert namecol.invocation.get_action()(subject.value) == "ken"
+    assert namecol.get_function()
+    assert namecol.get_function().get_expression() == "name"
     DataColumn.evallog = True
     namecol.eval(subject, objectdesk) == "ken"
 
@@ -100,8 +100,9 @@ def test_create_no_mod(objectdesk):
 
     assert view.rows_to_string_table(objectdesk) == ([(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])], [6])
     view.select(1)
-    assert view.selection() == 1
-    assert view.row(view.selection()) == ["yuuji"]
+    assert view.selection_index() == 1
+    assert view.get_row(0) == ["ken"]
+    assert view.get_row(view.selection_index()) == ["yuuji"]
 
 #
 #
@@ -111,11 +112,11 @@ def test_expand_view(objectdesk):
     employee = objectdesk.get_type("Employee")
 
     view = ObjectSet(items, employee, objectdesk, ["name", "postcode"])
-    view.expand_view(objectdesk, ["tall"])
+    view.view_append(objectdesk, ["tall"])
 
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
     assert view.count() == 3
-    assert view.row(0) == ["ken", "111-1111", 3]
+    assert view.get_row(0) == ["ken", "111-1111", 3]
 
 
 
@@ -141,7 +142,7 @@ def test_filtered_manytimes(objectdesk):
     view = parse_new_setview(objectdesk, datas, "name postcode")
     view.select(1)
     assert view.count() == 3
-    assert view.row(view.selection()) == ["ishulalmandij", "000-0000"]
+    assert view.get_row(view.selection()) == ["ishulalmandij", "000-0000"]
     
     view2 = parse_setview(objectdesk, view, "/where @tall < 10")
     assert view2.count() == 2
