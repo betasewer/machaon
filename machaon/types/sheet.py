@@ -5,22 +5,18 @@ from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
 from machaon.core.message import MessageEngine, MemberGetter, select_method
 from machaon.core.invocation import InvocationContext
+from machaon.process import ProcessError
 from machaon.cui import get_text_width
-from machaon.types.tuple import ObjectTuple
+
+from machaon.types.tuple import ObjectTuple, ElemObject, NotFound
 
 #
 #
 #
-class ResultIndexError(Exception):
-    def __init__(self, count):
-        self.count = count
-
+class NotSelected(Exception):
     def __str__(self):
-        if self.count is None:
-            return "まだ検索していません"
-        return "検索結果({}件)の範囲外です".format(self.count)
+        return "選択がありません"
 
-#
 class InvalidColumnNames(Exception):
     def __init__(self, names):
         self.names = names
@@ -36,31 +32,35 @@ DATASET_STRINGIFY_SUMMARIZE = 1
 #
 #
 class DataColumn():
-    def __init__(self, expression, method_inv, typename):
-        self.getter = MemberGetter(expression, method_inv)
-        self.typename = typename
+    def __init__(self, function, typename=None, *, name=None):
+        self._getter = function
+        self._typename = typename
+        self._name = name
         self._t = None
     
-    @property
-    def invocation(self):
-        return self.getter.method
-
     def get_name(self):
-        return self.invocation.get_method_name()
-    
-    def get_doc(self):
-        return self.invocation.get_method_doc()
+        if self._name is None:
+            return self._getter.get_expression()
+        return self._name
     
     def get_type(self, context):
         if self._t is None:
-            self._t = context.select_type(self.typename)
+            self._t = context.select_type(self._typename or "Any")
         return self._t
     
+    def get_function(self):
+        return self._getter
+    
     def eval(self, subject, context):
-        obj = self.getter.run_function(subject, context)
+        obj = self._getter.run_function(subject, context)
+        if self._typename is None and not obj.is_error(): # 型を記憶する
+            self._typename = obj.get_typename()
+            self._t = obj.type
         return obj.value
     
-    def stringify(self, context, value, method):
+    def stringify(self, context, value, method=DATASET_STRINGIFY):
+        if isinstance(value, ProcessError):
+            return "<error: {}>".format(value.summarize())
         if method == DATASET_STRINGIFY_SUMMARIZE:
             return self.get_type(context).summarize_value(value)
         else:
@@ -137,10 +137,9 @@ def make_data_columns(type, *expressions) -> List[DataColumnUnion]:
 
         methinv = select_method(member_name, type)
         if methinv:
+            fn = MemberGetter(member_name, methinv)
             specs = methinv.get_result_specs()
-            if not specs:
-                raise ValueError("データカラムで参照中のメソッド'{}'は値を返しません".format(member_name))
-            col = DataColumn(member_name, methinv, specs[0].get_typename())
+            col = DataColumn(fn, specs[0].get_typename())
             columns.append(col)
         else:
             invalid_names.append(member_name)
@@ -150,24 +149,36 @@ def make_data_columns(type, *expressions) -> List[DataColumnUnion]:
     return columns
 
 #
-#
-#
-class FoundItem():
-    """ @type
-    データ集合に含まれる値。
-    """
-    def __init__(self, type=None, value=None, rowindex=None):
-        self.type = type
-        self.value = value
-        self.rowindex = rowindex
+SEARCH_METHOD_EQUAL = 1
+SEARCH_METHOD_FORWARD_MATCH = 2
+SEARCH_METHOD_BACKWARD_MATCH = 3
+SEARCH_METHOD_PARTIAL_MATCH = 4
+
+def make_data_search_predicate(code, column, bound_context):
+    if code == SEARCH_METHOD_EQUAL:
+        def pred(l, r):
+            return l == r
+    elif code == SEARCH_METHOD_FORWARD_MATCH:
+        def pred(l, r):
+            return column.stringify(bound_context, l).startswith(r)
+    elif code == SEARCH_METHOD_BACKWARD_MATCH:
+        def pred(l, r):
+            return column.stringify(bound_context, l).endswith(r)
+    elif code == SEARCH_METHOD_PARTIAL_MATCH:
+        def pred(l, r):
+            return r in column.stringify(bound_context, l)
+    else:
+        raise ValueError("Unknown search method")
+    
+    return pred
 
 #
 #
 #
-class ObjectSet():  
+class Sheet():  
     """ @type
-    オブジェクトのメンバを縦列とするデータの配列。
-    Typename: ObjectSet
+    同じ型のオブジェクトに対する式を縦列とするデータの配列。
+    Typename: Sheet
     """
     def __init__(self, items, itemtype, context=None, column_names=None, viewtype=None, *, uninitialized=False):
         self.itemtype = itemtype
@@ -187,8 +198,7 @@ class ObjectSet():
     
     # アイテムにアクセスする
     def __iter__(self):
-        for itemindex, _row in self.rows:
-            yield self.items[itemindex]
+        return self.current_items()
 
     #
     # メンバ値へのアクセス
@@ -204,6 +214,22 @@ class ObjectSet():
         itemindex, _r = self.rows[row]
         item = self.items[itemindex]
         return Object(self.itemtype, item)
+    
+    def top(self):
+        """ @method
+        0番目のアイテムオブジェクトを取得する。
+        Returns:
+            Object: 値
+        """
+        return self.at(0)
+    
+    def last(self):
+        """ @method
+        最後のアイテムオブジェクトを取得する。
+        Returns:
+            Object: 値
+        """
+        return self.at(-1)
     
     def get(self, context, column, row):
         """ @method context
@@ -231,45 +257,32 @@ class ObjectSet():
             column(str): 列名+一致タイプ指定（前方*／*後方／*部分*）
             value(Any): 検索する値
         Returns:
-            FoundItem: 値
+            ElemObject: 値
         """
         # 一致タイプ
-        code = 0
+        method = SEARCH_METHOD_EQUAL
         if len(column)>1:
             if column[0] == "*" and column[-1] == "*": 
-                code = 3
+                method = SEARCH_METHOD_PARTIAL_MATCH
                 column = column[1:-1]
             elif column[0] == "*":
-                code = 2
+                method = SEARCH_METHOD_BACKWARD_MATCH
                 column = column[1:]
             elif column[-1] == "*":
-                code = 1
+                method = SEARCH_METHOD_FORWARD_MATCH
                 column = column[:-1]
         
         icol, col = self.select_column(column)
-
-        if code == 0:
-            def pred(l, r):
-                return l == r
-        elif code == 1:
-            def pred(l, r):
-                return col.stringify(context, l).startswith(r)
-        elif code == 2:
-            def pred(l, r):
-                return col.stringify(context, l).endswith(r)
-        elif code == 3:
-            def pred(l, r):
-                return r in col.stringify(context, l)
+        pred = make_data_search_predicate(method, col, context)
         
         # 順に検索
-        for ival, val in enumerate(self.select_column_values(icol, col, context)):
-            if pred(val, value):
-                valtype = col.get_type(context)
-                return FoundItem(valtype, val, ival)
+        for ival, obj in enumerate(self.column_values(context, icol, col)):
+            if pred(obj.value, value):
+                return ElemObject("Int", ival, obj)
 
-        return FoundItem() # 見つからなかった
+        raise NotFound() # 見つからなかった
 
-    def row(self, index):
+    def get_row(self, index):
         """ 行を取得する。 """
         _itemindex, row = self.rows[index]
         return row
@@ -280,16 +293,56 @@ class ObjectSet():
             if iitem == itemindex:
                 return irow
         raise ValueError("Invalid item index")
+
+    def current_rows(self):
+        """ 現在あるすべての行を取得する。 """
+        for itemindex, rows in self.rows:
+            yield itemindex, rows
     
-    def get_current_items(self):
+    def current_items(self):
         """ 現在あるすべての行のアイテムを取得する。 """
-        items = []
         for itemindex, _ in self.rows:
-            items.append(self.items[itemindex])
-        return items
+            yield self.items[itemindex]
+
+    def column_values(self, context, index, column=None):
+        """ @method context
+        ある列をタプルにして得る。
+        Params:
+            column(Str): カラム名
+        Returns:
+            Tuple:
+        """
+        if column is None:
+            icol, col = self.select_column(index)
+        else:
+            icol, col = index, column
+
+        if icol == -1:
+            # 新しいカラムを増やす
+            self.generate_rows_concat(context, [col])
+            icol = len(self.viewcolumns)
+            self.viewcolumns.append(col)
+
+        valtype = col.get_type(context)
+        for itemindex, _row in self.rows:
+            subject = Object(self.itemtype, self.items[itemindex])
+            value = col.eval(subject, context)
+            yield Object(valtype, value)
     
+    #
+    # シーケンス関数
+    # 
+    def append(self, context, *items):
+        """ @method context
+        アイテムを追加する。
+        Params:
+            *items: 
+        """
+        self.items.extend(items)
+        self.append_generate_rows(context, items)
+
     def count(self):
-        """ @method
+        """ @method [len]
         行の数を取得する。
         Params:
         Returns:
@@ -335,30 +388,30 @@ class ObjectSet():
         """
         self._selection = None
 
-    def selection(self): # rowindexを返す
-        """ @method
-        選択中の行インデックスを得る。
-        Returns:
-            Optional[Int]: 行ID
-        """
-        if self._selection is None:
-            return None
-        return self._selection[1]
-    
-    def selection_item(self):
-        """ @method
+    def selection(self):
+        """ @method [sel]
         選択中のアイテムを得る。
         Returns:
-            Optional[Object]: アイテム
+            Object: アイテム
         """
         if self._selection is None:
-            return None
+            raise NotSelected()
         return Object(self.itemtype, self.items[self._selection[0]])
 
+    def selection_index(self):
+        """ @method [seli]
+        選択中の行インデックスを得る。
+        Returns:
+            Int: 行ID
+        """
+        if self._selection is None:
+            raise NotSelected()
+        return self._selection[1]
+    
     def selection_row(self):
         """ 選択中の行を得る。 """
         if self._selection is None:
-            return None
+            raise NotSelected()
         _index, row = self.rows[self._selection[1]]
         return row
 
@@ -474,6 +527,22 @@ class ObjectSet():
         self.rows = newrows
         self.viewcolumns = [DataItemItselfColumn(self.itemtype)] # identical
     
+    def append_generate_rows(self, context, items):
+        """ 値を計算し、行を追加する """
+        if not self.viewcolumns:
+            raise ValueError("uninitialized")
+        
+        start = len(self.rows)
+        if isinstance(self.viewcolumns[0], DataItemItselfColumn):
+            for itemindex, item in enumerate(items, start=start):
+                self.rows.append((itemindex, [item]))
+        else:
+            for itemindex, item in enumerate(items, start=start):
+                item = self.items[itemindex]
+                subject = Object(self.itemtype, item)
+                newrow = [col.eval(subject, context) for col in self.viewcolumns]
+                self.rows.append((itemindex, newrow))
+
     # 
     # ビューの列を変更する
     #
@@ -494,8 +563,8 @@ class ObjectSet():
         # 新たに値を計算
         self.generate_rows(context, newcolumns)
         
-    def expand_view(self, context, column_names):
-        """ @method context
+    def view_append(self, context, column_names):
+        """ @method context alias-name [view++]
         列を追加する。
         Params:
             column_names(List[Str]): カラム名
@@ -516,14 +585,29 @@ class ObjectSet():
 
         # データを展開する：列を追加
         self.generate_rows_concat(context, newcolumns)
+    
+    def operate(self, context, function, name=None):
+        """ @method context [opr]
+        任意の関数によって新しいカラムを作成し、最後に追加する。
+        Params:
+            function(Function): 1変数関数
+            name(Str): *カラム名
+        """
+        # 空のデータからは空のビューしか作られない
+        if not self.items:
+            self.rows = []
+            return self
 
+        col = DataColumn(function, None, name=name) # 型は推定する
+        self.generate_rows_concat(context, [col])
+    
     def clone(self):
         """ @method
         このビューと同一の別のビューを作る。
         Returns:
-            Self: 新たなビュー
+            Sheet: 新たなビュー
         """
-        r = ObjectSet(self.items, self.itemtype, uninitialized=True)
+        r = Sheet(self.items, self.itemtype, uninitialized=True)
         r.rows = self.rows.copy()
         r.viewcolumns = self.viewcolumns.copy()
         r.viewtype = self.viewtype
@@ -543,7 +627,7 @@ class ObjectSet():
             Tuple:
         """
         values = []
-        for item in self.get_current_items():
+        for item in self.current_items():
             o = Object(self.itemtype, item)
             v = predicate.run_function(o, context)
             values.append(v)
@@ -558,7 +642,7 @@ class ObjectSet():
             Tuple:
         """
         values = []
-        for item in self.get_current_items():
+        for item in self.current_items():
             o = Object(self.itemtype, item)
             v = predicate.run_function(o, context)
             if v.type is self.itemtype:
@@ -576,7 +660,7 @@ class ObjectSet():
         if type is self.itemtype:
             return self.getitems()
         values = []
-        for item in self.get_current_items():
+        for item in self.current_items():
             try:
                 v = type.conversion_construct(context, item)
             except Exception as e:
@@ -635,6 +719,8 @@ class ObjectSet():
     # any
     
     #
+    # タプルの取得
+    #
     def getallitems(self):
         """ @method alias-name [items]
         全アイテムオブジェクトのタプルを得る。
@@ -643,38 +729,40 @@ class ObjectSet():
         """
         return [Object(self.itemtype, x) for x in self.items]
 
-    #
     def getitems(self):
         """ @method alias-name [curitems]
         現在の行のアイテムをタプルで得る。
         Returns:
             Tuple
         """
-        return [Object(self.itemtype, x) for x in self.get_current_items()]
+        return [Object(self.itemtype, x) for x in self.current_items()]
     
-    #
-    def column(self, context, column):
+    def column(self, context, name):
         """ @method context
         ある列をタプルにして得る。
         Params:
-            column(Str): カラム名
+            name(Str): カラム名
         Returns:
             Tuple:
         """
-        icol, col = self.select_column(column)
-        if icol == -1:
-            # 新しいカラムを増やす
-            self.generate_rows_concat(context, [col])
-            icol = len(self.viewcolumns)
-            self.viewcolumns.append(col)
-
-        valtype = col.get_type(context)
         objs = []
-        for itemindex, _row in self.rows:
-            subject = Object(self.itemtype, self.items[itemindex])
-            value = col.eval(subject, context)
+        for obj in self.column_values(context, name):
+            objs.append(obj)
+        return ObjectTuple(objs)
+    
+    def row(self, context, index):
+        """ @method context
+        ある行をタプルにして得る。
+        Params:
+            index(Str): 行番号
+        Returns:
+            Tuple:
+        """
+        objs = []
+        row = self.get_row(index)
+        for col, value in zip(self.viewcolumns, row):
+            valtype = col.get_type(context)
             objs.append(Object(valtype, value))
-        
         return ObjectTuple(objs)
 
     #
@@ -697,7 +785,7 @@ class ObjectSet():
             value = list(value)
 
         itemtype = context.select_type(itemtypename)
-        return ObjectSet(value, itemtype, context, columnnames)
+        return Sheet(value, itemtype, context, columnnames)
 
 
 class RowToObject():

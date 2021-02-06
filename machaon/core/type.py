@@ -226,6 +226,10 @@ class Type():
 
         return None
     
+    @classmethod
+    def from_dict(cls, d):
+        return cls(d).load()
+
     @property
     def describer(self):
         return self._describer

@@ -37,6 +37,43 @@ def resolve_generic_method_invocation(name, modbits=None):
     return TypeMethodInvocation(_GenericMethodsType, method, modbits)
 
 #
+# 演算子と実装の対応
+#
+operators = {
+    "==" : "equal",
+    "!=" : "not-equal",
+    "<=" : "less-equal",
+    "<" : "less",
+    ">=" : "greater-equal",
+    ">" : "greater",
+    "<=>" : "compare",
+    "+" : "add",
+    "-" : "sub",
+    "*" : "mul",
+    "@" : "matmul",
+    "**" : "pow",
+    "/" : "div",
+    "//" : "floordiv",
+    "%" : "mod",
+    "-=" : "negative",
+    "+=" : "positive",
+    "&" : "bitand",
+    "^" : "bitxor",
+    "|" : "bitor",
+    "~" : "bitinv",
+    ">>" : "rshift",
+    "<<" : "lshift",
+    "in" : "exists_in",
+    "greater?" : "get_greater",
+    "less?" : "get_less",
+    "truth?" : "get_truth",
+    "=" : "identical",
+    "?" : "pretty",
+    "as" : "convertas",
+    "=>" : "bind",
+}
+
+#
 #
 # 実装
 #
@@ -44,7 +81,7 @@ def resolve_generic_method_invocation(name, modbits=None):
 class GenericMethods:
     """
     エイリアス名はメソッドの設定で指定しても読み込まれません。
-    ファイル末尾にあるoperatorsに追加してください。
+    operatorsに追加してください。
     """
     @classmethod
     def describe_object(cls, typeobj):
@@ -62,7 +99,7 @@ class GenericMethods:
             Bool:
         """
         return left == right
-        
+
     def not_equal(self, left, right):       
         """ @method reciever-param
         二項!=演算子。（等しくない）
@@ -117,7 +154,33 @@ class GenericMethods:
             Bool:
         """
         return left > right
-        
+    
+    def compare(self, left, right):
+        """ @method reciever-param
+        Arguments:
+            left(Any): 
+            right(Any): 
+        Returns:
+            Int:
+        """
+        if left == right:
+            return 0
+        elif left < right:
+            return 1
+        else:
+            return -1
+    
+    def is_between(self, left, min, max):
+        """ @method reciever-param
+        Params:
+            left(Any):
+            min(Any): 下端（含む）
+            max(Any): 上端（含む）
+        Returns:
+            Bool:
+        """
+        return min <= left and left <= max
+    
     def is_(self, left, right):
         """ @method reciever-param
         is演算子。（同一オブジェクト）
@@ -140,48 +203,25 @@ class GenericMethods:
         """
         return left is not right
 
-    # 論理
-    def logand(self, left, right):
-        """ @method reciever-param
-        A かつ B であるか。
-        Arguments:
-            left(Bool): 
-            right(Bool): 
-        Returns:
-            Bool:
-        """
-        return left and right
-
-    def logior(self, left, right):
-        """ @method reciever-param
-        A または B であるか。
-        Arguments:
-            left(Bool): 
-            right(Bool): 
-        Returns:
-            Bool:
-        """
-        return left or right
-
-    def lognot(self, left):
-        """ @method reciever-param
-        A が偽か。
-        Arguments:
-            left(Bool): 
-        Returns:
-            Bool:
-        """
-        return not left
-
     def truth(self, left) -> bool:
         """ @method reciever-param
         A が真か。
         Arguments:
-            left(Bool): 
+            left(Any): 
         Returns:
             Bool:
         """
         return bool(left)
+    
+    def falsy(self, left) -> bool:
+        """ @method reciever-param
+        A が偽か。
+        Arguments:
+            left(Any): 
+        Returns:
+            Bool:
+        """
+        return not left
 
     # 数学
     def add(self, left, right):
@@ -261,7 +301,7 @@ class GenericMethods:
         """
         return left % right
 
-    def neg(self, left):
+    def negative(self, left): 
         """ @method reciever-param
         単項-演算子。（符号反転）
         Arguments:
@@ -281,16 +321,6 @@ class GenericMethods:
         """
         return +left
 
-    def abs(self, left):
-        """ @method reciever-param
-        絶対値。
-        Arguments:
-            left(Any):
-        Returns:
-            Any:
-        """
-        return abs(left)
-
     def pow(self, left, right):
         """ @method reciever-param
         べき乗の計算。
@@ -298,20 +328,9 @@ class GenericMethods:
             left(Any): 底
             right(Any): 指数
         Returns:
-            Any: べき
+            Any:
         """
-        return pow(left, right)
-
-    def round(self, left, right=None):
-        """ @method reciever-param
-        小数を丸める。
-        Arguments:
-            left(Any): 数
-            right(Int): 桁数
-        Returns:
-            Any: 丸められた小数。
-        """
-        return round(left, right)
+        return left ** right
 
     # ビット演算
     def bitand(self, left, right):
@@ -382,62 +401,62 @@ class GenericMethods:
     # リスト関数
     def exists_in(self, left, right):
         """ @method reciever-param
-        二項in演算子の逆。（集合に含まれるか）
+        二項in演算子。（集合に含まれるか）
         Arguments:
             left(Any): 対象
             right(Any): 母集団
         Returns:
             Any:
         """
-        return right in left 
+        return left in right
 
     def contains(self, left, right):
         """ @method reciever-param
-        二項in演算子。（集合に含まれるか）
+        二項in演算子の逆。（集合が含むか）
         Arguments:
             left(Any): 母集団
             right(Any): 対象
         Returns:
             Any:
         """
-        return left in right
+        return right in left 
 
-    def at(self, left, right):
+    def at(self, left, index):
         """ @method reciever-param
         添え字演算子。（要素アクセス）
         Arguments:
             left(Any): 配列
-            right(Any): 添え字
+            index(Any): 添え字
         Returns:
             Any:
         """
-        return left[right]
-
-    def slice(self, left, start, end):
+        return left[index]
+    
+    def slice(self, left, start, stop):
         """ @method reciever-param
-        スライス演算子。（要素アクセス）
+        添え字演算子。（要素アクセス）
         Arguments:
             left(Any): 配列
-            start(Any): 始まり
-            end(Any): 終わり
+            start(Any): 開始位置
+            stop(Any): 終了位置
         Returns:
             Any:
         """
-        return left[start:end]
-        
+        return left[start:stop]
+    
     # その他の組み込み関数
     def length(self, left):
         """ @method reciever-param
         長さを求める。
         Arguments:
-            left(Any): 
+            left(Any):
         Returns:
             Any:
         """
         return len(left)
 
-    def or_greater(self, left, right):
-        """ @method reciever-param
+    def get_greater(self, left, right):
+        """ @method reciever-param 
         大きい方を取る。
         Arguments:
             left(Any): 
@@ -449,7 +468,7 @@ class GenericMethods:
             return right
         return left
 
-    def or_less(self, left, right):
+    def get_less(self, left, right):
         """ @method reciever-param
         小さい方を取る。
         Arguments:
@@ -461,18 +480,19 @@ class GenericMethods:
         if left > right:
             return right
         return left
-
-    def in_format(self, left, right):
-        """ @method reciever-param
-        書式化文字列を作成。
+    
+    def get_truth(self, left, right):
+        """ @method reciever-param 
+        真と評価される方を取る。
         Arguments:
-            left(Any): 値
-            right(Str): 値の書式
+            left(Any): 
+            right(Any): 
         Returns:
-            Str: 文字列
+            Any:
         """
-        fmt = "{0:" + right + "}"
-        return fmt.format(left)
+        if left:
+            return left
+        return right
 
     # オブジェクト
     def identical(self, obj):
@@ -530,41 +550,6 @@ class GenericMethods:
         """
         context.bind_object(right, left)
         return left
-
-#
-# 演算子と実装の対応
-#
-operators = {
-    "==" : "equal",
-    "!=" : "not-equal",
-    "<=" : "less-equal",
-    "<" : "less",
-    ">=" : "greater-equal",
-    ">" : "greater",
-    "+" : "add",
-    "-" : "sub",
-    "*" : "mul",
-    "**" : "pow",
-    "/" : "div",
-    "//" : "floordiv",
-    "%" : "mod",
-    "&" : "bitand",
-    "^" : "bitxor",
-    "|" : "bitor",
-    "~" : "bitinv",
-    ">>" : "rshift",
-    "<<" : "lshift",
-    "and" : "logand",
-    "or" : "logior",
-    "not" : "lognot",
-    "&&" : "logand", 
-    "||" : "logior",
-    "=" : "identical",
-    "?" : "pretty",
-    "=>" : "bind",
-    "in" : "contains",
-    "as" : "convertas",
-}
 
 class GenericMethodValue():
     def __init__(self):

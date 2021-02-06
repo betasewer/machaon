@@ -211,7 +211,7 @@ class Method():
         """ @method alias-name [params]
         仮引数のリスト
         Returns:
-            Set[MethodParameter]: (name, typename, doc)
+            Sheet[MethodParameter]: (name, typename, doc)
         """
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
@@ -258,7 +258,7 @@ class Method():
         """ @method alias-name [results]
         返り値のリスト
         Returns:
-            Set[MethodResult]: (name, typename, doc)
+            Sheet[MethodResult]: (name, typename, doc)
         """
         if self.flags & METHOD_RESULT_UNSPECIFIED:
             raise UnloadedMethod(self.name)
@@ -420,17 +420,22 @@ class Method():
 
             head, _, doc = [x.strip() for x in line.partition(":")]
             if head.startswith("*"):
-                name = head[1:]
-                typename = "Any"
+                name, _, right = head[1:].partition("(")
+                if right:
+                    typename, _, _ = right.partition(")")
+                    typename = typename.strip()
+                else:
+                    typename = "Any"
                 flags |= PARAMETER_VARIABLE
             else:
                 name, _, paren = head.partition("(")
                 name = name.strip()
                 typename, _, _ = paren.partition(")")
                 typename = typename.strip()
-                if not name or not typename:
-                    raise BadMethodDeclaration("引数'{}'の型指定が間違っています。「引数名(型名): 説明文」と指定してください".format(name))
             
+            if not name or not typename:
+                raise BadMethodDeclaration("引数'{}'の型指定が間違っています。「引数名(型名): 説明文」と指定してください".format(name))
+        
             if typename.endswith("..."):
                 self.flags |= METHOD_CONSUME_TRAILING_PARAMS
                 typename = typename.rstrip(".")

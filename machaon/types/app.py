@@ -19,7 +19,7 @@ class RootObject:
         使用可能な型を列挙する。
         Params:
         Returns:
-            Set[Type]: (name,doc) 型のリスト
+            Sheet[Type]: (name,doc) 型のリスト
         '''
         types = []
         for t in self.context.type_module.enum():
@@ -43,7 +43,7 @@ class RootObject:
         ''' @method
         パッケージを取得する。
         Returns:
-            Set[Package]: (name, source, scope) パッケージリスト
+            Sheet[Package]: (name, source, scope) パッケージリスト
         '''
         return list(self.context.root.enum_packages())
     

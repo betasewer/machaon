@@ -45,6 +45,9 @@ class Path():
     def __str__(self):
         return self._path
     
+    def get(self):
+        return self._path
+    
     @classmethod
     def from_location_name(cls, name):
         p = shell_platform().location_name_to_path(*name.split(":",maxsplit=1))
@@ -235,6 +238,13 @@ class Path():
         """
         up, _ext = os.path.splitext(self._path)
         return Path(os.path.join(up, extension))
+    
+    def with_basename_format(self, format, *args):
+        """ 書式に基づいて名前のみ変更する。（内部利用）"""
+        head, basename = os.path.split(self._path)
+        filename, fext = os.path.splitext(basename)
+        newpath = os.path.join(head, format.format(filename, *args) + fext)
+        return Path(newpath)
 
     #
     # シェル機能
@@ -243,7 +253,7 @@ class Path():
         """ @method [ls]
         ディレクトリに含まれるファイルとサブディレクトリの一覧を返す。
         Returns:
-            Set[Path]: (name, filetype, modtime, size)
+            Sheet[Path]: (name, filetype, modtime, size)
         """
         if not self.isdir():
             return [Path(self._path)]
@@ -254,7 +264,7 @@ class Path():
         """ @method context
         ファイルを再帰的に検索する。
         Returns:
-            Set[Path]: (name, extension, modtime, size)
+            Sheet[Path]: (name, extension, modtime, size)
         """
         basedir = self.dir()
         for dirpath, dirname, filenames in os.walk(basedir):
@@ -385,7 +395,7 @@ class TextFile(Path):
         Returns:
             Str: 文字エンコーディングの名前
         """
-        if self._enc is None:
+        if self._enc is not None:
             return self._enc
         encoding = detect_text_encoding(self._path)
         self._enc = encoding
@@ -396,7 +406,10 @@ class TextFile(Path):
         return TextFile(s)
     
     def conversion_construct(self, context, v):
-        return TextFile(str(v))
+        p = TextFile(str(v))
+        if not p.isfile():
+            raise ValueError("ファイルではありません")
+        return p
     
     def stringify(self):
         return self._path    

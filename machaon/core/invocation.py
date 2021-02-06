@@ -265,7 +265,7 @@ class InvocationContext:
         if typename is None:
             valtype = self.deduce_type(value)
         else:
-            valtype = self.select_type(typename)
+            valtype = self.get_type(typename)
         return Object(valtype, value)
     
     def new_invocation_error_object(self, exception=None):

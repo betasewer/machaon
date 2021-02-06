@@ -791,9 +791,9 @@ class MessageEngine():
             obj = paramtype.new_object(convval)
         
         elif objcode == TERM_OBJ_TUPLE:
-            from machaon.types.tuple import ObjectTuple
+            from machaon.types.tuple import Tuple
             elems = values[0].split() # 文字列を空白で区切る
-            tpl = ObjectTuple.conversion_construct(None, context, elems)
+            tpl = Tuple.conversion_construct(None, context, elems)
             obj = context.new_object("Tuple", tpl)
 
         elif objcode == TERM_OBJ_LITERAL:

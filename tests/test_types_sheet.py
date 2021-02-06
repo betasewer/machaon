@@ -1,13 +1,11 @@
 import pytest
-
 import operator
-
 from machaon.core.type import TypeModule
 from machaon.core.object import ObjectCollection, Object
-from machaon.core.invocation import InvocationContext
-from machaon.types.objectset import ObjectSet, make_data_columns, DataColumn
+from machaon.core.invocation import InvocationContext, instant_context
 from machaon.core.message import MessageEngine
 from machaon.core.sort import ValueWrapper
+from machaon.types.sheet import Sheet, make_data_columns, DataColumn, DataItemItselfColumn
 
 class Employee():
     """
@@ -51,7 +49,7 @@ def objectdesk():
 #
 def test_column(objectdesk):
     employee = objectdesk.get_type("Employee")
-    view = ObjectSet([
+    view = Sheet([
             Employee(x,y) for (x,y) in [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")]
         ], 
         employee,
@@ -90,7 +88,7 @@ def test_create_no_mod(objectdesk):
     datas = [Employee(x) for x in ("ken", "yuuji", "kokons")]
     employee = objectdesk.get_type("Employee")
 
-    view = ObjectSet(datas, employee, objectdesk, ["name"])
+    view = Sheet(datas, employee, objectdesk, ["name"])
     
     assert view.count() == 3
     assert len(view.get_current_columns()) == 1
@@ -111,7 +109,7 @@ def test_expand_view(objectdesk):
     items = [Employee(x, y) for (x,y) in (("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333"))]
     employee = objectdesk.get_type("Employee")
 
-    view = ObjectSet(items, employee, objectdesk, ["name", "postcode"])
+    view = Sheet(items, employee, objectdesk, ["name", "postcode"])
     view.view_append(objectdesk, ["tall"])
 
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
@@ -130,7 +128,7 @@ def test_create_filtered(objectdesk):
     assert bits == [True, False, True]
     
     # TODO: get_lambda_argument_namesの実装
-    view = ObjectSet(datas, employee).view(objectdesk, "table", predicate=f)
+    view = Sheet(datas, employee).view(objectdesk, "table", predicate=f)
     assert view.count() == 2
     assert view.rows_to_string_table(objectdesk) == ([(0, ["ken","3"]), (2, ["yuuji","5"])], [5, 1])
 
@@ -186,3 +184,94 @@ def test_sortkey_wrapper():
     assert wrap(3) < wrap(5)
     assert (wrap(3), wrap(10)) < (wrap(3), wrap(15))   
 
+
+#
+#
+#
+#
+#
+
+class Hotel:
+    """ @type
+    ホテル。
+    """
+    def __init__(self, name):
+        self._name = name
+        self._rooms = [
+            Room("101", "Twin", "Bed"),
+            Room("102", "Twin", "Bed"),
+            Room("103", "Single", "Futon"),
+            Room("201", "Double", "Bed"),
+            Room("202", "Double", "Bed"),
+            Room("203", "Twin", "Futon")
+        ]
+
+    def name(self):
+        """@method
+        Returns:
+            Str:
+        """
+        return self._name
+    
+    def rooms(self):
+        """ @method
+        Returns:
+            Sheet[Room]:
+        """
+        return self._rooms
+
+class Room:
+    """ @type
+    ホテルの部屋。
+    """
+    def __init__(self, name, type, style):
+        self._name = name
+        self._type = type
+        self._style = style
+    
+    def name(self):
+        """ @method
+        Returns: 
+            Str:
+        """
+        return self._name
+        
+    def type(self):
+        """ @method
+        Returns: 
+            Str:
+        """
+        return self._type
+
+    def style(self):
+        """ @method
+        Returns: 
+            Str:
+        """
+        return self._style
+
+def hotelrooms(name):
+    h = Hotel(name)
+    cxt = instant_context()
+    o = Sheet(h.rooms(), cxt.new_type(Room))
+    return o, cxt
+
+#
+def test_construct():
+    rooms, _cxt = hotelrooms("Okehazama")
+    assert rooms.get_current_columns()
+    assert isinstance(rooms.get_current_columns()[0], DataItemItselfColumn)
+    assert rooms.get_current_column_names() == ["="]
+
+#
+def test_append():
+    rooms, cxt = hotelrooms("Okehazama")
+    assert [x.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203"]
+    rooms.append(cxt, Room("501", "Suite", "Bed"))
+    assert [x.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203", "501"]
+
+    #
+    rooms.view(cxt, ["name", "type"])
+    rooms.append(cxt, Room("502", "Single", "Bed"))
+    rooms.append(cxt, Room("503", "Single", "Bed"))
+    assert [x[0] for _, x in rooms.current_rows()] == ["101", "102", "103", "201", "202", "203", "501", "502", "503"]

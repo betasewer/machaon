@@ -55,7 +55,7 @@ class TypeType():
         使用可能なメソッドを列挙する。
         Params:
         Returns:
-            Set[Method]: (name,doc,signature) メソッドのリスト
+            Sheet[Method]: (name,doc,signature) メソッドのリスト
         '''
         helps = []
 
@@ -115,6 +115,14 @@ class TypeType():
         '''
         return type.get_describer_qualname()
     
+    def set(self, type, context):
+        ''' @method context
+        空のSetを作成する。
+        Returns:
+            Object:
+        '''
+        from machaon.types.sheet import Sheet
+        return Object(context.get_type("Sheet"), Sheet([], type))
 
 @fundamental_type.definition(typename="Any", doc="""
 あらゆる型を受け入れる型。
@@ -248,7 +256,7 @@ class StrType():
         """
         return s.split(sep, maxsplit=maxsplit)
     
-    #
+    # 
     # 制御構文
     #
     def eval(self, s, context, subject=None):
@@ -293,10 +301,10 @@ class StrType():
         try:
             return Path.from_location_name(s)
         except Exception as e:
-            import os
-            if os.path.exists(s):
-                return Path(s)
-            raise e
+            p = Path(s)
+            if not p.exists():
+                raise e
+            return p
 
 @fundamental_type.definition(typename="Bool", doc="""
 Python.bool 真偽値。
@@ -315,6 +323,37 @@ class BoolType():
             return False
         else:
             raise ValueError(s)
+    
+    #
+    # 論理
+    #
+    def logical_and(self, left, right):
+        """ @method alias-name [and &&]
+        A かつ B であるか。
+        Arguments:
+            right(Bool): 
+        Returns:
+            Bool:
+        """
+        return left and right
+
+    def logical_or(self, left, right):
+        """ @method alias-name [or ||]
+        A または B であるか。
+        Arguments:
+            right(Bool): 
+        Returns:
+            Bool:
+        """
+        return left or right
+
+    def logical_not(self, left):
+        """ @method alias-name [not]
+        A が偽か。
+        Returns:
+            Bool:
+        """
+        return not left
 
     #
     # if
@@ -336,27 +375,103 @@ class BoolType():
             body = else_
         return run_function(body, None, context)
 
+#
+#
+# 数学型
+#
+#
+class NumericType():   
+    def abs(self, n):
+        """ @method
+        絶対値。
+        Returns:
+            Any:
+        """
+        return abs(n)
+    
+    def round(self, n, digits=None):
+        """ @method
+        小数を丸める。
+        Arguments:
+            right(Int): 桁数
+        Returns:
+            Any: 丸められた小数。
+        """
+        return round(n, digits)
+    
+
+
 @fundamental_type.definition(typename="Int", doc="""
 整数型。
 """)
-class IntType():
+class IntType(NumericType):
     """@type use-instance-method
     ValueType: int
     """
 
     def construct(self, s):
         return int(s, 0)
+        
+    #
+    def hex(self, n):
+        """ @method
+        16進表記を得る。
+        Returns:
+            Str:
+        """
+        return hex(n)
+    
+    def oct(self, n):
+        """ @method
+        8進表記を得る。
+        Returns:
+            Str:
+        """
+        return oct(n)
+    
+    def bin(self, n):
+        """ @method
+        2進表記を得る。
+        Returns:
+            Str:
+        """
+        return bin(n)
+    
+    #
+    def pow(self, n, exp):
+        """ @method
+        べき乗を計算する。
+        Params:
+            exp(Int):
+        Returns:
+            Int:
+        """
+        return pow(n, exp)
+
 
 @fundamental_type.definition(typename="Float", doc="""
 浮動小数点型。
 """)
-class FloatType():
+class FloatType(NumericType):
     """@type use-instance-method
     ValueType: float
     """
 
     def construct(self, s):
         return float(s)
+    
+    # math
+    def pow(self, n, exp):
+        """ @method
+        べき乗を計算する。
+        Params:
+            exp(Float):
+        Returns:
+            Int:
+        """
+        import math
+        return math.pow(n, exp)
+
 
 @fundamental_type.definition(typename="Complex", doc="""
 複素数型。
@@ -368,6 +483,7 @@ class ComplexType():
 
     def construct(self, s):
         return complex(s)
+    
 
 @fundamental_type.definition(typename="Datetime", doc="""
 日付時刻型。
@@ -391,10 +507,10 @@ class DatetimeType():
 #
 # ----------------------------------------------------------
 fundamental_type.definition(typename="Tuple")(
-    "machaon.types.tuple.ObjectTuple"
+    "machaon.types.tuple.Tuple"
 )
-fundamental_type.definition(typename="Set")(
-    "machaon.types.objectset.ObjectSet"
+fundamental_type.definition(typename="Sheet")(
+    "machaon.types.sheet.Sheet"
 )
 fundamental_type.definition(typename="Method")(
     "machaon.core.method.Method"

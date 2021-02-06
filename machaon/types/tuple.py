@@ -11,17 +11,39 @@ from machaon.cui import get_text_width
 #
 #
 #
-class FoundItem():
+class NotFound(Exception):
+    def __str__(self):
+        return "見つかりませんでした"
+
+#
+#
+#
+class ElemObject():
     """ @type
     データ集合に含まれる値。
     typename:
-        FoundItem
+        ElemObject
     """
-    def __init__(self, object=None, index=None):
+    def __init__(self, keytypename, key, object):
+        self.keytypename = keytypename
+        self.key = key
         self.object = object
-        self.index = index
     
+    def get(self):
+        """ @method
+        オブジェクトを得る。
+        Returns:
+            Object:
+        """
+        return self.object
 
+    def getkey(self, context):
+        """ @method context alias-name [key]
+        位置を示すキーを得る。
+        Returns:
+            Object:
+        """
+        return context.new_object(self.keytypename, self.key)
 
 #
 #
@@ -64,8 +86,8 @@ class ObjectTuple():
         # 順に検索
         for i, o in enumerate(self.objects):
             if o.value == value:
-                return FoundItem(o, i)
-        return FoundItem() # 見つからなかった
+                return ElemObject("Int", i, o)
+        raise NotFound() # 見つからなかった
 
     def count(self):
         """ @method
@@ -138,7 +160,7 @@ class ObjectTuple():
             predicate(Function): 述語関数
         """
         for o in self.objects:
-            predicate.run(o, context)
+            predicate.run_function(o, context)
 
     def map(self, context, predicate):
         """ @method context
@@ -172,11 +194,11 @@ class ObjectTuple():
             cur = start
             objs = self.objects
         
-        subject_type = Type({
+        subject_type = Type.from_dict({
             "Typename" : "TupleReduceSubject",
             "0": "Object",
             "1": "Object"
-        }).load()
+        })
         for o in objs:
             subject = subject_type.new_object({"0": cur, "1": o})
             cur = predicate.run_function(subject, context)
