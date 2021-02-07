@@ -24,26 +24,34 @@ class ElemObject():
     typename:
         ElemObject
     """
-    def __init__(self, keytypename, key, object):
-        self.keytypename = keytypename
-        self.key = key
+    def __init__(self, object, key, value=None):
         self.object = object
+        self.key = key
+        self.value = value
     
     def get(self):
-        """ @method
-        オブジェクトを得る。
+        """ @method [object]
+        関連付けられたオブジェクトを得る。
         Returns:
             Object:
         """
         return self.object
-
-    def getkey(self, context):
-        """ @method context alias-name [key]
+ 
+    def getkey(self):
+        """ @method alias-name [key]
         位置を示すキーを得る。
         Returns:
             Object:
         """
-        return context.new_object(self.keytypename, self.key)
+        return self.key
+
+    def getvalue(self):
+        """ @method alias-name [value]
+        関連付けられた値を得る。
+        Returns:
+            Object:
+        """
+        return self.value
 
 #
 #
@@ -75,8 +83,8 @@ class ObjectTuple():
         return self.objects[index]
     
     # split find-if [@_ reg-match heck]
-    def find(self, value):
-        """ @method
+    def find(self, context, app, value):
+        """ @method task context
         値を検索して取得する。（完全一致）
         Params:
             value(Any): 検索する値
@@ -86,7 +94,9 @@ class ObjectTuple():
         # 順に検索
         for i, o in enumerate(self.objects):
             if o.value == value:
-                return ElemObject("Int", i, o)
+                index = context.new_object("Int", i)
+                return ElemObject(o, index)
+        
         raise NotFound() # 見つからなかった
 
     def count(self):

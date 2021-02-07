@@ -99,7 +99,7 @@ class InvocationEntry():
                     yield Object(rettype, INVOCATION_RETURN_RECIEVER)
                     continue
                 elif value is None:
-                    # 例外発生による中断
+                    # Noneが返された
                     err = MessageNoReturn()
                     yield context.new_invocation_error_object(err)
                     continue

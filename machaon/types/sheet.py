@@ -288,7 +288,9 @@ class Sheet():
         for ival, obj in enumerate(self.column_values(context, icol, col)):
             if pred(obj.value, value):
                 item = self.items[self.get_item_from_row(ival)]
-                return ElemObject("Int", ival, item)
+                index = context.new_object("Int", ival)
+                ovalue = col.get_type(context).new_object(obj.value)
+                return ElemObject(item, index, ovalue)
 
         raise NotFound() # 見つからなかった
 
