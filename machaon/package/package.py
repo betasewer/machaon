@@ -35,8 +35,8 @@ class Package():
         name: str, 
         source: Any, 
         type: int = None,
+        module: Optional[str] = None, 
         separate = True, 
-        entrypoint: Optional[str] = None, 
         hashval = None, 
     ):
         self.name: str = name
@@ -47,10 +47,10 @@ class Package():
         if not type: type = Package.MODULES
         self._type = type
 
-        if not entrypoint: 
+        if not module: 
             if self._type == Package.MODULES:
-                entrypoint = "{}.__init__".format(self.name)
-        self.entrypoint: Optional[str] = entrypoint
+                module = "{}.__init__".format(self.name)
+        self.entrypoint: Optional[str] = module
 
         self._hash = hashval
 

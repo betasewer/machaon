@@ -76,9 +76,17 @@ class AppRoot:
     #
     # クラスパッケージを走査する
     #
-    # パッケージ概要を追加
-    def add_package(self, name, source=None, preload=False, **packagekwargs):
-        newpkg = Package(name, source, **packagekwargs)
+    def add_package(self, name, source=None, module=None, preload=False, **packagekwargs):
+        """
+        パッケージ概要を追加する。
+        Params:
+            name(str): パッケージ名
+            source(Repository): *外部パッケージの定義、Noneでローカルを参照
+            module(str): *モジュール名、Noneで__init__
+            preload(bool): 起動時にロードする
+            ...: その他、machaon.package.package.Packageのコンストラクタ引数
+        """
+        newpkg = Package(name, source, module=module, **packagekwargs)
         for pkg in self.pkgs:
             if pkg.name == newpkg.name:
                 pkg.assign_definition(newpkg)

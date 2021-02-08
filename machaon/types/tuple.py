@@ -7,13 +7,8 @@ from machaon.core.message import MessageEngine, MemberGetter, select_method
 from machaon.core.invocation import InvocationContext
 from machaon.core.sort import parse_sortkey
 from machaon.cui import get_text_width
+from machaon.types.fundamental import NotFound
 
-#
-#
-#
-class NotFound(Exception):
-    def __str__(self):
-        return "見つかりませんでした"
 
 #
 #

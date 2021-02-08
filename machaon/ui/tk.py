@@ -157,30 +157,39 @@ class tkLauncher(Launcher):
         self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
 
-    def openfilename_dialog(self, *, 
-        filters=None, 
+    def open_pathdialog(self, dialogtype, 
         initialdir=None, 
-        multiple=False,
-        title=None
-    ):
-        return tkinter.filedialog.askopenfilename(
-            filetypes = filters or (), 
-            initialdir = initialdir, 
-            multiple = multiple, 
-            title = title
-        )
-
-    def opendirname_dialog(self, *, 
+        initialfile=None, 
         filters=None, 
-        initialdir=None,     
+        multiple=False,
         title=None,
-        mustexist=False,
+        defaultextension=None,
+        mustexist=False
     ):
-        return tkinter.filedialog.askdirectory(
-            initialdir = initialdir, 
-            title = title,
-            mustexist = mustexist  
-        )
+        if "f" in dialogtype:
+            return tkinter.filedialog.askopenfilename(
+                initialdir=initialdir,
+                filetypes=filters or (),
+                initialfile=initialfile,
+                multiple=multiple,
+                title=title or "ファイルを選択"
+            )
+        elif "d" in dialogtype:
+            if multiple:
+                raise ValueError("複数選択はサポートされていません")
+            return tkinter.filedialog.askdirectory(
+                initialdir=initialdir,
+                mustexist=mustexist,
+                title=title or "ディレクトリを選択"
+            )
+        elif "s" in dialogtype:
+            return tkinter.filedialog.asksaveasfilename(
+                initialdir=initialdir,
+                defaultextension=defaultextension,
+                title=title or "保存場所を選択"
+            )
+        else:
+            raise ValueError("Bad dialogtype code")
     
     #
     # UIの配置と初期化

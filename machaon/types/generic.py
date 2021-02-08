@@ -64,6 +64,7 @@ operators = {
     ">>" : "rshift",
     "<<" : "lshift",
     "in" : "is-in",
+    "#" : "at",
     "greater?" : "get-greater",
     "less?" : "get-less",
     "truth?" : "get-truth",
@@ -550,6 +551,23 @@ class GenericMethods:
         """
         context.bind_object(right, left)
         return left
+    
+    def pyinvoke(self, selfarg, context, symbol, *args):
+        """ @method reciever-param context
+        外部モジュールの関数を評価する。
+        Params:
+            selfarg(Object): 引数1
+            symbol(str): シンボル
+            *args(Any): 引数
+        Returns:
+            Any:
+        """
+        from machaon.core.importer import attribute_loader
+        loader = attribute_loader(symbol)
+        imported = loader(fallback=False)
+        if not callable(imported):
+            raise ValueError("'{}'は呼び出し可能な関数ではありません".format(symbol))
+        return imported(selfarg.value, *args) # 関数実行
 
 class GenericMethodValue():
     def __init__(self):

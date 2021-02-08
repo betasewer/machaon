@@ -62,6 +62,10 @@ class Object():
     def is_error(self):
         from machaon.process import ProcessError
         return isinstance(self.value, ProcessError)
+    
+    def is_truth(self):
+        return self.value and not self.is_error()
+
 
 #
 class ObjectPrettyView():

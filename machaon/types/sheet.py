@@ -8,7 +8,8 @@ from machaon.core.invocation import InvocationContext
 from machaon.process import ProcessError
 from machaon.cui import get_text_width
 
-from machaon.types.tuple import ObjectTuple, ElemObject, NotFound
+from machaon.types.tuple import ObjectTuple, ElemObject
+from machaon.types.fundamental import NotFound
 
 #
 #
@@ -210,7 +211,7 @@ class Sheet():
     # メンバ値へのアクセス
     #
     def at(self, row):
-        """ @method
+        """ @method [#]
         アイテムオブジェクトを行インデックスで指定して取得する。
         Params:
             row(int): 行インデックス
@@ -222,7 +223,7 @@ class Sheet():
         return Object(self.itemtype, item)
     
     def top(self):
-        """ @method
+        """ @method [t]
         0番目のアイテムオブジェクトを取得する。
         Returns:
             Object: 値
@@ -230,7 +231,7 @@ class Sheet():
         return self.at(0)
     
     def last(self):
-        """ @method
+        """ @method [l]
         最後のアイテムオブジェクトを取得する。
         Returns:
             Object: 値

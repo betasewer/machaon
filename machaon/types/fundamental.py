@@ -271,21 +271,19 @@ class StrType():
         from machaon.core.message import run_function
         return run_function(s, subject, context)
     
-    def invoke(self, symbol, context, *args):
+    def pyvalue(self, symbol, context):
         """ @method context
-        外部モジュールの関数あるいは変数を評価する。
-        Params:
-            args(Any): 引数
+        外部モジュールの変数あるいは引数無し関数を評価する。
         Returns:
             Any:
         """
         from machaon.core.importer import attribute_loader
         loader = attribute_loader(symbol)
         imported = loader(fallback=False)
-        if not args and not callable(imported):
+        if not callable(imported):
             return imported # 変数
         else:
-            return imported(*args) # 関数実行
+            return imported() # 関数実行
     
     #
     # その他
@@ -508,7 +506,7 @@ class DatetimeType():
 #
 # ----------------------------------------------------------
 fundamental_type.definition(typename="Tuple")(
-    "machaon.types.tuple.Tuple"
+    "machaon.types.tuple.ObjectTuple"
 )
 fundamental_type.definition(typename="Sheet")(
     "machaon.types.sheet.Sheet"
@@ -529,26 +527,15 @@ fundamental_type.definition(typename="AppChamber")(
     "machaon.types.app.AppChamber"
 )
 
-# ----------------------------------------------------------
 #
-#  実行コンテキストの参照
 #
-# ----------------------------------------------------------
-
-
-
-# Desktop new glob *.docx |> add-target Xuthus.Genko new => $genko 
-# | Xuthus.GenkoProcess new indent 2 => $setting 
-# | $genko process $setting 
-# | $genko report $genko commonpath sameext output 
+# エラーオブジェクト
 #
+#
+class NotFound(Exception):
+    """
+    検索したが見つからなかった
+    """
 
-# Desktop new glob *.docx => $file Xuthus.Genko new => $genko
-# $genko add-target $file
-# $genko process
-# $genko inspect
 
-# glob *.docx new Desktop => $files Genko::xuthus new => $genko
-# $genko add-target $files
-# $genko process
-# $genko inspect
+

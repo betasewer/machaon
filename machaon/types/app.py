@@ -19,7 +19,7 @@ class RootObject:
         使用可能な型を列挙する。
         Params:
         Returns:
-            Sheet[Type]: (name,doc) 型のリスト
+            Sheet[Type]: (name, doc, scope) 型のリスト
         '''
         types = []
         for t in self.context.type_module.enum():

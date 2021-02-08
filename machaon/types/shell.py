@@ -11,6 +11,7 @@ from collections import defaultdict
 from typing import Optional
 
 from machaon.shellpopen import popen_capture
+from machaon.types.fundamental import NotFound
 
 #
 #
@@ -260,18 +261,31 @@ class Path():
         items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
         return items
     
-    def find(self, context, predicate):
-        """ @method context
+    def dialog(self):
+        """ @method [dlg]
+        ファイル・フォルダダイアログを開く。
+        Returns:
+            PathDialog:
+        """
+        return self
+    
+    def search(self, context, app, predicate, depth=3):
+        """ @method task context
         ファイルを再帰的に検索する。
+        Params:
+            predicate(Function): 述語関数
+            depth(int): 探索する階層の限界
         Returns:
             Sheet[Path]: (name, extension, modtime, size)
         """
-        basedir = self.dir()
+        basedir = self.dir().path()
         for dirpath, dirname, filenames in os.walk(basedir):
             for filename in filenames:
-                subj = context.get_type()
-                if predicate.run_function(subj, context).value:
-                    return 
+                filepath = os.path.join(basedir, dirpath, filename)
+                path = context.new_object("Path", filepath)
+                if predicate.run_function(path, context).is_truth():
+                    return path
+        raise NotFound()
     
     def run(self, app, params=None):
         """ @task
@@ -352,8 +366,63 @@ class Path():
         return Path(str(v))
     
     def stringify(self):
-        return self._path    
+        return self._path   
 
+#
+#
+#
+class PathDialog:
+    """ @type
+    パスを選択するダイアログ。
+    """
+    def __init__(self, p):
+        self.p = p
+        self._filter = None
+    
+    def file(self, app):
+        """ @method spirit
+        一つのファイルを選択する。
+        Returns:
+            Path:
+        """
+        p = app.open_pathdialog("f", self.p.dir(), filters=self._filter)
+        return p
+
+    def files(self, app):
+        """ @method spirit
+        複数のファイルを選択する。
+        Returns:
+            Tuple:
+        """
+        p = app.open_pathdialog("f", self.p.dir(), filters=self._filter, multiple=True)
+        return p
+
+    def dir(self, app):
+        """ @method spirit
+        一つのディレクトリを選択する。
+        Returns:
+            Path:
+        """
+        p = app.open_pathdialog("d", self.p.dir())
+        return p
+
+    def dirs(self, app):
+        """ @method spirit
+        複数のディレクトリを選択する。
+        Returns:
+            Tuple:
+        """
+        p = app.open_pathdialog("d", self.p.dir(), multiple=True)
+        return p
+    
+    def save(self, app):
+        """ @method spirit
+        保存するファイルの場所を選択する。
+        Returns:
+            Path:
+        """
+        p = app.open_pathdialog("s", self.p.dir())
+        return p
 
 #
 """

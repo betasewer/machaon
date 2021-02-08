@@ -283,12 +283,24 @@ class Spirit():
     def scroll_screen(self, index):
         self.app.get_ui().scroll_screen(index)
     
-    def ask_openfilename(self, **kwargs):
-        return self.app.get_ui().openfilename_dialog(**kwargs)
+    def open_pathdialog(self, dialogtype, 
+        initialdir=None, initialfile=None, 
+        filters=None, title=None, 
+        multiple=False, 
+        defaultextension=None,
+        mustexist=False
+    ):
+        """
+        """
+        return self.app.get_ui().open_pathdialog(
+            dialogtype,
+            initialdir=initialdir, initialfile=initialfile,
+            filters=filters, title=title, 
+            multiple=multiple,
+            defaultextension=defaultextension,
+            mustexist=mustexist
+        )
     
-    def ask_opendirname(self, **kwargs):
-        return self.app.get_ui().opendirname_dialog(**kwargs)
-
     #
     # スレッド操作／プログレスバー操作
     #
