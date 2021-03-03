@@ -132,6 +132,14 @@ LOG_MESSAGE_EVALRET = 4
 LOG_MESSAGE_END = 10
 LOG_RUN_FUNCTION = 11
 
+def instant_return_test(context, value, typename, typeparams=()):
+    """ メソッド返り値テスト用 """
+    from machaon.core.method import MethodResult
+    typespec = MethodResult(typename, typeparams=typeparams)
+    inv = InvocationEntry(None, None, (), {})
+    inv.results.append((value, typespec))
+    return next(inv.result_objects(context), None)
+
 #
 #
 #
@@ -183,12 +191,7 @@ class InvocationContext:
 
     #
     def get_object(self, name) -> Optional[Object]:
-        for x in self.input_objects.pick_by_name(name):
-            return x.object
-        return None
-
-    def get_object_by_type(self, typename) -> Optional[Object]:
-        for x in self.input_objects.pick_by_type(typename):
+        for x in self.input_objects.pick(name):
             return x.object
         return None
 
@@ -199,14 +202,6 @@ class InvocationContext:
                 li.append(x.object)
         return li
 
-    def get_selected_objects_typedict(self):
-        objmap = defaultdict(list) # type: DefaultDict[str, List[Object]]
-        for x in self.input_objects.pick_all():
-            if x.selected:
-                obj = x.object
-                objmap[obj.get_typename()].append(obj)
-        return objmap
-    
     def push_object(self, name: str, obj: Object):
         self.input_objects.push(name, obj)
         
@@ -256,13 +251,13 @@ class InvocationContext:
         """ 値から型を推定する """
         if isinstance(value, Object):
             return value.type
-        
         value_type = type(value) 
         return self.type_module.deduce(value_type)
     
-    def new_object(self, typename, value) -> Object:
+    def new_object(self, typename, value=None) -> Object:
         """ 型名と値からオブジェクトを作る """
-        if typename is None:
+        if value is None:
+            value = typename
             valtype = self.deduce_type(value)
         else:
             valtype = self.get_type(typename)
@@ -342,10 +337,11 @@ class InvocationContext:
                 title = "end-of-message"
                 line = ""
             elif code == LOG_RUN_FUNCTION:
-                printer(" -- function begin --------------")
                 cxt = args[0]
-                cxt.pprint_log(printer=printer)
-                printer(" -- function end ----------------")
+                if cxt is not self:
+                    printer(" BEGIN ->")
+                    cxt.pprint_log(printer=printer)
+                    printer(" END <-")
                 continue
             else:
                 raise ValueError("不明なログコード:"+",".join([code,*args]))
@@ -502,10 +498,7 @@ class TypeMethodInvocation(BasicInvocation):
 
         # インスタンスを渡す
         selfvalue = get_object_value(selfobj, self.get_parameter_spec(-1))
-        if self.method.is_delegated():
-            args.append(selfvalue["/delegate"])
-        else:
-            args.append(selfvalue)
+        args.append(selfvalue)
     
         if self.method.is_context_bound():
             # コンテクストを渡す
@@ -660,23 +653,23 @@ class FunctionInvocation(BasicInvocation):
         return [MethodResult("Any")] # 値から推定する
 
 #
-class ObjectGetterInvocation(BasicInvocation):
-    def __init__(self, meth, modifier):
+class ObjectRefInvocation(BasicInvocation):
+    def __init__(self, name, obj, modifier):
         super().__init__(modifier)
-        self.method = meth
+        self.name = name
+        self.object = obj
     
     def get_method_name(self):
-        return self.method.get_name()
+        return self.name
 
     def get_method_doc(self):
-        return self.method.get_doc()
+        return "Object '{}'".format(self.name)
     
     def display(self):
-        return ("ObjectGetter", self.method.get_name(), self.modifier_name())
+        return ("ObjectRef", self.name, self.modifier_name())
     
     def query_method(self, this_type):
-        self.method.load(this_type)
-        return self.method
+        raise NotImplementedError()
     
     def is_task(self):
         return False
@@ -684,17 +677,14 @@ class ObjectGetterInvocation(BasicInvocation):
     def is_parameter_consumer(self):
         return False
 
-    def prepare_invoke(self, _context: InvocationContext, *argobjects):
-        selfobj, *_args = argobjects
-        selfval = selfobj.value
-        return InvocationEntry(self, self.get_action(), (selfval,), {})
+    def prepare_invoke(self, _context: InvocationContext, *_argobjects):
+        return InvocationEntry(self, self.get_action(), (), {})
 
     def get_action(self):
-        key = self.method.get_action()
-        return _itemgetter(key)
+        return _objrefgetter(self.object)
     
     def get_result_specs(self):
-        return self.method.get_results()
+        raise NotImplementedError()
 
     def get_max_arity(self):
         return 0
@@ -706,7 +696,7 @@ class ObjectGetterInvocation(BasicInvocation):
         return None
 
 
-def _itemgetter(key):
-    def _get(obj):
-        return obj[key]
+def _objrefgetter(obj):
+    def _get():
+        return obj
     return _get

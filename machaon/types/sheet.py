@@ -690,15 +690,27 @@ class Sheet():
     #
     # 行関数
     #
+    def row_to_object(self, context, itemindex, row):
+        """ 
+        表の一行を読み取り用オブジェクトに変換する 
+        """
+        values = {
+            "#delegate" : Object(self.itemtype, self.items[itemindex])
+        }
+        for i, col in enumerate(self.viewcolumns):
+            key = col.get_name()
+            valtype = col.get_type(context)
+            values[key] = Object(valtype, row[i])
+        return context.get_type("ObjectCollection").new_object(values)
+
     def foreach(self, context, predicate):
         """ @method context
         行に関数を適用する。
         Params:
             predicate(Function): 関数
         """
-        converter = RowToObject(self, context)
         for entry in self.rows:
-            subject = converter.row_object(*entry)
+            subject = self.row_to_object(context, *entry)
             predicate.run_function(subject, context)
     
     def filter(self, context, predicate):
@@ -708,9 +720,8 @@ class Sheet():
             predicate(Function): 述語関数
         """
         # 関数を行に適用する
-        converter = RowToObject(self, context)
         def fn(entry):
-            subject = converter.row_object(*entry)
+            subject = self.row_to_object(context, *entry)
             return predicate.run_function(subject, context).value
         
         self.rows = list(filter(fn, self.rows))
@@ -724,9 +735,8 @@ class Sheet():
         Params:
             sorter(Function): 並べ替え関数
         """
-        converter = RowToObject(self, context)
         def sortkey(entry):
-            subject = converter.row_object(*entry)
+            subject = self.row_to_object(context, *entry)
             return key.run_function(subject, context).value
 
         self.rows.sort(key=sortkey)
@@ -806,10 +816,9 @@ class Sheet():
         return Sheet(value, itemtype, context, columnnames)
 
 
-class RowToObject():
-    """ 
-    表の一行を読み取り用オブジェクトに変換する 
-    """
+
+
+class _RowToObject():
     def __init__(self, dataset, context):
         """ 型を初期化する """
         prototype = {
@@ -827,14 +836,6 @@ class RowToObject():
 
     def row_object(self, itemindex, row):
         """ 行をオブジェクトに変換する """
-        values = {
-            "/delegate" : self.dataset.items[itemindex]
-        }
-        for i, col in enumerate(self.dataset.viewcolumns):
-            key = col.get_name()
-            valtype = col.get_type(self.context)
-            values[key] = Object(valtype, row[i])
-        return Object(self.type, values)
 
 
 

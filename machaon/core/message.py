@@ -3,7 +3,7 @@ import sys
 from itertools import zip_longest
 from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
-from machaon.core.symbol import python_builtin_typenames, normalize_method_name
+from machaon.core.symbol import PythonBuiltinTypenames, normalize_method_name
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
 from machaon.core.method import Method, MethodParameter
@@ -12,6 +12,7 @@ from machaon.core.invocation import (
     TypeMethodInvocation,
     InstanceMethodInvocation,
     FunctionInvocation,
+    ObjectRefInvocation,
     INVOCATION_RETURN_RECIEVER,
     LOG_MESSAGE_BEGIN,
     LOG_MESSAGE_CODE,
@@ -249,7 +250,7 @@ def select_literal(context, literal) -> Object:
 
 def value_to_obj(context, value):
     typename = type(value).__name__
-    if typename not in python_builtin_typenames:
+    if typename not in PythonBuiltinTypenames.literals:
         raise BadExpressionError("Unsupported literal type: {}".format(typename))
     return Object(context.get_type(typename), value)
 
@@ -272,7 +273,7 @@ def select_reciever(context, expression) -> Object:
     return select_literal(context, expression)
 
 # メソッド
-def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
+def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
     # モディファイアを分離する
     if modbits is None:
         def startsmod(sigil, value, expr, bits):
@@ -287,12 +288,26 @@ def select_method(name, typetraits=None, *, modbits=None) -> BasicInvocation:
 
     name = normalize_method_name(name)
 
+    # レシーバがオブジェクト集合の場合はメンバ参照に変換
+    if reciever and typetraits.is_object_collection():
+        collection = reciever
+        item = collection.get(name)
+        if item is not None:
+            return ObjectRefInvocation(name, item.object, modbits)
+        else:
+            delegate = collection.get("#delegate")
+            if delegate is not None:
+                # 移譲先オブジェクトからメソッドを探し直す
+                delg = delegate.object
+                return select_method(name, delg.type, reciever=delg.value)
+            raise BadExpressionError("Member '{}' is not found in reciever (ObjectCollection)".format(name))
+
     # 型メソッド
     using_type_method = typetraits and not typetraits.is_any()
     if using_type_method:
         meth = typetraits.select_method(name)
         if meth is not None:
-            return meth.get_invocation(typetraits, modbits)
+            return TypeMethodInvocation(typetraits, meth, modbits)
     
     # グローバル定義の関数
     from machaon.types.generic import resolve_generic_method_invocation
@@ -792,9 +807,9 @@ class MessageEngine():
             obj = paramtype.new_object(convval)
         
         elif objcode == TERM_OBJ_TUPLE:
-            from machaon.types.tuple import Tuple
+            from machaon.types.tuple import ObjectTuple
             elems = values[0].split() # 文字列を空白で区切る
-            tpl = Tuple.conversion_construct(None, context, elems)
+            tpl = ObjectTuple.conversion_construct(None, context, elems)
             obj = context.new_object("Tuple", tpl)
 
         elif objcode == TERM_OBJ_LITERAL:
@@ -816,7 +831,7 @@ class MessageEngine():
 
         elif objcode == TERM_OBJ_LAMBDA_ARG_MEMBER:
             reciever = select_lambda_subject(context)
-            selector = select_method(values[0], reciever.type)
+            selector = select_method(values[0], reciever.type, reciever=reciever.value)
             objs = (reciever, selector)
         
         elif objcode == TERM_OBJ_CONSTANT:
@@ -838,7 +853,7 @@ class MessageEngine():
             reciever = self._readings[-1].reciever
             if isinstance(reciever, ResultStackTopRef):
                 reciever = reciever.pick_object(context)
-            selector = select_method(objs[0], reciever.type)
+            selector = select_method(objs[0], reciever.type, reciever=reciever.value)
             self._readings[-1].set_selector(selector)
 
         elif astcode == TERM_LAST_BLOCK_ARG:
@@ -865,7 +880,7 @@ class MessageEngine():
         elif astcode == TERM_NEW_BLOCK_SELECTOR:
             resultref = ResultStackTopRef()
             reciever = resultref.pick_object(context) # ローカルオブジェクトを一つ消費
-            selector = select_method(objs[0], reciever.type)
+            selector = select_method(objs[0], reciever.type, reciever=reciever.value)
             new_msg = Message(reciever, selector)
             self._readings.append(new_msg)
         

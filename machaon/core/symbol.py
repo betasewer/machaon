@@ -1,20 +1,25 @@
 from typing import Tuple
+from collections import namedtuple
 
 #
 # 型名
 #
 #
-python_builtin_typenames = {
-    "str", "int", "bool", "float", "complex"
-}
-python_builtin_iterable_typenames = {
-    "list", "tuple", "bytes", 
-}
+class PythonBuiltinTypenames:
+    literals = { 
+        "str", "int", "bool", "float", "complex" 
+    }
+    dictionaries =  {
+        "dict",
+    }
+    iterables = {
+        "list", "tuple", "set", "bytes", 
+    }
 
 #
 def normalize_typename(name: str) -> str:
     if not name[0].isupper():
-        if name in python_builtin_typenames:
+        if name in PythonBuiltinTypenames.literals:
             name = name.capitalize() # ドキュメントとしても使うために、Pythonの組み込み型に限り小文字でも可とする
     bracket = name.find("[")
     if bracket != -1:

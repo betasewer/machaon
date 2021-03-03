@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
-from machaon.core.symbol import normalize_typename, BadTypename, BadMethodName, python_builtin_typenames, python_builtin_iterable_typenames
+from machaon.core.symbol import normalize_typename, BadTypename, BadMethodName, PythonBuiltinTypenames
 from machaon.core.method import Method, methoddecl_collect_attributes, UnloadedMethod, MethodLoadError
 from machaon.core.importer import attribute_loader
 from machaon.core.docstring import DocStringParser
@@ -35,6 +35,7 @@ class UnsupportedMethod(Exception):
 
 #
 TYPE_ANYTYPE = 0x1
+TYPE_OBJCOLTYPE = 0x2
 TYPE_METHODS_INSTANCE_BOUND = 0x100
 TYPE_METHODS_TYPE_BOUND = 0x200
 TYPE_USE_INSTANCE_METHOD = 0x400
@@ -72,6 +73,9 @@ class Type():
     
     def is_any(self):
         return self.flags & TYPE_ANYTYPE > 0
+    
+    def is_object_collection(self):
+        return self.flags & TYPE_OBJCOLTYPE > 0
     
     def get_value_type(self):
         return self.value_type
@@ -169,13 +173,6 @@ class Type():
             name2 = self.get_member_alias(name)
             if name2 is not None:
                 meth = self._methods.get(name2)
-        
-        if meth is None and self.flags & TYPE_HAS_DELEGATE_OBJECT:
-            # 基底型に任せる
-            delegate_type = self.describer["Delegate"]
-            meth = delegate_type.select_method(name)
-            if meth:
-                meth = meth.delegated()
         
         if meth:
             try:
@@ -369,16 +366,10 @@ class Type():
                     self.doc = value
                 elif key == "ValueType":
                     self.value_type = value
-                elif key == "Delegate":
-                    self.flags |= TYPE_HAS_DELEGATE_OBJECT
                 else:
                     # メソッド定義
                     from machaon.core.object import Object
-                    if isinstance(value, str):
-                        valuetype = value
-                        mth = Method(key)
-                        mth.load_as_getter(valuetype)
-                    elif len(value)>1 and callable(value[-1]):                      
+                    if len(value)>1 and callable(value[-1]):                      
                         *docs, action = value
                         mth = Method(key)
                         mth.load_from_string("\n".join(docs), action)
@@ -610,10 +601,13 @@ class TypeModule():
         if t:
             return t
         
-        if hasattr(value_type, "__name__"): # 基本型
-            if value_type.__name__ in python_builtin_typenames:
-                return self.get(value_type.__name__.capitalize())
-            elif value_type.__name__ in python_builtin_iterable_typenames:
+        if hasattr(value_type, "__name__"): 
+            typename = value_type.__name__
+            if typename in PythonBuiltinTypenames.literals: # 基本型
+                return self.get(typename.capitalize())
+            elif typename in PythonBuiltinTypenames.dictionaries: # 辞書型
+                return self.get("ObjectCollection")
+            elif typename in PythonBuiltinTypenames.iterables: # イテラブル型
                 return self.get("Tuple")
 
         for _tn, ts in self._typelib.items(): # 型を比較する

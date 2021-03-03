@@ -1,4 +1,4 @@
-from machaon.core.invocation import InvocationEntry, BasicInvocation, TypeMethodInvocation, InstanceMethodInvocation, FunctionInvocation
+from machaon.core.invocation import InvocationEntry, BasicInvocation, TypeMethodInvocation, InstanceMethodInvocation, FunctionInvocation, ObjectRefInvocation
 from machaon.core.object import ObjectValue
 
 def plus2mul(x, y):

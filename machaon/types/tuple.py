@@ -199,13 +199,8 @@ class ObjectTuple():
             cur = start
             objs = self.objects
         
-        subject_type = Type.from_dict({
-            "Typename" : "TupleReduceSubject",
-            "0": "Object",
-            "1": "Object"
-        })
         for o in objs:
-            subject = subject_type.new_object({"0": cur, "1": o})
+            subject = context.new_object({"0": cur, "1": o})
             cur = predicate.run_function(subject, context)
             
         return cur
@@ -255,10 +250,8 @@ class ObjectTuple():
         # 型を値から推定する
         objs = []
         for val in value:
-            if isinstance(val, Object):
-                objs.append(val)
-            else:
-                valtype = context.deduce_type(val)
-                objs.append(Object(valtype, val))
+            if not isinstance(val, Object):
+                val = context.new_object(val)
+            objs.append(val)
 
         return ObjectTuple(objs)

@@ -103,15 +103,16 @@ class ObjectCollectionItem:
     def select(self, select=True):
         self.selected = select
 
-#
-#
-#
+
 class ObjectCollection():
+    """ @type
+    オブジェクトを文字列によるキーで集めた辞書。
+    メソッド名がそのままメンバ参照になる。
+    """
     def __init__(self):
         self._items: Dict[int, ObjectCollectionItem] = {}
         self._namemap: DefaultDict[str, List[int]] = defaultdict(list)
-        self._typemap: DefaultDict[str, List[int]] = defaultdict(list)
-    
+
     # コンストラクタを実行しつつオブジェクトを新規作成
     def new(self, name: str, type: Type, *args, **kwargs) -> ObjectCollectionItem:
         if not isinstance(name, str) or not isinstance(type, Type):
@@ -132,30 +133,38 @@ class ObjectCollection():
         item = ObjectCollectionItem(newident, name, obj)
         self._items[newident] = item
         self._namemap[name].append(newident)
-        self._typemap[obj.get_typename()].append(newident)
         return item
 
     # 名前で検索する
-    def pick_by_name(self, name) -> Generator[ObjectCollectionItem, None, None]:
+    def pick(self, name) -> Generator[ObjectCollectionItem, None, None]:
         for ident in self._namemap[name]:
             yield self._items[ident]
     
-    def get_by_name(self, name) -> Optional[ObjectCollectionItem]:
-        li = list(self.pick_by_name(name))
+    def get(self, name) -> Optional[ObjectCollectionItem]:
+        li = list(self.pick(name))
         return li[-1] if li else None
 
-    # 型名で検索する
-    def pick_by_type(self, typename) -> Generator[ObjectCollectionItem, None, None]:
-        typename = normalize_typename(typename)
-        for ident in self._typemap[typename]:
-            yield self._items[ident]
-            
-    def get_by_type(self, name) -> Optional[ObjectCollectionItem]:
-        li = list(self.pick_by_type(name))
-        return li[-1] if li else None
-    
     # 全てのオブジェクトを取得
     def pick_all(self) -> Generator[ObjectCollectionItem, None, None]:
         for item in self._items.values():
             yield item
     
+    #
+    #
+    #
+    def construct(self, s):
+        pass
+
+    def conversion_construct(self, context, value, *_args):
+        if isinstance(value, dict):
+            col = ObjectCollection()
+            for k, v in value.items():
+                if not isinstance(v, Object):
+                    v = context.new_object(v)
+                col.push(k, v)
+            return col
+        else:
+            raise ValueError("'{}'からの型変換は定義されていません".format(type(value).__name__))
+
+    def pprint(self, app):
+        pass

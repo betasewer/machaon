@@ -1,6 +1,6 @@
 import re
 
-from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod, TYPE_ANYTYPE
+from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod, TYPE_ANYTYPE, TYPE_OBJCOLTYPE
 from machaon.core.object import Object
 
 fundamental_type = TypeModule()
@@ -510,6 +510,9 @@ fundamental_type.definition(typename="Tuple")(
 )
 fundamental_type.definition(typename="Sheet")(
     "machaon.types.sheet.Sheet"
+)
+fundamental_type.definition(typename="ObjectCollection", bits=TYPE_OBJCOLTYPE)(
+    "machaon.core.object.ObjectCollection"
 )
 fundamental_type.definition(typename="Method")(
     "machaon.core.method.Method"

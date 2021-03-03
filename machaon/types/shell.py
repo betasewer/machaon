@@ -238,7 +238,9 @@ class Path():
             Path:
         """
         up, _ext = os.path.splitext(self._path)
-        return Path(os.path.join(up, extension))
+        if not extension.startswith("."):
+            extension = "." + extension
+        return Path(up + extension)
     
     def with_basename_format(self, format, *args):
         """ 書式に基づいて名前のみ変更する。（内部利用）"""

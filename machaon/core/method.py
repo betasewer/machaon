@@ -21,8 +21,6 @@ METHOD_CONSUME_TRAILING_PARAMS = 0x0020
 
 METHOD_LOADED = 0x0100
 METHOD_HAS_RECIEVER_PARAM = 0x0200 # レシーバオブジェクトもパラメータとして扱う
-METHOD_OBJECT_GETTER = 0x0400
-METHOD_DELEGATED = 0x0800
 
 METHOD_PARAMETER_UNSPECIFIED = 0x1000
 METHOD_RESULT_UNSPECIFIED = 0x2000
@@ -79,18 +77,6 @@ class Method():
     def check_valid(self):
         if self.name is None:
             raise ValueError("name")
-    
-    def delegated(self):
-        """ 基底オブジェクトに移譲されたメソッド """
-        t = Method()
-        t.name = self.name
-        t.doc = self.doc
-        t.target = self.target
-        t._action = self._action
-        t.flags = self.flags | METHOD_DELEGATED
-        t.params = self.params
-        t.results = self.results
-        return t
     
     def get_name(self):
         """ @method alias-name [name]
@@ -170,10 +156,6 @@ class Method():
         """ レシーバオブジェクトの引数情報があるか """
         return (self.flags & METHOD_HAS_RECIEVER_PARAM) > 0
 
-    def is_delegated(self):
-        """ 基底クラスのメソッドか """
-        return (self.flags & METHOD_DELEGATED) > 0
-    
     # 仮引数を追加
     def add_parameter(self,
         name,
@@ -541,34 +523,6 @@ class Method():
         self._action = action
         self.target = "function:{}".format(str(action))
         self.flags |= METHOD_LOADED
-
-    def load_as_getter(self, typename):
-        """
-        引数のないメソッドとしてロードする。
-        Params:
-            typename(str): 返り値の型名
-        """
-        if self.flags & METHOD_LOADED:
-            return 
-        
-        # 返り値型
-        self.add_result(typename)
-
-        key = normalize_method_target(self.name)
-        self._action = key
-        self.target = "getter:{}".format(key)
-        self.flags |= METHOD_LOADED | METHOD_OBJECT_GETTER
-    
-    def get_invocation(self, type, modbits):
-        """
-        基本的にTypeMethodInvocationを返し、
-        OBJECT_GETTER指定時のみObjectGetterInvocationを返す。
-        """
-        from machaon.core.invocation import ObjectGetterInvocation, TypeMethodInvocation
-        if self.flags & METHOD_OBJECT_GETTER:
-            return ObjectGetterInvocation(self, modbits)
-        else:
-            return TypeMethodInvocation(type, self, modbits)
     
     def get_signature(self):
         """ @method alias-name [signature]
