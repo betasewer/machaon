@@ -537,7 +537,7 @@ class GenericMethods:
         Returns:
             Object: 変換されたオブジェクト
         """
-        v = type.conversion_construct(context, obj.value)
+        v = type.construct_from_value(context, obj.value)
         return type.new_object(v)
 
     def bind(self, left, context, right):

@@ -126,7 +126,7 @@ class ObjectTuple():
         for x in self.objects:
             # 変換コンストラクタを呼び出す
             try:
-                v = type.conversion_construct(context, x.value)
+                v = type.construct_from_value(context, x.value)
             except:
                 continue
             objs.append(Object(type, v))

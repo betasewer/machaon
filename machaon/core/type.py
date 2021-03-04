@@ -101,9 +101,10 @@ class Type():
         t._describer = self._describer
         return t
     
-    def new_object(self, *args):
+    def new_object(self, value):
+        """ この型のオブジェクトを作る。型変換は行わない """
         from machaon.core.object import Object
-        return Object(self, *args)
+        return Object(self, value)
 
     #
     #
@@ -148,13 +149,19 @@ class Type():
             app.post("message", s)
     
     def conversion_construct(self, context, value, *params):
-        if isinstance(value, self.value_type):
-            return value 
         r = self.call_internal_method("conversion_construct", "t", context, value, *params)
         if r:
             return r[0]
         else:
             return self.value_type(value)
+    
+    def construct_from_value(self, context, value, *params):
+        if isinstance(value, self.value_type):
+            return value 
+        elif isinstance(value, str):
+            return self.construct_from_string(value)
+        else:
+            return self.conversion_construct(context, value, *params)
 
     # 
     # メソッド呼び出し

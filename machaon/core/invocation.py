@@ -255,13 +255,16 @@ class InvocationContext:
         return self.type_module.deduce(value_type)
     
     def new_object(self, typename, value=None) -> Object:
-        """ 型名と値からオブジェクトを作る """
+        """ 型名と値からオブジェクトを作る。値の型変換を行う """
         if value is None:
             value = typename
             valtype = self.deduce_type(value)
         else:
             valtype = self.get_type(typename)
-        return Object(valtype, value)
+        if valtype is None:
+            raise ValueError("型が存在しません")
+        convvalue = valtype.construct_from_value(self, value)
+        return valtype.new_object(convvalue)
     
     def new_invocation_error_object(self, exception=None):
         """ エラーオブジェクトを作る """
@@ -684,7 +687,8 @@ class ObjectRefInvocation(BasicInvocation):
         return _objrefgetter(self.object)
     
     def get_result_specs(self):
-        raise NotImplementedError()
+        r = MethodResult(self.object.get_typename())
+        return [r]
 
     def get_max_arity(self):
         return 0

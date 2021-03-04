@@ -800,10 +800,7 @@ class MessageEngine():
             val = values[0]
             spec = values[1]
             paramtype = context.get_type(spec.get_typename())
-            if isinstance(val, str):
-                convval = paramtype.construct_from_string(val)
-            else:
-                convval = paramtype.conversion_construct(context, val, *spec.get_typeparams())
+            convval = paramtype.construct_from_value(context, val, *spec.get_typeparams())
             obj = paramtype.new_object(convval)
         
         elif objcode == TERM_OBJ_TUPLE:
