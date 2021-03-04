@@ -166,5 +166,15 @@ class ObjectCollection():
         else:
             raise ValueError("'{}'からの型変換は定義されていません".format(type(value).__name__))
 
+    def summarize(self):
+        heads = []
+        trail = ""
+        for name, _ids in self._namemap.items():
+            heads.append(name)
+            if len(heads) > 4:
+                trail = "..."
+                break
+        return ", ".join(heads) + trail
+
     def pprint(self, app):
         pass
