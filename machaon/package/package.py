@@ -1,14 +1,15 @@
 import os
 import shutil
 import sys
-import subprocess
 import tempfile
 import configparser
 import re
 import importlib
+import inspect
+import traceback
 from typing import Dict, Any, Union, List, Optional
 
-from machaon.core.importer import module_loader
+from machaon.core.importer import module_loader, attribute_loader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
 
@@ -20,6 +21,7 @@ PACKAGE_TYPE_MODULES = 0x1
 PACKAGE_TYPE_DEPENDENCY = 0x2
 PACKAGE_TYPE_RESOURCE = 0x3
 PACKAGE_TYPE_UNDEFINED = 0x4
+PACKAGE_TYPE_SINGLE_MODULE = 0x5
 PACKAGE_LOADED = 0x10
 
 #
@@ -27,6 +29,7 @@ PACKAGE_LOADED = 0x10
 #
 class Package():
     MODULES = PACKAGE_TYPE_MODULES
+    SINGLE_MODULE = PACKAGE_TYPE_SINGLE_MODULE
     DEPENDENCY = PACKAGE_TYPE_DEPENDENCY
     RESOURCE = PACKAGE_TYPE_RESOURCE
     UNDEFINED = PACKAGE_TYPE_UNDEFINED
@@ -44,10 +47,11 @@ class Package():
         self.scope = self.name
         self.separate = separate
         
-        if not type: type = Package.MODULES
+        if type is None: 
+            type = Package.MODULES
         self._type = type
 
-        if not module: 
+        if module is None: 
             if self._type == Package.MODULES:
                 module = "{}.__init__".format(self.name)
         self.entrypoint: Optional[str] = module
@@ -71,12 +75,12 @@ class Package():
     @property
     def source_name(self):
         if self.source is None:
-            return None
+            raise ValueError("No source")
         return self.source.name 
 
     def get_source_signature(self):
         if self.source is None:
-            return None
+            raise ValueError("No source")
         return self.source.get_source()
     
     def get_source(self):
@@ -131,37 +135,66 @@ class Package():
 
         if self._type == PACKAGE_TYPE_MODULES:
             # __init__を読みに行く
-            spec = importlib.util.find_spec(self.entrypoint)
-            if spec is None:
-                raise ModuleNotFoundError(self.entrypoint)
-            mod = importlib.util.module_from_spec(spec)
-
+            aloader = attribute_loader(self.entrypoint, attr="machaon_modules")
             try:
-                spec.loader.exec_module(mod)
+                moduleindex = aloader(fallback=True)
             except Exception as e:
                 self._loaded.append(PackageLoadError(e))
+                return False
 
             # 型が定義されたモジュールをロードする
-            moduleindex = getattr(mod, "machaon_modules", None)
             if moduleindex:
+                # 指定されたモジュールのみ
                 modules = [module_loader(x) for x in moduleindex]
             else:
-                modules = [module_loader(self.entrypoint)]
+                # サブモジュール全て
+                modules = []
+                basefile = getattr(aloader.load(), "__file__", None)
+                if basefile is None:
+                    raise ValueError("モジュールのファイルパスを特定できません")
 
-            scopename = self.scope
-            for modloader in modules:
-                try:
-                    for klass in modloader.enum_type_describers():
-                        root.typemodule.define(klass, scope=scopename)
-                except Exception as e:
-                    ex = PackageTypeDefLoadError(e, modloader.entrypoint())
-                    self._loaded.append(ex)
-                    continue
-        
+                basedir = os.path.dirname(basefile)
+
+                # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
+                files_on_stack = []
+                for fr in traceback.extract_stack():
+                    fname = os.path.normpath(fr.filename)
+                    if fname.startswith(basedir):
+                        files_on_stack.append(fname)
+
+                for dirpath, _dirnames, filenames in os.walk(basedir):
+                    for filename in filenames:
+                        _, ext = os.path.splitext(filename)
+                        if ext != ".py":
+                            continue
+                        filepath = os.path.join(dirpath, filename)
+                        if filepath in files_on_stack:
+                            continue # 再帰するのでロードをスキップ
+                        relname = os.path.splitext(os.path.relpath(filepath, basedir))[0].replace("/", "_").replace("\\", "_")
+                        composed_name = "{}_submodule_{}".format(self.name, relname)
+                        modules.append(module_loader(composed_name, location=filepath))
+
+            self._load_defined_types(modules, root)
+
+        elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
+            loader = module_loader(self.entrypoint)
+            self._load_defined_types([loader], root)
+
         self._loaded.append(True)
         return not self.is_load_failed()
+
+    def _load_defined_types(self, loaders, root):
+        scopename = self.scope
+        for modloader in loaders:
+            try:
+                for klass in modloader.enum_type_describers():
+                    root.typemodule.define(klass, scope=scopename)
+            except Exception as e:
+                ex = PackageTypeDefLoadError(e, str(modloader))
+                self._loaded.append(ex)
+                continue
     
-    def is_loaded(self):
+    def once_loaded(self):
         return len(self._loaded) > 0
     
     def is_load_failed(self):
@@ -169,12 +202,17 @@ class Package():
             return False
         return self._loaded[0] is not True
     
-    def get_last_load_error(self) -> Optional[Exception]:
-        for v in reversed(self._loaded):
-            if v is True:
+    def get_load_errors(self) -> List[Exception]:
+        errs = []
+        for x in self._loaded:
+            if x is True:
                 continue
-            return v
-        return None
+            errs.append(x)
+        return errs
+    
+    def get_last_load_error(self) -> Optional[Exception]:
+        errors = self.get_load_errors()
+        return errors[-1] if errors else None
 
     def unload(self, root):
         if self._type == PACKAGE_TYPE_UNDEFINED:
@@ -185,7 +223,44 @@ class Package():
 
         if self._type == PACKAGE_TYPE_MODULES:
             root.typemodule.remove_scope(self.scope)
-    
+
+def create_package(name, package, module, **kwargs):
+    """
+    文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
+    """
+    if package is not None:
+        if isinstance(package, str):
+            host, sep, desc = package.partition(":")
+            if not sep:
+                raise ValueError("package: '{}' 文法が間違っています".format(package))
+            if host == "github":
+                from machaon.package.repository import GithubRepArchive
+                modpackage = GithubRepArchive(desc)
+            elif host == "bitbucket":
+                from machaon.package.repository import BitbucketRepArchive
+                modpackage = BitbucketRepArchive(desc)
+            elif host == "module":
+                from machaon.package.archive import LocalModule
+                modpackage = LocalModule()
+                module = desc
+            elif host == "local":
+                from machaon.package.archive import LocalFile
+                modpackage = LocalFile(desc)
+            elif host == "local-archive":
+                from machaon.package.archive import LocalArchive
+                modpackage = LocalArchive(desc)
+            else:
+                raise ValueError("package: '{}' サポートされていないホストです".format(host))
+        else:
+            modpackage = package
+        return Package(name, modpackage, module=module, **kwargs)
+    else:
+        if module is None:
+            raise ValueError("module: ローカルモジュールへの参照を指定してください")
+        from machaon.package.archive import LocalModule
+        source = LocalModule()
+        kwargs["type"] = PACKAGE_TYPE_SINGLE_MODULE # エントリポイントのモジュールのみ読み込む
+        return Package(name, source, module=module, **kwargs)
 
 #
 class PackageNotFoundError(Exception):

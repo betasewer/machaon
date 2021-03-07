@@ -12,12 +12,11 @@ def launch():
     from machaon.package.auth import BasicAuth
     root.add_package(
         "machaon.shell",
-        module="machaon.types.shell",
-        preload=True
+        "machaon.types.shell",
     )
     root.add_package(
         "hello",
-        BitbucketRepArchive("betasewer/test_module")
+        remote="bitbucket:betasewer/test_module"
     )
 
     root.run()

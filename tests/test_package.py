@@ -1,6 +1,6 @@
 import pytest
-#from machaon.app import AppRoot
-#from machaon.ui.tk import tkLauncher
+from machaon.app import AppRoot
+from machaon.ui.tk import tkLauncher
 
 #from machaon.commands.catalogue import shell_commands
 #from machaon.package.package import package
@@ -19,26 +19,14 @@ def approot():
     return app
 
 @pytest.mark.skip()
-def test_cmdset_setup(approot):
-    approot.setup_package(("shell",), shell_commands())
-    assert len(approot.cmdengine.commandsets) == 1
-    assert approot.cmdengine.commandsets[0].get_prefixes() == ("shell",)
-    assert len(approot.cmdengine.commandsets[0].match("ls")) == 1
-
-@pytest.mark.skipif(True, reason="package-setup flag is not set")
 def test_package_setup(approot):
-    approot.setup_package(("test",), 
-        package(
-            source=local_archive("C:\\codes\\python\\machaon\\tests\\sample\\pkg\\betasewer-test_module.zip", name="test_module"), 
-            #source=bitbucket_rep("betasewer/test_module"), 
-            entrypoint="hello"
-        )
+    pkg = approot.add_package(
+        "test",
+        "bitbucket:betasewer/test_module",
+        module="hello"
     )
-    assert len(approot.cmdengine.commandsets) == 1
-    #assert isinstance(approot.cmdengine.commandsets[0], NotYetInstalledCommandSet)
     
-    spi = TempSpirit(approot)
-    command_package(spi, "update", False, 0)
+    approot.update_package(pkg)
     assert approot.cmdengine.commandsets[0].match("test.helloworld")
     spi.printout()
 

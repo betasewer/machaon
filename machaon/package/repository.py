@@ -19,6 +19,8 @@ class RepositoryArchive(BasicArchive):
 
     download_chunk_size = 20 * 1024 # 20kb
     download_timeout = 15 # 秒
+
+    hostname = "<unspecified>"
     
     def __init__(self, name, username=None, arcfilename=None, credential=None):
         super().__init__()
@@ -37,7 +39,7 @@ class RepositoryArchive(BasicArchive):
         return os.path.join(workdir, self.arcfilename)
 
     def get_source(self) -> str:
-        return "remote-archive:{}/{}".format(self.name, self.get_repository_url())
+        return "remote:{}/{}/{}".format(type(self).hostname, self.username, self.name)
         
     def get_repository_url(self):
         raise NotImplementedError()
@@ -102,6 +104,8 @@ class RepositoryArchive(BasicArchive):
 #
 #
 class GithubRepArchive(RepositoryArchive):
+    hostname = "github.com"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     
@@ -121,6 +125,8 @@ class GithubRepArchive(RepositoryArchive):
 #
 #
 class BitbucketRepArchive(RepositoryArchive):
+    hostname = "bitbucket.org"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
     

@@ -13,6 +13,27 @@ class AppPackageType:
             Str:
         """
         return package.name
+    
+    def status(self, package):
+        """ @method
+        ロード状態を示す文字列
+        Returns:
+            Str:
+        """
+        if not package.once_loaded():
+            return "利用不可: 待機中"
+        if package.is_load_failed():
+            return "利用不可: エラー"
+        else:
+            return "準備完了"
+
+    def load_errors(self, package):
+        """ @method
+        前回のロード時に発生したエラー
+        Returns:
+            Tuple:
+        """
+        return [str(x) for x in package.get_load_errors()]
 
     def scope(self, package):
         """ @method

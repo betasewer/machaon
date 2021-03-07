@@ -316,7 +316,7 @@ class Type():
         #
         # 型定義の解析
         #
-        sections = DocStringParser(doc, ("Typename", "ValueType", "MemberAlias"))
+        sections = DocStringParser(doc, ("Typename", "Params", "ValueType", "MemberAlias"))
 
         typename = sections.get_value("Typename")
         if typename:
@@ -331,6 +331,8 @@ class Type():
                 continue
             elif line == "use-instance-method":
                 self.flags |= TYPE_USE_INSTANCE_METHOD
+            elif line == "trait":
+                self.flags |= TYPE_METHODS_TYPE_BOUND
             else:
                 doc += line
 

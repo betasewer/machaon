@@ -43,7 +43,7 @@ class RootObject:
         ''' @method
         パッケージを取得する。
         Returns:
-            Sheet[Package]: (name, source, scope) パッケージリスト
+            Sheet[Package]: (name, source, scope, status) パッケージリスト
         '''
         return list(self.context.root.enum_packages())
     

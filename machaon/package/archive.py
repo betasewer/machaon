@@ -88,41 +88,54 @@ class BasicArchive():
             self._arc.extractall(outdir)
         return os.path.join(outdir, self.get_member_root())
 
-#
-#
-#
+
 class LocalArchive(BasicArchive):
-    def __init__(self, filepath, *, name):
+    """
+    ファイルパスで指定するアーカイブファイル
+    """
+    def __init__(self, filepath):
         super().__init__()
         self.filepath = filepath
-        self.name = name
     
     def get_arcfilepath(self, _workdir):
         return self.filepath
         
     def get_source(self) -> str:
-        return "local-archive:{}/{}".format(self.name, self.filepath)
+        return "archive-file:{}".format(self.filepath)
 
     def query_hash(self):
         return None
 
-#
-#
-#
+
 class LocalFile():
+    """
+    ファイルパスで指定するモジュール
+    """
     is_remote = False
     is_archive = False
 
-    def __init__(self, filepath, *, name):
+    def __init__(self, filepath):
         self.filepath = filepath
-        self.name = name
 
     def get_source(self) -> str:
-        return "local-file:{}/{}".format(self.name, self.filepath)
+        return "file:{}".format(self.filepath)
     
     #
     # パスを取得
     #
     def get_local_path(self):
         return self.filepath
-    
+
+
+class LocalModule():
+    """
+    配置されたモジュール（参照のみ）
+    """
+    is_remote = False
+    is_archive = False
+
+    def __init__(self):
+        pass
+
+    def get_source(self) -> str:
+        return "module"

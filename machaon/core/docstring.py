@@ -30,7 +30,7 @@ class DocStringParser():
                 if part.startswith("  ") or " " in newkey:
                     sections[key].append(line) # 空白2つ以上ではじまるか、空白が語中に含まれているならセクション名とみなさない
                 elif newkey not in sections:
-                    raise DocStringParseError("Unknown section name: {}".format(newkey), doc)
+                    raise DocStringParseError("定義されていないセクションです: {}".format(newkey), doc)
                 else:
                     if rest:
                         sections[newkey].append(rest)

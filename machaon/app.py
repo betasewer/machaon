@@ -13,7 +13,7 @@ from typing import Optional, List, Any
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
-from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError
+from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
 import machaon.platforms
@@ -76,17 +76,28 @@ class AppRoot:
     #
     # クラスパッケージを走査する
     #
-    def add_package(self, name, source=None, module=None, preload=False, **packagekwargs):
+    def add_package(self, 
+        name, 
+        package=None,
+        *,
+        module=None,
+        delayload=False, 
+        type=None,
+        separate=True,
+        hashval=None,
+    ):
         """
         パッケージ概要を追加する。
         Params:
             name(str): パッケージ名
-            source(Repository): *外部パッケージの定義、Noneでローカルを参照
-            module(str): *モジュール名、Noneで__init__
+            module(str): モジュール名
+            package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
             preload(bool): 起動時にロードする
-            ...: その他、machaon.package.package.Packageのコンストラクタ引数
+            type(int): モジュールの種類
+            separate(bool): site-packageにインストールしない
+            hashval(str): パッケージハッシュ値の指定
         """
-        newpkg = Package(name, source, module=module, **packagekwargs)
+        newpkg = create_package(name, package, module, type=type, separate=separate, hashval=hashval)
         for pkg in self.pkgs:
             if pkg.name == newpkg.name:
                 pkg.assign_definition(newpkg)
@@ -94,8 +105,9 @@ class AppRoot:
         else:
             self.pkgs.append(newpkg)
         
-        if preload: # この時点でロードしておく
+        if not delayload: # この時点でロードしておく
             newpkg.load(self)
+        return newpkg
 
     # パッケージ概要を取得する
     def get_package(self, name, *, fallback=True):
