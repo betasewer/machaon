@@ -129,8 +129,7 @@ class TypeType():
 あらゆる型を受け入れる型。
 """)
 class AnyType():
-    """@type
-    ValueType: machaon.Any
+    """@type trait
     """
 
     def construct(self, s):

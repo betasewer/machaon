@@ -113,7 +113,7 @@ class InvocationEntry():
                         rettype = context.get_type("Any")
 
                 # 値の型が異なる場合は、暗黙の型変換を行う
-                if rettype.value_type is not type(value):
+                if not rettype.check_value_type(type(value)):
                     typeparams = retspec.get_typeparams() if retspec else tuple()
                     value = rettype.conversion_construct(context, value, *typeparams)
                 
@@ -254,13 +254,13 @@ class InvocationContext:
         value_type = type(value) 
         return self.type_module.deduce(value_type)
     
-    def new_object(self, typename, value=None) -> Object:
+    def new_object(self, typecode: Any, value=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う """
         if value is None:
-            value = typename
+            value = typecode
             valtype = self.deduce_type(value)
         else:
-            valtype = self.get_type(typename)
+            valtype = self.new_type(typecode)
         if valtype is None:
             raise ValueError("型が存在しません")
         convvalue = valtype.construct_from_value(self, value)

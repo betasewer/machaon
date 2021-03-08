@@ -289,7 +289,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     name = normalize_method_name(name)
 
     # レシーバがオブジェクト集合の場合はメンバ参照に変換
-    if reciever and typetraits.is_object_collection():
+    if reciever is not None and typetraits.is_object_collection():
         collection = reciever
         item = collection.get(name)
         if item is not None:

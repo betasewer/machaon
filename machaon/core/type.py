@@ -36,10 +36,9 @@ class UnsupportedMethod(Exception):
 #
 TYPE_ANYTYPE = 0x1
 TYPE_OBJCOLTYPE = 0x2
-TYPE_METHODS_INSTANCE_BOUND = 0x100
-TYPE_METHODS_TYPE_BOUND = 0x200
+TYPE_TYPETRAIT_DESCRIBER = 0x100
+TYPE_VALUETYPE_DESCRIBER = 0x200
 TYPE_USE_INSTANCE_METHOD = 0x400
-TYPE_HAS_DELEGATE_OBJECT = 0x800
 TYPE_LOADED = 0x1000
 
 #
@@ -153,15 +152,24 @@ class Type():
         if r:
             return r[0]
         else:
-            return self.value_type(value)
-    
+            if self.value_type is None: # 制限なし
+                return value
+            l_name = type(value).__name__
+            r_name = getattr(self.value_type, "__name__", None) or str(self.value_type)
+            raise ValueError("'{}' -> '{}'への変換関数が定義されていません".format(l_name, r_name))
+
     def construct_from_value(self, context, value, *params):
-        if isinstance(value, self.value_type):
+        if self.check_value_type(type(value)):
             return value 
         elif isinstance(value, str):
             return self.construct_from_string(value)
         else:
             return self.conversion_construct(context, value, *params)
+    
+    def check_value_type(self, value_type):
+        if self.value_type is None: # 制限なし
+            return True
+        return self.value_type is value_type
 
     # 
     # メソッド呼び出し
@@ -240,10 +248,10 @@ class Type():
         return self._describer
 
     def is_methods_type_bound(self):
-        return (self.flags & TYPE_METHODS_TYPE_BOUND) > 0
+        return (self.flags & TYPE_TYPETRAIT_DESCRIBER) > 0
     
     def is_methods_instance_bound(self):
-        return (self.flags & TYPE_METHODS_INSTANCE_BOUND) > 0
+        return (self.flags & TYPE_VALUETYPE_DESCRIBER) > 0
 
     def is_using_instance_method(self):
         return (self.flags & TYPE_USE_INSTANCE_METHOD) > 0
@@ -332,7 +340,7 @@ class Type():
             elif line == "use-instance-method":
                 self.flags |= TYPE_USE_INSTANCE_METHOD
             elif line == "trait":
-                self.flags |= TYPE_METHODS_TYPE_BOUND
+                self.flags |= TYPE_TYPETRAIT_DESCRIBER
             else:
                 doc += line
 
@@ -341,7 +349,7 @@ class Type():
             self.doc = doc.strip()
 
         valtypename = sections.get_value("ValueType")
-        if valtypename == "machaon.Any":
+        if valtypename == "Any":
             self.value_type = None # Any型
         elif valtypename:
             loader = attribute_loader(valtypename)
@@ -399,6 +407,16 @@ class Type():
         else:
             raise BadTraitDeclaration("型定義がありません。辞書か、定義クラスのドキュメント文字列で記述してください")
         
+        # TYPE_XXX_DESCRIBERフラグを推定する
+        if self.flags & (TYPE_TYPETRAIT_DESCRIBER|TYPE_VALUETYPE_DESCRIBER) == 0:
+            if self.value_type and describer is not self.value_type: 
+                # 別の値型が定義されているならTYPETRAIT
+                self.flags |= TYPE_TYPETRAIT_DESCRIBER
+            else: 
+                # describerを値型とする
+                self.flags |= TYPE_VALUETYPE_DESCRIBER
+                self.value_type = describer
+
         # 専用のフォールバック値として
         if not self.typename:
             if hasattr(describer, "__name__"):
@@ -412,18 +430,6 @@ class Type():
         if not self.doc:
             if hasattr(describer, "__doc__"):
                 self.doc = describer.__doc__
-        
-        if self.value_type is None:
-            if isinstance(describer, type):
-                self.value_type = describer # describerを値型にする
-            else:
-                self.value_type = str
-        
-        # メソッドに渡すselfの意味
-        if self.value_type is describer:
-            self.flags |= TYPE_METHODS_INSTANCE_BOUND
-        else:
-            self.flags |= TYPE_METHODS_TYPE_BOUND
         
         if isinstance(describer, type):
             # typemodule.getで識別子として使用可能にする
