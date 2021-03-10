@@ -75,4 +75,13 @@ def test_any():
     anytype = fundamental_type.get("Any")
     assert anytype.is_loaded()
     assert anytype.is_any()
+
+def test_function():
+    fntype = fundamental_type.get("Function")
+    fnpower = fntype.construct_from_string("@ * @")
+    assert fnpower
+    from machaon.core.message import MessageEngine
+    assert isinstance(fnpower, MessageEngine)
+
+
     

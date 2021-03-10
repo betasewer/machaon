@@ -63,13 +63,13 @@ class AppPackageType:
         """ @task context
         パッケージをインストールし、ロードする。
         """
-        self.call_internal_method("_update", package, context, app, forceinstall=True)
+        self._update(package, context, app, forceinstall=True)
     
     def update(self, package, context, app):
         """ @task context
         パッケージを更新し、再ロードする。
         """
-        self.call_internal_method("_update", package, context, app)
+        self._update(package, context, app)
 
     # 
     def _update(self, package, context, app, forceinstall=False):

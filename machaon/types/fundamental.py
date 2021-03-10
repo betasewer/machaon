@@ -147,7 +147,8 @@ class FunctionType():
     ValueType: machaon.core.message.MessageEngine
     """
     def construct(self, s):
-        return self.value_type(s)
+        from machaon.core.message import MessageEngine
+        return MessageEngine(s)
 
     def stringify(self, f):
         return f.get_expression()
@@ -272,7 +273,7 @@ class StrType():
     
     def pyvalue(self, symbol, context):
         """ @method context
-        外部モジュールの変数あるいは引数無し関数を評価する。
+        外部モジュールの変数あるいは引数無し関数呼び出しとして評価する。
         Returns:
             Any:
         """

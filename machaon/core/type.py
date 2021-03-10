@@ -81,6 +81,12 @@ class Type():
     
     def is_scope(self, scope):
         return self.scope == scope
+    
+    def get_describer_instance(self):
+        if isinstance(self._describer, type):
+            return self._describer()
+        else:
+            return self._describer
 
     def get_describer_qualname(self):
         if isinstance(self._describer, type):
