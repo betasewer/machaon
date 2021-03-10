@@ -20,12 +20,14 @@ class AppPackageType:
         Returns:
             Str:
         """
+        if not package.is_installed():
+            return "未インストール"
         if not package.once_loaded():
-            return "利用不可: 待機中"
+            return "読み込み待機中"
         if package.is_load_failed():
-            return "利用不可: エラー"
+            return "読み込み済: エラー"
         else:
-            return "準備完了"
+            return "読み込み済: 準備完了"
 
     def load_errors(self, package):
         """ @method
