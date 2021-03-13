@@ -203,6 +203,11 @@ def test_double_block_is_denied():
     # ((7 mul 8) <no-selector> <no-argument>)　と解釈しエラー
     ptest("((7 mul 8)) add ((9 mul 10)) ", 7*8+9*10)
 
+#
+def test_paren_block():
+    ptest("1 + (2 * 3)", 1+(2*3))
+    ptest("1 + (2 * (3 - 4))", 1+(2*(3-4)))
+
 def test_parse_function():
     def ltest(s, subject, *rhs):
         from machaon.core.object import ObjectCollection, Object
@@ -279,3 +284,8 @@ def test_message_reenter():
     # 4. 
     r = func.run_function(context.get_type("Int").new_object(2), context)
     assert r.value == 105
+
+
+
+
+

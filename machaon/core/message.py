@@ -886,14 +886,15 @@ class MessageEngine():
             self._readings[-1].start_keyword_args()
 
         if astinstr & TERM_END_LAST_BLOCK:
-            msg = self._readings[-1]
-            if not msg.is_reciever_specified():
-                raise BadExpressionError("レシーバがありません：{}".format(msg.sexprs()))
-            if not msg.is_selector_specified():
-                raise BadExpressionError("セレクタがありません：{}".format(msg.sexprs()))
-            if not msg.is_min_arg_specified():
-                raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
-            msg.end_keyword_args()
+            if self._readings:
+                msg = self._readings[-1]
+                if not msg.is_reciever_specified():
+                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexprs()))
+                if not msg.is_selector_specified():
+                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexprs()))
+                if not msg.is_min_arg_specified():
+                    raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
+                msg.end_keyword_args()
 
         if astinstr & TERM_END_ALL_BLOCK:
             for msg in self._readings:
@@ -1029,13 +1030,13 @@ class ConstantLog():
         return _view_bitflag("TOKEN_", self._code)
     
     def as_term_flags(self) -> str:
-        astcode = self._code & 0x000F
-        astinstr = self._code & 0x00F0
-        objcode = self._code & 0xFF00
+        astcode = self._code & TERM_AST_MASK
+        instrcode = self._code & TERM_INSTR_MASK
+        objcode = self._code & TERM_OBJ_MASK
         codename = _view_constant("TERM_", astcode)
         codename += "+" + _view_constant("TERM_", objcode)
-        if astinstr:
-            codename += "+" + _view_bitflag("TERM_", astinstr)
+        if instrcode:
+            codename += "+" + _view_bitflag("TERM_", instrcode)
         return codename
 
 def _view_constant(prefix, code):
@@ -1051,7 +1052,7 @@ def _view_bitflag(prefix, code):
     c = code
     n = []
     for k, v in globals().items():
-        if k.startswith(prefix) and v & c:
+        if k.startswith(prefix) and v & c and v != TERM_INSTR_MASK:
             n.append(k)
             c = (c & ~v)
     if c!=0:
