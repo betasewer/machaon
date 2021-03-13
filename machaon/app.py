@@ -35,7 +35,7 @@ class AppRoot:
         self.typemodule = None
         self.objcol = ObjectCollection()
 
-    def initialize(self, *, ui, module_dir="", current_dir=None):
+    def initialize(self, *, ui, package_dir=None, current_dir=None):
         self.ui = ui
 
         if current_dir is None:
@@ -46,15 +46,15 @@ class AppRoot:
         self.processhive = ProcessHive()
         chamber = self.processhive.addnew(self.ui.get_input_prompt())
         
-        if not module_dir:
-            module_dir = os.path.join(os.getcwd(), "machaon")
-            if not os.path.isdir(module_dir):
-                os.mkdir(module_dir)
+        if not package_dir:
+            package_dir = os.path.join(os.getcwd(), "machaon")
+            if not os.path.isdir(package_dir):
+                os.mkdir(package_dir)
         
-        if not os.path.isdir(module_dir):
-            raise ValueError("ディレクトリが存在しません: " + module_dir)
+        if not os.path.isdir(package_dir):
+            raise ValueError("ディレクトリが存在しません: " + package_dir)
 
-        self.pkgmanager = PackageManager(module_dir)
+        self.pkgmanager = PackageManager(package_dir)
         self.pkgmanager.load_database()
         self.pkgmanager.add_to_import_path()
         self.pkgs = self.pkgmanager.create_undefined_empty_packages()[:]
@@ -106,7 +106,7 @@ class AppRoot:
             self.pkgs.append(newpkg)
         
         if not delayload: # この時点でロードしておく
-            newpkg.load(self)
+            self.load_pkg(newpkg)
         return newpkg
 
     # パッケージ概要を取得する
@@ -136,11 +136,23 @@ class AppRoot:
     def get_package_status(self, package):
         return self.pkgmanager.get_update_status(package)
 
-    # パッケージを名前で読み込む
-    def load_package(self, name):
-        pkg = self.get_package(name, fallback=False)
-        if not pkg.load(self):
-            raise pkg.get_last_load_error()
+    def load_pkg(self, package, *, force=False):
+        """ パッケージオブジェクトから型をロードする """
+        if not force and package.is_load_succeeded():
+            return True
+        
+        package.reset_loading()
+        for klass in package.iter_type_describers():
+            self.typemodule.define(klass, scope=package.scope)
+        package.finish_loading()
+        
+        return package.is_load_succeeded()
+    
+    def unload_pkg(self, package):
+        """ パッケージオブジェクトの型スコープを削除する """
+        if package.is_modules() and package.once_loaded():
+            self.typemodule.remove_scope(package.scope)
+        return True
 
     #
     # アプリの実行

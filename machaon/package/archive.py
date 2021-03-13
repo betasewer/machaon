@@ -18,6 +18,9 @@ class BasicArchive():
     def __init__(self):
         self._arc = None
         self._arcroot = None
+        
+    def get_default_module(self):
+        return None
     
     #
     # アーカイブを操作する

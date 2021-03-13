@@ -82,17 +82,20 @@ class Type():
     def is_scope(self, scope):
         return self.scope == scope
     
-    def get_describer_instance(self):
-        if isinstance(self._describer, type):
-            return self._describer()
-        else:
-            return self._describer
-
+    def get_describer(self):
+        return self._describer
+    
     def get_describer_qualname(self):
         if isinstance(self._describer, type):
             return ".".join([self._describer.__module__, self._describer.__qualname__])
         else:
             return str(self._describer)
+
+    def get_describer_instance(self):
+        if isinstance(self._describer, type):
+            return self._describer()
+        else:
+            return self._describer
 
     def copy(self):
         t = Type()

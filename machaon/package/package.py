@@ -9,7 +9,7 @@ import inspect
 import traceback
 from typing import Dict, Any, Union, List, Optional
 
-from machaon.core.importer import module_loader, attribute_loader, walk_modules
+from machaon.core.importer import module_loader, attribute_loader, walk_modules, module_name_from_path
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
 
@@ -22,7 +22,9 @@ PACKAGE_TYPE_DEPENDENCY = 0x2
 PACKAGE_TYPE_RESOURCE = 0x3
 PACKAGE_TYPE_UNDEFINED = 0x4
 PACKAGE_TYPE_SINGLE_MODULE = 0x5
-PACKAGE_LOADED = 0x10
+
+class PACKAGE_LOAD_END:
+    pass
 
 #
 #
@@ -51,9 +53,6 @@ class Package():
             type = Package.MODULES
         self._type = type
 
-        if module is None: 
-            if self._type == Package.MODULES:
-                module = "{}.__init__".format(self.name)
         self.entrypoint: Optional[str] = module
 
         self._hash = hashval
@@ -104,13 +103,13 @@ class Package():
         return self._hash
 
     def is_modules(self) -> bool:
-        return self._type == Package.MODULES
+        return self._type == PACKAGE_TYPE_MODULES or self._type == PACKAGE_TYPE_SINGLE_MODULE
     
     def is_undefined(self) -> bool:
-        return self._type == Package.UNDEFINED
+        return self._type == PACKAGE_TYPE_UNDEFINED
     
     def is_installed(self) -> bool:
-        if self._type == Package.RESOURCE:
+        if self._type == PACKAGE_TYPE_RESOURCE:
             return False
         if self.entrypoint is None:
             raise ValueError("entrypoint")
@@ -125,17 +124,14 @@ class Package():
         
         return True
 
-    def load(self, root):
-        """ パッケージに定義されたすべての型をロードする """
+    def iter_type_describers(self):
+        """ パッケージ内のモジュールにあるすべての型定義クラスを得る """
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
-
-        if self._loaded:
-            return not self.is_load_failed()
-
+        
         if self._type == PACKAGE_TYPE_MODULES:
             # __init__を読みに行く
-            aloader = attribute_loader(self.entrypoint)
+            aloader = module_loader(self.entrypoint)
             try:
                 moduleindex = aloader.load_attr("machaon_modules", fallback=True)
             except Exception as e:
@@ -149,43 +145,59 @@ class Package():
             else:
                 # サブモジュール全て
                 modules = []
-                basedir = os.path.dirname(aloader.file)
-                for loader in walk_modules(basedir):
-                    modules.append(loader)
+                basepkg = aloader.module_name
+                basedir = os.path.dirname(aloader.load_filepath())
 
-            self._load_defined_types(modules, root)
+                # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
+                skip_names = []
+                for fr in traceback.extract_stack():
+                    fname = os.path.normpath(fr.filename)
+                    if fname.startswith(basedir):
+                        relname = module_name_from_path(fname, basedir, basepkg)
+                        skip_names.append(relname)
+                
+                for loader in walk_modules(basedir, basepkg):
+                    if loader.module_name in skip_names:
+                        continue 
+                    modules.append(loader)
 
         elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
             loader = module_loader(self.entrypoint)
-            self._load_defined_types([loader], root)
+            modules = [loader]
 
-        self._loaded.append(True)
-        return not self.is_load_failed()
-
-    def _load_defined_types(self, loaders, root):
-        scopename = self.scope
-        for modloader in loaders:
+        for modloader in modules:
             try:
                 for klass in modloader.enum_type_describers():
-                    root.typemodule.define(klass, scope=scopename)
+                    yield klass
             except Exception as e:
                 ex = PackageTypeDefLoadError(e, str(modloader))
                 self._loaded.append(ex)
                 continue
     
+    def reset_loading(self):
+        self._loaded.clear()
+    
+    def finish_loading(self):
+        self._loaded.append(PACKAGE_LOAD_END)
+
     def once_loaded(self):
         return len(self._loaded) > 0
     
     def is_load_failed(self):
         if not self._loaded:
             return False
-        return self._loaded[0] is not True
+        return self._loaded[0] is not PACKAGE_LOAD_END
     
+    def is_load_succeeded(self):
+        if not self._loaded:
+            return False
+        return self._loaded[0] is PACKAGE_LOAD_END
+
     def get_load_errors(self) -> List[Exception]:
         errs = []
         for x in self._loaded:
-            if x is True:
-                continue
+            if x is PACKAGE_LOAD_END:
+                break
             errs.append(x)
         return errs
     
@@ -203,43 +215,47 @@ class Package():
         if self._type == PACKAGE_TYPE_MODULES:
             root.typemodule.remove_scope(self.scope)
 
-def create_package(name, package, module, **kwargs):
+def create_package(name, package, module=None, **kwargs):
     """
     文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
     """
-    if package is not None:
-        if isinstance(package, str):
-            host, sep, desc = package.partition(":")
-            if not sep:
-                raise ValueError("package: '{}' 文法が間違っています".format(package))
-            if host == "github":
-                from machaon.package.repository import GithubRepArchive
-                modpackage = GithubRepArchive(desc)
-            elif host == "bitbucket":
-                from machaon.package.repository import BitbucketRepArchive
-                modpackage = BitbucketRepArchive(desc)
-            elif host == "module":
-                from machaon.package.archive import LocalModule
-                modpackage = LocalModule()
-                module = desc
-            elif host == "local":
-                from machaon.package.archive import LocalFile
-                modpackage = LocalFile(desc)
-            elif host == "local-archive":
-                from machaon.package.archive import LocalArchive
-                modpackage = LocalArchive(desc)
-            else:
-                raise ValueError("package: '{}' サポートされていないホストです".format(host))
+    pkgtype = None
+    if isinstance(package, str):
+        host, sep, desc = package.partition(":")
+        if not sep:
+            raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
+        if host == "github":
+            from machaon.package.repository import GithubRepArchive
+            pkgsource = GithubRepArchive(desc)
+        elif host == "bitbucket":
+            from machaon.package.repository import BitbucketRepArchive
+            pkgsource = BitbucketRepArchive(desc)
+        elif host == "local":
+            from machaon.package.archive import LocalModule
+            pkgsource = LocalModule()
+            module = desc
+        elif host == "local-module":
+            from machaon.package.archive import LocalModule
+            pkgsource = LocalModule()
+            module = desc
+            pkgtype = PACKAGE_TYPE_SINGLE_MODULE
+        elif host == "file-module":
+            from machaon.package.archive import LocalFile
+            pkgsource = LocalFile(desc)
+            pkgtype = PACKAGE_TYPE_SINGLE_MODULE
+        elif host == "archive":
+            from machaon.package.archive import LocalArchive
+            pkgsource = LocalArchive(desc)
         else:
-            modpackage = package
-        return Package(name, modpackage, module=module, **kwargs)
+            raise ValueError("package: '{}' サポートされていないホストです".format(host))
     else:
-        if module is None:
-            raise ValueError("module: ローカルモジュールへの参照を指定してください")
-        from machaon.package.archive import LocalModule
-        source = LocalModule()
-        kwargs["type"] = PACKAGE_TYPE_SINGLE_MODULE # エントリポイントのモジュールのみ読み込む
-        return Package(name, source, module=module, **kwargs)
+        pkgsource = package
+    
+    if pkgtype is not None:
+        kwargs["type"] = pkgtype
+    if module is None:
+        module = pkgsource.get_default_module()
+    return Package(name, pkgsource, module=module, **kwargs)
 
 #
 class PackageNotFoundError(Exception):

@@ -48,7 +48,7 @@ class PyAttributeLoader:
     def __call__(self, *, fallback=False):
         return self.load_attr(fallback=fallback)
     
-    def load_attr(self, *, fallback=False, name=None):
+    def load_attr(self, name=None, *, fallback=False):
         name = name or self.member_name
         mod = self.module
         loaded = getattr(mod, name, None)
@@ -56,8 +56,7 @@ class PyAttributeLoader:
             raise ValueError("ターゲット'{}'はモジュール'{}'に存在しません".format(name, mod.__name__))
         return loaded
     
-    @property
-    def path(self):
+    def load_filepath(self):
         mod = self.module
         basefile = getattr(mod, "__file__", None)
         if basefile is None:
@@ -91,12 +90,8 @@ class PyModuleAttributeLoader(PyAttributeLoader):
             import sys
             if self.module_name in sys.modules:
                 mod = sys.modules[self.module_name]
-            elif self._finder:
-                spec = self._finder.find_spec(self.module_name)
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                sys.modules[self.module_name] = mod
             else:
+                # sys.modulesの扱いを任せたいのでfinderは（今のところ）使わない
                 mod = importlib.import_module(self.module_name)
         else:
             mod = builtins
@@ -117,32 +112,49 @@ class PyModuleFileAttributeLoader(PyAttributeLoader):
     def __init__(self, module, path, member = None):
         super().__init__(member)
         self.module_name = module
-        self.filepath = path
+        self._path = path
     
     def load_module(self):
-        spec = importlib.util.spec_from_file_location(self.module_name, self.filepath)
+        spec = importlib.util.spec_from_file_location(self.module_name, self._path)
         if spec is None:
-            raise FileNotFoundError(self.filepath)
+            raise FileNotFoundError(self._path)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         return mod
 
+    def load_filepath(self):
+        return self._path
+
     def __str__(self) -> str:
         parts= []
-        parts.append("{}[{}]".format(self.module_name, self.filepath))
+        parts.append("{}[{}]".format(self.module_name, self._path))
         if self.member_name:
             parts.append(self.member_name)
         return ".".join(parts)
 
 
-def walk_modules(path, *, _pkg_name=None):
+def walk_modules(path, package_name=None):
     """
     このパス以下にあるすべてのモジュールを列挙する。
     """
     for finder, name, ispkg in pkgutil.iter_modules(path=[path]):
-        qual_name = name if not _pkg_name else _pkg_name + "." + name
+        qual_name = name if not package_name else package_name + "." + name
         if ispkg:
             cp = os.path.join(path, name)
-            yield from walk_modules(cp, _pkg_name=qual_name)
+            yield from walk_modules(cp, qual_name)
         else:
             yield PyModuleAttributeLoader(qual_name, finder=finder)
+
+def module_name_from_path(path, basepath, basename=None):
+    """
+    パスからモジュール名を作る
+    """
+    relpath, _ = os.path.splitext(os.path.relpath(path, basepath))
+    if "\\" in relpath:
+        relparts = relpath.split("\\")
+    else:
+        relparts = relpath.split("/")
+    name = ".".join(relparts)
+    if basename:
+        name = basename + "." + name
+    return name

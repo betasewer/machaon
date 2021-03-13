@@ -83,5 +83,3 @@ def test_function():
     from machaon.core.message import MessageEngine
     assert isinstance(fnpower, MessageEngine)
 
-
-    

@@ -228,7 +228,9 @@ class InvocationContext:
             scope, _, typename = typename.rpartition(".")
 
         if scope:
-            self.root.load_package(scope) # スコープをロードする
+            # スコープ名でパッケージを検索
+            package = self.root.get_package(scope, fallback=False)
+            self.root.load_pkg(package)
         
         t = self.type_module.get(typename, scope=scope)
         if t is None:
