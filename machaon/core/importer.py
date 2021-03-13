@@ -3,10 +3,16 @@ import builtins
 import inspect
 import os
 
-#
-#
-#
+
+def module_loader(expr, *, location=None):
+    if location:
+        return PyModuleFileLoader(expr, location)
+    else:
+        return PyModuleLoader(expr)
+
 def attribute_loader(expr, *, attr=None, location=None):
+    modloader = None
+    member = None
     if attr is None:
         mod, _, member = expr.rpartition(".")
         if not member:
@@ -15,24 +21,16 @@ def attribute_loader(expr, *, attr=None, location=None):
     else:
         member = attr
         mod = expr
-    if location:
-        return PyModuleFileAttributeLoader(mod, location, member)
-    else:
-        return PyModuleAttributeLoader(mod, member)
-
-def module_loader(expr, *, location=None):
-    if location:
-        return PyModuleFileAttributeLoader(expr, location)
-    else:
-        return PyModuleAttributeLoader(expr)
+    if mod:
+        modloader = module_loader(mod, location=location)
+    return AttributeLoader(modloader, member)
 
 
-class PyAttributeLoader:
+class PyBasicModuleLoader:
     """
     ローダーの基礎クラス
     """
-    def __init__(self, member = None):
-        self.member_name = member
+    def __init__(self):
         self._m = None
     
     @property
@@ -44,11 +42,7 @@ class PyAttributeLoader:
     def load_module(self):
         raise NotImplementedError()
     
-    def __call__(self, *, fallback=False):
-        return self.load_attr(fallback=fallback)
-    
     def load_attr(self, name=None, *, fallback=False):
-        name = name or self.member_name
         mod = self.module
         loaded = getattr(mod, name, None)
         if loaded is None and not fallback:
@@ -75,41 +69,31 @@ class PyAttributeLoader:
             if doc.startswith("@type"):
                 yield value
 
-class PyModuleAttributeLoader(PyAttributeLoader):
+class PyModuleLoader(PyBasicModuleLoader):
     """
     配置されたモジュールからロードする
     """
-    def __init__(self, module, member = None, *, finder = None):
-        super().__init__(member)
+    def __init__(self, module):
+        super().__init__()
         self.module_name = module
-        self._finder = finder
     
     def load_module(self):
-        if self.module_name:
-            import sys
-            if self.module_name in sys.modules:
-                mod = sys.modules[self.module_name]
-            else:
-                # sys.modulesの扱いを任せたいのでfinderは（今のところ）使わない
-                mod = importlib.import_module(self.module_name)
+        import sys
+        if self.module_name in sys.modules:
+            mod = sys.modules[self.module_name]
         else:
-            mod = builtins
+            # sys.modulesの扱いを任せる
+            mod = importlib.import_module(self.module_name)
         return mod
     
     def __str__(self) -> str:
-        parts= []
-        if self.module_name:
-            parts.append(self.module_name)
-        if self.member_name:
-            parts.append(self.member_name)
-        return ".".join(parts)
+        return self.module_name
 
-class PyModuleFileAttributeLoader(PyAttributeLoader):
+class PyModuleFileLoader(PyBasicModuleLoader):
     """
     ファイルパスを指定してロードする
     """
-    def __init__(self, module, path, member = None):
-        super().__init__(member)
+    def __init__(self, module, path):
         self.module_name = module
         self._path = path
     
@@ -125,12 +109,22 @@ class PyModuleFileAttributeLoader(PyAttributeLoader):
         return self._path
 
     def __str__(self) -> str:
-        parts= []
-        parts.append("{}[{}]".format(self.module_name, self._path))
-        if self.member_name:
-            parts.append(self.member_name)
-        return ".".join(parts)
+        return "{}[{}]".format(self.module_name, self._path)
 
+
+class AttributeLoader():
+    """
+    モジュールの要素をロードする
+    """
+    def __init__(self, module, attr):
+        self.attr_name = attr
+        self.module = module
+
+    def __call__(self, *, fallback=False):
+        if self.module:
+            return self.module.load_attr(self.attr_name, fallback=fallback)
+        else:
+            return getattr(builtins, self.attr_name, None)
 
 def walk_modules(path, package_name=None):
     """
@@ -146,7 +140,7 @@ def walk_modules(path, package_name=None):
                 continue
             filepath = os.path.join(dirpath, filename)
             qual_name = module_name_from_path(filepath, path, package_name)
-            yield PyModuleAttributeLoader(qual_name)
+            yield PyModuleLoader(qual_name)
 
 def module_name_from_path(path, basepath, basename=None):
     """
