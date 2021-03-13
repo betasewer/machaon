@@ -1,7 +1,6 @@
 import importlib
 import builtins
 import inspect
-import pkgutil
 import os
 
 #
@@ -137,18 +136,24 @@ def walk_modules(path, package_name=None):
     """
     このパス以下にあるすべてのモジュールを列挙する。
     """
-    for finder, name, ispkg in pkgutil.iter_modules(path=[path]):
-        qual_name = name if not package_name else package_name + "." + name
-        if ispkg:
-            cp = os.path.join(path, name)
-            yield from walk_modules(cp, qual_name)
-        else:
-            yield PyModuleAttributeLoader(qual_name, finder=finder)
+    for dirpath, dirnames, filenames in os.walk(path, topdown=True):
+        # キャッシュディレクトリを走査しない
+        dirnames[:] = [x for x in dirnames if not x.startswith((".", "__"))]
+        
+        filenames = [x for x in filenames if x.endswith(".py")]
+        for filename in filenames:
+            if filename in ("__init__.py", "__main__.py"):
+                continue
+            filepath = os.path.join(dirpath, filename)
+            qual_name = module_name_from_path(filepath, path, package_name)
+            yield PyModuleAttributeLoader(qual_name)
 
 def module_name_from_path(path, basepath, basename=None):
     """
     パスからモジュール名を作る
     """
+    if not os.path.isabs(path):
+        raise ValueError("Pass an absolute path")
     relpath, _ = os.path.splitext(os.path.relpath(path, basepath))
     if "\\" in relpath:
         relparts = relpath.split("\\")

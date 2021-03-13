@@ -26,6 +26,3 @@ def test_walk_modules():
     assert loaded[0] is loaded[1]
 
 
-
-
-
