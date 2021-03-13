@@ -9,7 +9,7 @@ import inspect
 import traceback
 from typing import Dict, Any, Union, List, Optional
 
-from machaon.core.importer import module_loader, attribute_loader
+from machaon.core.importer import module_loader, attribute_loader, walk_modules
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
 
@@ -135,9 +135,9 @@ class Package():
 
         if self._type == PACKAGE_TYPE_MODULES:
             # __init__を読みに行く
-            aloader = attribute_loader(self.entrypoint, attr="machaon_modules")
+            aloader = attribute_loader(self.entrypoint)
             try:
-                moduleindex = aloader(fallback=True)
+                moduleindex = aloader.load_attr("machaon_modules", fallback=True)
             except Exception as e:
                 self._loaded.append(PackageLoadError(e))
                 return False
@@ -149,30 +149,9 @@ class Package():
             else:
                 # サブモジュール全て
                 modules = []
-                basefile = getattr(aloader.load(), "__file__", None)
-                if basefile is None:
-                    raise ValueError("モジュールのファイルパスを特定できません")
-
-                basedir = os.path.dirname(basefile)
-
-                # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
-                files_on_stack = []
-                for fr in traceback.extract_stack():
-                    fname = os.path.normpath(fr.filename)
-                    if fname.startswith(basedir):
-                        files_on_stack.append(fname)
-
-                for dirpath, _dirnames, filenames in os.walk(basedir):
-                    for filename in filenames:
-                        _, ext = os.path.splitext(filename)
-                        if ext != ".py":
-                            continue
-                        filepath = os.path.join(dirpath, filename)
-                        if filepath in files_on_stack:
-                            continue # 再帰するのでロードをスキップ
-                        relname = os.path.splitext(os.path.relpath(filepath, basedir))[0].replace("/", "_").replace("\\", "_")
-                        composed_name = "{}_submodule_{}".format(self.name, relname)
-                        modules.append(module_loader(composed_name, location=filepath))
+                basedir = os.path.dirname(aloader.file)
+                for loader in walk_modules(basedir):
+                    modules.append(loader)
 
             self._load_defined_types(modules, root)
 

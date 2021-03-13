@@ -160,8 +160,16 @@ class Type():
         else:
             if self.value_type is None: # 制限なし
                 return value
-            l_name = type(value).__name__
-            r_name = getattr(self.value_type, "__name__", None) or str(self.value_type)
+            
+            def modqualname(t):
+                n = getattr(self.value_type, "__name__", None)
+                m = getattr(self.value_type, "__module__", None)
+                if n and m:
+                    return "{}.{}".format(m,n)
+                else:
+                    return str(t)
+            l_name = modqualname(type(value))
+            r_name = modqualname(self.value_type)
             raise ValueError("'{}' -> '{}'への変換関数が定義されていません".format(l_name, r_name))
 
     def construct_from_value(self, context, value, *params):
