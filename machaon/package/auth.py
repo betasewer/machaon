@@ -1,10 +1,10 @@
 import urllib.request
 import base64
 
-#
-#
-#
 class BasicAuth():
+    """
+    ベーシック認証
+    """
     def __init__(self, password, raw=False):
         if not raw:
             password = base64.b64decode(password).decode("utf-8")

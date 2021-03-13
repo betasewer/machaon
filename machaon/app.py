@@ -74,7 +74,7 @@ class AppRoot:
         return self.typemodule
  
     #
-    # クラスパッケージを走査する
+    # クラスパッケージ
     #
     def add_package(self, 
         name, 
@@ -153,6 +153,22 @@ class AppRoot:
         if package.is_modules() and package.once_loaded():
             self.typemodule.remove_scope(package.scope)
         return True
+   
+    def add_credential(self, target, cred):
+        """ 
+        ダウンロードの認証情報をパッケージに追加する。  
+        Params:
+            target(str): 対象［ホスト名:ユーザー名］
+            cred(Any): 認証オブジェクト
+        """
+        hostname, sep, username = target.partition(":")
+        if not sep:
+            raise ValueError("［ホスト名:ユーザー名］を指定してください")
+        hostname = hostname.strip()
+        username = username.strip()
+        for pkg in self.pkgs:
+            src = pkg.get_source()
+            src.add_credential(hostname, username, cred)
 
     #
     # アプリの実行

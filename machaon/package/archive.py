@@ -22,6 +22,9 @@ class BasicArchive():
     def get_default_module(self):
         return None
     
+    def add_credential(self, _hostname, _username, _cred):
+        return False
+    
     #
     # アーカイブを操作する
     #

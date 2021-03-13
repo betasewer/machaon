@@ -102,6 +102,13 @@ class RepositoryArchive(BasicArchive):
             return urllib.request.urlopen(req, timeout=type(self).download_timeout)
         except urllib.error.URLError as e:
             raise RepositoryURLError(e)
+    
+    #
+    def add_credential(self, hostname, username, cred):
+        if type(self).hostname == hostname and self.username == username:
+            self.credential = cred
+            return True
+        return False
 
 #
 #
