@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object, ObjectValue, ObjectCollection
-from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF
+from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
 from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName
 
 #
@@ -256,17 +256,30 @@ class InvocationContext:
         value_type = type(value) 
         return self.type_module.deduce(value_type)
     
-    def new_object(self, typecode: Any, value=None) -> Object:
-        """ 型名と値からオブジェクトを作る。値の型変換を行う """
-        if value is None:
-            value = typecode
-            valtype = self.deduce_type(value)
+    def new_object(self, value: Any, *, type=None, conversion=None) -> Object:
+        """ 型名と値からオブジェクトを作る。値の型変換を行う 
+        Params:
+            typecode_or_value(Any): 型を示すもの。valueを省略した場合は値をとり、型を推定する
+            *value(Any): 値
+        KeywordParams:
+            conversion(str): 値の変換方法
+        """
+        if type:
+            t = self.new_type(type)
+            convvalue = t.construct_from_value(self, value)
+            return t.new_object(convvalue)
+        elif conversion:
+            tname, _, doc = conversion.partition(":")
+            typename, doc, typeparams = parse_typename_syntax(tname.strip(), doc.strip())
+            t = self.new_type(typename)
+            convvalue = t.construct_from_value(self, value, *typeparams)
+            return t.new_object(convvalue)
         else:
-            valtype = self.new_type(typecode)
-        if valtype is None:
-            raise ValueError("型が存在しません")
-        convvalue = valtype.construct_from_value(self, value)
-        return valtype.new_object(convvalue)
+            valtype = self.deduce_type(value)
+            if valtype is None:
+                raise ValueError("値'{}'から型を推定できません".format(value))
+            convvalue = valtype.construct_from_value(self, value)
+            return valtype.new_object(convvalue)
     
     def new_invocation_error_object(self, exception=None):
         """ エラーオブジェクトを作る """

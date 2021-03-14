@@ -789,7 +789,7 @@ class MessageEngine():
             obj = select_object(context, typename=values[0])
 
         elif objcode == TERM_OBJ_STRING:
-            obj = context.new_object("Str", values[0])
+            obj = context.new_object(values[0], type="Str")
 
         elif objcode == TERM_OBJ_TYPE:
             typeexpr = values[0]
@@ -807,7 +807,7 @@ class MessageEngine():
             from machaon.types.tuple import ObjectTuple
             elems = values[0].split() # 文字列を空白で区切る
             tpl = ObjectTuple.conversion_construct(None, context, elems)
-            obj = context.new_object("Tuple", tpl)
+            obj = context.new_object(tpl, type="Tuple")
 
         elif objcode == TERM_OBJ_LITERAL:
             obj = select_literal(context, values[0])

@@ -289,7 +289,7 @@ class Sheet():
         for ival, obj in enumerate(self.column_values(context, icol, col)):
             if pred(obj.value, value):
                 item = self.items[self.get_item_from_row(ival)]
-                index = context.new_object("Int", ival)
+                index = context.new_object(ival, type="Int")
                 ovalue = col.get_type(context).new_object(obj.value)
                 return ElemObject(item, index, ovalue)
 
@@ -345,7 +345,7 @@ class Sheet():
         for itemindex, _row in self.rows:
             subject = Object(self.itemtype, self.items[itemindex])
             value = col.eval(subject, context)
-            yield Object(valtype, value)
+            yield valtype.new_object(value)
     
     #
     # シーケンス関数
@@ -701,7 +701,7 @@ class Sheet():
             key = col.get_name()
             valtype = col.get_type(context)
             values[key] = Object(valtype, row[i])
-        return context.get_type("ObjectCollection").new_object(values)
+        return context.new_object(values, type="ObjectCollection")
 
     def foreach(self, context, predicate):
         """ @method context
@@ -814,28 +814,6 @@ class Sheet():
 
         itemtype = context.select_type(itemtypename)
         return Sheet(value, itemtype, context, columnnames)
-
-
-
-
-class _RowToObject():
-    def __init__(self, dataset, context):
-        """ 型を初期化する """
-        prototype = {
-            "Typename" : "SetRowObject",
-            "Delegate" : dataset.itemtype
-        }
-        for i, col in enumerate(dataset.viewcolumns):
-            key = col.get_name()
-            valtype = col.get_type(context)
-            prototype[key] = valtype.typename
-        
-        self.type = Type(prototype).load()
-        self.dataset = dataset
-        self.context = context
-
-    def row_object(self, itemindex, row):
-        """ 行をオブジェクトに変換する """
 
 
 

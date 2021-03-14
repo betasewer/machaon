@@ -273,16 +273,16 @@ def test_message_reenter():
     func = MessageEngine("210 / @")
 
     # 1.
-    r = func.run_function(context.get_type("Int").new_object(7), context)
+    r = func.run_function(context.new_object(7), context)
     assert r.value == 30
     # 2.
-    r = func.run_function(context.get_type("Int").new_object(5), context)
+    r = func.run_function(context.new_object(5), context)
     assert r.value == 42
     # 3. (error)
-    r = func.run_function(context.get_type("Int").new_object(0), context)
+    r = func.run_function(context.new_object(0), context)
     assert r.is_error()
     # 4. 
-    r = func.run_function(context.get_type("Int").new_object(2), context)
+    r = func.run_function(context.new_object(2), context)
     assert r.value == 105
 
 

@@ -89,7 +89,7 @@ class ObjectTuple():
         # 順に検索
         for i, o in enumerate(self.objects):
             if o.value == value:
-                index = context.new_object("Int", i)
+                index = context.new_object(i, type="Int")
                 return ElemObject(o, index)
         
         raise NotFound() # 見つからなかった
@@ -255,3 +255,7 @@ class ObjectTuple():
             objs.append(val)
 
         return ObjectTuple(objs)
+    
+    # 内部使用
+    def values(self):
+        return [x.value for x in self.objects]

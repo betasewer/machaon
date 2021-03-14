@@ -112,7 +112,14 @@ class Type():
     def new_object(self, value):
         """ この型のオブジェクトを作る。型変換は行わない """
         from machaon.core.object import Object
-        return Object(self, value)
+        if isinstance(value, Object):
+            if value.type is not self:
+                raise ValueError("'{}' 違う型のオブジェクトです".format(value.type))
+            return value
+        else:
+            if not self.check_value_type(type(value)):
+                raise ValueError("'{}' 値の型が違います".format(type(value).__name__))
+            return Object(self, value)
 
     #
     #
