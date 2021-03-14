@@ -409,7 +409,7 @@ TERM_OBJ_CONSTANT = 0x0900
 TERM_OBJ_NOTHING = 0x0A00
 TERM_OBJ_TYPE = 0x0B00
 TERM_OBJ_SPECIFIED_TYPE = 0x0C00
-TERM_OBJ_REF_ROOT = 0x0D00
+TERM_OBJ_REF_ROOT_MEMBER = 0x0D00
 TERM_OBJ_TUPLE = 0x0E00
 #  - アクションの指示
 TERM_INSTR_MASK = 0xFF0000
@@ -674,16 +674,27 @@ class MessageEngine():
 
             objid = token[1:]
             if not objid: 
-                # ラムダ関数のメインオブジェクト
+                # 無名関数の引数オブジェクト
                 tokenbits |= TERM_OBJ_LAMBDA_ARG
             
-            elif SIGIL_OBJECT_LAMBDA_MEMBER in objid:
-                # メインオブジェクトのメンバ参照
-                tokenbits |= TERM_OBJ_LAMBDA_ARG_MEMBER
-                objid, _, memberid = token.partition(SIGIL_OBJECT_LAMBDA_MEMBER)
-
-                if not memberid:
-                    raise BadExpressionError("")
+            is_arg_member = SIGIL_OBJECT_LAMBDA_MEMBER in objid
+            is_root_member = objid[0] == SIGIL_OBJECT_SPEC_NAME
+            if is_arg_member or is_root_member:
+                # ブロックが生成される指示
+                if is_arg_member:
+                    # 引数オブジェクトのメンバ参照
+                    tokenbits |= TERM_OBJ_LAMBDA_ARG_MEMBER
+                    objid, _, memberid = token.partition(SIGIL_OBJECT_LAMBDA_MEMBER)
+                    if not memberid:
+                        raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_LAMBDA_MEMBER))
+                elif is_root_member:
+                    # ルートオブジェクトのメンバ参照
+                    tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
+                    memberid = token[2:]
+                    if not memberid:
+                        raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_SPEC_NAME))
+                else:
+                    raise ValueError("")
 
                 # 新たなブロックを生成する
                 if expect == EXPECT_ARGUMENT:
@@ -695,12 +706,6 @@ class MessageEngine():
                 if expect == EXPECT_NOTHING:
                     return (tokenbits | TERM_NEW_BLOCK_RECIEVER, memberid)
                 
-            elif objid[0] == SIGIL_OBJECT_SPEC_NAME:
-                objid = token[2:]
-                if objid == "root":
-                    # ルートオブジェクト
-                    tokenbits |= TERM_OBJ_REF_ROOT
-
             elif objid[0].isupper(): 
                 # 大文字なら型とみなす
                 tokenbits |= TERM_OBJ_REF_TYPENAME
@@ -784,10 +789,6 @@ class MessageEngine():
         elif objcode == TERM_OBJ_REF_TYPENAME:
             obj = select_object(context, typename=values[0])
 
-        elif objcode == TERM_OBJ_REF_ROOT:
-            rt = context.get_type("RootObject")
-            obj = rt.new_object(rt.value_type(context))
-
         elif objcode == TERM_OBJ_STRING:
             obj = context.new_object("Str", values[0])
 
@@ -831,6 +832,12 @@ class MessageEngine():
             selector = select_method(values[0], reciever.type, reciever=reciever.value)
             objs = (reciever, selector)
         
+        elif objcode == TERM_OBJ_REF_ROOT_MEMBER:
+            rt = context.get_type("RootObject")
+            reciever = rt.new_object(rt.value_type(context))
+            selector = select_method(values[0], reciever.type, reciever=reciever.value)
+            objs = (reciever, selector)
+
         elif objcode == TERM_OBJ_CONSTANT:
             obj = select_constant(context, values[0])
         
