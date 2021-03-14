@@ -34,7 +34,7 @@ class RootObject:
         Returns:
             Object: 変数
         '''
-        item = self.context.input_objects.get_by_name(name)
+        item = self.context.input_objects.get(name)
         if item is None:
             raise ValueError(name)
         return item.object

@@ -672,39 +672,38 @@ class MessageEngine():
             if expect == EXPECT_SELECTOR:
                 raise BadExpressionError("セレクタが必要です") 
 
+            def new_block_bits(selector_id):
+                if expect == EXPECT_ARGUMENT:
+                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, memberid)
+                elif expect == EXPECT_RECIEVER:
+                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, memberid)                
+                elif expect == EXPECT_NOTHING:
+                    return (tokenbits | TERM_NEW_BLOCK_RECIEVER, memberid)
+                else:
+                    raise ValueError("")
+
             objid = token[1:]
             if not objid: 
                 # 無名関数の引数オブジェクト
                 tokenbits |= TERM_OBJ_LAMBDA_ARG
             
-            is_arg_member = SIGIL_OBJECT_LAMBDA_MEMBER in objid
-            is_root_member = objid[0] == SIGIL_OBJECT_SPEC_NAME
-            if is_arg_member or is_root_member:
-                # ブロックが生成される指示
-                if is_arg_member:
-                    # 引数オブジェクトのメンバ参照
-                    tokenbits |= TERM_OBJ_LAMBDA_ARG_MEMBER
-                    objid, _, memberid = token.partition(SIGIL_OBJECT_LAMBDA_MEMBER)
-                    if not memberid:
-                        raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_LAMBDA_MEMBER))
-                elif is_root_member:
-                    # ルートオブジェクトのメンバ参照
-                    tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
-                    memberid = token[2:]
-                    if not memberid:
-                        raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_SPEC_NAME))
-                else:
-                    raise ValueError("")
+            elif SIGIL_OBJECT_LAMBDA_MEMBER in objid:
+                # 引数オブジェクトのメンバ参照
+                tokenbits |= TERM_OBJ_LAMBDA_ARG_MEMBER
+                objid, _, memberid = token.partition(SIGIL_OBJECT_LAMBDA_MEMBER)
+                if not memberid:
+                    raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_LAMBDA_MEMBER))
 
-                # 新たなブロックを生成する
-                if expect == EXPECT_ARGUMENT:
-                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, memberid)
+                return new_block_bits(memberid)
                 
-                if expect == EXPECT_RECIEVER:
-                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, memberid)
-                
-                if expect == EXPECT_NOTHING:
-                    return (tokenbits | TERM_NEW_BLOCK_RECIEVER, memberid)
+            elif objid[0] == SIGIL_OBJECT_SPEC_NAME:
+                # ルートオブジェクトのメンバ参照
+                tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
+                memberid = token[2:]
+                if not memberid:
+                    raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_SPEC_NAME))
+
+                return new_block_bits(memberid)
                 
             elif objid[0].isupper(): 
                 # 大文字なら型とみなす
