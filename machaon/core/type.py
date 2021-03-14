@@ -461,11 +461,12 @@ class Type():
 # 型の取得時まで定義の読み込みを遅延する
 #
 class TypeDelayLoader():
-    def __init__(self, traits: Union[str, Any], typename: str, doc, scope, bits):
+    def __init__(self, traits: Union[str, Any], typename: str, value_type = None, doc = "", scope = None, bits = 0):
         self.traits = traits
         self.typename = typename
         if not isinstance(typename, str):
             raise ValueError("型名を文字列で指定してください")
+        self.value_type = value_type
         self.doc = doc
         self.scope = scope
         self.bits = bits
@@ -481,29 +482,36 @@ class TypeDelayLoader():
         return self._t is not None
 
     def get_value_type(self):
-        return None
-    
+        if self.value_type is not None:
+            return self.value_type
+        elif self.bits & TYPE_ANYTYPE:
+            return None
+        else:
+            trait = self._load_trait()
+            return trait 
+
     def is_scope(self, scope):
         return self.scope == scope
     
+    def _load_trait(self):
+        if isinstance(self.traits, str):
+            from machaon.core.importer import attribute_loader
+            loader = attribute_loader(self.traits)
+            return loader()
+        else:
+            return self.traits
+
     def load(self, typemodule):
         if self._t is None:
-            traits = None
-            if isinstance(self.traits, str):
-                from machaon.core.importer import attribute_loader
-                loader = attribute_loader(self.traits)
-                traits = loader()
-            else:
-                traits = self.traits
-            
+            traits = self._load_trait()            
             self._t = typemodule.define(
                 traits, 
                 typename=self.typename, 
-                doc=self.doc, scope=self.scope, bits=self.bits,
+                value_type=self.value_type,
+                doc=self.doc, scope=self.scope, 
+                bits=self.bits,
                 delayedload=True
             )
-            self.traits = None
-            self.doc = ""
         return self._t
 
 #
@@ -645,7 +653,7 @@ class TypeModule():
         for _tn, ts in self._typelib.items(): # 型を比較する
             for t in ts:
                 if t.get_value_type() is value_type:
-                    return t
+                    return self._load_type(t)
         
         # 親モジュールを探索
         for ancmodule in self._ancestors:
@@ -663,6 +671,7 @@ class TypeModule():
         traits: Any = None,
         *,
         typename = None, 
+        value_type = None,
         doc = "",
         scope = None,
         bits = 0,
@@ -685,7 +694,7 @@ class TypeModule():
             raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__name__))
         
         if isinstance(t, Type):
-            t.describe(typename=typename, doc=doc, scope=scope, bits=bits)
+            t.describe(typename=typename, value_type=value_type, doc=doc, scope=scope, bits=bits)
             t.load()
 
         if not delayedload:
@@ -694,9 +703,9 @@ class TypeModule():
         return t
     
     # 遅延登録デコレータ
-    def definition(self, *, typename, doc="", scope=None, bits=0):
+    def definition(self, *, typename, value_type=None, doc="", scope=None, bits=0):
         def _deco(traits):
-            self.define(traits=TypeDelayLoader(traits, typename, doc, scope, bits))
+            self.define(traits=TypeDelayLoader(traits, typename, value_type, doc, scope, bits))
             return traits
         return _deco
     

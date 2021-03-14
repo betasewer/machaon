@@ -1,22 +1,21 @@
 import re
+import datetime
 
 from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod, TYPE_ANYTYPE, TYPE_OBJCOLTYPE
 from machaon.core.object import Object
 
 fundamental_type = TypeModule()
 
-
 # ----------------------------------------------------------
 #
 #  基本型
 #
 # ----------------------------------------------------------
-@fundamental_type.definition(typename="Type", doc="""
+@fundamental_type.definition(typename="Type", value_type=Type, doc="""
 オブジェクトの型。
 """)
 class TypeType():
     """@type
-    ValueType: machaon.core.type.Type
     """
 
     def stringify(self, v):
@@ -50,6 +49,21 @@ class TypeType():
         v = type.construct_from_string(str)
         return Object(type, v)
 
+    def help(self, type, context):
+        """ @method context
+        型の説明、メソッド一覧を表示する。
+        Returns:
+            Object:
+        """
+        docs = []
+        docs.append(type.fulltypename)
+        docs.extend(type.doc.splitlines())
+        docs.append("実装：{}".format(type.get_describer_qualname()))
+        context.spirit.post("message", "\n".join(docs))
+
+        meths = self.methods(type, context)
+        return context.new_object(meths, conversion="Sheet[Method]: (name,doc,signature)").pretty_view()
+
     def methods(self, type, context):
         '''@method context
         使用可能なメソッドを列挙する。
@@ -62,7 +76,6 @@ class TypeType():
         from machaon.core.message import enum_selectable_method
         for meth in enum_selectable_method(type):
             helps.append(meth)
-
         return helps
     
     def method(self, type, name):
@@ -115,9 +128,9 @@ class TypeType():
         '''
         return type.get_describer_qualname()
     
-    def set(self, type, context):
+    def sheet(self, type, context):
         ''' @method context
-        空のSetを作成する。
+        この型の空のSheetを作成する。
         Returns:
             Object:
         '''
@@ -172,12 +185,11 @@ class FunctionType():
 #  Pythonのビルトイン型
 #
 # ----------------------------------------------------------
-@fundamental_type.definition(typename="Str", doc="""
+@fundamental_type.definition(typename="Str", value_type=str, doc="""
 Python.str 文字列。
 """)
 class StrType():
     """ @type use-instance-method
-    ValueType: str
     """
     def construct(self, s):
         return s
@@ -305,12 +317,11 @@ class StrType():
                 raise e
             return p
 
-@fundamental_type.definition(typename="Bool", doc="""
+@fundamental_type.definition(typename="Bool", value_type=bool, doc="""
 Python.bool 真偽値。
 """)
 class BoolType():
     """@type use-instance-method
-    ValueType: bool
     """
 
     def construct(self, s):
@@ -400,12 +411,11 @@ class NumericType():
     
 
 
-@fundamental_type.definition(typename="Int", doc="""
+@fundamental_type.definition(typename="Int", value_type=int, doc="""
 整数型。
 """)
 class IntType(NumericType):
     """@type use-instance-method
-    ValueType: int
     """
 
     def construct(self, s):
@@ -448,12 +458,11 @@ class IntType(NumericType):
         return pow(n, exp)
 
 
-@fundamental_type.definition(typename="Float", doc="""
+@fundamental_type.definition(typename="Float", value_type=float, doc="""
 浮動小数点型。
 """)
 class FloatType(NumericType):
     """@type use-instance-method
-    ValueType: float
     """
 
     def construct(self, s):
@@ -472,25 +481,22 @@ class FloatType(NumericType):
         return math.pow(n, exp)
 
 
-@fundamental_type.definition(typename="Complex", doc="""
+@fundamental_type.definition(typename="Complex", value_type=complex, doc="""
 複素数型。
 """)
 class ComplexType():
     """@type use-instance-method
-    ValueType: complex
     """
 
     def construct(self, s):
         return complex(s)
     
 
-@fundamental_type.definition(typename="Datetime", doc="""
+@fundamental_type.definition(typename="Datetime", value_type=datetime.datetime, doc="""
 日付時刻型。
 """)
 class DatetimeType():
     """@type use-instance-method
-    ValueType:
-        datetime.datetime
     """
 
     def construct(self, s):
