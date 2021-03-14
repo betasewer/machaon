@@ -524,7 +524,7 @@ class Method():
         self.target = "function:{}".format(str(action))
         self.flags |= METHOD_LOADED
     
-    def get_signature(self):
+    def get_signature(self, *, with_name=False):
         """ @method alias-name [signature]
         メソッドの構文を返す。
         Returns:
@@ -532,7 +532,7 @@ class Method():
         """
         # パラメータ
         params = []
-        for i, p in enumerate(self.params):
+        for p in self.params:
             ps = ""
 
             name = p.name
@@ -550,14 +550,43 @@ class Method():
 
         # 戻り値
         results = []
-        for i, r in enumerate(self.results):
+        for r in self.results:
             re = r.typename
             results.append(re)
         
         if self.flags & METHOD_RESULT_UNSPECIFIED:
             results.append("...")
         
-        return "{}({}) -> {}".format(self.name, ",".join(params), ",".join(results))
+        parts = []
+        if with_name:
+            parts.append(self.name)
+        if params:
+            parts.append(" ".join(params))
+        elif not with_name:
+            parts.append("(引数無し)") # 何もないと→から始まるので、入れておいた
+        parts.append("->")
+        parts.append(", ".join(results))
+        return " ".join(parts)
+    
+    #
+    def pprint(self, app):
+        sig = self.get_signature(with_name=True)
+        app.post("message", sig)
+        app.post("message", self.doc)
+
+        app.post("message", "引数:")
+        if not self.params:
+            app.post("message", "    なし")
+        else:
+            for p in self.params:
+                l = "    {} [{}]: {}".format(p.get_name(), p.get_typename(), p.get_doc())
+                app.post("message", l)
+
+        app.post("message", "返値:")
+        r = self.results[0]
+        l = "    {}: {}".format(r.get_typename(), r.get_doc())
+        app.post("message", l)
+
 
 #
 # Typename[Typename2]: (param1, param2, ...) document
