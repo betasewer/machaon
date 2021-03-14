@@ -35,7 +35,14 @@ class AppRoot:
         self.typemodule = None
         self.objcol = ObjectCollection()
 
-    def initialize(self, *, ui, package_dir=None, current_dir=None):
+    def initialize(self, *, ui, package_dir=None, current_dir=None, **uiargs):
+        if isinstance(ui, str):
+            if ui == "tk":
+                from machaon.ui.tk import tkLauncher
+                ui = tkLauncher(**uiargs)
+            else:
+                raise ValueError("不明なUIタイプです")
+
         self.ui = ui
 
         if current_dir is None:
