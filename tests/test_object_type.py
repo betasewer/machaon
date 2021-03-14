@@ -87,7 +87,7 @@ def test_scoped_delayed_define():
     assert typelist[0] is ts # 追加順で取り出される
     assert typelist[1] is t
 
-#
+# 値から型を推定
 def test_deduce():
     assert fundamental_type.deduce(int) is fundamental_type.get("Int")
     assert fundamental_type.deduce(str) is fundamental_type.get("Str")

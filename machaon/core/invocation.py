@@ -587,6 +587,10 @@ class InstanceMethodInvocation(BasicInvocation):
         if getattr(fn,"__self__",None) is not None:
             # クラスメソッドを排除する
             return None
+            
+        if not callable(fn):
+            # 定数の類を取り除く
+            return None
 
         mth = Method(normalize_method_name(self.attrname), flags=METHOD_FROM_INSTANCE)
         mth.load_from_function(fn, this_type)

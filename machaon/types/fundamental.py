@@ -373,8 +373,8 @@ class BoolType():
         文字列を評価し、真なら実行する。
         @ == 32 if-true: "nekkedo" "hekkeo"
         Params:
-            if(Function): true 節
-            else(Function): false 節 
+            if_(Function): true 節
+            else_(Function): false 節 
         Returns:
             Object: 返り値
         """
@@ -403,7 +403,7 @@ class NumericType():
         """ @method
         小数を丸める。
         Arguments:
-            right(Int): 桁数
+            digits(Int): 桁数
         Returns:
             Any: 丸められた小数。
         """
