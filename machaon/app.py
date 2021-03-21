@@ -281,7 +281,7 @@ class AppRoot:
             "running" : [x.get_index() for x in runs]
         }
         return report
-        
+
     def select_chamber(self, index=None, *, activate=False) -> Optional[ProcessChamber]:
         chm = None
         if index is None or index == "":
@@ -309,16 +309,6 @@ class AppRoot:
     
     def remove_chamber(self, index=None):
         self.processhive.remove(index)
-
-    def stop_chamber(self, index=None, timeout=None):
-        if index is None:
-            chm = self.get_active_chamber()
-        else:
-            chm = self.get_chamber(index)
-        if chm:
-            chm.interrupt()
-            chm.join(timeout=timeout)
-        return chm
     
     #
     def select_object_collection(self):

@@ -729,7 +729,7 @@ class Sheet():
         # 選択を引き継ぐ
         self._reselect()
     
-    def sort(self, context, key):
+    def sort(self, context, sorter):
         """ @method context
         行の順番を並べ替える。
         Params:
@@ -737,7 +737,7 @@ class Sheet():
         """
         def sortkey(entry):
             subject = self.row_to_object(context, *entry)
-            return key.run_function(subject, context).value
+            return sorter.run_function(subject, context).value
 
         self.rows.sort(key=sortkey)
         

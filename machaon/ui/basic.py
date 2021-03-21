@@ -50,7 +50,8 @@ class Launcher():
         else:
             tag = msg.tag
             if tag == "on-exec-process":
-                process = msg.argument("process")
+                process_id = msg.argument("process")
+                process = self.app.get_active_chamber().get_process(process_id) # 全チャンバーから探す？
                 code = msg.text
                 if code == "begin":
                     timestamp = msg.argument("timestamp")
@@ -66,11 +67,10 @@ class Launcher():
                     self.on_end_process(process)
                 elif code == "success":
                     obj = msg.argument("ret")
-                    process = msg.argument("process")
                     context = msg.argument("context")
                     if obj:
                         if obj.is_pretty_view():
-                            m = ProcessMessage(tag="object-pretty-view", process=process, object=obj.value.get_object(), context=context)
+                            m = ProcessMessage(tag="object-pretty-view", pr=process, object=obj.value.get_object(), context=context)
                             self.message_handler(m)
                         else:
                             expr = " -> {} [{}]".format(obj.summary(), obj.get_typename())
@@ -87,8 +87,8 @@ class Launcher():
 
             elif tag == "object-pretty-view":
                 obj = msg.argument("object")
-                process = msg.argument("process")
                 context = msg.argument("context")
+                process = msg.argument("pr") # プロセスオブジェクトが紐づけられている
                 # pprintメソッドを呼ぶ
                 obj.pprint(context.spirit)
                 # ただちにメッセージを取得し処理する

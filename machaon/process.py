@@ -30,7 +30,6 @@ class Process:
         self.routine = None
         self._finished = False
         # スレッド
-        self.state = {}
         self.thread = None
         self._interrupted = False
         self.last_context = None
@@ -52,7 +51,7 @@ class Process:
 
         # 実行開始
         timestamp = datetime.datetime.now()
-        spirit.post("on-exec-process", "begin", spirit=spirit, process=self, timestamp=timestamp)
+        spirit.post("on-exec-process", "begin", spirit=spirit, timestamp=timestamp)
 
         # オブジェクトを取得
         inputobjs = root.select_object_collection()
@@ -92,13 +91,13 @@ class Process:
         # 実行時に発生した例外を確認する
         excep = context.get_last_exception()
         if excep is None:
-            context.spirit.post("on-exec-process", "success", process=self, ret=ret, context=context)
+            context.spirit.post("on-exec-process", "success", ret=ret, context=context)
             success = True
         elif isinstance(excep, ProcessInterrupted):
-            context.spirit.post("on-exec-process", "interrupted", process=self)
+            context.spirit.post("on-exec-process", "interrupted")
             success = False
         else:
-            context.spirit.post("on-exec-process", "error", process=self, error=ret)
+            context.spirit.post("on-exec-process", "error", error=ret)
             success = False
 
         # プロセス終了
@@ -135,9 +134,21 @@ class Process:
         """ メインスレッドで停止を確認する """
         return self._interrupted
     
-    def get_thread_ident(self):
-        return self.thread.ident
-    
+    def _start_infinite_thread(self, spirit):
+        """ テスト用の終わらないスレッドを開始する """
+        def body(spi):
+            while spi.interruption_point(nowait=True):
+                time.sleep(0.1)
+            
+        self.thread = threading.Thread(
+            target=body, 
+            args=(spirit,), 
+            name="Process{}_Infinite".format(self.index),
+            daemon=True
+        )
+        self._interrupted = False
+        self.thread.start()
+
     # 動作が終わっているか（未開始の場合は真）
     def is_finished(self):
         return self._finished
@@ -155,6 +166,7 @@ class Process:
     # メッセージ
     #
     def post_message(self, msg):
+        msg.set_argument("process", self.index) # プロセスを紐づける
         self.post_msgs.put(msg)
 
     def handle_post_message(self):
@@ -215,7 +227,7 @@ class Spirit():
     def __init__(self, app, process=None):
         self.app = app
         self.process = process
-        # プログレスバー        
+        # プログレスバー
         self.cur_prog_display = None 
     
     def inherit(self, other):
@@ -379,7 +391,7 @@ class TempSpirit(Spirit):
     
     def get_message(self):
         return self.msgs
-        
+
     #
     # カレントディレクトリ
     #
@@ -564,66 +576,75 @@ class ProcessScreenCanvas():
 class ProcessChamber:
     def __init__(self, index):
         self._index = index
-        self._prlist = []
+        self._processes = {}
         self.prelude_msgs = []
         self.handled_msgs = []
     
     def add(self, process):
-        if self._prlist and not self.last_process.is_finished():
-            return
-        self._prlist.append(process)
+        if self._processes and not self.last_process.is_finished():
+            raise ValueError("稼働中のプロセスが存在します")
+        i = process.get_index()
+        self._processes[i] = process
+        return process
     
     def add_prelude_messages(self, messages):
         self.prelude_msgs.extend(messages)
     
     @property
     def last_process(self):
-        if not self._prlist:
+        if not self._processes:
             raise ValueError("No process")
-        return self._prlist[-1]
+        maxkey = max(self._processes.keys())
+        return self._processes[maxkey]
     
     def is_empty(self):
-        return not self._prlist
+        return not self._processes
     
     def is_failed(self):
-        if not self._prlist:
+        if not self._processes:
             return False
         return self.last_process.is_failed()
     
     def is_finished(self):
-        if not self._prlist:
+        if not self._processes:
             return True
         return self.last_process.is_finished()
     
     def is_interrupted(self):
-        if not self._prlist:
+        if not self._processes:
             return False
         return self.last_process.is_interrupted()
 
     def interrupt(self): 
-        if not self._prlist:
+        if not self._processes:
             return
         if self.last_process.is_waiting_input():
             self.last_process.tell_input_end("")
         self.last_process.tell_interruption()
 
     def is_waiting_input(self): # -
-        if not self._prlist:
+        if not self._processes:
             return False
         return self.last_process.is_waiting_input()
     
     def finish_input(self, text): # -
-        if not self._prlist:
+        if not self._processes:
             return
         self.last_process.tell_input_end(text)
         
     def join(self, timeout):
-        if not self._prlist:
+        if not self._processes:
             return
         self.last_process.join(timeout=timeout)
     
+    def get_process(self, index):
+        return self._processes[index]
+    
+    def get_processes(self):
+        return [self._processes[x] for x in sorted(self._processes.keys())]
+    
     def handle_process_messages(self):
-        if not self._prlist:
+        if not self._processes:
             msgs = self.prelude_msgs
         else:
             msgs = self.last_process.handle_post_message()
@@ -633,8 +654,8 @@ class ProcessChamber:
     def get_process_messages(self): # -
         return self.handled_msgs
     
-    def add_initial_prompt(self, prompt):
-        self.prelude_msgs.append(ProcessMessage(prompt, tag="message-em", nobreak=True))
+    def add_initial_prompt(self, *args, **kwargs):
+        self.prelude_msgs.append(ProcessMessage(*args, **kwargs))
     
     def get_title(self): # -
         title = "Chamber"
@@ -650,13 +671,43 @@ class ProcessChamber:
     def get_index(self): # -
         return self._index
 
-    def get_last_process_index(self): # -
-        return self.last_process.get_index()
-    
     def get_input_string(self):
-        if not self._prlist:
+        if not self._processes:
             return ""
         return self.last_process.message.source
+    
+    def drop_processes(self, pred=None):
+        """
+        プロセスとプロセスに関連するメッセージを削除する。
+        Params:
+            *pred(callable): プロセスを判定する関数 
+        """
+        # メッセージの削除
+        piset = {}
+        end = None
+        reserved_msgs = []
+        for mi, msg in enumerate(self.handled_msgs):
+            pi = msg.argument("process")
+            if pi is None:
+                deletes = False # プロセスが関連付けられていないなら削除しない
+            elif pi not in piset:
+                pr = self._processes[pi]
+                if pr.is_running():
+                    end = mi
+                    break
+                deletes = pred(pr) if pred else True
+                piset[pi] = deletes
+            else:
+                deletes = piset[pi]
+            if not deletes:
+                reserved_msgs.append(msg)
+        del self.handled_msgs[0:end]
+        self.handled_msgs = reserved_msgs + self.handled_msgs
+        # プロセスの削除
+        for pi in [x for x,t in piset.items() if t]:
+            del self._processes[pi]
+
+
 
 #
 #
@@ -729,7 +780,7 @@ class ProcessHive:
         newindex = self._nextindex
         chamber = ProcessChamber(newindex)
         if initial_prompt:
-            chamber.add_initial_prompt(initial_prompt)
+            chamber.add_initial_prompt(initial_prompt, tag="message-em", nobreak=True)
         self.chambers[newindex] = chamber
         self._nextindex += 1
         self.activate(newindex)

@@ -41,17 +41,23 @@ class Object():
     def get_typename(self):
         return self.type.typename
     
+    def get_value(self):
+        if self.is_pretty_view():
+            return self.value.object.value
+        else:
+            return self.value
+    
     def copy(self):
-        return Object(self.type, copy(self.value))
+        return Object(self.type, copy(self.get_value()))
     
     def to_string(self) -> str:
-        return self.type.convert_to_string(self.value)
+        return self.type.convert_to_string(self.get_value())
 
     def summary(self) -> str:
-        return self.type.summarize_value(self.value)
+        return self.type.summarize_value(self.get_value())
 
     def pprint(self, spirit):
-        self.type.pprint_value(spirit, self.value)
+        self.type.pprint_value(spirit, self.get_value())
     
     def pretty_view(self):
         return Object(self.type, ObjectPrettyView(self))
@@ -61,11 +67,10 @@ class Object():
     
     def is_error(self):
         from machaon.process import ProcessError
-        return isinstance(self.value, ProcessError)
+        return isinstance(self.get_value(), ProcessError)
     
     def is_truth(self):
-        return self.value and not self.is_error()
-
+        return self.get_value() and not self.is_error()
 
 #
 class ObjectPrettyView():

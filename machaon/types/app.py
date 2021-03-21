@@ -26,18 +26,13 @@ class RootObject:
             types.append(t)
         return types
     
-    def var(self, name):
+    def vars(self):
         '''@method
-        変数を参照する。
-        Params:
-            name(str): 引数名
+        全ての変数を取得する。
         Returns:
-            Object: 変数
+            ObjectCollection: 辞書
         '''
-        item = self.context.input_objects.get(name)
-        if item is None:
-            raise ValueError(name)
-        return item.object
+        return self.context.input_objects
 
     def packages(self):
         ''' @method
@@ -56,6 +51,41 @@ class RootObject:
         '''
         chm = self.context.root.get_active_chamber()
         return chm
+    
+    def _clear_processes(self, app, pred):
+        ''' プロセスの実行結果とプロセス字体を削除する。 '''
+        chm = self.context.root.get_active_chamber()
+        chm.drop_processes(pred=pred)
+        msgs = chm.get_process_messages()
+        app.get_app_ui().replace_screen_message(msgs)
+    
+    def clear_last(self, app):
+        ''' @method spirit [cl]
+        直前のプロセスの実行結果を削除する。
+        '''
+        chm = self.context.root.get_active_chamber()
+        index = chm.last_process.get_index()
+        def is_lastpr(pr):
+            return pr.get_index() == index
+        self._clear_processes(app, is_lastpr)
+    
+    def clear_all(self, app):
+        ''' @method spirit [cla]
+        現在のチャンバーの全ての実行結果を削除する。
+        '''
+        self._clear_processes(app, None)
+
+    def clear_all_failed(self, app):
+        ''' @method spirit [claf]
+        エラーを返した実行結果をすべて削除する。
+        '''
+        def is_failed(pr):
+            return pr.is_failed()
+        self._clear_processes(app, is_failed)
+    
+
+    def stringify(self):
+        return "<アプリケーション>"
 
 #
 #
@@ -71,10 +101,12 @@ class AppChamber:
         処理済みのメッセージを詳細な形式で表示する。
         """
         for msg in chm.get_process_messages():
-            app.post("message", msg.text)
-            app.post("message", "tag={}".format(msg.tag))
+            lines = []
+            lines.append('"{}"'.format(msg.text))
+            lines.append("tag={}".format(msg.tag))
             for k, v in msg.args.items():
-                app.post("message", "{}={}".format(k, v))
+                lines.append("{}={}".format(k, v))
+            app.post("message", "\n".join(lines) + "\n")
 
 
 

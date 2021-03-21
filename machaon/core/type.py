@@ -180,7 +180,7 @@ class Type():
                     return str(t)
             l_name = modqualname(type(value))
             r_name = modqualname(self.value_type)
-            raise ValueError("'{}' -> '{}'への変換関数が定義されていません".format(l_name, r_name))
+            raise UnsupportedMethod("'{}'型から'{}'型への変換関数は定義されていません".format(l_name, r_name))
 
     def construct_from_value(self, context, value, *params):
         if self.check_value_type(type(value)):
