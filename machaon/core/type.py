@@ -54,7 +54,7 @@ class Type():
         self.value_type: Callable = value_type
         self.scope: Optional[str] = scope
         self._methods: Dict[str, Method] = {}
-        self._methodalias: Dict[str, TypeMemberAlias] = {}
+        self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
     
     @property
@@ -283,27 +283,37 @@ class Type():
     #
     # メソッド名のエイリアスを取得する
     #
-    def get_member_alias(self, name) -> Optional[str]:
-        a = self._methodalias.get(name, None)
-        if a and not a.is_group_alias():
-            return a.get_destination()
+    def get_member_alias(self, name: str) -> Optional[str]:
+        for x in self._methodalias[name]:
+            if not x.is_group_alias():
+                return x.get_destination()
         return None
     
     def get_member_group(self, name) -> Optional[List[str]]:
-        a = self._methodalias.get(name, None)
-        if a:
-            if a.is_group_alias():
-                return a.get_destination()
+        for x in self._methodalias[name]:
+            if x.is_group_alias():
+                return x.get_destination()
             else:
-                return [a.get_destination()]
+                return [x.get_destination()]
         return None
 
-    def enum_member_alias(self):
-        for meth in self._methodalias.values():
-            yield meth
-    
     def add_member_alias(self, name, dest):
-        self._methodalias[name] = TypeMemberAlias(name, dest)
+        self._methodalias[name].append(TypeMemberAlias(dest))
+    
+    def get_member_identical_names(self, name: str) -> List[str]:
+        """ この名前と同一のメンバを指す名前を全て得る """
+        truename = self.get_member_alias(name)
+        if truename is None:
+            truename = name
+        
+        l = [truename]
+        for aliasname, aliases in self._methodalias.items():
+            for a in aliases:
+                if a.is_group_alias():
+                    continue
+                if a.get_destination() == truename:
+                    l.append(aliasname)
+        return l
 
     #
     # 型定義構文用のメソッド
@@ -525,16 +535,12 @@ class TypeDelayLoader():
 #
 #
 class TypeMemberAlias:
-    def __init__(self, name, dest):
-        self.name = name
+    def __init__(self, dest):
         if isinstance(dest, str):
             self.dest = dest
         else:
             self.dest = list(dest)
 
-    def get_name(self):
-        return self.name
-    
     def get_destination(self):
         return self.dest
 

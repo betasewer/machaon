@@ -87,7 +87,7 @@ class Method():
         if self.flags & METHOD_LOADED == 0:
             raise UnloadedMethod(self.name)
         return self.name
-
+    
     def get_doc(self):
         """ @method alias-name [doc]
         メソッドの説明。

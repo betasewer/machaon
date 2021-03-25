@@ -127,17 +127,20 @@ def test_method_alias():
     types = TypeModule()
     t = types.define(SpecStrType, scope="spec")
 
-    t.add_member_alias("geak", "get_aknom")
+    t.add_member_alias("ge_ak", "get_aknom")
+    t.add_member_alias("g", "get_aknom")
     t.add_member_alias("std", ("name", "size", "attr"))
-    assert t.get_member_alias("geak") == "get_aknom"
+    assert t.get_member_alias("ge_ak") == "get_aknom"
     assert t.get_member_alias("std") is None
     assert t.get_member_group("std") == ["name", "size", "attr"]
-    assert t.get_member_group("geak") == ["get_aknom"]
+    assert t.get_member_group("ge_ak") == ["get_aknom"]
 
-    a = TypeMemberAlias("src", "dest")
-    assert a.get_name() == "src"
+    assert t.get_member_identical_names("get_aknom") == ["get_aknom", "ge_ak", "g"]
+    assert t.get_member_identical_names("g") == ["get_aknom", "ge_ak", "g"]
+
+    a = TypeMemberAlias("dest")
     assert a.get_destination() == "dest"
     assert not a.is_group_alias()
-    b = TypeMemberAlias("src", ["dest1", "dest2"])
+    b = TypeMemberAlias(["dest1", "dest2"])
     assert b.get_destination() == ["dest1", "dest2"]
     assert b.is_group_alias()

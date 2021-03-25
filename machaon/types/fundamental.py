@@ -69,13 +69,16 @@ class TypeType():
         使用可能なメソッドを列挙する。
         Params:
         Returns:
-            Sheet[Method]: (name,doc,signature) メソッドのリスト
+            Sheet[ObjectCollection]: (names,doc,signature) メソッドのリスト
         '''
         helps = []
-
         from machaon.core.message import enum_selectable_method
         for meth in enum_selectable_method(type):
-            helps.append(meth)
+            names = type.get_member_identical_names(meth.get_name())
+            helps.append({
+                "names" : names,
+                "#delegate" : meth
+            })
         return helps
     
     def method(self, type, name):
