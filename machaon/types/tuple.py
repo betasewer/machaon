@@ -227,11 +227,11 @@ class ObjectTuple():
     def summarize(self):
         if len(self.objects) < 5:
             summ = [o.summary() for o in self.objects]
-            return "[{}]".format(", ".join(summ))
+            return "{}".format(", ".join(summ))
         else:
             summ1 = [o.summary() for o in self.objects[0:2]]
             summ2 = [o.summary() for o in self.objects[-2:]]
-            return "[{}]".format(", ".join(summ1) + "..." + ", ".join(summ2))
+            return "{}".format(", ".join(summ1) + "..." + ", ".join(summ2))
 
     def pprint(self, app):
         if len(self.objects) == 0:
