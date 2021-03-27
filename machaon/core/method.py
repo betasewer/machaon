@@ -472,6 +472,7 @@ class Method():
             if self_typename:
                 # 第一引数が指定されていれば設定しておく
                 self.add_parameter("self", self_typename, flags=PARAMETER_REQUIRED)
+                self.flags |= METHOD_HAS_RECIEVER_PARAM
             else:
                 self.flags |= METHOD_PARAMETER_UNSPECIFIED
             self.flags |= METHOD_LOADED
@@ -524,7 +525,7 @@ class Method():
         self.target = "function:{}".format(str(action))
         self.flags |= METHOD_LOADED
     
-    def get_signature(self, *, with_name=False):
+    def get_signature(self, *, fully=False, self_typename=None):
         """ @method alias-name [signature]
         メソッドの構文を返す。
         Returns:
@@ -534,15 +535,16 @@ class Method():
         params = []
         for p in self.params:
             ps = ""
+            if p.is_required():
+                ps = p.name
+            elif p.is_variable():
+                ps = "*" + p.name
+            elif not p.is_required():
+                if fully:
+                    ps = "?{}={}".format(p.name, repr(p.default))
+                else:
+                    ps = "?{}".format(p.name)
 
-            name = p.name
-            if p.is_variable():
-                name = "*" + p.name
-            ps += name
-            
-            if not p.is_required():
-                ps += "={}".format(repr(p.default))
-            
             params.append(ps)
 
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
@@ -558,19 +560,19 @@ class Method():
             results.append("...")
         
         parts = []
-        if with_name:
+        if self_typename and (self.flags & METHOD_HAS_RECIEVER_PARAM) == 0:
+            parts.append(self_typename)
+        if fully:
             parts.append(self.name)
         if params:
             parts.append(" ".join(params))
-        elif not with_name:
-            parts.append("()") # 引数なしを明示
         parts.append("->")
         parts.append(", ".join(results))
         return " ".join(parts)
     
     #
     def pprint(self, app):
-        sig = self.get_signature(with_name=True)
+        sig = self.get_signature(fully=True)
         app.post("message", sig)
         app.post("message", self.doc)
 
