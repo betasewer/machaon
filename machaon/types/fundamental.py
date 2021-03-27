@@ -76,8 +76,8 @@ class TypeType():
         for meth in enum_selectable_method(type):
             names = type.get_member_identical_names(meth.get_name())
             helps.append({
-                "names" : names,
-                "#delegate" : meth
+                "names" : context.new_object(names),
+                "#delegate" : context.new_object(meth, type="Method")
             })
         return helps
     

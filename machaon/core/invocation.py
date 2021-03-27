@@ -18,6 +18,9 @@ class BadInstanceMethodInvocation(Exception):
 class BadFunctionInvocation(Exception):
     def __init__(self, name):
         self.name = name
+
+class BadObjectRefInvocation(Exception):
+    pass
     
 class MessageNoReturn(Exception):
     pass
@@ -259,10 +262,10 @@ class InvocationContext:
     def new_object(self, value: Any, *, type=None, conversion=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 
         Params:
-            typecode_or_value(Any): 型を示すもの。valueを省略した場合は値をとり、型を推定する
-            *value(Any): 値
+            value(Any): 値
         KeywordParams:
-            conversion(str): 値の変換方法
+            type(Any): 型を示す値
+            conversion(str): 値の変換方法を示す文字列
         """
         if type:
             t = self.new_type(type)
@@ -676,10 +679,25 @@ class FunctionInvocation(BasicInvocation):
 
 #
 class ObjectRefInvocation(BasicInvocation):
-    def __init__(self, name, obj, modifier):
+    def __init__(self, name, modifier=0):
         super().__init__(modifier)
         self.name = name
-        self.object = obj
+        self._object = None
+    
+    def resolve_ref(self, collection):
+        # メンバ参照を解決する
+        item = collection.get(self.name)
+        if item is not None:
+            self._object = item.object
+            return item.object
+        return None
+        
+    def resolve_delegation(self, collection):
+        # 移譲先のオブジェクトを返す
+        delgate_point = collection.get("#delegate")
+        if delgate_point is None:
+            return None
+        return delgate_point.object
     
     def get_method_name(self):
         return self.name
@@ -699,14 +717,28 @@ class ObjectRefInvocation(BasicInvocation):
     def is_parameter_consumer(self):
         return False
 
-    def prepare_invoke(self, _context: InvocationContext, *_argobjects):
-        return InvocationEntry(self, self.get_action(), (), {})
+    def prepare_invoke(self, context: InvocationContext, *argobjects):
+        collection, *_args = argobjects
 
+        obj = self.resolve_ref(collection.value)
+        if obj is not None:
+            return InvocationEntry(self, self.get_action(), (obj,), {})
+
+        delg = self.resolve_delegation(collection.value)
+        if delg is None:
+            raise BadObjectRefInvocation("値'{}'は存在しません (ObjectCollection)".format(self.name))
+        from machaon.core.message import select_method
+        inv = select_method(self.name, delg.type, reciever=delg.value)
+        return inv.prepare_invoke(context, delg)
+    
     def get_action(self):
-        return _objrefgetter(self.object)
+        return _objidentity
     
     def get_result_specs(self):
-        r = MethodResult(self.object.get_typename())
+        if self._object:
+            r = MethodResult(self._object.get_typename())
+        else:
+            r = MethodResult("Any")
         return [r]
 
     def get_max_arity(self):
@@ -719,7 +751,5 @@ class ObjectRefInvocation(BasicInvocation):
         return None
 
 
-def _objrefgetter(obj):
-    def _get():
-        return obj
-    return _get
+def _objidentity(obj):
+    return obj

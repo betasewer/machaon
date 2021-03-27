@@ -172,15 +172,14 @@ class Type():
                 return value
             
             def modqualname(t):
-                n = getattr(self.value_type, "__name__", None)
-                m = getattr(self.value_type, "__module__", None)
+                n = getattr(t, "__name__", None)
+                m = getattr(t, "__module__", None)
                 if n and m:
                     return "{}.{}".format(m,n)
                 else:
                     return str(t)
             l_name = modqualname(type(value))
-            r_name = modqualname(self.value_type)
-            raise UnsupportedMethod("'{}'型から'{}'型への変換関数は定義されていません".format(l_name, r_name))
+            raise UnsupportedMethod("'{}'型の変換関数は定義されていません （from '{}'）".format(self.typename, l_name))
 
     def construct_from_value(self, context, value, *params):
         if self.check_value_type(type(value)):

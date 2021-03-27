@@ -98,7 +98,7 @@ class Launcher():
             elif tag == "object-summary":
                 self.insert_screen_object_summary(msg)
             
-            elif tag == "object-setview":
+            elif tag == "object-sheetview":
                 data = msg.argument("data")
                 viewtype = data.get_viewtype()
                 context = msg.argument("context")

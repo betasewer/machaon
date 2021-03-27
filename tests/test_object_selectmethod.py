@@ -60,11 +60,10 @@ def test_objcol_select():
     om = select_method("apple", ColType, reciever=col)
     assert om
     assert om.display() == ("ObjectRef", "apple", "")
-    assert om.get_action()().value == "リンゴ"
+    assert om.prepare_invoke(None, Object(ColType, col)).args[0].value == "リンゴ"
     
     # メソッドの移譲
     dm = select_method("startswith", ColType, reciever=col)
     assert dm
     assert dm.display() == ("InstanceMethod", "startswith", "")
-
 

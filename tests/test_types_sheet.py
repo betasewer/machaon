@@ -66,7 +66,7 @@ def test_column(objectdesk):
 
     namecol = view.get_current_columns()[0]
     assert namecol.get_name() == "name"
-    assert namecol.get_type(objectdesk) is objectdesk.get_type("Str")
+    assert namecol.get_type(objectdesk, None) is objectdesk.get_type("Str")
 
     # カラムの値を得る
     subject = Object(employee, view.items[0])
@@ -275,3 +275,13 @@ def test_append():
     rooms.append(cxt, Room("502", "Single", "Bed"))
     rooms.append(cxt, Room("503", "Single", "Bed"))
     assert [x[0] for _, x in rooms.current_rows()] == ["101", "102", "103", "201", "202", "203", "501", "502", "503"]
+
+#
+def test_conversion_construct():
+    cxt = instant_context()
+    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str]: (length, =)")
+    sh = r.value
+    assert sh.get_row(0) == [2, "A1"]
+    assert sh.get_row(1) == [3, "B2B"]
+    assert sh.get_row(2) == [4, "C3C3"]
+

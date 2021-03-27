@@ -32,7 +32,37 @@ DATASET_STRINGIFY_SUMMARIZE = 1
 #
 #
 #
-class DataColumn():
+class BasicDataColumn():
+    def get_type(self, context, deduce):
+        raise NotImplementedError()
+    
+    def new_object(self, context, value):
+        t = self.get_type(context, value)
+        return context.new_object(value, type=t)
+
+    def stringify(self, context, value, method=DATASET_STRINGIFY):
+        if isinstance(value, ProcessError):
+            return "<error: {}>".format(value.summarize())
+        if method == DATASET_STRINGIFY_SUMMARIZE:
+            return self.get_type(context, value).summarize_value(value)
+        else:
+            return self.get_type(context, value).convert_to_string(value)
+
+    def make_compare_operator(self, context, lessthan=True):
+        typ = self.get_type(context, None)
+        if lessthan:
+            inv = select_method("lt", typ)
+        else:
+            inv = select_method("!lt", typ)
+        if inv is None:
+            return None
+        inv.set_result_typehint("Bool")
+        return inv
+
+#
+#
+#
+class DataColumn(BasicDataColumn):
     def __init__(self, function, typename=None, *, name=None):
         self._getter = function
         self._typename = typename
@@ -44,9 +74,16 @@ class DataColumn():
             return self._getter.get_expression()
         return self._name
     
-    def get_type(self, context):
+    def get_type(self, context, deduce):
         if self._t is None:
-            self._t = context.select_type(self._typename or "Any")
+            if self._typename is None or self._typename == "Any":
+                if deduce is None:
+                    raise ValueError("Cannot deduce value type of Sheet column '{}' because value is not provided here".format(self._name))
+                self._t = context.deduce_type(deduce)
+            else:
+                self._t = context.select_type(self._typename)
+        if self._t is None:
+            raise ValueError("value type of Sheet column '{}' is undefined")
         return self._t
     
     def get_function(self):
@@ -61,28 +98,9 @@ class DataColumn():
             self._typename = obj.get_typename()
             self._t = obj.type
         return obj.value
-    
-    def stringify(self, context, value, method=DATASET_STRINGIFY):
-        if isinstance(value, ProcessError):
-            return "<error: {}>".format(value.summarize())
-        if method == DATASET_STRINGIFY_SUMMARIZE:
-            return self.get_type(context).summarize_value(value)
-        else:
-            return self.get_type(context).convert_to_string(value)
-
-    def make_compare_operator(self, context, lessthan=True):
-        typ = self.get_type(context)
-        if lessthan:
-            inv = select_method("lt", typ)
-        else:
-            inv = select_method("!lt", typ)
-        if inv is None:
-            return None
-        inv.set_result_typehint("Bool")
-        return inv
 
 #
-class DataItemItselfColumn():
+class DataItemItselfColumn(BasicDataColumn):
     def __init__(self, type):
         self.type = type
     
@@ -96,30 +114,15 @@ class DataItemItselfColumn():
     def get_doc(self):
         return "要素"
     
-    def get_type(self, _context):
+    def get_type(self, _context, _deduce):
         return self.type
     
     def eval(self, subject, _context):
-        return subject
+        return subject.value
     
     def is_nonstring_column(self):
         return not self.type.is_any() and self.type.get_typename() != "Str"
-    
-    def stringify(self, context, value, method=DATASET_STRINGIFY):
-        if method == DATASET_STRINGIFY_SUMMARIZE:
-            return self.get_type(context).summarize_value(value)
-        else:
-            return self.get_type(context).convert_to_string(value)
 
-    def make_compare_operator(self, _context, lessthan=True):
-        if lessthan:
-            inv = select_method("lt", self.type)
-        else:
-            inv = select_method("!lt", self.type)
-        if inv is None:
-            return None
-        inv.set_result_typehint("Bool")
-        return inv
 
 #
 DataColumnUnion = Union[DataColumn, DataItemItselfColumn]
@@ -254,8 +257,7 @@ class Sheet():
         else:
             val = r[icol]
 
-        valtype = col.get_type(context)
-        return Object(valtype, val)
+        return col.new_object(context, val)
     
     def find(self, context, app, column, value):
         """ @method task context
@@ -290,7 +292,7 @@ class Sheet():
             if pred(obj.value, value):
                 item = self.items[self.get_item_from_row(ival)]
                 index = context.new_object(ival, type="Int")
-                ovalue = col.get_type(context).new_object(obj.value)
+                ovalue = col.new_object(context, obj.value)
                 return ElemObject(item, index, ovalue)
 
         raise NotFound() # 見つからなかった
@@ -341,11 +343,10 @@ class Sheet():
             icol = len(self.viewcolumns)
             self.viewcolumns.append(col)
 
-        valtype = col.get_type(context)
         for itemindex, _row in self.rows:
-            subject = Object(self.itemtype, self.items[itemindex])
+            subject = context.new_object(self.items[itemindex], type=self.itemtype)
             value = col.eval(subject, context)
-            yield valtype.new_object(value)
+            yield col.new_object(context, value)
     
     #
     # シーケンス関数
@@ -520,7 +521,7 @@ class Sheet():
         """ 値を計算し、新たに設定する """
         newrows = []
         for itemindex, item in enumerate(self.items):
-            subject = Object(self.itemtype, item)
+            subject = context.new_object(item, type=self.itemtype)
             newrow = [col.eval(subject, context) for col in newcolumns]
             newrows.append((itemindex, newrow)) # 新しい行
         self.rows = newrows
@@ -531,7 +532,7 @@ class Sheet():
         newrows = []
         for itemindex, currow in self.rows:
             item = self.items[itemindex]
-            subject = Object(self.itemtype, item)
+            subject = context.new_object(item, type=self.itemtype)
             newrow = [col.eval(subject, context) for col in newcolumns]
             newrows.append((itemindex, currow+newrow)) # 既存の行の後ろに結合
         self.rows = newrows
@@ -699,8 +700,7 @@ class Sheet():
         }
         for i, col in enumerate(self.viewcolumns):
             key = col.get_name()
-            valtype = col.get_type(context)
-            values[key] = Object(valtype, row[i])
+            values[key] = col.new_object(context, row[i])
         return context.new_object(values, type="ObjectCollection")
 
     def foreach(self, context, predicate):
@@ -789,8 +789,7 @@ class Sheet():
         objs = []
         row = self.get_row(index)
         for col, value in zip(self.viewcolumns, row):
-            valtype = col.get_type(context)
-            objs.append(Object(valtype, value))
+            objs.append(col.new_object(context, value))
         return ObjectTuple(objs)
 
     #
@@ -806,7 +805,7 @@ class Sheet():
             app.post("message", text)
         else:
             context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
-            app.post("object-setview", data=self, context=context)
+            app.post("object-sheetview", data=self, context=context)
 
     def conversion_construct(self, context, value, itemtypename, *columnnames):
         if not isinstance(value, list):

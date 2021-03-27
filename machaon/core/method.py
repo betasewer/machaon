@@ -563,7 +563,7 @@ class Method():
         if params:
             parts.append(" ".join(params))
         elif not with_name:
-            parts.append("(引数無し)") # 何もないと→から始まるので、入れておいた
+            parts.append("()") # 引数なしを明示
         parts.append("->")
         parts.append(", ".join(results))
         return " ".join(parts)

@@ -13,6 +13,7 @@ from machaon.core.invocation import (
     InstanceMethodInvocation,
     FunctionInvocation,
     ObjectRefInvocation,
+    BadObjectRefInvocation,
     INVOCATION_RETURN_RECIEVER,
     LOG_MESSAGE_BEGIN,
     LOG_MESSAGE_CODE,
@@ -289,18 +290,14 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     name = normalize_method_name(name)
 
     # レシーバがオブジェクト集合の場合はメンバ参照に変換
-    if reciever is not None and typetraits.is_object_collection():
-        collection = reciever
-        item = collection.get(name)
-        if item is not None:
-            return ObjectRefInvocation(name, item.object, modbits)
-        else:
-            delegate = collection.get("#delegate")
-            if delegate is not None:
-                # 移譲先オブジェクトからメソッドを探し直す
-                delg = delegate.object
-                return select_method(name, delg.type, reciever=delg.value)
-            raise BadExpressionError("Member '{}' is not found in reciever (ObjectCollection)".format(name))
+    if typetraits.is_object_collection():
+        inv = ObjectRefInvocation(name, modbits)
+        if reciever and not inv.resolve_ref(reciever):
+            delg = inv.resolve_delegation(reciever)
+            if delg is None:
+                raise BadObjectRefInvocation("値 '{}' は存在しません (ObjectCollection)".format(name))
+            return select_method(name, delg.type, modbits=modbits, reciever=delg.value)
+        return inv
 
     # 型メソッド
     using_type_method = typetraits and not typetraits.is_any()
@@ -316,7 +313,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
         return inv 
 
     if using_type_method and not typetraits.is_using_instance_method():
-        raise BadExpressionError("Method '{}' is not found in '{}' (instance method is excluded)".format(name, typetraits.typename))
+        raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.typename))
     
     # インスタンスメソッド
     return InstanceMethodInvocation(name, modbits)
