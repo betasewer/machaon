@@ -142,6 +142,8 @@ class ObjectCollection():
 
     # 名前で検索する
     def pick(self, name) -> Generator[ObjectCollectionItem, None, None]:
+        if name not in self._namemap:
+            return
         for ident in self._namemap[name]:
             yield self._items[ident]
     
@@ -174,7 +176,9 @@ class ObjectCollection():
     def summarize(self):
         heads = []
         trail = ""
-        for name, _ids in self._namemap.items():
+        for name, ids in self._namemap.items():
+            if not ids:
+                continue
             heads.append(name)
             if len(heads) > 4:
                 trail = "..."
@@ -192,8 +196,8 @@ class ObjectCollection():
             columnwidths = [8, 8, 8]
             for name, ids in self._namemap.items():
                 for i in ids:
-                    o = self._items[i]
-                    columnwidths[0] = max(columnwidths[0], name)
+                    o = self._items[i].object
+                    columnwidths[0] = max(columnwidths[0], len(name))
                     sm = o.summary()
                     columnwidths[1] = max(columnwidths[1], len(sm))
                     tn = o.get_typename()

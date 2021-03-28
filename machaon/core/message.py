@@ -292,12 +292,16 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     # レシーバがオブジェクト集合の場合はメンバ参照に変換
     if typetraits.is_object_collection():
         inv = ObjectRefInvocation(name, modbits)
-        if reciever and not inv.resolve_ref(reciever):
-            delg = inv.resolve_delegation(reciever)
-            if delg is None:
-                raise BadObjectRefInvocation("値 '{}' は存在しません (ObjectCollection)".format(name))
-            return select_method(name, delg.type, modbits=modbits, reciever=delg.value)
-        return inv
+        if reciever is None:
+            return inv # 不確定なので全てメンバ参照と考える
+        else:
+            if inv.resolve_ref(reciever):
+                return inv
+            else:
+                delg = inv.resolve_delegation(reciever)
+                if delg is not None:
+                    return select_method(name, delg.type, modbits=modbits, reciever=delg.value)
+                # ObjectCollection自体のメソッドとなる
 
     # 型メソッド
     using_type_method = typetraits and not typetraits.is_any()
