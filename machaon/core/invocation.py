@@ -473,8 +473,6 @@ class BasicInvocation():
 def get_object_value(obj, spec=None):
     if spec and spec.is_object():
         return obj
-    elif obj.is_pretty_view():
-        return obj.value.get_object().value
     else:
         return obj.value
 
