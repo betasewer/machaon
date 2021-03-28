@@ -699,26 +699,17 @@ class tkLauncher(Launcher):
     #
     #
     #
-    def insert_screen_setview(self, data, viewtype, dataid, context):
-        generate = screen_get_setview_method(viewtype, "generate")
-        if generate is None:
-            raise ValueError("表示形式'{}'には未対応です".format(viewtype))
-        
+    def insert_screen_setview(self, rows, columns, colmaxwidths, viewtype, dataid, context):
         dataname = viewtype + "@" + dataid
-
         self.log.configure(state='normal')
-        generate(self, self.log, data, dataname, context)
+        screen_sheetview_generate(self, self.log, rows, columns, colmaxwidths, dataname)
         self.log.insert("end", "\n")
         self.log.configure(state='disabled')
     
     def select_screen_setview_item(self, dataname, index, charindex):
         viewtype, dataid = dataname.split("@")
-        select_item = screen_get_setview_method(viewtype, "select_item")
-        if select_item is None:
-            raise ValueError("表示形式'{}'には未対応です".format(viewtype))
-
         self.log.configure(state='normal')
-        select_item(self, self.log, charindex, dataid)
+        screen_sheetview_select_item(self, self.log, charindex, dataid)
         self.log.configure(state='disabled')
         return True
     
@@ -984,10 +975,8 @@ class tkLauncher(Launcher):
 #
 # Dataview Table
 #
-def screen_setview_table_generate(ui, wnd, setview, dataname, context):
-    rows, colmaxwidths = setview.rows_to_string_table(context, "summarize")
-    
-    columns = [x.get_name() for x in setview.get_current_columns()]
+# ui, wnd, rows, columns, colmaxwidths, dataname
+def screen_sheetview_generate(ui, wnd, rows, columns, colmaxwidths, dataname):
     colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colmaxwidths)]
 
     # ヘッダー
@@ -1013,8 +1002,9 @@ def screen_setview_table_generate(ui, wnd, setview, dataname, context):
         wnd.insert("end", head, tags) # ヘッダー
         wnd.insert("end", index, linktags) # No. リンク
         wnd.insert("end", line+"\n", tags) # 行本体
-    
-def screen_setview_table_select_item(ui, wnd, charindex, _dataid):
+
+
+def screen_sheetview_select_item(ui, wnd, charindex, _dataid):
     wnd.configure(state='normal')
     
     selpoints = wnd.tag_ranges("log-item-selection")
@@ -1033,35 +1023,16 @@ def screen_setview_table_select_item(ui, wnd, charindex, _dataid):
     wnd.configure(state='disabled')
 
 #
-# Dataview Wide
-#
-def screen_setview_wide_generate(ui, wnd):
-    raise NotImplementedError()
-
-def screen_setview_wide_select_item(ui, wnd):
-    raise NotImplementedError()
-
-#
-# Dataview List
-#
-
-#
 # Tuple 
 #
-def screen_setview_tuple_generate(ui, wnd, tpl, dataname, context):
+def screen_setview_tuple_generate(ui, wnd, objects, dataname, context):
     # 値
-    for i, obj in enumerate(tpl.objects):
+    for i, obj in enumerate(objects):
         line = "{} [{}]".format(obj.summary(), obj.get_typename())
         index = str(i)
         head = " "*(5-len(index))
         tags = ("message",)
         wnd.insert("end", head + index + " | " + line + "\n", tags)
-
-
-# 実装関数を取得する
-def screen_get_setview_method(viewtype, name):
-    viewtype = viewtype.lower()
-    return globals().get("screen_setview_{}_{}".format(viewtype, name), None)
 
 #
 #

@@ -239,7 +239,16 @@ class ObjectTuple():
             app.post("message", text)
         else:
             context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
-            app.post("object-tupleview", data=self, context=context)
+            columns = ["値", "型"]
+            columnwidths = [8, 8]
+            rows = []
+            for i, o in enumerate(self.objects):
+                sm = o.summary()
+                columnwidths[0] = max(columnwidths[0], len(sm))    
+                tn = o.get_typename()
+                columnwidths[1] = max(columnwidths[1], len(tn))
+                rows.append((i, [sm, tn]))
+            app.post("object-sheetview", rows=rows, columns=columns, columnwidths=columnwidths, context=context)
 
     def conversion_construct(self, context, value):
         try:

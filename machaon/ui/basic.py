@@ -99,15 +99,12 @@ class Launcher():
                 self.insert_screen_object_summary(msg)
             
             elif tag == "object-sheetview":
-                data = msg.argument("data")
-                viewtype = data.get_viewtype()
+                rows = msg.argument("rows")
+                columns = msg.argument("columns")
+                colmaxwidths = msg.argument("columnwidths")
+                viewtype = "table"
                 context = msg.argument("context")
-                self.insert_screen_setview(data, viewtype, "testdata", context)
-            
-            elif tag == "object-tupleview":
-                data = msg.argument("data")
-                context = msg.argument("context")
-                self.insert_screen_setview(data, "tuple", "", context)
+                self.insert_screen_setview(rows, columns, colmaxwidths, viewtype, "anonymous", context)
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
@@ -160,7 +157,7 @@ class Launcher():
         return curstates
         
     # 
-    def insert_screen_setview(self, setview, viewtype, dataname, context):
+    def insert_screen_setview(self, rows, columns, columnmaxwidths, viewtype, dataname, context):
         raise NotImplementedError()
     
     #

@@ -2,7 +2,6 @@ from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Gene
 from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
-from machaon.core.object import Object
 from machaon.core.message import MessageEngine, MemberGetter, select_method
 from machaon.core.invocation import InvocationContext
 from machaon.process import ProcessError
@@ -213,8 +212,8 @@ class Sheet():
     #
     # メンバ値へのアクセス
     #
-    def at(self, row):
-        """ @method [#]
+    def at(self, context, row):
+        """ @method context [#]
         アイテムオブジェクトを行インデックスで指定して取得する。
         Params:
             row(int): 行インデックス
@@ -223,23 +222,23 @@ class Sheet():
         """
         itemindex, _r = self.rows[row]
         item = self.items[itemindex]
-        return Object(self.itemtype, item)
+        return context.new_object(item, type=self.itemtype)
     
-    def top(self):
-        """ @method [t]
+    def top(self, context):
+        """ @method context [t]
         0番目のアイテムオブジェクトを取得する。
         Returns:
             Object: 値
         """
-        return self.at(0)
+        return self.at(context, 0)
     
-    def last(self):
-        """ @method [l]
+    def last(self, context):
+        """ @method context [l]
         最後のアイテムオブジェクトを取得する。
         Returns:
             Object: 値
         """
-        return self.at(-1)
+        return self.at(context, -1)
     
     def get(self, context, column, row):
         """ @method context
@@ -407,15 +406,15 @@ class Sheet():
         """
         self._selection = None
 
-    def selection(self):
-        """ @method [sel]
+    def selection(self, context):
+        """ @method context [sel]
         選択中のアイテムを得る。
         Returns:
             Object: アイテム
         """
         if self._selection is None:
             raise NotSelected()
-        return Object(self.itemtype, self.items[self._selection[0]])
+        return context.new_object(self.items[self._selection[0]], type=self.itemtype)
 
     def selection_index(self):
         """ @method [seli]
@@ -558,7 +557,7 @@ class Sheet():
         else:
             for itemindex, item in enumerate(items, start=start):
                 item = self.items[itemindex]
-                subject = Object(self.itemtype, item)
+                subject = context.new_object(item, type=self.itemtype)
                 newrow = [col.eval(subject, context) for col in self.viewcolumns]
                 self.rows.append((itemindex, newrow))
 
@@ -647,7 +646,7 @@ class Sheet():
         """
         values = []
         for item in self.current_items():
-            o = Object(self.itemtype, item)
+            o = context.new_object(item, type=self.itemtype)
             v = predicate.run_function(o, context)
             values.append(v)
         return values
@@ -662,7 +661,7 @@ class Sheet():
         """
         values = []
         for item in self.current_items():
-            o = Object(self.itemtype, item)
+            o = context.new_object(item, type=self.itemtype)
             v = predicate.run_function(o, context)
             if v.type is self.itemtype:
                 values.append(v)
@@ -685,7 +684,7 @@ class Sheet():
             except Exception as e:
                 values.append(context.new_process_error_object(e))
             else:
-                values.append(Object(type, v))
+                values.append(type.new_object(v))
         return values
     
     #
@@ -696,7 +695,7 @@ class Sheet():
         表の一行を読み取り用オブジェクトに変換する 
         """
         values = {
-            "#delegate" : Object(self.itemtype, self.items[itemindex])
+            "#delegate" : context.new_object(self.items[itemindex], type=self.itemtype)
         }
         for i, col in enumerate(self.viewcolumns):
             key = col.get_name()
@@ -749,21 +748,21 @@ class Sheet():
     #
     # タプルの取得
     #
-    def getallitems(self):
-        """ @method alias-name [items]
+    def getallitems(self, context):
+        """ @method context alias-name [items]
         全アイテムオブジェクトのタプルを得る。
         Returns:
             Tuple: 
         """
-        return [Object(self.itemtype, x) for x in self.items]
+        return [context.new_object(x, type=self.itemtype) for x in self.items]
 
-    def getitems(self):
-        """ @method alias-name [curitems]
+    def getitems(self, context):
+        """ @method context alias-name [curitems]
         現在の行のアイテムをタプルで得る。
         Returns:
             Tuple
         """
-        return [Object(self.itemtype, x) for x in self.current_items()]
+        return [context.new_object(x, type=self.itemtype) for x in self.current_items()]
     
     def column(self, context, name):
         """ @method context
@@ -805,7 +804,9 @@ class Sheet():
             app.post("message", text)
         else:
             context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
-            app.post("object-sheetview", data=self, context=context)
+            rows, colmaxwidths = self.rows_to_string_table(context, "summarize")
+            columns = [x.get_name() for x in self.get_current_columns()]
+            app.post("object-sheetview", rows=rows, columns=columns, columnwidths=colmaxwidths, context=context)
 
     def conversion_construct(self, context, value, itemtypename, *columnnames):
         if not isinstance(value, list):
