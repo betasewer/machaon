@@ -27,50 +27,51 @@ class EMPTY_OBJECT:
 #
 class Object():
     def __init__(self, type, value=EMPTY_OBJECT):
-        self.value: Any = value
+        self._value: Any = value
         self.type: Type = type
         if not isinstance(self.type, Type):
             raise TypeError("'type' must be Type instance")
 
     def __repr__(self):
-        return "<Object {1} [{0}]>".format(self.type.typename, repr(self.value))
+        return "<Object {1} [{0}]>".format(self.type.typename, repr(self._value))
     
     def __str__(self):
         return "{1} [{0}]".format(self.type.typename, self.summary())
     
+    @property
+    def value(self):
+        if self.is_pretty_view():
+            return self._value.object._value
+        else:
+            return self._value
+    
     def get_typename(self):
         return self.type.typename
     
-    def get_value(self):
-        if self.is_pretty_view():
-            return self.value.object.value
-        else:
-            return self.value
-    
     def copy(self):
-        return Object(self.type, copy(self.get_value()))
+        return Object(self.type, copy(self.value))
     
     def to_string(self) -> str:
-        return self.type.convert_to_string(self.get_value())
+        return self.type.convert_to_string(self.value)
 
     def summary(self) -> str:
-        return self.type.summarize_value(self.get_value())
+        return self.type.summarize_value(self.value)
 
     def pprint(self, spirit):
-        self.type.pprint_value(spirit, self.get_value())
+        self.type.pprint_value(spirit, self.value)
     
     def pretty_view(self):
         return Object(self.type, ObjectPrettyView(self))
     
     def is_pretty_view(self):
-        return isinstance(self.value, ObjectPrettyView)
+        return isinstance(self._value, ObjectPrettyView)
     
     def is_error(self):
         from machaon.process import ProcessError
-        return isinstance(self.get_value(), ProcessError)
+        return isinstance(self.value, ProcessError)
     
     def is_truth(self):
-        return self.get_value() and not self.is_error()
+        return self.value and not self.is_error()
 
 #
 class ObjectPrettyView():

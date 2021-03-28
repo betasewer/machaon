@@ -70,7 +70,7 @@ class Launcher():
                     context = msg.argument("context")
                     if obj:
                         if obj.is_pretty_view():
-                            m = ProcessMessage(tag="object-pretty-view", pr=process, object=obj.value.get_object(), context=context)
+                            m = ProcessMessage(tag="object-pretty-view", pr=process, object=obj.value, context=context)
                             self.message_handler(m)
                         else:
                             expr = " -> {} [{}]".format(obj.summary(), obj.get_typename())
