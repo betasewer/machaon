@@ -51,6 +51,10 @@ class InvocationEntry():
         inv.results = self.results
         inv.exception = self.exception
         return inv
+    
+    def _invokeaction(self):
+        """ アクションを実行（デバッグ用） """
+        return self.action(*self.args, **self.kwargs)
 
     def invoke(self):
         """ アクションを実行し、返り値を保存する """
@@ -395,9 +399,9 @@ def instant_context(subject=None):
 # メソッドの実行
 #
 #
-INVOCATION_NEGATE_RESULT = 0x1
-INVOCATION_REVERSE_ARGS = 0x2
-INVOCATION_NORMALIZED_NAME = 0x4
+INVOCATION_NEGATE_RESULT    = 0x001
+INVOCATION_REVERSE_ARGS     = 0x002
+INVOCATION_NORMALIZED_NAME  = 0x004
 
 #
 #
@@ -445,6 +449,12 @@ class BasicInvocation():
     def get_result_typehint(self):
         return self.result_typehint
     
+    def resolve_object_value(self, obj, spec=None):
+        if spec and spec.is_object():
+            return obj
+        else:
+            return obj.value
+
     #
     # これらをオーバーロードする
     #
@@ -468,13 +478,6 @@ class BasicInvocation():
     
     def get_parameter_spec(self, index):
         return None # 不明
-
-#
-def get_object_value(obj, spec=None):
-    if spec and spec.is_object():
-        return obj
-    else:
-        return obj.value
 
 #
 # 型に定義されたメソッドの呼び出し 
@@ -516,7 +519,7 @@ class TypeMethodInvocation(BasicInvocation):
             args.append(self.type.get_describer_instance())
 
         # インスタンスを渡す
-        selfvalue = get_object_value(selfobj, self.get_parameter_spec(-1))
+        selfvalue = self.resolve_object_value(selfobj, self.get_parameter_spec(-1))
         args.append(selfvalue)
     
         if self.method.is_context_bound():
@@ -530,7 +533,7 @@ class TypeMethodInvocation(BasicInvocation):
         # 引数オブジェクトを整理する
         for i, argobj in enumerate(argobjs):
             argspec = self.get_parameter_spec(i)
-            a = get_object_value(argobj, argspec)
+            a = self.resolve_object_value(argobj, argspec)
             args.append(a)
         
         action = self.method.get_action()
@@ -606,16 +609,13 @@ class InstanceMethodInvocation(BasicInvocation):
 
         if not callable(method):
             # 引数なしの関数に変換する
-            def nullary(v):
-                def _method():
-                    return v
-                return _method
-            method = nullary(method)
+            method = _nullary(method)
         
         return method, instance, trailingargs
     
     def prepare_invoke(self, context, *argobjects):
-        method, _inst, args = self.resolve_instance_method([get_object_value(x) for x in argobjects])
+        a = [self.resolve_object_value(x) for x in argobjects]
+        method, _inst, args = self.resolve_instance_method(a)
         return InvocationEntry(self, method, args, {})
     
     def get_result_specs(self):
@@ -660,7 +660,7 @@ class FunctionInvocation(BasicInvocation):
     
     def prepare_invoke(self, invocations, *argobjects):
         # そのままの引数で
-        args = [get_object_value(x) for x in argobjects]
+        args = [self.resolve_object_value(x) for x in argobjects]
         return InvocationEntry(self, self.fn, args, {})
     
     def get_action(self):
@@ -682,21 +682,6 @@ class ObjectRefInvocation(BasicInvocation):
         self.name = name
         self._object = None
     
-    def resolve_ref(self, collection):
-        # メンバ参照を解決する
-        item = collection.get(self.name)
-        if item is not None:
-            self._object = item.object
-            return item.object
-        return None
-        
-    def resolve_delegation(self, collection):
-        # 移譲先のオブジェクトを返す
-        delgate_point = collection.get("#delegate")
-        if delgate_point is None:
-            return None
-        return delgate_point.object
-    
     def get_method_name(self):
         return self.name
 
@@ -716,21 +701,23 @@ class ObjectRefInvocation(BasicInvocation):
         return False
 
     def prepare_invoke(self, context: InvocationContext, *argobjects):
-        collection, *_args = argobjects
+        colarg, *_args = argobjects
+        collection = colarg.value
 
-        obj = self.resolve_ref(collection.value)
-        if obj is not None:
-            return InvocationEntry(self, self.get_action(), (obj,), {})
+        item = collection.get(self.name)
+        if item is not None:
+            return InvocationEntry(self, _nullary(item.object), (), {})
 
-        delg = self.resolve_delegation(collection.value)
-        if delg is None:
-            raise BadObjectRefInvocation("値'{}'は存在しません (ObjectCollection)".format(self.name))
-        from machaon.core.message import select_method
-        inv = select_method(self.name, delg.type, reciever=delg.value)
-        return inv.prepare_invoke(context, delg)
+        delg = collection.get_delegation()
+        if delg is not None:
+            from machaon.core.message import select_method
+            inv = select_method(self.name, delg.type, reciever=delg.value)
+            return inv.prepare_invoke(context, delg)
+        
+        raise BadObjectRefInvocation("値'{}'は存在しません (ObjectCollection)".format(self.name))
     
     def get_action(self):
-        return _objidentity
+        return None
     
     def get_result_specs(self):
         if self._object:
@@ -749,5 +736,7 @@ class ObjectRefInvocation(BasicInvocation):
         return None
 
 
-def _objidentity(obj):
-    return obj
+def _nullary(v):
+    def _method():
+        return v
+    return _method

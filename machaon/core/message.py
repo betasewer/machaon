@@ -289,20 +289,6 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
 
     name = normalize_method_name(name)
 
-    # レシーバがオブジェクト集合の場合はメンバ参照に変換
-    if typetraits.is_object_collection():
-        inv = ObjectRefInvocation(name, modbits)
-        if reciever is None:
-            return inv # 不確定なので全てメンバ参照と考える
-        else:
-            if inv.resolve_ref(reciever):
-                return inv
-            else:
-                delg = inv.resolve_delegation(reciever)
-                if delg is not None:
-                    return select_method(name, delg.type, modbits=modbits, reciever=delg.value)
-                # ObjectCollection自体のメソッドとなる
-
     # 型メソッド
     using_type_method = typetraits and not typetraits.is_any()
     if using_type_method:
@@ -315,6 +301,11 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     inv = resolve_generic_method_invocation(name, modbits)
     if inv is not None:
         return inv 
+
+    # レシーバがオブジェクト集合の場合はメンバ参照に変換
+    if typetraits.is_object_collection():
+        inv = ObjectRefInvocation(name, modbits)
+        return inv
 
     if using_type_method and not typetraits.is_using_instance_method():
         raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.typename))
