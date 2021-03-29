@@ -296,16 +296,16 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
         if meth is not None:
             return TypeMethodInvocation(typetraits, meth, modbits)
     
+    # レシーバがオブジェクト集合の場合はメンバ参照に変換
+    if typetraits.is_object_collection():
+        inv = ObjectRefInvocation(name, modbits)
+        return inv
+    
     # グローバル定義の関数
     from machaon.types.generic import resolve_generic_method_invocation
     inv = resolve_generic_method_invocation(name, modbits)
     if inv is not None:
         return inv 
-
-    # レシーバがオブジェクト集合の場合はメンバ参照に変換
-    if typetraits.is_object_collection():
-        inv = ObjectRefInvocation(name, modbits)
-        return inv
 
     if using_type_method and not typetraits.is_using_instance_method():
         raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.typename))
