@@ -285,7 +285,7 @@ class Path():
             for filename in filenames:
                 filepath = os.path.join(basedir, dirpath, filename)
                 path = context.new_object(filepath, type="Path")
-                if predicate.run_function(path, context).is_truth():
+                if predicate.run_function(path, context).test_truth():
                     return path
         raise NotFound()
     

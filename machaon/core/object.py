@@ -70,8 +70,10 @@ class Object():
         from machaon.process import ProcessError
         return isinstance(self.value, ProcessError)
     
-    def is_truth(self):
-        return self.value and not self.is_error()
+    def test_truth(self):
+        if self.is_error():
+            raise self.value.error
+        return self.value
 
 #
 class ObjectPrettyView():
@@ -131,8 +133,8 @@ class ObjectCollection():
         o = Object(type, value)
         return self.push(name, o)
 
-    # オブジェクトを追加
     def push(self, name: str, obj: Object) -> ObjectCollectionItem:
+        # オブジェクトを追加
         if not isinstance(name, str) or not isinstance(obj, Object):
             raise TypeError()
         newident = len(self._items)
@@ -141,8 +143,8 @@ class ObjectCollection():
         self._namemap[name].append(newident)
         return item
 
-    # 名前で検索する
     def pick(self, name) -> Generator[ObjectCollectionItem, None, None]:
+        # 名前で検索する
         if name not in self._namemap:
             return
         for ident in self._namemap[name]:
@@ -152,11 +154,21 @@ class ObjectCollection():
         li = list(self.pick(name))
         return li[-1] if li else None
 
-    # 全てのオブジェクトを取得
     def pick_all(self) -> Generator[ObjectCollectionItem, None, None]:
+        # 全てのオブジェクトを取得
         for item in self._items.values():
             yield item
     
+    def get_delegation(self):        
+        # 移譲先のオブジェクトを返す
+        delgate_point = self.get("#delegate")
+        if delgate_point is None:
+            return None
+        return delgate_point.object
+    
+    def set_delegation(self, o):
+        self.push("#delegate", o)
+
     #
     #
     #

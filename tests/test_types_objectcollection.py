@@ -11,7 +11,7 @@ def test_conversion_construct():
         "herring" : "にしん",
         "cod" : "たら",
     }, "ObjectCollection")
-    assert col.is_truth()
+    assert col.test_truth()
     assert col.value.get("cod").value == "たら"
     assert col.value.get("herring").value == "にしん"
 

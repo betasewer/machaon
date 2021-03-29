@@ -721,7 +721,7 @@ class Sheet():
         # 関数を行に適用する
         def fn(entry):
             subject = self.row_to_object(context, *entry)
-            return predicate.run_function(subject, context).value
+            return predicate.run_function(subject, context).test_truth()
         
         self.rows = list(filter(fn, self.rows))
 
@@ -736,7 +736,7 @@ class Sheet():
         """
         def sortkey(entry):
             subject = self.row_to_object(context, *entry)
-            return sorter.run_function(subject, context).value
+            return sorter.run_function(subject, context).test_truth()
 
         self.rows.sort(key=sortkey)
         

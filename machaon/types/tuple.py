@@ -143,7 +143,7 @@ class ObjectTuple():
         """
         # 関数を行に適用する
         def fn(subject):
-            return predicate.run_function(subject, context).value
+            return predicate.run_function(subject, context).test_truth()
         
         self.objects = list(filter(fn, self.objects))
     
@@ -154,7 +154,7 @@ class ObjectTuple():
             key(Function): 並べ替え関数
         """
         def sortkey(subject):
-            return key.run_function(subject, context).value
+            return key.run_function(subject, context).test_truth()
 
         self.objects.sort(key=sortkey)
         
