@@ -263,6 +263,26 @@ class Path():
         items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
         return items
     
+    def listdirdir(self):
+        """ @method [lsd]
+        ディレクトリに含まれるサブディレクトリの一覧を返す。
+        Returns:
+            Sheet[Path]: (name, filetype, modtime, size)
+        """
+        if not self.isdir():
+            return []
+        return [x for x in self.listdir() if x.isdir()]
+    
+    def listdirfile(self):
+        """ @method [lsf]
+        ディレクトリに含まれるファイルの一覧を返す。
+        Returns:
+            Sheet[Path]: (name, filetype, modtime, size)
+        """
+        if not self.isdir():
+            return [Path(self._path)]
+        return [x for x in self.listdir() if x.isfile()]
+    
     def dialog(self):
         """ @method [dlg]
         ファイル・フォルダダイアログを開く。
