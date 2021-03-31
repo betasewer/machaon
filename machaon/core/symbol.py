@@ -78,3 +78,11 @@ def is_valid_object_bind_name(name):
 # 不正な名前・予約された名前を使おうとした
 class BadObjectBindName(Exception):
     pass
+
+#
+def full_qualified_name(t):
+    mod = t.__module__
+    if mod is None or mod == len.__module__:
+        return t.__qualname__
+    else:
+        return mod + "." + t.__qualname__

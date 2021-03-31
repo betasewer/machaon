@@ -3,7 +3,7 @@ from collections import OrderedDict, defaultdict
 from copy import copy
 
 from machaon.core.type import Type
-from machaon.core.symbol import normalize_typename
+from machaon.core.symbol import normalize_typename, full_qualified_name
 
 # imported from...
 # desktop
@@ -37,6 +37,20 @@ class Object():
     
     def __str__(self):
         return "{1} [{0}]".format(self.type.typename, self.summary())
+    
+    def value_dstr(self):
+        v = self.value
+        t = type(v)
+        if t.__str__ is object.__str__:
+            ds = "0x{:0X}".format(id(v))
+        else:
+            ds = str(v)
+        if self.type.is_any():
+            return "{}({})".format(ds, full_qualified_name(t))
+        elif not self.type.check_value_type(t):
+            return "{}(!!{})".format(ds, full_qualified_name(t))
+        else:
+            return ds
     
     @property
     def value(self):

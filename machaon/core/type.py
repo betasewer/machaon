@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
-from machaon.core.symbol import normalize_typename, BadTypename, BadMethodName, PythonBuiltinTypenames
+from machaon.core.symbol import normalize_typename, BadTypename, BadMethodName, PythonBuiltinTypenames, full_qualified_name
 from machaon.core.method import Method, methoddecl_collect_attributes, UnloadedMethod, MethodLoadError
 from machaon.core.importer import attribute_loader
 from machaon.core.docstring import DocStringParser
@@ -87,7 +87,7 @@ class Type():
     
     def get_describer_qualname(self):
         if isinstance(self._describer, type):
-            return ".".join([self._describer.__module__, self._describer.__qualname__])
+            return full_qualified_name(self._describer)
         else:
             return str(self._describer)
 
@@ -492,7 +492,7 @@ class TypeDelayLoader():
         if isinstance(self.traits, str):
             return self.traits
         else:
-            return ".".join([self.traits.__module__, self.traits.__qualname__])
+            return full_qualified_name(self.traits)
     
     def is_loaded(self):
         return self._t is not None
@@ -737,3 +737,4 @@ class TypeModule():
 
 
 
+    

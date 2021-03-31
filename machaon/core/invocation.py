@@ -6,7 +6,7 @@ from collections import defaultdict
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object, ObjectValue, ObjectCollection
 from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
-from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName
+from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName, full_qualified_name
 
 #
 # 
@@ -650,7 +650,7 @@ class FunctionInvocation(BasicInvocation):
         return self.fn.__doc__
     
     def display(self):
-        name = ".".join([self.fn.__module__, self.fn.__qualname__])
+        name = full_qualified_name(self.fn)
         return ("Function", name, self.modifier_name())
     
     def query_method(self, _this_type):

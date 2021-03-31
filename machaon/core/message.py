@@ -168,7 +168,7 @@ class Message:
 
         def put(item):
             if isinstance(item, Object):
-                exprs.append("<{} {}>".format(item.get_typename(), item.value))
+                exprs.append("<{} {}>".format(item.get_typename(), item.value_dstr()))
             elif isinstance(item, ResultStackTopRef):
                 exprs.append("<#ResultStackTopRef>")
             else:
