@@ -363,10 +363,10 @@ class InvocationContext:
                 line = ""
             elif code == LOG_RUN_FUNCTION:
                 cxt = args[0]
-                if cxt is not self:
-                    printer(" BEGIN ->")
+                if cxt is not self and cxt._log: # ログが空であれば出力しない
+                    printer(" ====== BEGIN =====>>>")
                     cxt.pprint_log(printer=printer)
-                    printer(" END <-")
+                    printer(" <<<==== END =========")
                 continue
             else:
                 raise ValueError("不明なログコード:"+",".join([code,*args]))

@@ -1004,14 +1004,14 @@ class MessageEngine():
         for _ in runner: pass
 
         ret = self.finish(context)
-        
-        context.add_log(LOG_RUN_FUNCTION, context)
         return ret # Objectを返す
     
     def run_function(self, subject, context) -> Object:
         """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
-        subcontext = context.inherit(subject) # ここでコンテキストが入れ子になる
-        return self.run(subcontext)
+        subcontext = context.inherit(subject) # コンテキストが入れ子になる
+        ret = self.run(subcontext)
+        context.add_log(LOG_RUN_FUNCTION, subcontext)
+        return ret
 
 #
 # ログ表示用に定数名を出力する
@@ -1075,7 +1075,6 @@ class MemberGetter():
         subcontext = context.inherit(subject)
         message = Message(subject, self.method)
         result = message.eval(subcontext)
-
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         return result
     
