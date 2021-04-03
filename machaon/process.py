@@ -899,10 +899,10 @@ class ProcessError():
     def summarize(self):
         if isinstance(self.error, InternalMessageError):
             error = self.error.error
-            return "文法エラー：{}".format(str(error))
+            return "文法エラー：{}[{}]".format(str(error), self.get_error_typename())
         else:
             error = self.error
-            return "実行エラー：{}".format(str(error))
+            return "実行エラー：{}[{}]".format(str(error), self.get_error_typename())
 
     def pprint(self, app):
         if isinstance(self.error, InternalMessageError):

@@ -230,7 +230,7 @@ class InvocationContext:
     #    
     def get_type(self, typename, *, scope=None) -> Optional[Type]:
         """ 型名を渡し、型定義を取得する """
-        return self.type_module.get(typename, scope=scope)
+        return self.type_module.get(typename, scope=scope, fallback=False)
     
     def select_type(self, typename, *, scope=None) -> Type:
         """ 型名を渡し、無ければAny型を取得する """
