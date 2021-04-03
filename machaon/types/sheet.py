@@ -32,8 +32,17 @@ DATASET_STRINGIFY_SUMMARIZE = 1
 #
 #
 class BasicDataColumn():
+    def __init__(self):
+        self._t = None
+    
     def get_type(self, context, deduce):
-        raise NotImplementedError()
+        if self._t is None:
+            if deduce is None:
+                raise ValueError("Cannot deduce value type of Sheet column '{}' because value is not provided here".format(self._name))
+            self._t = context.deduce_type(deduce)
+            if self._t is None:
+                raise ValueError("value type of Sheet column '{}' is undefined")
+        return self._t
     
     def new_object(self, context, value):
         t = self.get_type(context, value)
@@ -41,12 +50,17 @@ class BasicDataColumn():
 
     def stringify(self, context, value, method=DATASET_STRINGIFY):
         if isinstance(value, ProcessError):
-            return "<error: {}>".format(value.summarize())
+            return "<{}>".format(value.summarize())
         if method == DATASET_STRINGIFY_SUMMARIZE:
             return self.get_type(context, value).summarize_value(value)
         else:
             return self.get_type(context, value).convert_to_string(value)
 
+    def is_nonstring_column(self):
+        if self._t is None:
+            raise ValueError("まだ読み込まれていない")
+        return not self._t.is_any() and self._t.get_typename() != "Str"
+    
     def make_compare_operator(self, context, lessthan=True):
         typ = self.get_type(context, None)
         if lessthan:
@@ -58,50 +72,46 @@ class BasicDataColumn():
         inv.set_result_typehint("Bool")
         return inv
 
-#
-#
-#
-class DataColumn(BasicDataColumn):
-    def __init__(self, function, typename=None, *, name=None):
-        self._getter = function
-        self._typename = typename
+class DataOperationColumn(BasicDataColumn):
+    def __init__(self, function, *, name=None):
+        self._fn = function
         self._name = name
-        self._t = None
     
     def get_name(self):
         if self._name is None:
-            return self._getter.get_expression()
+            return '"{}"'.format(self._fn.get_expression())
         return self._name
     
-    def get_type(self, context, deduce):
-        if self._t is None:
-            if self._typename is None or self._typename == "Any":
-                if deduce is None:
-                    raise ValueError("Cannot deduce value type of Sheet column '{}' because value is not provided here".format(self._name))
-                self._t = context.deduce_type(deduce)
-            else:
-                self._t = context.select_type(self._typename)
-        if self._t is None:
-            raise ValueError("value type of Sheet column '{}' is undefined")
-        return self._t
-    
     def get_function(self):
-        return self._getter
-    
-    def is_nonstring_column(self):
-        return self._typename and self._typename != "Str" and self._typename != "Any"
-    
+        return self._fn
+
     def eval(self, subject, context):
-        obj = self._getter.run_function(subject, context)
-        if self._typename is None and not obj.is_error(): # 型を記憶する
-            self._typename = obj.get_typename()
+        obj = self._fn.run_function(subject, context)
+        if self._t.is_any() and not obj.is_error(): # 型を記憶する
             self._t = obj.type
         return obj.value
 
-#
+class DataMemberColumn(DataOperationColumn):
+    def __init__(self, membername):
+        super().__init__(None, name=membername)
+    
+    def resolve(self, subject, context):
+        inv = select_method(self._name, subject.type, reciever=subject.value)
+        self._fn = MemberGetter(self._name, inv)
+        self._t = context.select_type(inv.get_result_specs()[0].get_typename())
+
+    def get_name(self):
+        return self._name
+    
+    def eval(self, subject, context):
+        if self._fn is None:
+            self.resolve(subject, context)
+        return super().eval(subject, context)
+
 class DataItemItselfColumn(BasicDataColumn):
     def __init__(self, type):
-        self.type = type
+        super().__init__()
+        self._t = type
     
     @property
     def method(self):
@@ -114,22 +124,17 @@ class DataItemItselfColumn(BasicDataColumn):
         return "要素"
     
     def get_type(self, _context, _deduce):
-        return self.type
+        return self._t
     
     def eval(self, subject, _context):
         return subject.value
-    
-    def is_nonstring_column(self):
-        return not self.type.is_any() and self.type.get_typename() != "Str"
-
 
 #
-DataColumnUnion = Union[DataColumn, DataItemItselfColumn]
+DataColumnUnion = Union[DataMemberColumn, DataOperationColumn, DataItemItselfColumn]
 
 #
 def make_data_columns(type, *expressions) -> List[DataColumnUnion]:
     columns: List[DataColumnUnion] = []
-    invalid_names = []
 
     names: List[str] = []
     for expr in expressions:
@@ -143,18 +148,15 @@ def make_data_columns(type, *expressions) -> List[DataColumnUnion]:
         if member_name == "=":
             columns.append(DataItemItselfColumn(type))
             continue
-
-        methinv = select_method(member_name, type)
-        if methinv:
-            fn = MemberGetter(member_name, methinv)
-            specs = methinv.get_result_specs()
-            col = DataColumn(fn, specs[0].get_typename())
+        
+        parts = member_name.split()
+        if len(parts) == 1:
+            col = DataMemberColumn(member_name)
             columns.append(col)
-        else:
-            invalid_names.append(member_name)
+        elif len(parts) > 1:
+            col = DataOperationColumn(member_name)
+            columns.append(col)
 
-    if invalid_names:
-        raise InvalidColumnNames(invalid_names)
     return columns
 
 #
@@ -585,7 +587,7 @@ class Sheet():
         """ @method context alias-name [view++]
         列を追加する。
         Params:
-            column_names(List[Str]): カラム名
+            column_names(Tuple[Str]): カラム名
         """
         # 空のデータからは空のビューしか作られない
         if not self.items:
@@ -616,7 +618,7 @@ class Sheet():
             self.rows = []
             return self
 
-        col = DataColumn(function, None, name=name) # 型は推定する
+        col = DataOperationColumn(function, name=name) # 型は推定する
         self.generate_rows_concat(context, [col])
     
     def clone(self):
@@ -676,7 +678,7 @@ class Sheet():
             Tuple:
         """
         if type is self.itemtype:
-            return self.getitems()
+            return self.getitems(context)
         values = []
         for item in self.current_items():
             try:

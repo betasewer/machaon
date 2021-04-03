@@ -5,7 +5,7 @@ from machaon.core.object import ObjectCollection, Object
 from machaon.core.invocation import InvocationContext, instant_context
 from machaon.core.message import MessageEngine
 from machaon.core.sort import ValueWrapper
-from machaon.types.sheet import Sheet, make_data_columns, DataColumn, DataItemItselfColumn
+from machaon.types.sheet import Sheet, make_data_columns, DataMemberColumn, DataItemItselfColumn
 
 class Employee():
     """
@@ -72,7 +72,6 @@ def test_column(objectdesk):
     subject = Object(employee, view.items[0])
     assert namecol.get_function()
     assert namecol.get_function().get_expression() == "name"
-    DataColumn.evallog = True
     namecol.eval(subject, objectdesk) == "ken"
 
     subject = Object(employee, view.items[2])
