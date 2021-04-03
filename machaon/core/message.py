@@ -12,8 +12,7 @@ from machaon.core.invocation import (
     TypeMethodInvocation,
     InstanceMethodInvocation,
     FunctionInvocation,
-    ObjectRefInvocation,
-    BadObjectRefInvocation,
+    ObjectMemberInvocation,
     INVOCATION_RETURN_RECIEVER,
     LOG_MESSAGE_BEGIN,
     LOG_MESSAGE_CODE,
@@ -298,7 +297,9 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     
     # レシーバがオブジェクト集合の場合はメンバ参照に変換
     if typetraits.is_object_collection():
-        inv = ObjectRefInvocation(name, modbits)
+        inv = ObjectMemberInvocation(name, modbits)
+        if reciever:
+            inv.resolve(reciever)
         return inv
     
     # グローバル定義の関数

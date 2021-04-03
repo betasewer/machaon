@@ -1,5 +1,5 @@
 from machaon.core.message import select_method
-from machaon.core.invocation import instant_context, ObjectRefInvocation
+from machaon.core.invocation import instant_context, ObjectMemberInvocation
 from machaon.types.fundamental import fundamental_type
 from machaon.core.method import Method
 from machaon.core.object import ObjectCollection, Object
@@ -59,10 +59,10 @@ def test_objcol_select():
     ColType = fundamental_type.get("ObjectCollection")
     om = select_method("apple", ColType, reciever=col)
     assert om
-    assert om.display() == ("ObjectRef", "apple", "")
+    assert om.display() == ("ObjectMember", "apple", "")
     
     # メソッドの移譲
     dm = select_method("startswith", ColType, reciever=col)
     assert dm
-    assert dm.display() == ("ObjectRef", "startswith", "")
+    assert dm.display() == ("ObjectMember", "startswith", "")
 

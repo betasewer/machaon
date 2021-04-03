@@ -1,6 +1,6 @@
 from machaon.core.invocation import (
     InvocationEntry, BasicInvocation, TypeMethodInvocation, 
-    InstanceMethodInvocation, FunctionInvocation, ObjectRefInvocation,
+    InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
     instant_context
 )
 from machaon.core.object import ObjectValue, ObjectCollection, Object
@@ -45,22 +45,46 @@ def test_objectref():
 
     arg = fundamental_type.get("ObjectCollection").new_object(col)
 
-    inv = ObjectRefInvocation("apple")
+    inv = ObjectMemberInvocation("apple")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "リンゴ"
+    assert isinstance(inv._resolved, ObjectMemberGetterInvocation)
+    assert inv.get_min_arity() == 0
+    assert inv.get_max_arity() == 0
+    assert inv.get_parameter_spec(0) is None
+    assert len(inv.get_result_specs()) == 1
+    assert inv.get_result_specs()[0].get_typename() == "Str"
     
-    inv = ObjectRefInvocation("trumpet")
+    inv = ObjectMemberInvocation("trumpet")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ラッパ"
 
-    # type method
+    # delegation
+
+    # unary type method
     import math
-    inv = ObjectRefInvocation("pyvalue")
+    inv = ObjectMemberInvocation("pyvalue")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() == math.pi
+    assert isinstance(inv._resolved, TypeMethodInvocation)
+    assert inv.get_min_arity() == 0
+    assert inv.get_max_arity() == 0
+    assert inv.get_parameter_spec(0) is None
+    assert len(inv.get_result_specs()) == 1
+    assert inv.get_result_specs()[0].get_typename() == "Any"
 
-    # instance method
-    inv = ObjectRefInvocation("islower")
+    # unary instance method
+    inv = ObjectMemberInvocation("islower")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() is True
+    assert isinstance(inv._resolved, InstanceMethodInvocation)
     
-    # generic method
-    inv = ObjectRefInvocation("length")
+    # unary generic method
+    inv = ObjectMemberInvocation("length")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() == len("math.pi")
+    assert isinstance(inv._resolved, TypeMethodInvocation)
 
+    # binary type method
+    inv = ObjectMemberInvocation("reg-match")
+    assert inv.prepare_invoke(cxt, arg, StrType.new_object("[A-z]+"))._invokeaction() is True
+    assert isinstance(inv._resolved, TypeMethodInvocation)
+    assert inv.get_min_arity() == 1
+    assert inv.get_max_arity() == 1
+    assert len(inv.get_result_specs()) == 1
+    assert inv.get_result_specs()[0].get_typename() == "Bool"

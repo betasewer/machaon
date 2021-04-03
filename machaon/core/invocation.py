@@ -19,7 +19,10 @@ class BadFunctionInvocation(Exception):
     def __init__(self, name):
         self.name = name
 
-class BadObjectRefInvocation(Exception):
+class BadObjectMemberInvocation(Exception):
+    pass
+
+class UnresolvedObjectMemberInvocation(Exception):
     pass
     
 class MessageNoReturn(Exception):
@@ -675,56 +678,32 @@ class FunctionInvocation(BasicInvocation):
     def get_result_specs(self):
         return [MethodResult("Any")] # 値から推定する
 
-#
-class ObjectRefInvocation(BasicInvocation):
-    def __init__(self, name, modifier=0):
-        super().__init__(modifier)
-        self.name = name
-        self._object = None
-    
-    def get_method_name(self):
-        return self.name
 
-    def get_method_doc(self):
-        return "Object '{}'".format(self.name)
-    
-    def display(self):
-        return ("ObjectRef", self.name, self.modifier_name())
+#
+class ObjectMemberGetterInvocation(BasicInvocation):
+    def __init__(self, name, typename, modifier=0):
+        super().__init__(modifier)
+        self.typename = typename
+        self.name = name
     
     def query_method(self, this_type):
-        raise NotImplementedError()
+        return None
     
     def is_task(self):
         return False
 
     def is_parameter_consumer(self):
         return False
-
-    def prepare_invoke(self, context: InvocationContext, *argobjects):
-        colarg, *_args = argobjects
-        collection = colarg.value
-
-        item = collection.get(self.name)
-        if item is not None:
-            return InvocationEntry(self, _nullary(item.object), (), {})
-
-        delg = collection.get_delegation()
-        if delg is not None:
-            from machaon.core.message import select_method
-            inv = select_method(self.name, delg.type, reciever=delg.value)
-            return inv.prepare_invoke(context, delg)
-        
-        raise BadObjectRefInvocation("値'{}'は存在しません (ObjectCollection)".format(self.name))
     
     def get_action(self):
         return None
     
     def get_result_specs(self):
-        if self._object:
-            r = MethodResult(self._object.get_typename())
-        else:
-            r = MethodResult("Any")
+        r = MethodResult(self.typename)
         return [r]
+    
+    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
+        return None
 
     def get_max_arity(self):
         return 0
@@ -732,11 +711,97 @@ class ObjectRefInvocation(BasicInvocation):
     def get_min_arity(self):
         return 0
 
-    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        return None
-
+    def prepare_invoke(self, _context, colarg):
+        item = colarg.value.get(self.name)
+        if item is not None:
+            return InvocationEntry(self, _nullary(item.object), (), {})
+        raise BadObjectMemberInvocation()
 
 def _nullary(v):
     def _method():
         return v
     return _method
+
+#
+class ObjectMemberInvocation(BasicInvocation):
+    def __init__(self, name, modifier=0):
+        super().__init__(modifier)
+        self.name = name
+        self._resolved = None
+    
+    def resolve(self, collection):
+        item = collection.get(self.name)
+        if item is not None:
+            self._resolved = ObjectMemberGetterInvocation(self.name, item.object.get_typename(), self.modifier)
+            return
+
+        delg = collection.get_delegation()
+        if delg is not None:
+            from machaon.core.message import select_method
+            self._resolved = select_method(self.name, delg.type, reciever=delg.value, modbits=self.modifier)
+            return
+        
+        raise BadObjectMemberInvocation("値'{}'は存在しません (ObjectCollection)".format(self.name))
+
+    def get_method_name(self):
+        return self.name
+
+    def get_method_doc(self):
+        return "オブジェクトのメンバ'{}'".format(self.name)
+
+    def display(self):
+        return ("ObjectMember", self.name, self.modifier_name())
+    
+    def must_be_resolved(self):
+        if self._resolved is None:
+            raise UnresolvedObjectMemberInvocation()
+
+    def query_method(self, this_type):
+        self.must_be_resolved()
+        return self._resolved.query_method(this_type)
+    
+    def is_task(self):
+        self.must_be_resolved()
+        return self._resolved.is_task()
+
+    def is_parameter_consumer(self):
+        self.must_be_resolved()
+        return self._resolved.is_parameter_consumer()
+
+    def prepare_invoke(self, context: InvocationContext, *argobjects):
+        colarg, *args = argobjects
+        # 実行時に呼び出しを解決する
+        if self._resolved is None:
+            self.resolve(colarg.value)
+            if self._resolved is None:
+                raise BadObjectMemberInvocation()
+        # 呼び出しエントリを作成する
+        if isinstance(self._resolved, ObjectMemberGetterInvocation):        
+            entry = self._resolved.prepare_invoke(context, colarg)
+        else:
+            delg = colarg.value.get_delegation()
+            if delg is None:
+                raise BadObjectMemberInvocation()
+            entry = self._resolved.prepare_invoke(context, delg, *args)
+        entry.invocation = self # 呼び出し元をすり替える
+        return entry
+    
+    def get_action(self):
+        self.must_be_resolved()
+        return self._resolved.get_action()
+    
+    def get_result_specs(self):
+        self.must_be_resolved()
+        return self._resolved.get_result_specs()
+
+    def get_max_arity(self):
+        self.must_be_resolved()
+        return self._resolved.get_max_arity()
+
+    def get_min_arity(self):
+        self.must_be_resolved()
+        return self._resolved.get_min_arity()
+
+    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
+        self.must_be_resolved()
+        return self._resolved.get_parameter_spec(index)
