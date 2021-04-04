@@ -16,7 +16,7 @@ from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, Pr
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
-import machaon.platforms
+from machaon.types.shellplatform import shellplatform
 
 #
 # ###################################################################
@@ -54,13 +54,8 @@ class AppRoot:
         chamber = self.processhive.addnew(self.ui.get_input_prompt())
         
         if not package_dir:
-            package_dir = os.path.join(os.getcwd(), "machaon")
-            if not os.path.isdir(package_dir):
-                os.mkdir(package_dir)
+            package_dir = os.path.join(shellplatform().location_name_to_path("documents"), "machaon")
         
-        if not os.path.isdir(package_dir):
-            raise ValueError("ディレクトリが存在しません: " + package_dir)
-
         self.pkgmanager = PackageManager(package_dir)
         self.pkgmanager.load_database()
         self.pkgmanager.add_to_import_path()

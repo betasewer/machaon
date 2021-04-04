@@ -298,17 +298,16 @@ class PackageManager():
     def load_database(self, force=False):
         if not force and self.database is not None:
             return
-
-        if not os.path.isfile(self._dbpath):
-            self.database = configparser.ConfigParser()
-            self.save_database()
-
-        cfg = None
-        with open(self._dbpath, "r", encoding="utf-8") as fi:
+        
+        if os.path.isfile(self._dbpath):
+            # ファイルを読み込む
             cfg = configparser.ConfigParser()
-            cfg.read_file(fi)
-
-        self.database = cfg
+            with open(self._dbpath, "r", encoding="utf-8") as fi:
+                cfg.read_file(fi)
+            self.database = cfg
+        else:
+            # 空データ
+            self.database = configparser.ConfigParser()
         return True
 
     def add_database(self, pkg, toplevel=None, infodir=None):
@@ -337,8 +336,11 @@ class PackageManager():
     def save_database(self):
         if self.database is None:
             raise DatabaseNotLoadedError()
+        if not os.path.isdir(self.dir):
+            os.makedirs(self.dir)
         with open(self._dbpath, "w", encoding="utf-8") as fo:
             self.database.write(fo)
+        print("save setting file '{}'".format(self._dbpath))
     
     def create_undefined_empty_packages(self):
         pkgs = []
