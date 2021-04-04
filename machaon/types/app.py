@@ -59,23 +59,23 @@ class RootObject:
         msgs = chm.get_process_messages()
         app.get_app_ui().replace_screen_message(msgs)
     
-    def clear_last(self, app):
-        ''' @method spirit [cl]
-        直前のプロセスの実行結果を削除する。
-        '''
-        chm = self.context.root.get_active_chamber()
-        index = chm.last_process.get_index()
-        def is_lastpr(pr):
-            return pr.get_index() == index
-        self._clear_processes(app, is_lastpr)
-    
-    def clear_all(self, app):
+    def clear(self, app):
         ''' @method spirit [cla]
         現在のチャンバーの全ての実行結果を削除する。
         '''
         self._clear_processes(app, None)
+    
+    def clear_except_last(self, app):
+        ''' @method spirit [cl]
+        直前のプロセスを除いてすべてを削除する。
+        '''
+        chm = self.context.root.get_active_chamber()
+        index = chm.last_process.get_index()
+        def is_lastpr(pr):
+            return pr.get_index() != index
+        self._clear_processes(app, is_lastpr)
 
-    def clear_all_failed(self, app):
+    def clear_failed(self, app):
         ''' @method spirit [claf]
         エラーを返した実行結果をすべて削除する。
         '''
@@ -83,7 +83,6 @@ class RootObject:
             return pr.is_failed()
         self._clear_processes(app, is_failed)
     
-
     def stringify(self):
         return "<アプリケーション>"
 
