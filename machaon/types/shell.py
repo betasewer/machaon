@@ -12,23 +12,7 @@ from typing import Optional
 
 from machaon.shellpopen import popen_capture
 from machaon.types.fundamental import NotFound
-
-#
-#
-#
-def shell_platform():
-    """
-    プラットフォームごとの実装を呼び出す
-    """
-    module = None 
-    system = sys.platform
-    if system == "win32":
-        import machaon.types.shellplatform.win32 as module
-    elif system == "darwin":
-        import machaon.types.shellplatform.darwin as module
-    else:
-        raise ValueError("Unsupported system: "+system)
-    return module
+from machaon.types.shellplatform import shellplatform
 
 #
 #
@@ -51,7 +35,7 @@ class Path():
     
     @classmethod
     def from_location_name(cls, name):
-        p = shell_platform().location_name_to_path(*name.split(":",maxsplit=1))
+        p = shellplatform().location_name_to_path(*name.split(":",maxsplit=1))
         if p is None:
             raise ValueError("不明なフォルダ名："+name)
         return cls(p)
@@ -350,14 +334,14 @@ class Path():
         Params:
             operation(str): *動作のカテゴリ。[open|print|edit|explore|find|...]
         """
-        shell_platform().start_file(self._path, operation)
+        shellplatform().start_file(self._path, operation)
     
     def explore(self):
         """ @method
         ファイル・フォルダをエクスプローラで開く。
         """
         p = self.dir()
-        shell_platform().start_file(p._path, "explore")
+        shellplatform().start_file(p._path, "explore")
 
     def print(self):
         """ @method
@@ -365,7 +349,7 @@ class Path():
         """
         if self.isdir():
             raise ValueError("Unsupported")
-        shell_platform().start_file(self._path, "print")
+        shellplatform().start_file(self._path, "print")
     
     #
     # 型の振る舞い
