@@ -113,6 +113,8 @@ class TypeType():
         Returns:
             Str:
         '''
+        if type.scope is None:
+            return ""
         return type.scope
 
     def qualname(self, type):
