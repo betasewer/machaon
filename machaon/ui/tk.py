@@ -292,8 +292,8 @@ class tkLauncher(Launcher):
 
         # フレームを除去       
         #self.root.overrideredirect(True)
-        from machaon.ui.theme import dark_classic_theme
-        self.apply_theme(dark_classic_theme())
+        import machaon.ui.theme
+        self.apply_theme(machaon.ui.theme.light_terminal_theme())
 
         # イベント
         def bind_event(*widgets):

@@ -61,6 +61,32 @@ def dark_classic_theme():
         "commandfontsize" : None,
         "logfontsize" : None,
     })
+
+def light_terminal_theme():
+    return ShellTheme({
+        "color.message" : "#303030",
+        "color.background" : "#F0F0F0",
+        "color.insertmarker" : "#000000",
+        "color.message-em" : "#8D0C0C",
+        "color.warning" : "#991070",
+        "color.error" : "#8D0C0C",
+        "color.hyperlink" : "#3C96A6",
+        "color.userinput" : "#6AAE08",
+        "color.label" : "#000000",
+        "color.highlight" : "#CCE8FF",
+        "color.sectionbackground" : "#F0F0F0",
+        "color.black" : "#000000",
+        "color.grey" : "#6E386E",
+        "color.red" : "#8D0C0C",
+        "color.blue" : "#17b2ff",
+        "color.green" : "#6AAE08",
+        "color.cyan" : "#3C96A6",
+        "color.yellow" : "#991070",
+        "color.magenta" : "#991070",
+        "ttktheme" : "clam",
+        "commandfontsize" : None,
+        "logfontsize" : None,
+    })
     
 def dark_blue_theme():
     return dark_classic_theme().extend({
@@ -86,6 +112,7 @@ def grey_green_theme():
         "color.highlight" : "#FFD0D0",
         "color.sectionbackground" : "#EFEFEF",
     })
+
 
 def papilio_machaon_theme():
     return grey_green_theme().extend({
