@@ -43,9 +43,6 @@ class RepositoryArchive(BasicArchive):
         
     def get_repository_url(self):
         raise NotImplementedError()
-    
-    def get_default_module(self):
-        return self.name
 
     #
     # ダウンロード

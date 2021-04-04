@@ -132,7 +132,7 @@ class AppPackageType:
                     app.message("  " + name)
 
         # 型をロードする
-        approot.unload_pkg(package)
+        approot.load_pkg(package)
 
         if operation is approot.install_package:
             if package.is_modules():

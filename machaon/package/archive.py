@@ -18,9 +18,6 @@ class BasicArchive():
     def __init__(self):
         self._arc = None
         self._arcroot = None
-        
-    def get_default_module(self):
-        return None
     
     def add_credential(self, _hostname, _username, _cred):
         return False

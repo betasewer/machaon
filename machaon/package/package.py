@@ -112,7 +112,7 @@ class Package():
         if self._type == PACKAGE_TYPE_RESOURCE:
             return False
         if self.entrypoint is None:
-            raise ValueError("entrypoint")
+            raise ValueError("エントリモジュールが指定されていません")
 
         # エントリパスの親モジュールから順に確認する
         mparts = self.entrypoint.split(".")
@@ -253,8 +253,6 @@ def create_package(name, package, module=None, **kwargs):
     
     if pkgtype is not None:
         kwargs["type"] = pkgtype
-    if module is None:
-        module = pkgsource.get_default_module()
     return Package(name, pkgsource, module=module, **kwargs)
 
 #
@@ -428,12 +426,12 @@ class PackageManager():
                     private_reqs = [name for name in private_reqs if not self.is_installed(name)]
                     if private_reqs:
                         yield PackageManager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
-                
+
                 # pipが作成したデータを見に行く
                 distinfo: Dict[str, str] = {}
                 if pkg.is_installation_separated():
                     distinfo = _read_pip_dist_info(self.dir, pkg.source_name)
-            
+
                 # データベースに書き込む
                 self.add_database(pkg, **distinfo)
 
@@ -450,6 +448,12 @@ class PackageManager():
         
         finally:
             tmpdir = cleanup_tmpdir(tmpdir)
+        
+        # パッケージの情報を修正する
+        if "toplevel" in self.database[pkg.name]:
+            if pkg.entrypoint is None:
+                pkg.entrypoint = self.database[pkg.name]["toplevel"]
+
         
     #
     def uninstall(self, pkg):
