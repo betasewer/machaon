@@ -27,8 +27,8 @@ class DocStringParser():
             part, sep, rest = line.partition(":")
             if sep:
                 newkey = part.strip()
-                if part.startswith("  ") or " " in newkey:
-                    sections[key].append(line) # 空白2つ以上ではじまるか、空白が語中に含まれているならセクション名とみなさない
+                if part.startswith(("  ", "\t")) or " " in newkey:
+                    sections[key].append(line) # タブまたは空白2つ以上ではじまるか、空白が語中に含まれているならセクション名とみなさない
                     continue
                 if newkey[0].islower():
                     newkey = newkey[0].upper() + newkey[1:]
