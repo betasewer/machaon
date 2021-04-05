@@ -21,7 +21,7 @@ def approot():
     
 def test_load_singlemodule_fundamental():
     root = approot()
-    pkg = create_package("fundamentals", "local-module:machaon.types.fundamental")
+    pkg = create_package("fundamentals", "module:machaon.types.fundamental")
 
     assert not pkg.once_loaded()
     assert not pkg.is_load_succeeded()
@@ -48,7 +48,7 @@ def test_load_singlemodule_fundamental():
 
 def test_load_submodules_types():
     root = approot()
-    pkg = create_package("types", "local:machaon.types")
+    pkg = create_package("types", "package:machaon.types")
 
     assert not pkg.once_loaded()
     assert not pkg.is_load_succeeded()
