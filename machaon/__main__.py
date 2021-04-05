@@ -12,7 +12,7 @@ def launch():
     from machaon.package.auth import BasicAuth
     root.add_package(
         "machaon.shell",
-        "local-module:machaon.types.shell",
+        "module:machaon.types.shell",
     )
     root.add_package(
         "hello",

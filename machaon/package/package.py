@@ -165,14 +165,20 @@ class Package():
             loader = module_loader(self.entrypoint)
             modules = [loader]
 
+        typecount = 0
         for modloader in modules:
             try:
                 for klass in modloader.enum_type_describers():
                     yield klass
+                    typecount += 1
             except Exception as e:
                 ex = PackageTypeDefLoadError(e, str(modloader))
                 self._loaded.append(ex)
                 continue
+        
+        if typecount == 0:
+            ex = PackageLoadError("型を1つも読み込めませんでした")
+            self._loaded.append(ex)
     
     def reset_loading(self):
         self._loaded.clear()
@@ -230,20 +236,20 @@ def create_package(name, package, module=None, **kwargs):
         elif host == "bitbucket":
             from machaon.package.repository import BitbucketRepArchive
             pkgsource = BitbucketRepArchive(desc)
-        elif host == "local":
+        elif host == "package":
             from machaon.package.archive import LocalModule
             pkgsource = LocalModule()
             module = desc
-        elif host == "local-module":
+        elif host == "module":
             from machaon.package.archive import LocalModule
             pkgsource = LocalModule()
             module = desc
             pkgtype = PACKAGE_TYPE_SINGLE_MODULE
-        elif host == "file-module":
+        elif host == "file":
             from machaon.package.archive import LocalFile
             pkgsource = LocalFile(desc)
             pkgtype = PACKAGE_TYPE_SINGLE_MODULE
-        elif host == "archive":
+        elif host == "package-arc":
             from machaon.package.archive import LocalArchive
             pkgsource = LocalArchive(desc)
         else:
