@@ -101,10 +101,9 @@ class Launcher():
             elif tag == "object-sheetview":
                 rows = msg.argument("rows")
                 columns = msg.argument("columns")
-                colmaxwidths = msg.argument("columnwidths")
-                viewtype = "table"
                 context = msg.argument("context")
-                self.insert_screen_setview(rows, columns, colmaxwidths, viewtype, "anonymous", context)
+                dataid = context.spirit.process.get_index()
+                self.insert_screen_setview(rows, columns, dataid, context)
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
@@ -157,7 +156,7 @@ class Launcher():
         return curstates
         
     # 
-    def insert_screen_setview(self, rows, columns, columnmaxwidths, viewtype, dataname, context):
+    def insert_screen_setview(self, rows, columns, dataid, context):
         raise NotImplementedError()
     
     #

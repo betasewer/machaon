@@ -220,16 +220,12 @@ class ObjectCollection():
             context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
             rows_ = []
             columns = ["名前", "値", "型"]
-            columnwidths = [8, 8, 8]
             for name, ids in self._namemap.items():
                 for i in ids:
                     o = self._items[i].object
-                    columnwidths[0] = max(columnwidths[0], len(name))
                     sm = o.summary()
-                    columnwidths[1] = max(columnwidths[1], len(sm))
                     tn = o.get_typename()
-                    columnwidths[2] = max(columnwidths[2], len(tn))
                     rows_.append([name, sm, tn])
             rows = [(i,x) for i,x in enumerate(rows_)]
-            app.post("object-sheetview", rows=rows, columns=columns, columnwidths=columnwidths, context=context)
+            app.post("object-sheetview", rows=rows, columns=columns, context=context)
 

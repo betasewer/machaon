@@ -82,9 +82,9 @@ class RootObject:
         def is_failed(pr):
             return pr.is_failed()
         self._clear_processes(app, is_failed)
-    
+
     def stringify(self):
-        return "<アプリケーション>"
+        return "<^o^>"
 
 #
 #

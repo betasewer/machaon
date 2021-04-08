@@ -95,7 +95,7 @@ def test_create_no_mod(objectdesk):
 
     assert view.rows == [(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])]
 
-    assert view.rows_to_string_table(objectdesk) == ([(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])], [6])
+    assert view.rows_to_string_table(objectdesk) == [(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])]
     view.select(1)
     assert view.selection_index() == 1
     assert view.get_row(0) == ["ken"]

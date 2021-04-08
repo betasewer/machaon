@@ -699,10 +699,9 @@ class tkLauncher(Launcher):
     #
     #
     #
-    def insert_screen_setview(self, rows, columns, colmaxwidths, viewtype, dataid, context):
-        dataname = viewtype + "@" + dataid
+    def insert_screen_setview(self, rows, columns, dataid, context):
         self.log.configure(state='normal')
-        screen_sheetview_generate(self, self.log, rows, columns, colmaxwidths, dataname)
+        screen_sheetview_generate(self, self.log, rows, columns, dataid)
         self.log.insert("end", "\n")
         self.log.configure(state='disabled')
     
@@ -976,32 +975,47 @@ class tkLauncher(Launcher):
 # Dataview Table
 #
 # ui, wnd, rows, columns, colmaxwidths, dataname
-def screen_sheetview_generate(ui, wnd, rows, columns, colmaxwidths, dataname):
-    colwidths = [max(get_text_width(c),w)+3 for (c,w) in zip(columns, colmaxwidths)]
+def screen_sheetview_generate(ui, wnd, rows, columns, dataname):
+    sheettag = "sheet-{}".format(dataname)
+    widths = []
+
+    # 列幅計算の準備
+    if not wnd.tag_configure(sheettag, "tabs")[-1]:
+        cfgs = wnd.configure("font")
+        import tkinter.font as tkfont
+        wndfont = tkfont.Font(font=cfgs[-1]) #　デフォルトフォント 
+        widths = [0 for _ in columns]
 
     # ヘッダー
-    head = "      | "
-    wnd.insert("end", head, ("message",))
-    line = ""
-    for col, width in zip(columns, colwidths):
-        line += ljust(col, width)
-    wnd.insert("end", line+"\n", ("message-em",))
+    head = "\t \t| "
+    wnd.insert("end", head, ("message", sheettag))
+    line =  "\t".join(columns)
+    wnd.insert("end", line+"\n", ("message-em", sheettag))
+    if widths:
+        widths = [max(w, wndfont.measure(s)) for w,s in zip(widths,columns)]
 
     # 値
-    for i, (itemindex, row) in enumerate(rows):
-        line = " | "
-        for s, width in zip(row, colwidths):
-            line += ljust(s, width)
+    tags = ("message", sheettag)
+    for i, (_itemindex, row) in enumerate(rows):
+        line = "\t{}\t| ".format(i) + "\t".join(row)
+        wnd.insert("end", line+"\n", tags)
+        if widths:
+            widths = [max(w, wndfont.measure(s)) for w,s in zip(widths,row)]
+    
+    # 列幅を計算する
+    if widths:
+        one = wndfont.measure("_")
+        widths = [one*2, one*3] + widths
+        widths[2] += one*2 # セパレータぶんの幅を先頭の値に加える
+        widths = widths[0:2] + [x + one*2 for x in widths[2:]] # アキを加える
 
-        index = str(i)
-        itemkey = DataItemTag.make(dataname, itemindex)
-        head = " "*(5-len(index))
-        tags = ("message",)
-        linktags = ui.new_hyper_tags(itemkey, DataItemTag.HYPERLABEL)
+        start = 0
+        tabs = []
+        for w in widths:
+            start += w
+            tabs.append(start)
+        wnd.tag_configure(sheettag, tabs=tabs)
 
-        wnd.insert("end", head, tags) # ヘッダー
-        wnd.insert("end", index, linktags) # No. リンク
-        wnd.insert("end", line+"\n", tags) # 行本体
 
 
 def screen_sheetview_select_item(ui, wnd, charindex, _dataid):

@@ -498,12 +498,8 @@ class Sheet():
             return a[0]
         return self.itemtype.get_member_group("view-top")
 
-    def rows_to_string_table(self, context, method=None) -> Tuple[
-        List[Tuple[int, List[str]]],    # 文字列にした一行ともとの行番号からなる表
-        List[int]                       # 各列ごとの、文字列の最大長
-    ]:
+    def rows_to_string_table(self, context, method=None) -> List[Tuple[int, List[str]]]: # 文字列にした値と行番号からなる行のリスト
         """ 計算済みのメンバ値をすべて文字列へ変換する。 """
-        colwidth = [0 for _ in self.viewcolumns]
         srows = []
         if method == "summarize":
             meth = DATASET_STRINGIFY_SUMMARIZE
@@ -514,9 +510,8 @@ class Sheet():
             for i, column in enumerate(self.viewcolumns):
                 s = column.stringify(context, row[i], meth)
                 srow[i] = s
-                colwidth[i] = max(colwidth[i], get_text_width(s))
             srows.append((itemindex, srow))
-        return srows, colwidth
+        return srows
 
     def generate_rows(self, context, newcolumns):
         """ 値を計算し、新たに設定する """
@@ -806,9 +801,9 @@ class Sheet():
             app.post("message", text)
         else:
             context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
-            rows, colmaxwidths = self.rows_to_string_table(context, "summarize")
+            rows = self.rows_to_string_table(context, "summarize")
             columns = [x.get_name() for x in self.get_current_columns()]
-            app.post("object-sheetview", rows=rows, columns=columns, columnwidths=colmaxwidths, context=context)
+            app.post("object-sheetview", rows=rows, columns=columns, context=context)
 
     def conversion_construct(self, context, value, itemtypename, *columnnames):
         if not isinstance(value, list):
