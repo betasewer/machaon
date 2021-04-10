@@ -402,9 +402,10 @@ def instant_context(subject=None):
 # メソッドの実行
 #
 #
-INVOCATION_NEGATE_RESULT    = 0x001
-INVOCATION_REVERSE_ARGS     = 0x002
-INVOCATION_NORMALIZED_NAME  = 0x004
+INVOCATION_NEGATE_RESULT       = 0x001
+INVOCATION_REVERSE_ARGS        = 0x002
+INVOCATION_DELEGATED_RECIEVER  = 0x004
+INVOCATION_BASE_RECIEVER  = 0x008
 
 #
 #
@@ -412,7 +413,7 @@ INVOCATION_NORMALIZED_NAME  = 0x004
 class BasicInvocation():
     MOD_NEGATE_RESULT = INVOCATION_NEGATE_RESULT
     MOD_REVERSE_ARGS = INVOCATION_REVERSE_ARGS
-    MOD_NORMALIZED_NAME = INVOCATION_NORMALIZED_NAME
+    MOD_BASE_RECIEVER = INVOCATION_BASE_RECIEVER
 
     def __init__(self, modifier):
         self.modifier = modifier
@@ -437,6 +438,8 @@ class BasicInvocation():
             m.append("reverse-args")
         if self.modifier & INVOCATION_NEGATE_RESULT:
             m.append("negate")
+        if self.modifier & INVOCATION_BASE_RECIEVER:
+            m.append("basic")
         if not m and straight:
             m.append("straight")
         return " ".join(m)
@@ -730,18 +733,25 @@ class ObjectMemberInvocation(BasicInvocation):
         self._resolved = None
     
     def resolve(self, collection):
+        if self._resolved is not None:
+            return
+
         item = collection.get(self.name)
         if item is not None:
             self._resolved = ObjectMemberGetterInvocation(self.name, item.object.get_typename(), self.modifier)
             return
 
+        from machaon.core.message import select_method
         delg = collection.get_delegation()
-        if delg is not None:
-            from machaon.core.message import select_method
+        if delg is not None and not (self.modifier & INVOCATION_BASE_RECIEVER):
             self._resolved = select_method(self.name, delg.type, reciever=delg.value, modbits=self.modifier)
-            return
+            self.modifier |= INVOCATION_DELEGATED_RECIEVER
+        else:
+            self._resolved = select_method(self.name, modbits=self.modifier)
+            if isinstance(self._resolved, InstanceMethodInvocation): # ObjectCollectionのインスタンスメソッドは使用しない
+                raise BadObjectMemberInvocation(self.name)
         
-        raise BadObjectMemberInvocation("値'{}'は存在しません (ObjectCollection)".format(self.name))
+        self.must_be_resolved()
 
     def get_method_name(self):
         return self.name
@@ -754,7 +764,7 @@ class ObjectMemberInvocation(BasicInvocation):
     
     def must_be_resolved(self):
         if self._resolved is None:
-            raise UnresolvedObjectMemberInvocation()
+            raise UnresolvedObjectMemberInvocation(self.name)
 
     def query_method(self, this_type):
         self.must_be_resolved()
@@ -771,18 +781,15 @@ class ObjectMemberInvocation(BasicInvocation):
     def prepare_invoke(self, context: InvocationContext, *argobjects):
         colarg, *args = argobjects
         # 実行時に呼び出しを解決する
-        if self._resolved is None:
-            self.resolve(colarg.value)
-            if self._resolved is None:
-                raise BadObjectMemberInvocation()
+        self.resolve(colarg.value)
         # 呼び出しエントリを作成する
-        if isinstance(self._resolved, ObjectMemberGetterInvocation):        
-            entry = self._resolved.prepare_invoke(context, colarg)
-        else:
+        if self.modifier & INVOCATION_DELEGATED_RECIEVER:        
             delg = colarg.value.get_delegation()
             if delg is None:
                 raise BadObjectMemberInvocation()
             entry = self._resolved.prepare_invoke(context, delg, *args)
+        else:
+            entry = self._resolved.prepare_invoke(context, colarg, *args)
         entry.invocation = self # 呼び出し元をすり替える
         return entry
     

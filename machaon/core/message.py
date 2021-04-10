@@ -272,19 +272,33 @@ def select_reciever(context, expression) -> Object:
     # リテラルだった
     return select_literal(context, expression)
 
+#
+_sel_modifiers = (
+    ("~", BasicInvocation.MOD_REVERSE_ARGS),
+    ("!", BasicInvocation.MOD_NEGATE_RESULT),
+    ("`", BasicInvocation.MOD_BASE_RECIEVER), 
+)
+def extract_selector_modifiers(selector):
+    modbits = 0
+    offset = 0
+    buf = ""
+    for ch in selector:
+        buf += ch
+        for token, value in _sel_modifiers:
+            if token == buf:
+                modbits |= value
+                buf = ""
+                break
+        else:
+            break
+        offset += 1
+    return selector[offset:], modbits
+
 # メソッド
 def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
     # モディファイアを分離する
     if modbits is None:
-        def startsmod(sigil, value, expr, bits):
-            if expr.startswith(sigil):
-                return (expr[len(sigil):], value|bits)
-            else:
-                return (expr, bits)
-        
-        modbits = 0
-        name, modbits = startsmod("~", BasicInvocation.MOD_REVERSE_ARGS, name, modbits)
-        name, modbits = startsmod("!", BasicInvocation.MOD_NEGATE_RESULT, name, modbits)
+        name, modbits = extract_selector_modifiers(name)
 
     name = normalize_method_name(name)
 
@@ -296,7 +310,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
             return TypeMethodInvocation(typetraits, meth, modbits)
     
     # レシーバがオブジェクト集合の場合はメンバ参照に変換
-    if typetraits.is_object_collection():
+    if typetraits and typetraits.is_object_collection():
         inv = ObjectMemberInvocation(name, modbits)
         if reciever:
             inv.resolve(reciever)

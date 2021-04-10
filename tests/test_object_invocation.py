@@ -5,6 +5,7 @@ from machaon.core.invocation import (
 )
 from machaon.core.object import ObjectValue, ObjectCollection, Object
 from machaon.types.fundamental import fundamental_type
+from machaon.core.type import full_qualified_name
 
 def plus2mul(x, y):
     return (x + 2) * (y + 2)
@@ -41,7 +42,6 @@ def test_objectref():
     col.push("apple", Object(StrType, "リンゴ"))
     col.push("gorilla", Object(StrType, "ゴリラ"))
     col.push("trumpet", Object(StrType, "ラッパ"))
-    col.push("#delegate", Object(StrType, "math.pi"))
 
     arg = fundamental_type.get("ObjectCollection").new_object(col)
 
@@ -57,7 +57,16 @@ def test_objectref():
     inv = ObjectMemberInvocation("trumpet")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ラッパ"
 
+    # generic method (Collectionを参照する)
+    inv = ObjectMemberInvocation("=")
+    assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
+    assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"
+
     # delegation
+    col.set_delegation(Object(StrType, "math.pi"))
+    
+    inv = ObjectMemberInvocation("gorilla")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ゴリラ"
 
     # unary type method
     import math
@@ -88,3 +97,13 @@ def test_objectref():
     assert inv.get_max_arity() == 1
     assert len(inv.get_result_specs()) == 1
     assert inv.get_result_specs()[0].get_typename() == "Bool"
+
+    # generic method (移譲先のオブジェクトを参照する)
+    inv = ObjectMemberInvocation("=")
+    assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
+    assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "Str"
+
+    # generic method (明示的にCollectionを参照する)
+    inv = ObjectMemberInvocation("=", BasicInvocation.MOD_BASE_RECIEVER)
+    assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
+    assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"

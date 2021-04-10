@@ -173,6 +173,13 @@ class ObjectCollection():
         for item in self._items.values():
             yield item
     
+    def delete(self, name):
+        if name not in self._namemap:
+            return
+        for ident in self._namemap[name]:
+            del self._items[ident]
+        del self._namemap[name]
+    
     def get_delegation(self):        
         # 移譲先のオブジェクトを返す
         delgate_point = self.get("#delegate")
@@ -181,7 +188,10 @@ class ObjectCollection():
         return delgate_point.object
     
     def set_delegation(self, o):
-        self.push("#delegate", o)
+        if o is None:
+            self.delete("#delegate")
+        else:
+            self.push("#delegate", o)
 
     #
     #

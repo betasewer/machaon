@@ -1,3 +1,5 @@
+import pytest
+
 from machaon.core.message import select_method
 from machaon.core.invocation import instant_context, ObjectMemberInvocation
 from machaon.types.fundamental import fundamental_type
@@ -35,6 +37,10 @@ def test_modified_select():
     assert gm
     assert gm.display() == ("TypeMethod", "machaon.types.generic.GenericMethods:is-in", "reverse-args")
 
+    gm = select_method("`=", StrType)
+    assert gm
+    assert gm.display() == ("TypeMethod", "machaon.types.generic.GenericMethods:identical", "basic")
+
 
 def test_anyobject_method_select():
     AnyType = fundamental_type.get("Any")
@@ -50,11 +56,12 @@ def test_anyobject_method_select():
 def test_objcol_select():
     StrType = fundamental_type.get("Str")
 
+    # delegate有り
     col = ObjectCollection()
     col.push("apple", Object(StrType, "リンゴ"))
     col.push("gorilla", Object(StrType, "ゴリラ"))
     col.push("trumpet", Object(StrType, "ラッパ"))
-    col.push("#delegate", Object(StrType, "コレクション"))
+    col.set_delegation(Object(StrType, "コレクション"))
 
     ColType = fundamental_type.get("ObjectCollection")
     om = select_method("apple", ColType, reciever=col)
@@ -62,6 +69,23 @@ def test_objcol_select():
     assert om.display() == ("ObjectMember", "apple", "")
     
     # メソッドの移譲
+    dm = select_method("startswith", ColType, reciever=col)
+    assert dm
+    assert dm.display() == ("ObjectMember", "startswith", "")
+
+    # delegate無し
+    col.set_delegation(None)
+    
+    om = select_method("gorilla", ColType, reciever=col)
+    assert om
+    assert om.display() == ("ObjectMember", "gorilla", "")
+
+@pytest.mark.xfail()
+def test_objcol_no_delegation():
+    col = ObjectCollection()
+    col.push("apple", Object(StrType, "リンゴ"))
+
+    # ObjectCollectionのinstance method (失敗する)
     dm = select_method("startswith", ColType, reciever=col)
     assert dm
     assert dm.display() == ("ObjectMember", "startswith", "")
