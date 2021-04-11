@@ -62,7 +62,7 @@ class TypeType():
         context.spirit.post("message", "\n".join(docs))
 
         meths = self.methods(type, context)
-        return context.new_object(meths, conversion="Sheet[ObjectCollection]: (names,doc,signature)").pretty_view()
+        return context.new_object(meths, conversion="Sheet[ObjectCollection]: (names,doc,signature)").to_pretty()
 
     def methods(self, type, context):
         '''@method context
