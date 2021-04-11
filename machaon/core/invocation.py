@@ -32,6 +32,10 @@ class MessageNoReturn(Exception):
 INVOCATION_RETURN_RECIEVER = "<reciever>"
 
 #
+def _default_result_object(context):
+    return context.get_type("StrType").new_object("-")
+
+#
 #
 #
 class InvocationEntry():
@@ -40,7 +44,7 @@ class InvocationEntry():
         self.action = action
         self.args = args
         self.kwargs = kwargs
-        self.results = [] # ObjectValue
+        self.result = None
         self.exception = exception
         
         if self.invocation:
@@ -51,7 +55,7 @@ class InvocationEntry():
     
     def clone(self):
         inv = InvocationEntry(self.invocation, self.action, self.args, self.kwargs, exception=self.exception)
-        inv.results = self.results
+        inv.result = self.result
         inv.exception = self.exception
         return inv
     
@@ -71,63 +75,68 @@ class InvocationEntry():
             self.exception = e
 
         # 返り値をまとめる
-        specs = self.invocation.get_result_specs()
-        if not isinstance(result, tuple):
-            result = (result,)
-        for i, value in enumerate(result):
-            if isinstance(value, Object):
-                self.results.append(value)
-            elif i<len(specs):
-                spec = specs[i]
-                self.results.append((value, spec))
+        spec = self.invocation.get_result_spec()
+        if isinstance(result, Object):
+            self.result = (result._value, result.type)
+        else:
+            self.result = (result, spec)
+
+    def result_object(self, context) -> Object:
+        """ 返り値をオブジェクトに変換する """
+        value, retspec = self.result
+
+        # エラーが発生した
+        if self.exception:
+            if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
+                return _default_result_object(context)
             else:
-                self.results.append((value,))
-        
-        # 返り値を否定
-        if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
-            for ret in self.results:
-                ret.value = not ret.value
+                return context.new_invocation_error_object(self.exception)
     
-    def result_objects(self, context) -> Generator[Object, None, None]:
-        """ 返り値をオブジェクトに変換する """       
-        for ret in self.results:
-            if isinstance(ret, Object):
-                yield ret
+        # Noneが返された
+        if value is None:
+            if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
+                return _default_result_object(context)
             else:
-                value = ret[0]
-                retspec = None
-                if len(ret)>1:
-                    retspec = ret[1]
-                    # 型名から型オブジェクトを得る
-                    rettype = context.select_type(retspec.get_typename())
-                else:
-                    retspec = None
-                    rettype = None
+                err = MessageNoReturn()
+                return context.new_invocation_error_object(err)
 
-                if retspec and retspec.is_return_self():
-                    # <return-self>
-                    yield Object(rettype, INVOCATION_RETURN_RECIEVER)
-                    continue
-                elif value is None:
-                    # Noneが返された
-                    err = MessageNoReturn()
-                    yield context.new_invocation_error_object(err)
-                    continue
+        # NEGATEモディファイアを適用            
+        if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
+            value = not value
+        
+        # 型を決定する
+        rettype = None
+        if isinstance(retspec, Type):
+            rettype = retspec
+        elif retspec:
+            if retspec.is_any():
+                rettype = None
+            else:
+                # 型名から型オブジェクトを得る
+                rettype = context.select_type(retspec.get_typename())
+                if retspec.is_return_self():
+                    return Object(rettype, INVOCATION_RETURN_RECIEVER)
 
-                # Any型の場合は値から推定する
-                if rettype is None or rettype.is_any():
-                    deducedtype = context.deduce_type(value)
-                    if deducedtype is not None:
-                        rettype = deducedtype
-                    else:
-                        rettype = context.get_type("Any")
+        # 型指定がない、あるいはAny型の場合は、値から型を推定する
+        if rettype is None or rettype.is_any():
+            deducedtype = context.deduce_type(value)
+            if deducedtype is not None:
+                rettype = deducedtype
+            else:
+                rettype = context.get_type("Any")
+        
+        if rettype is None:
+            raise ValueError("Cannot deduce value type")
 
-                # 値の型が異なる場合は、暗黙の型変換を行う
-                if not rettype.check_value_type(type(value)):
-                    typeparams = retspec.get_typeparams() if retspec else tuple()
-                    value = rettype.conversion_construct(context, value, *typeparams)
-                
-                yield Object(rettype, value)
+        # 返り値型に値が適合しない場合は、暗黙の型変換を行う
+        if not rettype.check_value_type(type(value)):
+            if isinstance(retspec, Type):
+                value = rettype.conversion_construct(context, value)
+            else:
+                typeparams = retspec.get_typeparams() if retspec else tuple()
+                value = rettype.conversion_construct(context, value, *typeparams)
+        
+        return Object(rettype, value)
 
     def is_failed(self):
         if self.exception:
@@ -146,9 +155,10 @@ def instant_return_test(context, value, typename, typeparams=()):
     """ メソッド返り値テスト用 """
     from machaon.core.method import MethodResult
     typespec = MethodResult(typename, typeparams=typeparams)
-    inv = InvocationEntry(None, None, (), {})
-    inv.results.append((value, typespec))
-    return next(inv.result_objects(context), None)
+    inv = BasicInvocation(0)
+    entry = InvocationEntry(inv, None, (), {})
+    entry.result = (value, typespec)
+    return entry.result_object(context)
 
 #
 #
@@ -309,12 +319,11 @@ class InvocationContext:
             return self.invocations[-1]
         return None
     
-    def last_result_objects(self) -> Generator[Object, None, None]:
+    def last_result_object(self) -> Optional[Object]:
         ent = self.get_last_invocation()
         if ent is None:
-            return
-        for ret in ent.result_objects(self):
-            yield ret
+            return None
+        return ent.result_object(self)
 
     def get_last_exception(self) -> Optional[Exception]:
         return self._last_exception
@@ -405,7 +414,9 @@ def instant_context(subject=None):
 INVOCATION_NEGATE_RESULT       = 0x001
 INVOCATION_REVERSE_ARGS        = 0x002
 INVOCATION_DELEGATED_RECIEVER  = 0x004
-INVOCATION_BASE_RECIEVER  = 0x008
+INVOCATION_BASE_RECIEVER       = 0x008
+INVOCATION_SHOW_HELP           = 0x010
+INVOCATION_DEFAULT_RESULT      = 0x020
 
 #
 #
@@ -414,6 +425,8 @@ class BasicInvocation():
     MOD_NEGATE_RESULT = INVOCATION_NEGATE_RESULT
     MOD_REVERSE_ARGS = INVOCATION_REVERSE_ARGS
     MOD_BASE_RECIEVER = INVOCATION_BASE_RECIEVER
+    MOD_SHOW_HELP = INVOCATION_SHOW_HELP
+    MOD_DEFAULT_RESULT = INVOCATION_DEFAULT_RESULT
 
     def __init__(self, modifier):
         self.modifier = modifier
@@ -440,6 +453,10 @@ class BasicInvocation():
             m.append("negate")
         if self.modifier & INVOCATION_BASE_RECIEVER:
             m.append("basic")
+        if self.modifier & INVOCATION_DEFAULT_RESULT:
+            m.append("default")
+        if self.modifier & INVOCATION_SHOW_HELP:
+            m.append("help")
         if not m and straight:
             m.append("straight")
         return " ".join(m)
@@ -467,8 +484,8 @@ class BasicInvocation():
     def prepare_invoke(self, context: InvocationContext, *args) -> InvocationEntry:
         raise NotImplementedError()
     
-    def get_result_specs(self):
-        return []
+    def get_result_spec(self):
+        return None
 
     def is_task(self):
         return False
@@ -548,8 +565,8 @@ class TypeMethodInvocation(BasicInvocation):
     def get_action(self):
         return self.method.get_action()
     
-    def get_result_specs(self):
-        return self.method.get_results()
+    def get_result_spec(self):
+        return self.method.get_result()
 
     def get_max_arity(self):
         cnt = self.method.get_acceptable_argument_max()
@@ -624,8 +641,8 @@ class InstanceMethodInvocation(BasicInvocation):
         method, _inst, args = self.resolve_instance_method(a)
         return InvocationEntry(self, method, args, {})
     
-    def get_result_specs(self):
-        return [MethodResult("Any")] # 値から推定する
+    def get_result_spec(self):
+        return MethodResult() # 値から推定する
 
 #
 # グローバルな関数を呼び出す
@@ -678,8 +695,8 @@ class FunctionInvocation(BasicInvocation):
     def get_min_arity(self):
         return self.arity[0]
         
-    def get_result_specs(self):
-        return [MethodResult("Any")] # 値から推定する
+    def get_result_spec(self):
+        return MethodResult() # 値から推定する
 
 
 #
@@ -701,9 +718,8 @@ class ObjectMemberGetterInvocation(BasicInvocation):
     def get_action(self):
         return None
     
-    def get_result_specs(self):
-        r = MethodResult(self.typename)
-        return [r]
+    def get_result_spec(self):
+        return MethodResult(self.typename)
     
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         return None
@@ -797,9 +813,9 @@ class ObjectMemberInvocation(BasicInvocation):
         self.must_be_resolved()
         return self._resolved.get_action()
     
-    def get_result_specs(self):
+    def get_result_spec(self):
         self.must_be_resolved()
-        return self._resolved.get_result_specs()
+        return self._resolved.get_result_spec()
 
     def get_max_arity(self):
         self.must_be_resolved()

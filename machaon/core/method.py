@@ -72,7 +72,7 @@ class Method():
         self.flags = flags
 
         self.params: List[MethodParameter] = []
-        self.results: List[MethodResult] = []
+        self.result: Optional[MethodResult] = None
 
     def check_valid(self):
         if self.name is None:
@@ -229,28 +229,22 @@ class Method():
             typeparams(List[str]): *生成時に引数として与えられる追加の情報
         """
         r = MethodResult(typename, doc, typeparams)
-        self.results.append(r)
+        self.result = r
     
     def add_result_self(self, type):
         """ メソッドのselfオブジェクトを返す """
         r = MethodResult(type.typename, "selfオブジェクト", (RETURN_SELF,))
-        self.results.append(r)
+        self.result = r
 
-    def get_results(self):
-        """ @method alias-name [results]
+    def get_result(self):
+        """ @method alias-name [result]
         返り値のリスト
         Returns:
             Sheet[MethodResult]: (name, typename, doc)
         """
         if self.flags & METHOD_RESULT_UNSPECIFIED:
             raise UnloadedMethod(self.name)
-        return self.results
-    
-    def get_result_count(self):
-        """ 返り値の数 """
-        if self.flags & METHOD_RESULT_UNSPECIFIED:
-            raise UnloadedMethod(self.name)
-        return len(self.results)
+        return self.result
     
     def get_acceptable_argument_max(self) -> Union[int, None]:
         """
@@ -337,7 +331,7 @@ class Method():
             raise ValueError("無効なアクションです：{}".format(self.target))
         
         # 返り値が無い場合はレシーバ自身を返す
-        if not self.results:
+        if not self.result:
             self.add_result_self(this_type)
         
         if self.flags & METHOD_UNSPECIFIED_MASK:
@@ -398,9 +392,11 @@ class Method():
         # 引数
         lines = sections.get_lines("Params", "Parameters", "Arguments", "Args")
         for line in lines:
-            flags = 0
+            head, _, paramdoc = [x.strip() for x in line.partition(":")]
+            if not head and not paramdoc:
+                continue # 空の行
 
-            head, _, doc = [x.strip() for x in line.partition(":")]
+            flags = 0
             if head.startswith("*"):
                 name, _, right = head[1:].partition("(")
                 if right:
@@ -436,8 +432,8 @@ class Method():
                     flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
                     break
             
-            typename, doc, typeparams = parse_typename_syntax(typename, doc)
-            self.add_parameter(name, typename, doc, default, flags=flags, typeparams=typeparams)
+            typename, paramdoc, typeparams = parse_typename_syntax(typename, paramdoc)
+            self.add_parameter(name, typename, paramdoc, default, flags=flags, typeparams=typeparams)
 
         # 戻り値
         lines = sections.get_lines("Returns")
@@ -552,8 +548,8 @@ class Method():
 
         # 戻り値
         results = []
-        for r in self.results:
-            re = r.typename
+        if self.result:
+            re = self.result.typename
             results.append(re)
         
         if self.flags & METHOD_RESULT_UNSPECIFIED:
@@ -585,9 +581,10 @@ class Method():
                 app.post("message", l)
 
         app.post("message", "返値:")
-        r = self.results[0]
-        l = "    {}: {}".format(r.get_typename(), r.get_doc())
-        app.post("message", l)
+        r = self.result
+        if r:
+            l = "    {}: {}".format(r.get_typename(), r.get_doc())
+            app.post("message", l)
 
 
 #
@@ -673,7 +670,7 @@ class MethodParameter():
 #
 #
 class MethodResult:
-    def __init__(self, typename, doc="", typeparams=None):
+    def __init__(self, typename=None, doc="", typeparams=None):
         self.typename = typename
         self.doc = doc
         self.typeparams = typeparams
@@ -683,13 +680,16 @@ class MethodResult:
         return line
     
     def get_typename(self):
-        return self.typename    
+        return self.typename or "Any" 
     
     def get_typeparams(self):
         return self.typeparams or []
 
     def get_doc(self):
         return self.doc
+    
+    def is_any(self):
+        return self.typename is None
     
     def is_return_self(self):
         return self.typeparams and self.typeparams[0] is RETURN_SELF

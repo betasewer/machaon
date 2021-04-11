@@ -144,14 +144,9 @@ class Message:
         # 実行する
         self.selector.invoke(context, *args)
 
-        # 返り値
-        if context.is_failed(): # 実行エラー発生
-            return context.new_invocation_error_object() # エラーオブジェクトを返す
-
-        # 最初の一つだけを採用
-        retobj = next(context.last_result_objects(), None)
+        retobj = context.last_result_object()
         if retobj is None:
-            raise BadMessageError("返り値がありません")
+            raise BadMessageError("No return value exists on the context stack")
     
         if retobj.value is INVOCATION_RETURN_RECIEVER:
             return self.reciever
@@ -277,8 +272,12 @@ _sel_modifiers = (
     ("~", BasicInvocation.MOD_REVERSE_ARGS),
     ("!", BasicInvocation.MOD_NEGATE_RESULT),
     ("`", BasicInvocation.MOD_BASE_RECIEVER), 
+    ("&", BasicInvocation.MOD_DEFAULT_RESULT), 
+    ("?", BasicInvocation.MOD_SHOW_HELP), 
 )
 def extract_selector_modifiers(selector):
+    if len(selector)<2:
+        return selector, 0
     modbits = 0
     offset = 0
     buf = ""

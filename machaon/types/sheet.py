@@ -98,7 +98,7 @@ class DataMemberColumn(DataOperationColumn):
     def resolve(self, subject, context):
         inv = select_method(self._name, subject.type, reciever=subject.value)
         self._fn = MemberGetter(self._name, inv)
-        self._t = context.select_type(inv.get_result_specs()[0].get_typename())
+        self._t = context.select_type(inv.get_result_spec().get_typename())
 
     def get_name(self):
         return self._name

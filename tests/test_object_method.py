@@ -63,7 +63,6 @@ def test_method_loading():
     assert newmethod.is_loaded()
     assert newmethod.get_name() == "reg-match"
     assert newmethod.get_param_count() == 1
-    assert newmethod.get_result_count() == 1
     assert newmethod.params[0].is_required()
     assert newmethod.get_required_argument_min() == 1
     assert newmethod.get_acceptable_argument_max() == 1
@@ -75,7 +74,6 @@ def test_method_loading():
     assert newmethod.is_loaded()
     assert newmethod.get_name() == "new"
     assert newmethod.get_param_count() == 1
-    assert newmethod.get_result_count() == 1
     assert newmethod.get_required_argument_min() == 0
     assert newmethod.get_acceptable_argument_max() == 1
     assert newmethod.is_type_bound() is True
@@ -83,7 +81,6 @@ def test_method_loading():
     t = fundamental_type.define(SomeValue)
     newmethod = t.select_method("perimeter")
     assert newmethod.get_param_count() == 0
-    assert newmethod.get_result_count() == 1
     assert newmethod.get_name() == "perimeter"
     assert not newmethod.is_type_bound()
 
@@ -99,6 +96,5 @@ def test_method_alias():
 def test_method_return_self():
     t = fundamental_type.define(SomeValue)
     m = t.select_method("modify")
-    assert m.get_result_count() == 1
-    assert m.get_results()[0].is_return_self()
+    assert m.get_result().is_return_self()
 

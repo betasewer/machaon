@@ -351,6 +351,12 @@ class Path():
             raise ValueError("Unsupported")
         shellplatform().start_file(self._path, "print")
     
+    def write_startup(self):
+        """ @method
+        スタートアップスクリプトのひな形をこのパスに書き出す。
+        """
+        pass
+    
     #
     # 型の振る舞い
     #

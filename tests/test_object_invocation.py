@@ -14,7 +14,7 @@ def divide(x, y):
     return x / y
 
 def get_first_result(ent):
-    return ent.results[0]
+    return ent.result
 
 #
 #
@@ -51,8 +51,7 @@ def test_objectref():
     assert inv.get_min_arity() == 0
     assert inv.get_max_arity() == 0
     assert inv.get_parameter_spec(0) is None
-    assert len(inv.get_result_specs()) == 1
-    assert inv.get_result_specs()[0].get_typename() == "Str"
+    assert inv.get_result_spec().get_typename() == "Str"
     
     inv = ObjectMemberInvocation("trumpet")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ラッパ"
@@ -76,8 +75,7 @@ def test_objectref():
     assert inv.get_min_arity() == 0
     assert inv.get_max_arity() == 0
     assert inv.get_parameter_spec(0) is None
-    assert len(inv.get_result_specs()) == 1
-    assert inv.get_result_specs()[0].get_typename() == "Any"
+    assert inv.get_result_spec().get_typename() == "Any"
 
     # unary instance method
     inv = ObjectMemberInvocation("islower")
@@ -95,8 +93,7 @@ def test_objectref():
     assert isinstance(inv._resolved, TypeMethodInvocation)
     assert inv.get_min_arity() == 1
     assert inv.get_max_arity() == 1
-    assert len(inv.get_result_specs()) == 1
-    assert inv.get_result_specs()[0].get_typename() == "Bool"
+    assert inv.get_result_spec().get_typename() == "Bool"
 
     # generic method (移譲先のオブジェクトを参照する)
     inv = ObjectMemberInvocation("=")

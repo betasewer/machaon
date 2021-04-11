@@ -63,7 +63,7 @@ def test_method():
     regmatch = fundamental_type.get("Str").select_method("reg-match")
     assert regmatch is not None
     assert regmatch.name == "reg-match"
-    assert regmatch.get_results()[0].get_typename() == "Bool"
+    assert regmatch.get_result().get_typename() == "Bool"
 
     act = regmatch.get_action()
     assert act(None, "0123.txt", "[0-9]+")
