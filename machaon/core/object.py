@@ -10,15 +10,6 @@ from machaon.core.symbol import normalize_typename, full_qualified_name
 # 
 #
 
-#
-#
-#
-class ObjectValue():
-    def __init__(self, typecode, value):
-        self.typecode = typecode
-        self.value = value
-
-
 class EMPTY_OBJECT:
     pass
 
@@ -27,13 +18,13 @@ class EMPTY_OBJECT:
 #
 class Object():
     def __init__(self, type, value=EMPTY_OBJECT):
-        self._value: Any = value
+        self.value: Any = value
         self.type: Type = type
         if not isinstance(self.type, Type):
             raise TypeError("'type' must be Type instance")
 
     def __repr__(self):
-        return "<Object {1} [{0}]>".format(self.type.typename, repr(self._value))
+        return "<Object {1} [{0}]>".format(self.type.typename, repr(self.value))
     
     def __str__(self):
         return "{1} [{0}]".format(self.type.typename, self.summary())
@@ -52,13 +43,6 @@ class Object():
         else:
             return ds
     
-    @property
-    def value(self):
-        if self.is_pretty_view():
-            return self._value.object._value
-        else:
-            return self._value
-    
     def get_typename(self):
         return self.type.typename
     
@@ -74,11 +58,11 @@ class Object():
     def pprint(self, spirit):
         self.type.pprint_value(spirit, self.value)
     
-    def pretty_view(self):
-        return Object(self.type, ObjectPrettyView(self))
+    def to_pretty(self):
+        return PrettyObject(self.type, self.value)
     
-    def is_pretty_view(self):
-        return isinstance(self._value, ObjectPrettyView)
+    def is_pretty(self):
+        return False
     
     def is_error(self):
         from machaon.process import ProcessError
@@ -90,12 +74,12 @@ class Object():
         return self.value
 
 #
-class ObjectPrettyView():
-    def __init__(self, o):
-        self.object = o
-    
-    def get_object(self):
-        return self.object
+class PrettyObject(Object):
+    def is_pretty(self):
+        return True
+
+    def __repr__(self):
+        return "<PrettyObject {1} [{0}]>".format(self.type.typename, repr(self.value))
 
 #
 #

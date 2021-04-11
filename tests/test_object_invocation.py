@@ -3,7 +3,7 @@ from machaon.core.invocation import (
     InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
     instant_context
 )
-from machaon.core.object import ObjectValue, ObjectCollection, Object
+from machaon.core.object import ObjectCollection, Object
 from machaon.types.fundamental import fundamental_type
 from machaon.core.type import full_qualified_name
 

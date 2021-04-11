@@ -69,7 +69,7 @@ class Launcher():
                     obj = msg.argument("ret")
                     context = msg.argument("context")
                     if obj:
-                        if obj.is_pretty_view():
+                        if obj.is_pretty():
                             m = ProcessMessage(tag="object-pretty-view", pr=process, object=obj, context=context)
                             self.message_handler(m)
                         else:

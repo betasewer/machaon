@@ -4,7 +4,7 @@ import inspect
 from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
-from machaon.core.object import Object, ObjectValue, ObjectCollection
+from machaon.core.object import Object, ObjectCollection
 from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
 from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName, full_qualified_name
 
@@ -28,12 +28,16 @@ class UnresolvedObjectMemberInvocation(Exception):
 class MessageNoReturn(Exception):
     pass
 
-#
+
 INVOCATION_RETURN_RECIEVER = "<reciever>"
 
-#
 def _default_result_object(context):
-    return context.get_type("StrType").new_object("-")
+    return context.get_type("Str").new_object("-")
+
+def _new_process_error_object(context, error, objectType):
+    from machaon.process import ProcessError
+    errtype = context.new_type(ProcessError)
+    return objectType(errtype, ProcessError(context, error))
 
 #
 #
@@ -77,28 +81,27 @@ class InvocationEntry():
         # 返り値をまとめる
         spec = self.invocation.get_result_spec()
         if isinstance(result, Object):
-            self.result = (result._value, result.type)
+            self.result = (result.value, result.type, type(result))
         else:
-            self.result = (result, spec)
+            self.result = (result, spec, Object)
 
     def result_object(self, context) -> Object:
         """ 返り値をオブジェクトに変換する """
-        value, retspec = self.result
+        value, retspec, objectType = self.result
 
         # エラーが発生した
         if self.exception:
             if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
                 return _default_result_object(context)
             else:
-                return context.new_invocation_error_object(self.exception)
+                return _new_process_error_object(context, self.exception, objectType)
     
         # Noneが返された
         if value is None:
             if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
                 return _default_result_object(context)
             else:
-                err = MessageNoReturn()
-                return context.new_invocation_error_object(err)
+                return _new_process_error_object(context, MessageNoReturn(), objectType)
 
         # NEGATEモディファイアを適用            
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
@@ -115,7 +118,7 @@ class InvocationEntry():
                 # 型名から型オブジェクトを得る
                 rettype = context.select_type(retspec.get_typename())
                 if retspec.is_return_self():
-                    return Object(rettype, INVOCATION_RETURN_RECIEVER)
+                    return objectType(rettype, INVOCATION_RETURN_RECIEVER)
 
         # 型指定がない、あるいはAny型の場合は、値から型を推定する
         if rettype is None or rettype.is_any():
@@ -136,7 +139,7 @@ class InvocationEntry():
                 typeparams = retspec.get_typeparams() if retspec else tuple()
                 value = rettype.conversion_construct(context, value, *typeparams)
         
-        return Object(rettype, value)
+        return objectType(rettype, value)
 
     def is_failed(self):
         if self.exception:
@@ -157,7 +160,7 @@ def instant_return_test(context, value, typename, typeparams=()):
     typespec = MethodResult(typename, typeparams=typeparams)
     inv = BasicInvocation(0)
     entry = InvocationEntry(inv, None, (), {})
-    entry.result = (value, typespec)
+    entry.result = (value, typespec, Object)
     return entry.result_object(context)
 
 #
@@ -305,9 +308,8 @@ class InvocationContext:
         """ エラーオブジェクトを作る """
         if exception is None: 
             exception = self.get_last_exception()
-        from machaon.process import ProcessError
-        return self.new_type(ProcessError).new_object(ProcessError(self, exception))
-
+        return _new_process_error_object(self, exception, Object)
+    
     #
     def push_invocation(self, entry: InvocationEntry):
         self.invocations.append(entry)

@@ -1,5 +1,5 @@
 import pytest
-from machaon.core.object import Object, ObjectValue, ObjectCollection
+from machaon.core.object import Object, ObjectCollection
 from machaon.types.fundamental import fundamental_type
 
 Int = fundamental_type.get("Int")

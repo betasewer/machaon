@@ -2,7 +2,7 @@ import pytest
 import re
 
 from machaon.core.type import Type
-from machaon.core.object import Object, ObjectValue
+from machaon.core.object import Object
 from machaon.core.message import MessageEngine, MessageTokenBuffer, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_type
 from machaon.process import TempSpirit

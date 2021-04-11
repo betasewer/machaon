@@ -514,9 +514,9 @@ class GenericMethods:
         Returns:
             Object: 
         """
-        if obj.is_pretty_view():
+        if obj.is_pretty():
             return obj
-        return obj.pretty_view()
+        return obj.to_pretty()
 
     def type(self, obj):
         """ @method reciever-param
