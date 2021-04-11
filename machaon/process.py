@@ -14,6 +14,7 @@ from machaon.core.object import Object, ObjectCollection
 from machaon.core.message import MessageEngine, InternalMessageError
 from machaon.core.invocation import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
+from machaon.core.symbol import full_qualified_name
 
 #
 # ######################################################################
@@ -915,10 +916,75 @@ class ProcessError():
         details = traceback.format_exception(type(excep), excep, excep.__traceback__)
         app.post("error", details[-1] if details else "")
         app.post("message-em", "スタックトレース{}：".format(title))
-        app.post("message", "".join(details[1:-1]) + "\n")
+        msg = verbose_display_traceback(excep.__traceback__, app.get_app_ui().wrap_width)
+        app.post("message", msg + "\n")
 
         app.post("message-em", "メッセージ解決：")
         self.context.pprint_log(lambda x: app.post("message", x))
 
 
 
+def verbose_display_traceback(tb, linewidth):
+    import linecache
+    import inspect
+
+    lines = []
+    while tb:
+        frame = tb.tb_frame
+        filename = frame.f_code.co_filename
+        fnname = frame.f_code.co_name
+        lineno = tb.tb_lineno
+        msg_location = "{}, {}行目".format(filename, lineno)
+
+        msg_line = linecache.getline(filename, lineno).strip()
+
+        indent = "  "
+        msg_fn = "{}:".format(fnname)
+        msg_locals = []
+        localdict = frame.f_locals
+        localself = localdict.pop("self", None)
+        if localself is not None:
+            fn = getattr(localself, fnname, None)
+            if fn is not None:
+                msg_fn = "{}{}:".format(fnname, display_parameters(fn))
+            
+            msg_locals.append("self = <{}>".format(full_qualified_name(type(localself))))
+
+        for name, value in sorted(localdict.items()):
+            try:
+                if value.__repr__ is object.__repr__:
+                    val_str = "<{}>".format(full_qualified_name(type(value)))
+                else:
+                    val_str = repr(value)
+            except:
+                val_str = "<error on __repr__>"
+            val_str = collapse_text(val_str, linewidth)
+            val_str = val_str.replace('\n', '\n{}'.format(' ' * (len(name) + 2)))
+            msg_locals.append("{} = {}".format(name, val_str))
+
+        lines.append(msg_location)
+        lines.append(indent + msg_line)
+        lines.append(indent + "-" * 30)
+        lines.append(indent + msg_fn)
+        for line in msg_locals:
+            lines.append(indent + indent + line)
+        lines.append(indent + "-" * 30)
+        lines.append("\n")
+
+        tb = tb.tb_next
+
+    return '\n'.join(lines)
+
+def display_parameters(fn):
+    import inspect
+    params = ["self"]
+    try:
+        sig = inspect.signature(fn)
+        for p in sig.parameters.values():
+            if p.default == inspect.Parameter.empty:
+                params.append(p.name)
+            else:
+                params.append("{} = {}".format(p.name, p.default))
+        return "({})".format(", ".join(params))
+    except ValueError as e:
+        return "(<error: {}>)".format(e)
