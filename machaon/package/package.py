@@ -351,11 +351,11 @@ class PackageManager():
         for pkgname, section in self.database.items():
             if pkgname == "DEFAULT":
                 continue
-            pkg = Package(
+            pkg = create_package(
                 pkgname, 
-                section["source"],
-                PACKAGE_TYPE_UNDEFINED,
-                section["separate"],
+                section["source"], 
+                type=PACKAGE_TYPE_UNDEFINED, 
+                separate=section["separate"], 
                 hashval=section["hash"]
             )
             pkgs.append(pkg)

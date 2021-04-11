@@ -59,7 +59,7 @@ class AppRoot:
         self.pkgmanager = PackageManager(package_dir)
         self.pkgmanager.load_database()
         self.pkgmanager.add_to_import_path()
-        self.pkgs = self.pkgmanager.create_undefined_empty_packages()[:]
+        self.pkgs = []
 
         self.typemodule = TypeModule()
         self.typemodule.add_fundamental_types()
