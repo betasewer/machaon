@@ -365,7 +365,7 @@ class Method():
         if decl.startswith("@method"):
             pass
         elif decl.startswith("@task"):
-            self.flags |= METHOD_TASK
+            self.flags |= METHOD_TASK # こちらで指定
         else:
             raise BadMethodDeclaration("いずれかのメソッドタイプ指定が必要です：@method @task")
         
@@ -377,7 +377,9 @@ class Method():
         if "reciever-param" in declparts:
             self.flags |= METHOD_HAS_RECIEVER_PARAM
         if "task" in declparts:
-            self.flags |= METHOD_TASK # こちらでもよい
+            self.flags |= METHOD_TASK # こちらで指定してもよい
+        if "nospirit" in declparts:
+            self.flags &= ~METHOD_SPIRIT_BOUND
 
         # 説明
         desc = sections.get_string("Description")
