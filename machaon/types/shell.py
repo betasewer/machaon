@@ -30,6 +30,9 @@ class Path():
     def __str__(self):
         return self._path
     
+    def __fspath__(self):
+        return self._path
+    
     def get(self):
         return self._path
     
@@ -461,14 +464,28 @@ def walk_path(dirpath, level):
 #
 #
 #
-class TextFile(Path):
+class TextFile():
     """ @type
-    テキストファイルのパス。
+    テキストファイル。
     Typename: TextFile    
     """
     def __init__(self, p):
-        super().__init__(p)
+        if not p.isfile():
+            raise ValueError("テキストファイルのパスが必要です")
+        self._p = p
         self._enc = None
+    
+    @property
+    def _path(self):
+        return self._p.get()
+    
+    def path(self):
+        """ @method
+        パスを得る。
+        Returns:
+            Path:
+        """
+        return self._p
 
     def detect_encoding(self):
         """ @method
@@ -481,53 +498,46 @@ class TextFile(Path):
         encoding = detect_text_encoding(self._path)
         self._enc = encoding
         return encoding
+    
+    def set_encoding(self, encoding):
+        """ @method
+        文字エンコーディング形式を設定する。
+        Params:
+            encoding(Str):
+        """
+        self._enc = encoding
+    
+    def text(self, size=None):
+        """ @method
+        テキストを丸ごと返す。
+        Params:
+            size(int): 取得する文字数
+        Returns:
+            Str:
+        """
+        self.detect_encoding()
+        with open(self._path, "r", encoding=self._enc) as fi:
+            return fi.read(size)
+
+    def read_stream(self):
+        """ ファイルを開いて読み込みストリームを返す。 """
+        self.detect_encoding()
+        return open(self._path, "r", encoding=self._enc)
+
+    def write_stream(self):
+        """ ファイルを開いて書き込みストリームを返す。 """
+        self.detect_encoding()
+        return open(self._path, "w", encoding=self._enc)
 
     #
     def construct(self, s):
-        return TextFile(s)
+        return TextFile(Path.construct(None, s))
     
     def conversion_construct(self, context, v):
-        p = TextFile(str(v))
-        if not p.isfile():
-            raise ValueError("ファイルではありません")
-        return p
-    
+        return TextFile(Path.conversion_construct(None, context, v))
+
     def stringify(self):
-        return self._path    
-
-def get_text_content(app, target, encoding=None, head=0, tail=0, all=False):
-    if all:
-        head, tail = 0, 0
-    pth = app.abspath(target)
-
-    app.message-em("ファイル名：[%1%]", embed=[
-        app.hyperlink.msg(pth)
-    ])
-
-    if encoding is None:
-        # 自動検出
-        encoding = detect_text_encoding(pth)
-
-    app.message-em("エンコーディング：%1%", embed=[
-        app.message.msg(encoding or "unknown")
-    ])
-    app.message-em("--------------------")
-
-    tails = []
-    with open(pth, "r", encoding=encoding) as fi:
-        for i, line in enumerate(fi):
-            if head and i >= head:
-                break
-            if tail:
-                tails.append(line)
-            else:
-                app.message(line, nobreak=True)
-
-        if tail and tails:
-            for l in tails[-tail:]:
-                app.message(l, nobreak=True)
-    
-    app.message-em("\n--------------------")
+        return self._path
 
 #
 def detect_text_encoding(fpath):
@@ -589,6 +599,7 @@ def get_binary_content(app, target, size=128, width=16):
             app.message("")
             j += 1
     app.message-em("\n--------------------")
+
 
 #
 #

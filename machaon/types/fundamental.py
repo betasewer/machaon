@@ -510,7 +510,108 @@ class DatetimeType():
     def stringify(self, date):
         return date.strftime("%y/%m/%d (%a) %H:%M.%S")
 
+#
+#
+#
+class BasicStream():
+    """ ストリームの基底クラス """
+    def __init__(self, source):
+        self._source = source
+        self._stream = None
+    
+    def get_path(self):
+        if isinstance(self._source, str):
+            return self._source
+        elif hasattr(self._source, "__fspath__"):
+            return self._source.__fspath__()
+        import io
+        if isinstance(self._source, io.FileIO):
+            return self._source.name
+        if hasattr(self._source, "path"): # Pathオブジェクトが返される
+            return self._source.path().get()
+        
+        return None
 
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, et, ev, tb):
+        self.close()
+
+    def _open_stream(self, rw, binary, encoding):
+        source = self._source
+
+        # ファイルパスから開く
+        fpath = None
+        if isinstance(source, str):
+            fpath = source
+        elif hasattr(source, "__fspath__"):
+            fpath = source.__fspath__()
+        if fpath:
+            mode = rw[0] + ("b" if binary else "")
+            return open(fpath, mode, encoding=encoding)
+        
+        # オブジェクトから開く
+        if hasattr(source, "{}_stream".format(rw)):
+            opener = getattr(source, "{}_stream".format(rw))
+            return opener()
+        
+        # 開かれたストリームである
+        import io
+        if isinstance(source, io.IOBase):
+            if source.closed:
+                raise ValueError("Stream has already been closed")
+            return source
+        
+        raise TypeError("'{}'からストリームを取り出せません".format(repr(source)))
+
+    def _must_be_opened(self):
+        if self._stream is None:
+            raise ValueError("Stream is not opened")
+    
+    def close(self):
+        self._must_be_opened()
+        self._stream.close()
+    
+    
+@fundamental_type.definition(typename="InputStream", doc="""
+入力ストリーム
+""")
+class InputStream(BasicStream):
+    def open(self, binary=False, encoding=None):
+        self._stream = self._open_stream("read", binary=binary, encoding=encoding)
+        return self
+    
+    def lines(self):
+        self._must_be_opened()
+        for l in self._stream:
+            yield l
+    
+    def conversion_construct(self, context, value):
+        return InputStream(value)
+    
+    def stringify(self, _v):
+        return "<InputStream>"
+
+
+@fundamental_type.definition(typename="OutputStream", doc="""
+出力ストリーム
+""")
+class OutputStream(BasicStream):
+    def open(self, binary=False, encoding=None):
+        self._stream = self._open_stream("write", binary=binary, encoding=encoding)
+        return self
+    
+    def write(self, v):
+        self._must_be_opened()
+        return self._stream.write(v)
+
+    def conversion_construct(self, context, value):
+        return OutputStream(value)
+    
+    def stringify(self, _v):
+        return "<OutputStream>"
+    
 # ----------------------------------------------------------
 #
 #  その他のデータ型

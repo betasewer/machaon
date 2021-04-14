@@ -270,11 +270,6 @@ class Spirit():
     def message(self, tag, value=None, **options):
         return ProcessMessage(value, tag, **options)
 
-    # ファイル対象に使用するとよい...
-    def print_target(self, target):
-        self.post("message-em", '対象 --> [{}]'.format(target))
-
-    #
     def message_io(self, tag="message", *, oneliner=False, **options):
         return ProcessMessageIO(self, tag, oneliner, **options)
     
@@ -303,8 +298,7 @@ class Spirit():
         defaultextension=None,
         mustexist=False
     ):
-        """
-        """
+        """ uiのダイアログ関数を呼び出す """
         return self.app.get_ui().open_pathdialog(
             dialogtype,
             initialdir=initialdir, initialfile=initialfile,
@@ -367,6 +361,24 @@ class Spirit():
                 cd = os.getcwd()
             path = os.path.normpath(os.path.join(cd, path))
         return path
+
+    #
+    # 基本型へのショートカット
+    #
+    def path(self, p):
+        """ ファイルパス操作オブジェクト """
+        from machaon.types.shell import Path
+        return Path(p)
+
+    def open_input_stream(self, target, binary=False, encoding=None):
+        """ 読み込みストリームを返す """
+        from machaon.types.fundamental import InputStream
+        return InputStream(target).open(binary, encoding)
+    
+    def open_output_stream(self, target, binary=False, encoding=None):
+        """ 書き込みストリームを返す """
+        from machaon.types.fundamental import OutputStream
+        return OutputStream(target).open(binary, encoding)
 
 #
 #
@@ -952,8 +964,11 @@ def verbose_display_traceback(tb, linewidth):
 
         for name, value in sorted(localdict.items()):
             try:
-                if value.__repr__ is object.__repr__:
-                    val_str = "<{}>".format(full_qualified_name(type(value)))
+                if type(value).__repr__ is object.__repr__:
+                    if hasattr(value, "stringify"):
+                        val_str = "<{} {}>".format(full_qualified_name(type(value)), value.stringify())
+                    else:
+                        val_str = "<{}>".format(full_qualified_name(type(value)))
                 else:
                     val_str = repr(value)
             except:
