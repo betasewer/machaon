@@ -620,14 +620,20 @@ class TypeModule():
         return t
 
     # すべての型を取得する
-    def enum(self) -> Generator[Type, None, None]:
+    def enum(self, fallback=True) -> Generator[Type, None, None]:
         for ancs in self._ancestors:
             for t in ancs.enum():
                 yield t
 
         for _, ts in self._typelib.items():
             for t in ts:
-                yield self._load_type(t)
+                try:
+                    yield self._load_type(t)
+                except Exception as e:
+                    if fallback:
+                        pass
+                    else:
+                        raise e
     
     #
     # 取得し、無ければ定義する
