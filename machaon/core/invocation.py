@@ -291,6 +291,9 @@ class InvocationContext:
             type(Any): 型を示す値
             conversion(str): 値の変換方法を示す文字列
         """
+        from machaon.process import ProcessError
+        if isinstance(value, ProcessError):
+            return self.new_type(ProcessError).new_object(value) # エラーオブジェクトは型変換しない
         if type:
             t = self.new_type(type)
             convvalue = t.construct_from_value(self, value)
