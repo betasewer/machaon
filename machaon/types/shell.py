@@ -534,11 +534,8 @@ class TextFile():
         return open(self._path, "w", encoding=self._enc)
 
     #
-    def construct(self, s):
-        return TextFile(Path.construct(None, s))
-    
     def conversion_construct(self, context, v):
-        return TextFile(Path.conversion_construct(None, context, v))
+        return TextFile(context.get_type(Path).construct_from_value(context, v))
 
     def stringify(self):
         return self._path
