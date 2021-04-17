@@ -147,7 +147,7 @@ class Path():
             Number[Byte]:
         """
         if self.isdir():
-            return 0
+            return None
         return os.path.getsize(self._path)
         #if size_bytes == 0:
         #    return "0B"

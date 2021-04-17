@@ -426,7 +426,7 @@ TERM_END_ALL_BLOCK = 0x040000
 # メッセージで用いる記号
 SIGIL_OBJECT_ID = "@"
 SIGIL_OBJECT_LAMBDA_MEMBER = "/"
-SIGIL_OBJECT_SPEC_NAME = "#"
+SIGIL_OBJECT_ROOT_MEMBER = "@"
 SIGIL_SCOPE_RESOLUTION = "::"
 SIGIL_END_OF_KEYWORDS = ";"
 SIGIL_RIGHTFIRST_EVALUATION = "$"
@@ -702,7 +702,7 @@ class MessageEngine():
 
                 return new_block_bits(memberid)
                 
-            elif objid[0] == SIGIL_OBJECT_SPEC_NAME:
+            elif objid[0] == SIGIL_OBJECT_ROOT_MEMBER:
                 # ルートオブジェクトのメンバ参照
                 tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
                 memberid = token[2:]
