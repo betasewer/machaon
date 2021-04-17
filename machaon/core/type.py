@@ -597,7 +597,7 @@ class TypeModule():
         elif hasattr(typecode, "Type_typename"):
             fulltypename = typecode.Type_typename
             if "." in fulltypename:
-                thisscope, _, typename = fulltypename.partition(".")
+                thisscope, _, typename = fulltypename.rpartition(".")
             else:
                 thisscope, typename = None, fulltypename
             t = self.find(typename, scope=thisscope)
