@@ -46,7 +46,7 @@ class KnownPaths():
         return self._known_dir("pictures")
         
     def musics(self):
-        return self._known_dir("musics")
+        return self._known_dir("music")
 
     def videos(self):
         return self._known_dir("videos")
