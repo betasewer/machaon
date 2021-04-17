@@ -6,6 +6,7 @@ from machaon.core.invocation import (
 from machaon.core.object import ObjectCollection, Object
 from machaon.types.fundamental import fundamental_type
 from machaon.core.type import full_qualified_name
+from machaon.core.method import Method, MethodParameter, MethodResult
 
 def plus2mul(x, y):
     return (x + 2) * (y + 2)
@@ -19,7 +20,7 @@ def get_first_result(ent):
 #
 #
 #
-def test_entry():
+def test_function():
     inv = FunctionInvocation(plus2mul)
     ent = InvocationEntry(inv, inv.get_action(), (2,3), {})
     assert not ent.is_failed()
@@ -32,6 +33,10 @@ def test_entry():
     ent.invoke()
     assert get_first_result(ent)
     assert get_first_result(ent)[0] == 2/4
+
+    
+def test_type():
+    m = Method()
 
 
 def test_objectref():    

@@ -97,4 +97,3 @@ def test_method_return_self():
     t = fundamental_type.define(SomeValue)
     m = t.select_method("modify")
     assert m.get_result().is_return_self()
-

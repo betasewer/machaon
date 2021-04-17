@@ -79,15 +79,18 @@ class InvocationEntry():
             self.exception = e
 
         # 返り値をまとめる
-        spec = self.invocation.get_result_spec()
         if isinstance(result, Object):
-            self.result = (result.value, result.type, type(result))
+            self.result = (result.value, result)
         else:
-            self.result = (result, spec, Object)
+            self.result = (result, self.invocation.get_result_spec())
 
     def result_object(self, context) -> Object:
         """ 返り値をオブジェクトに変換する """
-        value, retspec, objectType = self.result
+        value, retspec = self.result
+        if isinstance(retspec, Object):
+            objectType = type(retspec)
+        else:
+            objectType = Object
 
         # エラーが発生した
         if self.exception:
@@ -95,30 +98,31 @@ class InvocationEntry():
                 return _default_result_object(context)
             else:
                 return _new_process_error_object(context, self.exception, objectType)
-    
+
+        # return reciever
+        if isinstance(retspec, MethodResult) and retspec.is_return_self():
+            return objectType(context.get_type("Any"), INVOCATION_RETURN_RECIEVER)
+
         # Noneが返された
         if value is None:
             if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
                 return _default_result_object(context)
             else:
                 return _new_process_error_object(context, MessageNoReturn(), objectType)
-
+        
         # NEGATEモディファイアを適用            
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
             value = not value
         
         # 型を決定する
         rettype = None
-        if isinstance(retspec, Type):
-            rettype = retspec
+        if isinstance(retspec, Object):
+            rettype = retspec.type
         elif retspec:
             if retspec.is_any():
                 rettype = None
             else:
-                # 型名から型オブジェクトを得る
                 rettype = context.select_type(retspec.get_typename())
-                if retspec.is_return_self():
-                    return objectType(rettype, INVOCATION_RETURN_RECIEVER)
 
         # 型指定がない、あるいはAny型の場合は、値から型を推定する
         if rettype is None or rettype.is_any():
@@ -160,7 +164,7 @@ def instant_return_test(context, value, typename, typeparams=()):
     typespec = MethodResult(typename, typeparams=typeparams)
     inv = BasicInvocation(0)
     entry = InvocationEntry(inv, None, (), {})
-    entry.result = (value, typespec, Object)
+    entry.result = (value, typespec)
     return entry.result_object(context)
 
 #
