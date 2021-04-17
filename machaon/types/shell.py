@@ -12,7 +12,7 @@ from typing import Optional
 
 from machaon.shellpopen import popen_capture
 from machaon.types.fundamental import NotFound
-from machaon.types.shellplatform import shellplatform
+from machaon.types.shellplatform import shellpath
 
 #
 #
@@ -35,13 +35,6 @@ class Path():
     
     def get(self):
         return self._path
-    
-    @classmethod
-    def from_location_name(cls, name):
-        p = shellplatform().location_name_to_path(*name.split(":",maxsplit=1))
-        if p is None:
-            raise ValueError("不明なフォルダ名："+name)
-        return cls(p)
     
     @property
     def stat(self):
@@ -337,14 +330,14 @@ class Path():
         Params:
             operation(str): *動作のカテゴリ。[open|print|edit|explore|find|...]
         """
-        shellplatform().start_file(self._path, operation)
+        shellpath().start_file(self._path, operation)
     
     def explore(self):
         """ @method
         ファイル・フォルダをエクスプローラで開く。
         """
         p = self.dir()
-        shellplatform().start_file(p._path, "explore")
+        shellpath().start_file(p._path, "explore")
 
     def print(self):
         """ @method
@@ -352,7 +345,7 @@ class Path():
         """
         if self.isdir():
             raise ValueError("Unsupported")
-        shellplatform().start_file(self._path, "print")
+        shellpath().start_file(self._path, "print")
     
     def write_startup(self):
         """ @method
@@ -374,11 +367,22 @@ class Path():
 
         return Path(os.path.join(self._path, r))
     
-    def construct(self, s):
-        return Path(s)
-    
-    def conversion_construct(self, context, v):
-        return Path(str(v))
+    def conversion_construct(self, context, value):
+        if isinstance(value, str):
+            head, tail = os.path.split(value)
+            if not head: # no slash in path
+                # 場所の識別名として解釈
+                if tail == "machaon":
+                    p = context.spirit.get_app().get_basic_dir()
+                else:
+                    name, _, param  = value.partition(":")
+                    p = shellpath().get_known_path(name, param, context.spirit.get_app())
+                if p is not None:
+                    return Path(p)
+            # 識別名が存在しなければパスとする
+            return Path(value)
+        else:
+            return Path(str(value))
     
     def stringify(self):
         return self._path   
@@ -636,5 +640,3 @@ def unzip(app, path, out=None, win=False):
             newpath = os.path.join(cd, memberpath.encode("cp437").decode("utf-8"))
             os.rename(oldpath, newpath)
             stack.extend([(newpath, d[memberpath], x) for x in d[memberpath]])
-
-

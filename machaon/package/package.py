@@ -294,11 +294,16 @@ class PackageManager():
     PIP_MSG = milestone_msg("msg")
     PIP_END = milestone_msg("returncode")
 
-    def __init__(self, directory, database="packages.ini"):
+    def __init__(self, directory, databasepath):
         self.dir = directory
         self.database = None # type: configparser.ConfigParser
-        self._dbpath = os.path.join(directory, database)
+        self._dbpath = databasepath
+        self.load_database()
 
+    def add_to_import_path(self):
+        if self.dir not in sys.path:
+            sys.path.insert(0, self.dir)
+    
     def load_database(self, force=False):
         if not force and self.database is not None:
             return
@@ -345,21 +350,6 @@ class PackageManager():
         with open(self._dbpath, "w", encoding="utf-8") as fo:
             self.database.write(fo)
         print("save setting file '{}'".format(self._dbpath))
-    
-    def create_undefined_empty_packages(self):
-        pkgs = []
-        for pkgname, section in self.database.items():
-            if pkgname == "DEFAULT":
-                continue
-            pkg = create_package(
-                pkgname, 
-                section["source"], 
-                type=PACKAGE_TYPE_UNDEFINED, 
-                separate=section["separate"], 
-                hashval=section["hash"]
-            )
-            pkgs.append(pkg)
-        return pkgs
     
     def check_database(self):
         if self.database is None:
@@ -493,10 +483,6 @@ class PackageManager():
             return "latest"
         else:
             return "old"
-    
-    def add_to_import_path(self):
-        if self.dir not in sys.path:
-            sys.path.insert(0, self.dir)
 
 #
 #

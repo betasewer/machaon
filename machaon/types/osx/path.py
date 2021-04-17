@@ -1,6 +1,6 @@
 import os
 
-def location_name_to_path(name: str, param: str = ""):
+def get_known_path(name: str, param: str = "", approot = None):
     """
     特殊なフォルダ・ファイルの名前からパスを得る。
     """

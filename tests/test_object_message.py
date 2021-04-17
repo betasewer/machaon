@@ -178,16 +178,14 @@ def test_string_literals():
     ptest("'9786' reg-match [0-9]+", True)
     ptest("'ABCD{:04}HIJK{:02}OP' format: 20 1", "ABCD0020HIJK01OP")
 
-    # construct from string (Type.forge)
-    ptest("Str parse -> 1) 'Beck' & 'Johny' Store ", " 1) 'Beck' & 'Johny' Store ")
-    ptest("Int parse '0x32'", 0x32)
-
     # escaped literal
     ptest("--/ madman / =", " madman ")
     ptest("--^madman (28)^ startswith: mad", True)
     ptest("--| 'madman' (41) | endswith: --|) |", True)
     
     # construct from string (Str.as)
+    ptest("--/ 1) 'Beck' & 'Johny' Store/ as Str", " 1) 'Beck' & 'Johny' Store")
+    ptest("--/0x32/ as Int", 0x32)
     ptest("--/0x7F/ as Int", 0x7F)
     ptest("--/3+5j/ as Complex", 3+5j)
 

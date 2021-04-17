@@ -124,13 +124,13 @@ class Type():
     #
     #
     #
-    def construct_from_string(self, arg: str):
+    def construct_from_string(self, context, arg: str):
         r = self.call_internal_method("construct", "t", arg)
         if r:
             return r[0]
         else:
-            # デフォルト動作
-            raise UnsupportedMethod("construct")
+            # 別の実装へ転送
+            return self.conversion_construct(context, arg)
 
     def convert_to_string(self, v: Any):
         r = self.call_internal_method("stringify", "i", v)
@@ -164,28 +164,20 @@ class Type():
             app.post("message", s)
     
     def conversion_construct(self, context, value, *params):
+        if self.value_type is None: # 制限なし
+            return value
         r = self.call_internal_method("conversion_construct", "t", context, value, *params)
         if r:
             return r[0]
         else:
-            if self.value_type is None: # 制限なし
-                return value
-            
-            def modqualname(t):
-                n = getattr(t, "__name__", None)
-                m = getattr(t, "__module__", None)
-                if n and m:
-                    return "{}.{}".format(m,n)
-                else:
-                    return str(t)
-            l_name = modqualname(type(value))
+            l_name = full_qualified_name(type(value))
             raise UnsupportedMethod("'{}'型の変換関数は定義されていません （from '{}'）".format(self.typename, l_name))
 
     def construct_from_value(self, context, value, *params):
         if self.check_value_type(type(value)):
             return value 
         elif isinstance(value, str):
-            return self.construct_from_string(value)
+            return self.construct_from_string(context, value)
         else:
             return self.conversion_construct(context, value, *params)
     

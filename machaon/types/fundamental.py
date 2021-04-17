@@ -37,17 +37,6 @@ class TypeType():
         else:
             value = type.get_value_type()(args)
         return Object(type, value)
-    
-    def parse(self, type, str):
-        ''' @method
-        文字列からインスタンスを生成する。
-        Params:
-            str(Str): 文字列
-        Returns:
-            Object: オブジェクト
-        '''
-        v = type.construct_from_string(str)
-        return Object(type, v)
 
     def help(self, type, context):
         """ @method context
@@ -205,8 +194,8 @@ class StrType():
     #
     # メソッド
     #
-    def convertas(self, s, type):
-        '''@method alias-name [as]
+    def convertas(self, s, context, type):
+        '''@method context alias-name [as]
         指定の型の値へと変換する。
         stringfyメソッドを使用。
         Params:
@@ -214,7 +203,7 @@ class StrType():
         Returns:
             Object: 新たな型の値
         '''
-        value = type.construct_from_string(s)
+        value = type.construct_from_string(context, s)
         return Object(type, value)
     
     def convertas_literals(self, s, context):
@@ -301,26 +290,7 @@ class StrType():
             return imported # 変数
         else:
             return imported() # 関数実行
-    
-    #
-    # その他
-    #
-    def path(self, s):
-        """ @method
-        フォルダ・ファイルを名前で指定してパスを得る。
-        名前でなければパスと見なす。
-        Params:
-        Returns:
-            machaon.shell.Path: パス
-        """
-        from machaon.types.shell import Path
-        try:
-            return Path.from_location_name(s)
-        except Exception as e:
-            p = Path(s)
-            if not p.exists():
-                raise e
-            return p
+
 
 @fundamental_type.definition(typename="Bool", value_type=bool, doc="""
 Python.bool 真偽値。

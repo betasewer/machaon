@@ -16,7 +16,7 @@ from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, Pr
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
 from machaon.cui import test_yesno
 from machaon.milestone import milestone, milestone_msg
-from machaon.types.shellplatform import shellplatform
+from machaon.types.shellplatform import shellpath
 
 #
 # ###################################################################
@@ -29,13 +29,13 @@ class AppRoot:
     def __init__(self):
         self.ui = None
         self.processhive = None
-        self.curdir = "" # 基本ディレクトリ
+        self.basicdir = "" # 設定ファイルなどを置くディレクトリ
         self.pkgmanager = None
         self.pkgs = []
         self.typemodule = None
         self.objcol = ObjectCollection()
 
-    def initialize(self, *, ui, package_dir=None, current_dir=None, **uiargs):
+    def initialize(self, *, ui, basic_dir=None, **uiargs):
         if isinstance(ui, str):
             if ui == "tk":
                 from machaon.ui.tk import tkLauncher
@@ -45,28 +45,24 @@ class AppRoot:
 
         self.ui = ui
 
-        if current_dir is None:
-            self.set_current_dir_desktop()
-        else:
-            self.set_current_dir(current_dir)
+        if basic_dir is None:
+            basic_dir = os.path.join(shellpath().get_known_path("documents", approot=self), "machaon")
+        self.basicdir = basic_dir
 
-        self.processhive = ProcessHive()
-        chamber = self.processhive.addnew(self.ui.get_input_prompt())
-        
-        if not package_dir:
-            package_dir = os.path.join(shellplatform().location_name_to_path("documents"), "machaon")
-        
-        self.pkgmanager = PackageManager(package_dir)
-        self.pkgmanager.load_database()
+        package_dir = os.path.join(self.basicdir, "packages")
+        self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
         self.pkgmanager.add_to_import_path()
         self.pkgs = []
 
         self.typemodule = TypeModule()
         self.typemodule.add_fundamental_types()
         
+        self.processhive = ProcessHive()
+        
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
         
+        chamber = self.processhive.addnew(self.ui.get_input_prompt())
         self.ui.activate_new_chamber(chamber)
     
     def get_ui(self):
@@ -74,6 +70,18 @@ class AppRoot:
 
     def get_type_module(self):
         return self.typemodule
+    
+    def get_basic_dir(self):
+        return self.basicdir
+    
+    def get_GUID_names_file(self):
+        p = os.path.join(self.basicdir, "guid.ini")
+        if os.path.exists(p):
+            return p
+        p = os.path.join(os.path.dirname(__file__), "types\\windows", "guid.ini")
+        if not os.path.exists(p):
+            raise ValueError("Default guid.init does not exist")
+        return p
  
     #
     # クラスパッケージ
@@ -197,18 +205,6 @@ class AppRoot:
     
     def mainloop(self):
         self.ui.run_mainloop()
-
-    #
-    # 基本ディレクトリ
-    #
-    def get_current_dir(self):
-        return self.curdir
-    
-    def set_current_dir(self, path):
-        self.curdir = path
-    
-    def set_current_dir_desktop(self):
-        self.set_current_dir(os.path.join(os.path.expanduser("~"), "Desktop"))
 
     #
     # コマンド処理の流れ

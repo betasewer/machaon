@@ -86,4 +86,3 @@ def full_qualified_name(t):
         return t.__qualname__
     else:
         return mod + "." + t.__qualname__
-
