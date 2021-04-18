@@ -46,3 +46,10 @@ def parse_guid(name, guid_db_path=None):
             raise ValueError("GUIDが見つかりません")
         return GUID.from_string(value)
 
+
+def guid_entries(guid_db_path, *section_names):
+    values = configparser.ConfigParser()
+    values.read(guid_db_path)
+    for secname in section_names:
+        for k, v in values[secname].items():
+            yield k, v

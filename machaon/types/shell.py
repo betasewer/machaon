@@ -14,15 +14,17 @@ from machaon.shellpopen import popen_capture
 from machaon.types.fundamental import NotFound
 from machaon.types.shellplatform import shellpath
 
-#
+# Path new known-location-names
 #
 #
 class Path():
     """ @type
-    ファイル・フォルダのパス
-    Typename: Path
+    ファイル・フォルダのパス。
+    Constructor:
+        パス、または場所の名前を受ける。
+        使用できる場所の名前の一覧は、known-names。
     """
-    def __init__(self, path):
+    def __init__(self, path=""):
         self._path = path
         self._isdir = None
         self._stat = None
@@ -41,13 +43,24 @@ class Path():
         if self._stat is None:
             self._stat = os.stat(self._path)
         return self._stat
+        
+    #
+    #
+    #
+    def known_names(self, spirit):
+        """ @method spirit
+        場所の名前のリスト。
+        Returns:
+            Sheet[ObjectCollection]: (name, path)
+        """
+        return [{"name":k, "path":Path(v)} for k,v in shellpath().known_paths(spirit.get_app())]
 
     #
     # 要素を調査する
     #
     def path(self):
         """ @method
-        パス
+        パスの文字列
         Returns:
             Str:
         """

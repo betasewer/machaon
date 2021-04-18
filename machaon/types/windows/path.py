@@ -2,7 +2,8 @@ import os
 from ctypes import (
     windll, c_wchar_p, byref, wintypes, POINTER
 )
-from machaon.types.windows.guid import GUID, parse_guid
+from machaon.types.shellplatform import common_known_names
+from machaon.types.windows.guid import GUID, parse_guid, guid_entries
 
 def shell_get_known_folder_path(SHGetKnownFolderPath, guid):
     """
@@ -27,6 +28,9 @@ class KnownPaths():
 
     def _known_dir(self, name):
         guid = parse_guid("FOLDERID." + name, self.guid_db_path)
+        return self._get_path(guid)
+    
+    def _get_path(self, guid):
         return shell_get_known_folder_path(self.SHGetKnownFolderPath, guid)
 
     # ユーザーフォルダ
@@ -79,6 +83,10 @@ class KnownPaths():
     # デフォルト
     def fallback(self, name):
         return self._known_dir(name)
+    
+    def special_locations(self):
+        for k, v in guid_entries(self.guid_db_path, "FOLDERID"):
+            yield k, self._get_path(parse_guid(v))
 
 
 class EnvPaths():
@@ -134,6 +142,9 @@ class EnvPaths():
     # デフォルト
     def fallback(self, name):
         return None
+    
+    def special_locations(self):
+        return []
 
 
 #
@@ -170,6 +181,25 @@ def get_known_path(name: str, param: str = "", approot = None):
 
     return None
 
+def known_paths(approot):
+    names = common_known_names + [
+        # platform spec
+        "windows",
+    ]
+    common_names = set(names)
+
+    paths = KnownPaths(approot)
+    try:
+        paths._load_apis()
+    except AttributeError:
+        paths = EnvPaths() # type: ignore
+    
+    for k in names:
+        yield k, getattr(paths, k)()
+    
+    for k, v in paths.special_locations():
+        if not k in common_names:
+            yield k, v
 
 def start_file(path, operation=None):
     """

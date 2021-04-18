@@ -1,4 +1,5 @@
 import os
+from machaon.types.shellplatform import common_known_names
 
 def get_known_path(name: str, param: str = "", approot = None):
     """
@@ -35,6 +36,12 @@ def get_known_path(name: str, param: str = "", approot = None):
             
     return None
     
+def known_paths(_approot):
+    """
+    定義済みのパスのリスト
+    """
+    for x in common_known_names:
+        yield get_known_path(x)
     
 def start_file(path, operation=None):
     """
