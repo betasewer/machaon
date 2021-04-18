@@ -150,6 +150,8 @@ class Type():
                 s = self.convert_to_string(v)
             except UnsupportedMethod:
                 return "{} <summary unsupported>".format(v)
+            if not isinstance(s, str):
+                s = repr(s) # オブジェクトに想定されない値が入っている
             s = s.replace("\n", " ").strip()
             return s[0:50]+"..." if len(s)>50 else s
 
