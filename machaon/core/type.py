@@ -53,6 +53,7 @@ class Type():
         self.flags = bits
         self.value_type: Callable = value_type
         self.scope: Optional[str] = scope
+        self.ctordoc: str = ""
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
@@ -345,11 +346,14 @@ class Type():
             long: (mode ftype modtime size name)
             short: (ftype name)
             link: path
+        
+        Constructor:
+            <document>
         """
         #
         # 型定義の解析
         #
-        sections = DocStringParser(doc, ("Typename", "Params", "ValueType", "MemberAlias"))
+        sections = DocStringParser(doc, ("Typename", "Params", "ValueType", "MemberAlias", "Constructor"))
 
         typename = sections.get_value("Typename")
         if typename:
@@ -389,6 +393,9 @@ class Type():
             if dest[0] == "(" and dest[-1] == ")":
                 row = dest[1:-1].split()
                 self.add_member_alias(name, row)
+        
+        ctordoc = "\n".join([x.lstrip() for x in sections.get_lines("Constructor")])
+        self.ctordoc = ctordoc
 
     #
     #
