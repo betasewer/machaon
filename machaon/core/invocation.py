@@ -306,10 +306,11 @@ class InvocationContext:
             return t.new_object(convvalue)
         else:
             valtype = self.deduce_type(value)
-            if valtype is None:
-                raise ValueError("値'{}'から型を推定できません".format(value))
-            convvalue = valtype.construct_from_value(self, value)
-            return valtype.new_object(convvalue)
+            if valtype:
+                convvalue = valtype.construct_from_value(self, value)
+                return valtype.new_object(convvalue)
+            else:
+                return self.new_type("Any").new_object(value)
     
     def new_invocation_error_object(self, exception=None):
         """ エラーオブジェクトを作る """
