@@ -24,34 +24,32 @@ class TypeType():
     #
     # メソッド
     #
-    def new(self, type, args=()):
+    def new(self, type):
         '''@method
-        インスタンスを生成する。
-        Params:
-            args (Any): 1つか0個の引数
+        空のインスタンスを生成する。
         Returns:
             Object: オブジェクト
         '''
-        if isinstance(args, tuple) and len(args)==0:
-            value = type.get_value_type()()
-        else:
-            value = type.get_value_type()(args)
+        vt = type.get_value_type()
+        value = vt()
         return Object(type, value)
 
     def help(self, type, context):
         """ @method context
         型の説明、メソッド一覧を表示する。
-        Returns:
-            Object:
         """
         docs = []
         docs.append(type.fulltypename)
         docs.extend(type.doc.splitlines())
-        docs.append("実装：{}".format(type.get_describer_qualname()))
+        docs.append("［実装］\n{}".format(type.get_describer_qualname()))
+        docs.append("［引数］")
+        docs.extend(type.ctordoc.splitlines())
+        docs.append("［メソッド］")
         context.spirit.post("message", "\n".join(docs))
-
+        # メソッドの表示
         meths = self.methods(type, context)
-        return context.new_object(meths, conversion="Sheet[ObjectCollection]: (names,doc,signature)").to_pretty()
+        meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection]: (names,doc,signature)")
+        meths_sheet.pprint(context.spirit)
 
     def methods(self, type, context):
         '''@method context
