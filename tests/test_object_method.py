@@ -73,9 +73,9 @@ def test_method_loading():
     assert newmethod
     assert newmethod.is_loaded()
     assert newmethod.get_name() == "new"
-    assert newmethod.get_param_count() == 1
+    assert newmethod.get_param_count() == 0
     assert newmethod.get_required_argument_min() == 0
-    assert newmethod.get_acceptable_argument_max() == 1
+    assert newmethod.get_acceptable_argument_max() == 0
     assert newmethod.is_type_bound() is True
 
     t = fundamental_type.define(SomeValue)
