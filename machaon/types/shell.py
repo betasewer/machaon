@@ -39,6 +39,10 @@ class Path():
         return self._path
     
     @property
+    def normpath(self):
+        return os.path.normpath(self._path)
+    
+    @property
     def stat(self):
         if self._stat is None:
             self._stat = os.stat(self._path)
@@ -302,6 +306,14 @@ class Path():
                     return path
         raise NotFound()
     
+    def makedirs(self):
+        """ @method
+        パスが存在しない場合、ディレクトリとして作成する。途中のパスも作成する。
+        """
+        if self.exists():
+            raise ValueError("パスは既に存在しています")
+        os.makedirs(self.normpath)
+    
     def run(self, app, params=None):
         """ @task
         ファイルを実行し、終わるまで待つ。
@@ -312,7 +324,7 @@ class Path():
             raise ValueError("ディレクトリは実行できません")
 
         pa = []
-        pa.append(self._path)
+        pa.append(self.normpath)
         pa.extend(params or [])
 
         proc = popen_capture(pa)
