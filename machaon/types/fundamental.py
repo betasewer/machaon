@@ -26,12 +26,23 @@ class TypeType():
     #
     def new(self, type):
         '''@method
-        空のインスタンスを生成する。
+        引数無しでコンストラクタを実行する。
         Returns:
             Object: オブジェクト
         '''
         vt = type.get_value_type()
         value = vt()
+        return Object(type, value)
+    
+    def ctor(self, type, context, s):
+        '''@method context
+        文字列からインスタンスを作成する。
+        Params:
+            s(Str):
+        Returns:
+            Object: オブジェクト
+        '''
+        value = type.construct_from_string(context, s)
         return Object(type, value)
 
     def help(self, type, context):
