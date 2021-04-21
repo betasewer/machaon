@@ -41,7 +41,7 @@ def known_paths(_approot):
     定義済みのパスのリスト
     """
     for x in common_known_names:
-        yield get_known_path(x)
+        yield x, get_known_path(x)
     
 def start_file(path, operation=None):
     """
