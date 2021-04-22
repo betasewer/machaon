@@ -57,7 +57,11 @@ class Path():
         Returns:
             Sheet[ObjectCollection]: (name, path)
         """
-        return [{"name":k, "path":Path(v)} for k,v in shellpath().known_paths(spirit.get_app())]
+        res = []
+        for k, v in shellpath().known_paths(spirit.get_app()):
+            if v is not None:
+                res.append({"name":k, "path":Path(v)})
+        return res
 
     #
     # 要素を調査する
