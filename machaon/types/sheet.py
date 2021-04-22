@@ -59,7 +59,7 @@ class BasicDataColumn():
     def is_nonstring_column(self):
         if self._t is None:
             raise ValueError("まだ読み込まれていない")
-        return not self._t.is_any() and self._t.get_typename() != "Str"
+        return not self._t.is_any() and self._t.typename != "Str"
     
     def make_compare_operator(self, context, lessthan=True):
         typ = self.get_type(context, None)
@@ -215,7 +215,7 @@ class Sheet():
     # メンバ値へのアクセス
     #
     def at(self, context, row):
-        """ @method context [#]
+        """ @method context 
         アイテムオブジェクトを行インデックスで指定して取得する。
         Params:
             row(int): 行インデックス
@@ -297,6 +297,22 @@ class Sheet():
                 return ElemObject(item, index, ovalue)
 
         raise NotFound() # 見つからなかった
+    
+    def pick_first_column(self, context, app, value):
+        """ @method task context [#]
+        最初のカラムの値で前方一致検索を行う。
+        Params:
+            value(Str): 検索する値
+        Returns:
+            Object: アイテム
+        """
+        col = self.get_first_column()
+        for ival, obj in enumerate(self.column_values(context, None, col)):
+            s = col.stringify(context, obj.value)
+            if s.startswith(value):
+                item = self.items[self.get_item_from_row(ival)]
+                return context.new_object(item, type=self.itemtype)
+        raise NotFound()
 
     def get_row(self, index):
         """ 行を取得する。 """
@@ -479,24 +495,14 @@ class Sheet():
     def get_current_column_names(self) -> List[str]:
         return [x.get_name() for x in self.viewcolumns]
     
+    def get_first_column(self):
+        if len(self.viewcolumns) == 0:
+            raise ValueError("No columns")
+        return self.viewcolumns[0]
+    
     def add_column(self, name):
         cols = make_data_columns(self.itemtype, name)
         self.viewcolumns.append(cols[0])
-    
-    def get_top_column_name(self) -> Optional[str]:
-        a = self.itemtype.get_member_group("view-top")
-        if a is not None:
-            return a[0]
-        for meth in self.itemtype.enum_methods():
-            if meth.get_required_argument_min() == 0:
-                return meth.name
-        return None
-    
-    def get_link_column_name(self) -> Optional[str]:
-        a = self.itemtype.get_member_group("view-link")
-        if a is not None:        
-            return a[0]
-        return self.itemtype.get_member_group("view-top")
 
     def rows_to_string_table(self, context, method=None) -> List[Tuple[int, List[str]]]: # 文字列にした値と行番号からなる行のリスト
         """ 計算済みのメンバ値をすべて文字列へ変換する。 """
@@ -811,7 +817,6 @@ class Sheet():
 
         itemtype = context.select_type(itemtypename)
         return Sheet(value, itemtype, context, columnnames)
-
 
 
 

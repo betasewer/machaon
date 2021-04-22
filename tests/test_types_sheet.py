@@ -58,8 +58,6 @@ def test_column(objectdesk):
     )
 
     assert view.get_item_type() is employee
-    assert view.get_top_column_name() == "name"
-    assert view.get_link_column_name() is None
 
     view.add_column("tall")
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
