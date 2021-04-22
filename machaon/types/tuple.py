@@ -94,16 +94,22 @@ class ObjectTuple():
     
     def pick(self, app, value):
         """ @method task [#]
-        値を検索して取得する。（前方一致）
+        値を検索して取得する。
+        前方一致で見つからなければ後方一致の結果を返す。
         Params:
             value(Str):
         Returns:
             Object:
         """
-        for o in self.objects:
+        tlo = None
+        for i, o in enumerate(self.objects):
             s = o.to_string()
             if s.startswith(value):
                 return o
+            elif s.endswith(value):
+                tlo = o
+        if tlo:
+            return tlo
         raise NotFound()
 
     def count(self):

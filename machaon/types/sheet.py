@@ -300,18 +300,27 @@ class Sheet():
     
     def pick_first_column(self, context, app, value):
         """ @method task context [#]
-        最初のカラムの値で前方一致検索を行う。
+        最初のカラムの値で検索を行う。
+        前方一致で見つからなければ後方一致の結果を返す。
         Params:
             value(Str): 検索する値
         Returns:
             Object: アイテム
         """
+        fi, bi = None, None
         col = self.get_first_column()
         for ival, obj in enumerate(self.column_values(context, None, col)):
             s = col.stringify(context, obj.value)
             if s.startswith(value):
-                item = self.items[self.get_item_from_row(ival)]
-                return context.new_object(item, type=self.itemtype)
+                fi = ival
+                break
+            elif s.endswith(value):
+                bi = ival
+
+        iitem = fi if fi is not None else bi
+        if iitem is not None:
+            item = self.items[self.get_item_from_row(iitem)]
+            return context.new_object(item, type=self.itemtype)
         raise NotFound()
 
     def get_row(self, index):
