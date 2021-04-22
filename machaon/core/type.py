@@ -153,8 +153,11 @@ class Type():
             if not isinstance(s, str):
                 s = repr(s) # オブジェクトに想定されない値が入っている
             s = s.replace("\n", " ").strip()
-            return s[0:50]+"..." if len(s)>50 else s
-
+            if len(s) > 50:
+                return s[0:30] + "..." + s[-20:]
+            else:
+                return s
+    
     def pprint_value(self, app, v: Any):
         r = self.call_internal_method("pprint", "i", v, app)
         if r:
