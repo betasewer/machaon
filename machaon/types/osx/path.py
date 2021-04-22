@@ -17,6 +17,8 @@ def get_known_path(name: str, param: str = "", approot = None):
         return os.path.join(home, "Downloads")
     elif name == "applications" or name == "programs":
         return os.path.join(home, "Applications")
+    elif name == "pictures":
+        return os.path.join(home, "Pictures")
     elif name == "musics":
         return os.path.join(home, "Music")
     elif name == "videos":
