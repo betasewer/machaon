@@ -77,7 +77,6 @@ class ObjectTuple():
         """
         return self.objects[index]
     
-    # split find-if [@_ reg-match heck]
     def find(self, context, app, value):
         """ @method task context
         値を検索して取得する。（完全一致）
@@ -90,9 +89,22 @@ class ObjectTuple():
         for i, o in enumerate(self.objects):
             if o.value == value:
                 index = context.new_object(i, type="Int")
-                return ElemObject(o, index)
-        
+                return ElemObject(o, index)        
         raise NotFound() # 見つからなかった
+    
+    def pick(self, app, value):
+        """ @method task [#]
+        値を検索して取得する。（前方一致）
+        Params:
+            value(Str):
+        Returns:
+            Object:
+        """
+        for o in self.objects:
+            s = o.to_string()
+            if s.startswith(value):
+                return o
+        raise NotFound()
 
     def count(self):
         """ @method
