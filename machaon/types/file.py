@@ -5,8 +5,8 @@ class BasicLoadFile():
     """
     開いた時に中身を取得できるファイル
     """
-    def __init__(self, path, file=None):
-        self._path = path
+    def __init__(self, path=None, *, file=None):
+        self._path = path or Path()
         self._file = file
 
     def load(self):
@@ -49,7 +49,7 @@ class BasicLoadFile():
         """ @task
         ファイルをセーブする。
         """
-        savepath = self._pathstr
+        savepath = self.pathstr
         for retry_level in range(1, 4):
             try:
                 self.savefile(savepath)
@@ -59,7 +59,7 @@ class BasicLoadFile():
                 break
         else:
             app.post("error", '"{}"に保存できません。別のアプリで開かれています。'.format(self._pathstr))
-        self._path.set(savepath)
+        self._path = Path(savepath)
     
     def savefile(self, path):
         raise NotImplementedError()
@@ -76,8 +76,8 @@ class BasicContextFile():
     """
     開いている間のみ中身にアクセスできるファイル
     """
-    def __init__(self, path):
-        self._path = path
+    def __init__(self, path=None):
+        self._path = path or Path()
         self._file = None
     
     def open(self, mode):
