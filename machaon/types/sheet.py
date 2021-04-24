@@ -51,6 +51,8 @@ class BasicDataColumn():
     def stringify(self, context, value, method=DATASET_STRINGIFY):
         if isinstance(value, ProcessError):
             return "<{}>".format(value.summarize())
+        if isinstance(value, str):
+            return value
         if method == DATASET_STRINGIFY_SUMMARIZE:
             return self.get_type(context, value).summarize_value(value)
         else:
