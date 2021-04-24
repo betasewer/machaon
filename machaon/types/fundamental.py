@@ -3,6 +3,7 @@ import datetime
 
 from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod, TYPE_ANYTYPE, TYPE_OBJCOLTYPE
 from machaon.core.object import Object
+from machaon.core.symbol import full_qualified_name
 
 fundamental_type = TypeModule()
 
@@ -153,6 +154,15 @@ class AnyType():
 
     def conversion_construct(self, _context, value):
         return value # そのままの値を返す
+    
+    def summarize(self, v):
+        return "<AnyObject: {}>".format(full_qualified_name(type(v)))
+    
+    def stringify(self, v):
+        if type(v).__repr__ is object.__repr__:
+            return "<^o^ {:0X}({})>".format(id(v), full_qualified_name(type(v)))
+        else:
+            return "{}({})".format(v, full_qualified_name(type(v)))
 
 
 @fundamental_type.definition(typename="Function", doc="""

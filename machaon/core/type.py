@@ -139,7 +139,10 @@ class Type():
             return r[0]
         else:
             # デフォルト動作
-            return str(v) if v is not None else ""
+            if type(v).__str__ is object.__str__:
+                return "<^o^ {:0X}>".format(id(v))
+            else:
+                return str(v)
 
     def summarize_value(self, v: Any):
         r = self.call_internal_method("summarize", "i", v)
