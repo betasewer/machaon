@@ -69,7 +69,7 @@ def test_column(objectdesk):
     # カラムの値を得る
     subject = Object(employee, view.items[0])
     assert namecol.get_function()
-    assert namecol.get_function().get_expression() == "name"
+    assert namecol.get_function().get_expression() == "&name"
     namecol.eval(subject, objectdesk) == "ken"
 
     subject = Object(employee, view.items[2])

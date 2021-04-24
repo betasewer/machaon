@@ -94,10 +94,11 @@ class DataOperationColumn(BasicDataColumn):
 class DataMemberColumn(DataOperationColumn):
     def __init__(self, membername):
         super().__init__(None, name=membername)
+        self._method = "&" + membername
     
     def resolve(self, subject, context):
-        inv = select_method(self._name, subject.type, reciever=subject.value)
-        self._fn = MemberGetter(self._name, inv)
+        inv = select_method(self._method, subject.type, reciever=subject.value)
+        self._fn = MemberGetter(self._method, inv)
         self._t = context.select_type(inv.get_result_spec().get_typename())
 
     def get_name(self):
@@ -715,7 +716,7 @@ class Sheet():
         return context.new_object(values, type="ObjectCollection")
 
     def foreach(self, context, predicate):
-        """ @method context
+        """ @method context [%]
         行に関数を適用する。
         Params:
             predicate(Function): 関数
@@ -725,7 +726,7 @@ class Sheet():
             predicate.run_function(subject, context)
     
     def filter(self, context, predicate):
-        """ @method context
+        """ @method context [&]
         行を絞り込む。
         Params:
             predicate(Function): 述語関数
