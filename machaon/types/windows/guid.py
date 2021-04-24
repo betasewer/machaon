@@ -41,9 +41,9 @@ def parse_guid(name, guid_db_path=None):
             raise ValueError("セクション名を指定してください")
         values = configparser.ConfigParser()
         values.read(guid_db_path)
+        if not values.has_option(secname, valname):
+            raise ValueError("名前'{}'に対するGUIDが定義されていません".format(valname))
         value = values.get(secname, valname)
-        if value is None:
-            raise ValueError("GUIDが見つかりません")
         return GUID.from_string(value)
 
 
