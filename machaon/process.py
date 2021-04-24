@@ -16,14 +16,11 @@ from machaon.core.invocation import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 from machaon.core.symbol import full_qualified_name
 
-#
-# ######################################################################
-# プロセスの実行
-# ######################################################################
-#
-# スレッドの実行、停止、操作を行う 
-#
+
 class Process:
+    """ @type
+    プロセスの開始、スレッドの実行、停止、操作を行う 
+    """
     def __init__(self, index, message):
         self.index: int = index
         # 
@@ -79,7 +76,7 @@ class Process:
                 self._interrupted = False
                 self.thread.start()
                 return
-        
+
         # 同期実行の終わり
         self.on_finish_process(context)
 
@@ -109,18 +106,31 @@ class Process:
         for _ in routine: pass # 残りの処理を全て実行する
         self.on_finish_process(context)
     
-    # プロセスID
     def get_index(self):
+        """ @method alias-name [index]
+        プロセス番号を得る。
+        Returns:
+            Int:
+        """
         return self.index
 
-    # 紐づけられた実行中／実行済みコンテキスト
     def get_last_invocation_context(self):
+        """ @method alias-name [last-context]
+        紐づけられた実行中／実行済みコンテキストを得る。
+        Returns:
+            InvocationContext:
+        """
         return self.last_context
     
     #
     # スレッド
     #
     def is_running(self):
+        """ @method
+        スレッドが実行中か
+        Returns:
+            bool:
+        """
         return self.thread and self.thread.is_alive()
 
     def join(self, timeout=None):
@@ -135,6 +145,27 @@ class Process:
         """ メインスレッドで停止を確認する """
         return self._interrupted
     
+    def is_finished(self):
+        """ @method
+        作業が終わっているか。未開始の場合も真
+        Returns:
+            bool:
+        """
+        return self._finished
+        
+    def finish(self):
+        self._finished = True
+
+    def is_failed(self):
+        """ @method
+        一度でも失敗したか。未開始の場合は偽
+        Returns:
+            bool:
+        """
+        if self.last_context:
+            return self.last_context.is_failed()
+        return False
+
     def _start_infinite_thread(self, spirit):
         """ テスト用の終わらないスレッドを開始する """
         def body(spi):
@@ -149,19 +180,6 @@ class Process:
         )
         self._interrupted = False
         self.thread.start()
-
-    # 動作が終わっているか（未開始の場合は真）
-    def is_finished(self):
-        return self._finished
-        
-    def finish(self):
-        self._finished = True
-
-    # 一度でも失敗したか（未開始の場合は偽）
-    def is_failed(self):
-        if self.last_context:
-            return self.last_context.is_failed()
-        return False
 
     #
     # メッセージ
@@ -202,6 +220,16 @@ class Process:
         """ メインスレッドから入力完了を通知する """
         self.last_input = text
         self.event_inputend.set()
+    
+    #
+    #
+    #
+    def conversion_construct(self, context, value):
+        if isinstance(value, int):
+            return context.root.find_process(value)
+        else:
+            raise ValueError("Unsupported Conversion")
+
 
 #
 # プロセスの中断指示
@@ -651,7 +679,7 @@ class ProcessChamber:
         self.last_process.join(timeout=timeout)
     
     def get_process(self, index):
-        return self._processes[index]
+        return self._processes.get(index, None)
     
     def get_processes(self):
         return [self._processes[x] for x in sorted(self._processes.keys())]
@@ -932,7 +960,7 @@ class ProcessError():
         app.post("message", msg + "\n")
 
         app.post("message-em", "メッセージ解決：")
-        self.context.pprint_log(lambda x: app.post("message", x))
+        self.context.pprint_log_as_message(app)
 
 
 

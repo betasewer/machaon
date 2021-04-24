@@ -154,7 +154,7 @@ class ObjectTuple():
     # アルゴリズム関数
     #
     def filter(self, context, predicate):
-        """ @method context
+        """ @method context [&]
         行を絞り込む。
         Params:
             predicate(Function): 述語関数
@@ -177,7 +177,7 @@ class ObjectTuple():
         self.objects.sort(key=sortkey)
         
     def foreach(self, context, predicate):
-        """ @method context
+        """ @method context [%]
         値に関数を適用する。
         Params:
             predicate(Function): 述語関数

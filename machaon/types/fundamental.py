@@ -608,6 +608,12 @@ fundamental_type.definition(typename="ObjectCollection", bits=TYPE_OBJCOLTYPE)(
 fundamental_type.definition(typename="Method")(
     "machaon.core.method.Method"
 )
+fundamental_type.definition(typename="InvocationContext")(
+    "machaon.core.invocation.InvocationContext"
+)
+fundamental_type.definition(typename="Process")(
+    "machaon.process.Process"
+)
 fundamental_type.definition(typename="ProcessError")(
     "machaon.process.ProcessError"
 )

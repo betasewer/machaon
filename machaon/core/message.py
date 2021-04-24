@@ -1093,7 +1093,9 @@ class MemberGetter():
         """ その場でメッセージを構築し実行 """
         subcontext = context.inherit(subject)
         message = Message(subject, self.method)
-        result = message.eval(subcontext)
+        subcontext.add_log(LOG_MESSAGE_EVAL, message)
+        result = message.eval(subcontext)        
+        subcontext.add_log(LOG_MESSAGE_EVALRET, result)
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         return result
     

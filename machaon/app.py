@@ -302,6 +302,22 @@ class AppRoot:
         self.processhive.remove(index)
     
     #
+    def find_process(self, index):
+        # アクティブなチャンバーから検索する
+        actchm = self.get_active_chamber()        
+        pr = actchm.get_process(index)
+        if pr is not None:
+            return pr
+        # ほかのチャンバーから検索する
+        for chm in self.get_chambers():
+            if chm is actchm:
+                continue
+            pr = chm.get_process(index)
+            if pr is not None:
+                return pr
+        return None
+    
+    #
     def select_object_collection(self):
         return self.objcol
 

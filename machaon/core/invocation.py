@@ -43,6 +43,10 @@ def _new_process_error_object(context, error, objectType):
 #
 #
 class InvocationEntry():
+    """ @type
+    関数の呼び出し引数と返り値。
+    Typename: Invocation
+    """
     def __init__(self, invocation, action, args, kwargs, *, exception=None):
         self.invocation = invocation
         self.action = action
@@ -63,6 +67,30 @@ class InvocationEntry():
         inv.exception = self.exception
         return inv
     
+    def get_args(self):
+        """ @method
+        引数。
+        Returns:
+            Tuple:
+        """
+        return self.args
+    
+    def get_kwargs(self):
+        """ @method
+        キーワード引数。
+        Returns:
+            ObjectCollection:
+        """
+        return self.kwargs
+
+    def get_result(self, context):
+        """ @method context
+        返り値。
+        Returns:
+            Object:
+        """
+        return self.result_object(context)
+
     def _invokeaction(self):
         """ アクションを実行（デバッグ用） """
         return self.action(*self.args, **self.kwargs)
@@ -86,6 +114,9 @@ class InvocationEntry():
 
     def result_object(self, context) -> Object:
         """ 返り値をオブジェクトに変換する """
+        if self.result is None:
+            raise ValueError("返り値がまだありません")
+
         value, retspec = self.result
         if isinstance(retspec, Object):
             objectType = type(retspec)
@@ -171,6 +202,9 @@ def instant_return_test(context, value, typename, typeparams=()):
 #
 #
 class InvocationContext:
+    """ @type
+    メソッドの呼び出しコンテキスト
+    """
     def __init__(self, *, input_objects, type_module, spirit=None, subject=None):
         self.type_module: TypeModule = type_module
         self.input_objects: ObjectCollection = input_objects  # 外部のオブジェクト参照
@@ -329,6 +363,14 @@ class InvocationContext:
             return self.invocations[-1]
         return None
     
+    def get_invocations(self):
+        """ @method alias-name [invocations]
+        呼び出された関数のリスト。
+        Returns:
+            Sheet[Invocation]:
+        """ 
+        return self.invocations
+
     def last_result_object(self) -> Optional[Object]:
         ent = self.get_last_invocation()
         if ent is None:
@@ -339,6 +381,11 @@ class InvocationContext:
         return self._last_exception
     
     def is_failed(self):
+        """ @method
+        エラーが発生したか
+        Returns:
+            bool:
+        """
         return self._last_exception is not None
     
     def push_extra_exception(self, exception):
@@ -359,6 +406,7 @@ class InvocationContext:
             printer(" --- no log ---")
             return
         
+        subindex = None
         for code, *args in self._log:
             if code == LOG_MESSAGE_BEGIN:
                 source = args[0]
@@ -384,21 +432,57 @@ class InvocationContext:
                 title = "end-of-message"
                 line = ""
             elif code == LOG_RUN_FUNCTION:
-                cxt = args[0]
-                if cxt is not self and cxt._log: # ログが空であれば出力しない
-                    printer(" ====== BEGIN =====>>>")
-                    cxt.pprint_log(printer=printer)
-                    printer(" <<<==== END =========")
+                if subindex is None: subindex = 0
+                subindex += 1
                 continue
             else:
                 raise ValueError("不明なログコード:"+",".join([code,*args]))
+            
+            pad = 16-len(title)
+            printer(" {}:{}{}".format(title, pad*" ", line))
 
+        if subindex is not None:
+            title = "sub-contexts"
+            if subindex > 1:
+                line = "0-{}".format(subindex-1)
+            else:
+                line = "0"
             pad = 16-len(title)
             printer(" {}:{}{}".format(title, pad*" ", line))
 
         if self._last_exception:
             err = self._last_exception
-            printer(" ERROR: {}".format(type(err).__name__))
+            printer("  ERROR: {}".format(type(err).__name__))
+    
+    def get_subcontext(self, index):
+        """ @method alias-name [sub-context]
+        呼び出しの中でネストしたコンテキストを取得する。
+        Params:
+            index(str): ネスト位置を示すインデックス。(例:0-4-1)
+        Returns:
+            InvocationContext:
+        """
+        if isinstance(index, str):
+            indices = [int(x) for x in index.split("-")]
+        else:
+            indices = [index]
+        
+        subcxt = None
+        logs = self._log
+        for i, idx in enumerate(indices):
+            submessages = [x for x in logs if x[0] == LOG_RUN_FUNCTION]
+            if idx<0 or idx>= len(submessages):
+                raise IndexError()
+            subcxt = submessages[idx][1]
+            # 次のレベルへ
+            logs = subcxt._log 
+        return subcxt
+
+    def pprint_log_as_message(self, app):
+        """ @method spirit alias-name [log]
+        ログを表示する。
+        """ 
+        self.pprint_log(lambda x: app.post("message", x))
 
 
 def instant_context(subject=None):
