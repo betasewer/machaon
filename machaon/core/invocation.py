@@ -838,3 +838,52 @@ class ObjectMemberInvocation(BasicInvocation):
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         self.must_be_resolved()
         return self._resolved.get_parameter_spec(index)
+
+#
+class TypeConstructorInvocation(BasicInvocation):
+    def __init__(self, typename, modifier):
+        super().__init__(modifier)
+        self._typename = typename
+    
+    def get_method_name(self):
+        return self._typename
+
+    def get_method_doc(self):
+        return "型'{}'のコンストラクタ".format(self._typename)
+
+    def display(self):
+        return ("TypeConstructor", self._typename, self.modifier_name())
+    
+    def query_method(self, this_type):
+        raise ValueError("型変換関数は取得できません")
+    
+    def is_task(self):
+        return False
+
+    def is_parameter_consumer(self):
+        return False
+
+    def prepare_invoke(self, context: InvocationContext, *argobjects):
+        argobj, *_args = argobjects
+        # 型の実装を取得する
+        from machaon.core.message import select_type
+        t = select_type(context, self._typename)
+        # 変換コンストラクタの呼び出しを作成
+        arg = self.resolve_object_value(argobj)
+        return InvocationEntry(self, t.construct_from_value, (context, arg), {})
+    
+    def get_action(self):
+        raise ValueError("型変換関数は取得できません")
+    
+    def get_max_arity(self):
+        return 0
+
+    def get_min_arity(self):
+        return 0
+
+    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
+        return MethodParameter("str", "Str", "")
+    
+    def get_result_spec(self):
+        return MethodResult(self._typename)
+

@@ -13,6 +13,7 @@ from machaon.core.invocation import (
     InstanceMethodInvocation,
     FunctionInvocation,
     ObjectMemberInvocation,
+    TypeConstructorInvocation,
     INVOCATION_RETURN_RECIEVER,
     LOG_MESSAGE_BEGIN,
     LOG_MESSAGE_CODE,
@@ -298,6 +299,10 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     # モディファイアを分離する
     if modbits is None:
         name, modbits = extract_selector_modifiers(name)
+
+    # 大文字のメソッドは型変換コンストラクタ
+    if name[0].isupper():
+        return TypeConstructorInvocation(name, modbits)
 
     name = normalize_method_name(name)
 
@@ -707,7 +712,7 @@ class MessageEngine():
                 tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
                 memberid = token[2:]
                 if not memberid:
-                    raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_SPEC_NAME))
+                    raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_ROOT_MEMBER))
 
                 return new_block_bits(memberid)
                 
