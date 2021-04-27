@@ -6,7 +6,7 @@ from collections import defaultdict
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
-from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName, full_qualified_name
+from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName, full_qualified_name, SIGIL_DEFAULT_RESULT
 
 #
 # 
@@ -32,7 +32,7 @@ class MessageNoReturn(Exception):
 INVOCATION_RETURN_RECIEVER = "<reciever>"
 
 def _default_result_object(context):
-    return context.get_type("Str").new_object("-")
+    return context.get_type("Str").new_object(SIGIL_DEFAULT_RESULT)
 
 def _new_process_error_object(context, error, objectType):
     from machaon.process import ProcessError

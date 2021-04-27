@@ -205,9 +205,14 @@ class TextFile(BasicContextFile):
 def detect_text_encoding(fpath):
     from machaon.platforms import current
     
-    encset = ["utf-8", "utf_8_sig", "utf-16", "shift-jis"]
+    encset = []
+    # Unicode
+    encset.extend(["utf-8", "utf_8_sig", "utf-16"])
+    # ascii extended encodings
     if current.default_encoding not in encset:
-        encset.insert(0, current.default_encoding)
+        encset.append(current.default_encoding)
+    # ascii
+    encset.append("ascii")
 
     cands = set(encset)
     size = 256

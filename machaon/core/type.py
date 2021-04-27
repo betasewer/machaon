@@ -140,7 +140,7 @@ class Type():
         else:
             # デフォルト動作
             if type(v).__str__ is object.__str__:
-                return "<^o^ {:0X}>".format(id(v))
+                return "<Object {:0X}>".format(id(v))
             else:
                 return str(v)
 

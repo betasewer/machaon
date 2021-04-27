@@ -160,7 +160,7 @@ class AnyType():
     
     def stringify(self, v):
         if type(v).__repr__ is object.__repr__:
-            return "<^o^ {:0X}({})>".format(id(v), full_qualified_name(type(v)))
+            return "<Object {:0X}({})>".format(id(v), full_qualified_name(type(v)))
         else:
             return "{}({})".format(v, full_qualified_name(type(v)))
 
@@ -193,13 +193,63 @@ class FunctionType():
         return f.run_function(subject, context)
 
 
+@fundamental_type.definition(typename="Stored", doc="""
+外部ファイルのオブジェクトを操作する。
+""")
+class StoredObject():
+    """@type
+    """
+    def __init__(self, object):
+        self.object = object
+
+    def get_object(self):
+        """ @method alias-name [object]
+        オブジェクトを取得する。
+        Returns:
+            Object:
+        """
+        return self.object
+    
+    def bind(self, context, name):
+        """ @method context [=>]
+        オブジェクトを名前に束縛する。
+        Params:
+            name(Str):
+        """
+        context.push_object(name, self.object)
+
+    def conversion_construct(self, context, value):
+        # 外部ファイルからロードする
+        from machaon.core.persistence import get_persistent_path, load_persistent_file
+        from machaon.types.shell import Path
+        if isinstance(value, str):
+            path = get_persistent_path(context.root, value)
+            o = load_persistent_file(context, path)
+            name = value
+        elif isinstance(value, Path):
+            path = value
+            o = load_persistent_file(context, path)
+            name = None
+        else:
+            raise TypeError("")
+        
+        if name is not None:
+            context.push_object(name, o)
+            context.spirit.post("message", "'{}'よりオブジェクト'{}'をロード".format(path, name))
+        else:
+            context.spirit.post("message", "'{}'より無名オブジェクトをロード".format(path))
+        
+        return ImportedObject(o)
+
+
+
 # ----------------------------------------------------------
 #
 #  Pythonのビルトイン型
 #
 # ----------------------------------------------------------
 @fundamental_type.definition(typename="Str", value_type=str, doc="""
-Python.str 文字列。
+文字列。
 """)
 class StrType():
     """ @type use-instance-method
@@ -207,27 +257,18 @@ class StrType():
     def construct(self, s):
         return s
     
+    def conversion_construct(self, _context, v):
+        return str(v)
+    
     def stringify(self, v):
         return v
-
+    
     #
     # メソッド
     #
-    def convertas(self, s, context, type):
-        '''@method context alias-name [as]
-        指定の型の値へと変換する。
-        stringfyメソッドを使用。
-        Params:
-            type (Type): 型
-        Returns:
-            Object: 新たな型の値
-        '''
-        value = type.construct_from_string(context, s)
-        return Object(type, value)
-    
     def convertas_literals(self, s, context):
         """ @method context alias-name [as-literal]
-        すべての値を適当な型に変換する。
+        値を適当な型に変換する。
         Params:
         Returns:
             Object: 新たな型の値
@@ -312,7 +353,7 @@ class StrType():
 
 
 @fundamental_type.definition(typename="Bool", value_type=bool, doc="""
-Python.bool 真偽値。
+真偽値。
 """)
 class BoolType():
     """@type use-instance-method

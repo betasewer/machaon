@@ -86,3 +86,9 @@ def full_qualified_name(t):
         return t.__qualname__
     else:
         return mod + "." + t.__qualname__
+
+
+#
+SIGIL_DEFAULT_RESULT = "-"
+
+

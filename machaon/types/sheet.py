@@ -4,8 +4,8 @@ from collections import defaultdict
 from machaon.core.type import Type, TypeModule
 from machaon.core.message import MessageEngine, MemberGetter, select_method
 from machaon.core.invocation import InvocationContext
+from machaon.core.symbol import SIGIL_DEFAULT_RESULT
 from machaon.process import ProcessError
-from machaon.cui import get_text_width
 
 from machaon.types.tuple import ObjectTuple, ElemObject
 from machaon.types.fundamental import NotFound
@@ -51,7 +51,7 @@ class BasicDataColumn():
     def stringify(self, context, value, method=DATASET_STRINGIFY):
         if isinstance(value, ProcessError):
             return "<{}>".format(value.summarize())
-        if isinstance(value, str):
+        if isinstance(value, str) and value == SIGIL_DEFAULT_RESULT:
             return value
         if method == DATASET_STRINGIFY_SUMMARIZE:
             return self.get_type(context, value).summarize_value(value)
