@@ -518,7 +518,6 @@ class MessageEngine():
         self._readings = []  # type: List[Message]
         self._codes = []     # type: List[Tuple[int, Tuple[Any,...]]]
         self._curblockstack = [] # type: List[int]
-        self._temp_result_stack = []
         
     def get_expression(self) -> str:
         """ コード文字列を返す """
@@ -933,8 +932,6 @@ class MessageEngine():
 
             # メッセージが完成したので評価する
             yield msg
-            result = self._temp_result_stack.pop()
-            context.push_local_object(result) # スタックに乗せる
             completed += 1
 
             index -= 1
@@ -973,7 +970,6 @@ class MessageEngine():
         coderuniter = build_run_codes()
         codes = []
         while True:
-            completemsgs = []
             try:
                 code, values = next(coderuniter, (None, None))
                 if code is None:
@@ -990,12 +986,10 @@ class MessageEngine():
                     
                     context.add_log(LOG_MESSAGE_EVALRET, result)
 
-                    if result.is_error(): # エラーオブジェクトが返った
-                        context.push_local_object(result)
+                    # 返り値をスタックに乗せる
+                    context.push_local_object(result)
+                    if result.is_error(): # エラーオブジェクトが返ったら実行を中断する
                         return
-
-                    self._temp_result_stack.append(result) # reduce_stepのジェネレータへの受け渡しにのみ使用するスタック
-                    completemsgs.append(msg)
 
             except Exception as e:
                 # メッセージ実行以外の場所でエラーが起きた
@@ -1018,7 +1012,6 @@ class MessageEngine():
         ret = returns[-1]
 
         self._readings.clear()
-        self._temp_result_stack.clear()
         return ret
     
     def run(self, context) -> Object:
