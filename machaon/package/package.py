@@ -146,24 +146,28 @@ class Package():
                 # サブモジュール全て
                 modules = []
                 basepkg = aloader.module_name
-                basedir = os.path.dirname(aloader.load_filepath())
-
-                # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
-                skip_names = []
-                for fr in traceback.extract_stack():
-                    fname = os.path.normpath(fr.filename)
-                    if fname.startswith(basedir):
-                        relname = module_name_from_path(fname, basedir, basepkg)
-                        skip_names.append(relname)
-                
-                for loader in walk_modules(basedir, basepkg):
-                    if loader.module_name in skip_names:
-                        continue 
-                    modules.append(loader)
+                for pkgpath in aloader.load_package_directories():
+                    # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
+                    skip_names = []
+                    for fr in traceback.extract_stack():
+                        fname = os.path.normpath(fr.filename)
+                        if fname.startswith(pkgpath):
+                            relname = module_name_from_path(fname, pkgpath, basepkg)
+                            skip_names.append(relname)
+                    
+                    for loader in walk_modules(pkgpath, basepkg):
+                        if loader.module_name in skip_names:
+                            continue 
+                        modules.append(loader)
 
         elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
             loader = module_loader(self.entrypoint)
             modules = [loader]
+        
+        if not modules:
+            ex = PackageLoadError("モジュールを1つも読み込めませんでした")
+            self._loaded.append(ex)
+            return False
 
         typecount = 0
         for modloader in modules:
@@ -177,8 +181,9 @@ class Package():
                 continue
         
         if typecount == 0:
-            ex = PackageLoadError("型を1つも読み込めませんでした")
+            ex = PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules)))
             self._loaded.append(ex)
+            return False
     
     def reset_loading(self):
         self._loaded.clear()
