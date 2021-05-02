@@ -75,7 +75,7 @@ class RootObject:
         chm = self.context.root.get_active_chamber()
         chm.drop_processes(pred=pred)
         msgs = chm.get_process_messages()
-        app.get_app_ui().replace_screen_message(msgs)
+        app.get_ui().replace_screen_message(msgs)
     
     def clear(self, app):
         ''' @method spirit [cla]

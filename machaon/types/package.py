@@ -75,7 +75,7 @@ class AppPackageType:
 
     # 
     def _update(self, package, context, app, forceinstall=False):
-        approot = app.get_app()
+        approot = app.get_root()
 
         app.post("message-em", " ====== パッケージ'{}'のインストール ====== ".format(package.name))
         rep = package.get_source()
@@ -151,7 +151,7 @@ class AppPackageType:
         """ @task context
         パッケージをアンインストールする。
         """
-        approot = app.get_app()
+        approot = app.get_root()
 
         app.post("message-em", " ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
 

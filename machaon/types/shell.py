@@ -58,7 +58,7 @@ class Path():
             Sheet[ObjectCollection]: (name, path)
         """
         res = []
-        for k, v in shellpath().known_paths(spirit.get_app()):
+        for k, v in shellpath().known_paths(spirit.get_root()):
             if v is not None:
                 res.append({"name":k, "path":Path(v)})
         return res
@@ -402,10 +402,10 @@ class Path():
             if not head: # no slash in path
                 # 場所の識別名として解釈
                 if tail == "machaon":
-                    p = context.spirit.get_app().get_basic_dir()
+                    p = context.spirit.get_root().get_basic_dir()
                 else:
                     name, _, param  = value.partition(":")
-                    p = shellpath().get_known_path(name, param, context.spirit.get_app())
+                    p = shellpath().get_known_path(name, param, context.spirit.get_root())
                 if p is not None:
                     return Path(p)
             # 識別名が存在しなければパスとする

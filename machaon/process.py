@@ -253,21 +253,18 @@ class StillExecuting(Exception):
 # ###################################################################
 #
 class Spirit():
-    def __init__(self, app, process=None):
-        self.app = app
+    def __init__(self, root, process=None):
+        self.root = root
         self.process = process
         # プログレスバー
         self.cur_prog_display = None 
     
     def inherit(self, other):
-        self.app = other.app
+        self.root = other.root
         self.process = other.process
 
-    def get_app(self):
-        return self.app
-    
-    def get_app_ui(self):
-        return self.app.get_ui()
+    def get_root(self):
+        return self.root
     
     def get_process(self):
         return self.process
@@ -302,14 +299,17 @@ class Spirit():
         return ProcessMessageIO(self, tag, oneliner, **options)
     
     #
-    # UIの動作を命じる
+    # UIの関数を呼び出す
     #
+    def get_ui(self):
+        return self.root.get_ui()
+    
     def ask_yesno(self, desc):
-        answer = self.app.get_ui().get_input(desc)
+        answer = self.get_ui().get_input(desc)
         return test_yesno(answer)
     
     def get_input(self, desc=""):
-        return self.app.get_ui().get_input(self, desc)
+        return self.get_ui().get_input(self, desc)
     
     def wait_input(self):
         if self.process is None:
@@ -317,7 +317,7 @@ class Spirit():
         return self.process.wait_input()
     
     def scroll_screen(self, index):
-        self.app.get_ui().scroll_screen(index)
+        self.get_ui().scroll_screen(index)
     
     def open_pathdialog(self, dialogtype, 
         initialdir=None, initialfile=None, 
@@ -327,7 +327,7 @@ class Spirit():
         mustexist=False
     ):
         """ uiのダイアログ関数を呼び出す """
-        return self.app.get_ui().open_pathdialog(
+        return self.get_ui().open_pathdialog(
             dialogtype,
             initialdir=initialdir, initialfile=initialfile,
             filters=filters, title=title, 
@@ -335,6 +335,11 @@ class Spirit():
             defaultextension=defaultextension,
             mustexist=mustexist
         )
+    
+    def get_ui_wrap_width(self):
+        if self.root is None:
+            return 0xFFFFFF
+        return self.get_ui().wrap_width
     
     #
     # スレッド操作／プログレスバー操作
@@ -956,7 +961,8 @@ class ProcessError():
         details = traceback.format_exception(type(excep), excep, excep.__traceback__)
         app.post("error", details[-1] if details else "")
         app.post("message-em", "スタックトレース{}：".format(title))
-        msg = verbose_display_traceback(excep.__traceback__, app.get_app_ui().wrap_width)
+
+        msg = verbose_display_traceback(excep.__traceback__, app.get_ui_wrap_width())
         app.post("message", msg + "\n")
 
         app.post("message-em", "メッセージ解決：")
