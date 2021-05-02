@@ -16,7 +16,7 @@ def launch():
     )
     root.add_package(
         "hello",
-        "bitbucket:betasewer/test_module"
+        "bitbucket:betasewer/test_module:hello"
     )
 
     root.run()
