@@ -89,6 +89,23 @@ def full_qualified_name(t):
 
 
 #
+# メッセージで用いられる記号
+#
+SIGIL_OBJECT_ID = "@"
+SIGIL_OBJECT_LAMBDA_MEMBER = "."
+SIGIL_OBJECT_ROOT_MEMBER = "@"
+SIGIL_SCOPE_RESOLUTION = "/"
+SIGIL_END_OF_KEYWORDS = ";"
 SIGIL_DEFAULT_RESULT = "-"
+
+QUOTE_ENDPARENS = {
+    "[" : "]",
+    "{" : "}",
+    "<" : ">",
+    "(" : ")",
+    "（" : "）",
+    "【" : "】",
+    "《" : "》",
+}
 
 
