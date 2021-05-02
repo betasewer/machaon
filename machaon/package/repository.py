@@ -39,8 +39,8 @@ class RepositoryArchive(BasicArchive):
         return os.path.join(workdir, self.arcfilename)
 
     def get_source(self) -> str:
-        return "remote:{}/{}/{}".format(type(self).hostname, self.username, self.name)
-        
+        return "{}/{}/{}".format(type(self).hostname, self.username, self.name)
+
     def get_repository_url(self):
         raise NotImplementedError()
 
@@ -80,7 +80,7 @@ class RepositoryArchive(BasicArchive):
         except urllib.error.URLError:
             pass
         return None
-    
+
     def query_hash(self):
         raise NotImplementedError()
  
