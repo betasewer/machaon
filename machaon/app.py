@@ -143,8 +143,8 @@ class AppRoot:
         yield from self.pkgmanager.install(package, newinstall=False)
     
     # パッケージにアップデートが必要か
-    def get_package_status(self, package):
-        return self.pkgmanager.get_update_status(package)
+    def query_package_status(self, package):
+        return self.pkgmanager.query_status(package)
 
     def load_pkg(self, package, *, force=False):
         """ パッケージオブジェクトから型をロードする """

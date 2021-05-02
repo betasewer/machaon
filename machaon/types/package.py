@@ -14,16 +14,24 @@ class AppPackageType:
         """
         return package.name
     
-    def status(self, package):
-        """ @method
+    def status(self, package, spirit):
+        """ @method spirit
         ロード状態を示す文字列
         Returns:
             Str:
         """
         if not package.is_installed():
-            return "未インストール"
+            status = spirit.root.query_package_status(package)
+            if "none" == status:
+                return "未インストール"
+            else:
+                return "モジュールが見つからない"
         if not package.once_loaded():
-            return "読み込み待機中"
+            status = spirit.root.query_package_status(package)
+            if "none" == status:
+                return "削除済"
+            else:
+                return "読み込み待機中"
         if package.is_load_failed():
             return "読み込み済: エラー"
         else:
@@ -83,7 +91,7 @@ class AppPackageType:
             app.post("message", "  --> {}".format(rep.get_source()))
         
         operation = approot.update_package
-        status = approot.get_package_status(package)
+        status = approot.query_package_status(package)
         if status == "none":
             app.post("message-em", "新たにインストールします")
             operation = approot.install_package

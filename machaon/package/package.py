@@ -220,6 +220,8 @@ class Package():
 
         if self._type == PACKAGE_TYPE_MODULES:
             root.typemodule.remove_scope(self.scope)
+        
+        self._loaded.clear()
 
 def create_package(name, package, module=None, **kwargs):
     """
@@ -231,11 +233,15 @@ def create_package(name, package, module=None, **kwargs):
         if not sep:
             raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
         if host == "github":
+            desc, sep, mod = desc.rpartition(":")
             from machaon.package.repository import GithubRepArchive
             pkgsource = GithubRepArchive(desc)
+            module = mod if sep else pkgsource.name
         elif host == "bitbucket":
+            desc, sep, mod = desc.rpartition(":")
             from machaon.package.repository import BitbucketRepArchive
             pkgsource = BitbucketRepArchive(desc)
+            module = mod if sep else pkgsource.name
         elif host == "package":
             from machaon.package.archive import LocalModule
             pkgsource = LocalModule()
@@ -357,8 +363,6 @@ class PackageManager():
              
     def is_installed(self, pkg_name: str):
         self.check_database()
-        if not isinstance(pkg_name, str):
-            raise TypeError("pkg_name")
         return pkg_name in self.database
 
     #
@@ -471,13 +475,13 @@ class PackageManager():
             
         self.remove_database(pkg.name)
             
-    def get_update_status(self, pkg) -> str:
+    def query_status(self, pkg) -> str:
         if not self.is_installed(pkg.name):
             return "none"
-        # hashを比較して変更を検知する
         entry = self.database[pkg.name]
+        # hashを比較して変更を検知する
         hash_ = pkg.load_hash()
-        if hash_ is None:
+        if hash_ is None or "hash" not in entry:
             return "unknown"
         if entry["hash"] == hash_:
             return "latest"
