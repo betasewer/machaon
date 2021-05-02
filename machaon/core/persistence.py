@@ -5,7 +5,7 @@ from machaon.core.message import run_function
 
 def get_persistent_path(root, name):
     """ machaon標準ディレクトリからファイルを読み込む """
-    d = root.get_basic_dir()
+    d = root.get_store_dir()
     path = os.path.join(d, name)
     if not os.path.isfile(path):
         path = path + ".txt"
@@ -16,7 +16,7 @@ def get_persistent_path(root, name):
 def enum_persistent_names(root):
     """ machaon標準ディレクトリからファイルを読み込む """
     n = []
-    d = root.get_basic_dir()
+    d = root.get_store_dir()
     for name in os.listdir(d):
         path = os.path.join(d, name)
         if os.path.isfile(path):
@@ -26,7 +26,7 @@ def enum_persistent_names(root):
 
 def load_persistent_file(context, path):
     """ ファイルにメッセージとして記述されたオブジェクトをロードする """
-    f = TextFile(Path(path))    
+    f = TextFile(Path(path))
     content = f.text()
     # メッセージとして実行する
     obj = run_function(content, None, context)
