@@ -220,7 +220,7 @@ class InvocationContext:
     
     @property
     def root(self):
-        return self.spirit.app
+        return self.spirit.root
     
     #
     def inherit(self, subject=None):
