@@ -49,12 +49,15 @@ class PyBasicModuleLoader:
             raise ValueError("ターゲット'{}'はモジュール'{}'に存在しません".format(name, mod.__name__))
         return loaded
     
-    def load_filepath(self):
+    def load_package_directories(self):
         mod = self.module
-        basefile = getattr(mod, "__file__", None)
-        if basefile is None:
-            raise ValueError("モジュールのファイルパスを特定できません")
-        return basefile
+        if getattr(mod, "__path__", None) is not None:
+            for path in mod.__path__:
+                yield path
+        elif getattr(mod, "__file__", None) is not None:
+            yield [os.path.dirname(mod.__file__)]
+        else:
+            raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
     
     def enum_type_describers(self):
         """ 型を定義しているクラスをモジュールから列挙する """
