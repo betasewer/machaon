@@ -140,10 +140,10 @@ def test_message_engine():
         "concat", TOKEN_TERM, 
         "You got wrong book.", TOKEN_TERM|TOKEN_ALL_BLOCK_END|TOKEN_STRING,
     )
-    assert reads("he says --[ This is not joke ]") == (
+    assert reads("he says --[ This is not a joke ]") == (
         "he", TOKEN_TERM|TOKEN_FIRSTTERM, 
         "says", TOKEN_TERM, 
-        " This is not joke ", TOKEN_TERM|TOKEN_STRING,
+        " This is not a joke ", TOKEN_TERM|TOKEN_STRING,
         "", TOKEN_ALL_BLOCK_END
     )
 
@@ -156,7 +156,6 @@ def test_generic_methods():
     ptest("(5 add 6) negative", -11)
     ptest("(7 mul 8) add (9 mul 10) ", 7*8+9*10)
     ptest("(7 mul 8) add ((9 sub 10) mul 11) ", 7*8+(9-10)*11)
-    ptest("7 mul 8 add $ $ 9 sub 10 mul 11 ", 7*8+(9-10)*11) # 同じ結果に
     ptest("7 mul 8 add 9 sub 10", (((7*8)+9)-10))
     ptest("'573' length", 3)
     ptest("GODZILLA slice (9 sub 8) -1", "ODZILL")
@@ -241,7 +240,7 @@ def test_parse_function():
     ltest("Function ctor -> @ name == lucky", lucky, True)
     ltest("Function ctor -> @ type startswith: Golden", lucky, True)
     ltest("Function ctor -> @ age * 10", lucky, 30)
-    ltest("Function ctor -> (@ age * 5) == 25 || $ $ @ name == lucky", lucky, True)
+    ltest("Function ctor -> (@ age * 5 == 25) || (@ name == lucky)", lucky, True)
     ltest("Function ctor -> 32 * 45 ", lucky, 32 * 45)
 
 
@@ -284,6 +283,21 @@ def test_message_reenter():
     assert r.value == 105
 
 
+#
+def test_message_block():
+    context = test_context()
 
+    # 二つ以上のメッセージを含むブロック
+    r = run_function("10 * (1 + 2 + 3)", None, context)
+    assert r.value == 10 * 6
 
+    r = run_function("'1-2-3' startswith: (1 Str + '-')", None, context)
+    assert r.value is True
+    
+    r = run_function("('1 2 3' + ' ' + '4 5') split as Int reduce '@.0 + @.1'", None, context)
+    assert r.value == (1 + 2 + 3 + 4 + 5)
+
+    # ネスト
+    r = run_function("100 / ((1 + 2 + 3) * (4 + 5 + 6))", None, context)
+    assert r.value == 100 / ((1 + 2 + 3) * (4 + 5 + 6))
 

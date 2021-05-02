@@ -66,7 +66,7 @@ def test_column(objectdesk):
     assert namecol.get_name() == "name"
     assert namecol.get_type(objectdesk, None) is objectdesk.get_type("Str")
 
-    # カラムの値を得る
+    # カラムの値を得る 
     subject = Object(employee, view.items[0])
     assert namecol.get_function()
     assert namecol.get_function().get_expression() == "&name"

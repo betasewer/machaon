@@ -3,7 +3,16 @@ import sys
 from itertools import zip_longest
 from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
-from machaon.core.symbol import PythonBuiltinTypenames, normalize_method_name
+from machaon.core.symbol import (
+    PythonBuiltinTypenames, normalize_method_name,
+    SIGIL_OBJECT_ID,
+    SIGIL_OBJECT_LAMBDA_MEMBER,
+    SIGIL_OBJECT_ROOT_MEMBER,
+    SIGIL_SCOPE_RESOLUTION,
+    SIGIL_DEFAULT_RESULT,
+    SIGIL_END_OF_KEYWORDS,
+    QUOTE_ENDPARENS
+)
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
 from machaon.core.method import Method, MethodParameter
@@ -427,23 +436,7 @@ TERM_INSTR_MASK = 0xFF0000
 TERM_START_KEYWORD_ARGS = 0x010000
 TERM_END_LAST_BLOCK = 0x020000
 TERM_END_ALL_BLOCK = 0x040000
-
-# メッセージで用いる記号
-SIGIL_OBJECT_ID = "@"
-SIGIL_OBJECT_LAMBDA_MEMBER = "."
-SIGIL_OBJECT_ROOT_MEMBER = "@"
-SIGIL_SCOPE_RESOLUTION = "/"
-SIGIL_END_OF_KEYWORDS = ";"
-SIGIL_RIGHTFIRST_EVALUATION = "$"
-QUOTE_ENDPARENS = {
-    "[" : "]",
-    "{" : "}",
-    "<" : ">",
-    "(" : ")",
-    "（" : "）",
-    "【" : "】",
-    "《" : "》",
-}
+TERM_BEGIN_NEW_BLOCK = 0x080000
 
 #
 #
@@ -521,11 +514,10 @@ class MessageTokenBuffer():
 class MessageEngine():
     def __init__(self, expression=""):
         self.source = expression
-
         self._tokens = []    # type: List[Tuple[str, int]]
         self._readings = []  # type: List[Message]
         self._codes = []     # type: List[Tuple[int, Tuple[Any,...]]]
-
+        self._curblockstack = [] # type: List[int]
         self._temp_result_stack = []
         
     def get_expression(self) -> str:
@@ -611,6 +603,18 @@ class MessageEngine():
                 yield buffer.token(TOKEN_TERM|TOKEN_ALL_BLOCK_END)
         else:
             yield buffer.token(TOKEN_ALL_BLOCK_END)
+    
+    # 現在評価している途中のメッセージ
+    def current_reading_message(self):
+        if self._curblockstack: 
+            curblock = self._curblockstack[-1]
+            if len(self._readings)-1 < curblock:
+                return None
+            return self._readings[-1]
+        else:
+            if not self._readings:
+                return None
+            return self._readings[-1]
 
     # 構文を組み立てる
     def build_message(self, reading, token: str, tokentype: int) -> Tuple: # (int, Any...)
@@ -638,12 +642,12 @@ class MessageEngine():
         # エスケープされた文字列
         isstringtoken = tokentype & TOKEN_STRING > 0
 
-        # ブロック開始指示
+        # 明示的ブロック開始指示
         if tokentype & TOKEN_BLOCK_BEGIN:
             if expect == EXPECT_SELECTOR:
                 raise BadExpressionError("メッセージはセレクタになりません")
 
-            tokenbits |= TERM_OBJ_NOTHING
+            tokenbits |= (TERM_OBJ_NOTHING | TERM_BEGIN_NEW_BLOCK)
             if expect == EXPECT_RECIEVER:
                 return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, )
 
@@ -657,18 +661,6 @@ class MessageEngine():
         if not isstringtoken and token == SIGIL_END_OF_KEYWORDS:
             if expect == EXPECT_ARGUMENT:
                 return (tokenbits | TERM_OBJ_NOTHING | TERM_END_LAST_BLOCK, )
-
-        # 評価順序変更
-        if not isstringtoken and token == SIGIL_RIGHTFIRST_EVALUATION:
-            if expect == EXPECT_RECIEVER:
-                tokenbits |= TERM_OBJ_NOTHING
-                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, )
-
-            if expect == EXPECT_ARGUMENT:
-                tokenbits |= TERM_OBJ_NOTHING
-                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, )
-                
-            # if expect == EXPECT_SELECTOR or expect == EXPECT_NOTHING: -> through
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:
@@ -813,7 +805,7 @@ class MessageEngine():
             paramtype = context.get_type(spec.get_typename())
             convval = paramtype.construct_from_value(context, val, *spec.get_typeparams())
             obj = paramtype.new_object(convval)
-        
+
         elif objcode == TERM_OBJ_TUPLE:
             from machaon.types.tuple import ObjectTuple
             elems = values[0].split() # 文字列を空白で区切る
@@ -841,7 +833,7 @@ class MessageEngine():
             reciever = select_lambda_subject(context)
             selector = select_method(values[0], reciever.type, reciever=reciever.value)
             objs = (reciever, selector)
-        
+
         elif objcode == TERM_OBJ_REF_ROOT_MEMBER:
             rt = context.get_type("RootObject")
             reciever = rt.new_object(rt.value_type(context))
@@ -850,13 +842,13 @@ class MessageEngine():
 
         elif objcode == TERM_OBJ_CONSTANT:
             obj = select_constant(context, values[0])
-        
+
         elif objcode == TERM_OBJ_NOTHING:
             pass
 
         else:
             raise BadExpressionError("不明な生成コードに遭遇：{}".format(objcode))
-            
+
         if obj is not None: objs = (obj,)
 
         # メッセージを構築する
@@ -902,6 +894,10 @@ class MessageEngine():
         if astinstr & TERM_START_KEYWORD_ARGS:            
             self._readings[-1].start_keyword_args()
 
+        if astinstr & TERM_BEGIN_NEW_BLOCK:
+            newpos = len(self._readings)-1 # 上でメッセージを追加済み
+            self._curblockstack.append(newpos) # 新しいブロックの番号を記録する
+
         if astinstr & TERM_END_LAST_BLOCK:
             if self._readings:
                 msg = self._readings[-1]
@@ -912,6 +908,7 @@ class MessageEngine():
                 if not msg.is_min_arg_specified():
                     raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
                 msg.end_keyword_args()
+                self._curblockstack.pop()
 
         if astinstr & TERM_END_ALL_BLOCK:
             for msg in self._readings:
@@ -922,18 +919,25 @@ class MessageEngine():
                 if not msg.is_min_arg_specified():
                     raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
                 msg.end_keyword_args()
-
+            self._curblockstack.clear()
+        
         # 完成したメッセージをキューから取り出す
         completed = 0
+        index = len(self._readings)-1
         for msg in reversed(self._readings):
-            if not msg.is_specified(): # 最低限のレシーバ、引数が指定されているか
+            if not msg.is_specified(): # レシーバ、引数が指定されていない
+                break
+            if self._curblockstack and self._curblockstack[-1] > index: # ブロック外の評価を遅延する
+                print("ブロック外の評価を遅延します")
                 break
 
-            # メッセージが完成した
+            # メッセージが完成したので評価する
             yield msg
             result = self._temp_result_stack.pop()
             context.push_local_object(result) # スタックに乗せる
             completed += 1
+
+            index -= 1
 
         if completed>0:
             del self._readings[-completed:]
@@ -955,7 +959,7 @@ class MessageEngine():
         if not self._codes:
             def build_run_codes():
                 for token, tokentype in self.tokenize(self.source):
-                    reading = self._readings[-1] if self._readings else None
+                    reading = self.current_reading_message()
                     code, *values = self.build_message(reading, token, tokentype)
                     yield (code, values)
         else:
