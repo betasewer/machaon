@@ -49,7 +49,7 @@ class AppRoot:
             basic_dir = os.path.join(shellpath().get_known_path("documents", approot=self), "machaon")
         self.basicdir = basic_dir
 
-        package_dir = os.path.join(self.basicdir, "packages")
+        package_dir = self.get_package_dir()
         self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
         self.pkgmanager.add_to_import_path()
         self.pkgs = []
@@ -73,6 +73,15 @@ class AppRoot:
     
     def get_basic_dir(self):
         return self.basicdir
+    
+    def get_package_dir(self):
+        return os.path.join(self.basicdir, "packages")
+    
+    def get_store_dir(self):
+        return os.path.join(self.basicdir, "store")
+    
+    def get_credential_dir(self):
+        return os.path.join(self.basicdir, "credential")
     
     def get_GUID_names_file(self):
         p = os.path.join(self.basicdir, "guid.ini")
@@ -169,16 +178,19 @@ class AppRoot:
         ダウンロードの認証情報をパッケージに追加する。  
         Params:
             target(str): 対象［ホスト名:ユーザー名］
-            cred(Any): 認証オブジェクト
+            cred(str/Any): 認証タイプ／認証オブジェクト
         """
-        hostname, sep, username = target.partition(":")
-        if not sep:
-            raise ValueError("［ホスト名:ユーザー名］を指定してください")
-        hostname = hostname.strip()
-        username = username.strip()
+        from machaon.package.auth import create_credential
+        cred = create_credential(self, target, cred)
+
+        mark = False
         for pkg in self.pkgs:
             src = pkg.get_source()
-            src.add_credential(hostname, username, cred)
+            if src.add_credential(cred):
+                mark = True
+        
+        if not mark:
+            raise ValueError("認証情報はどのパッケージにも設定されませんでした")
 
     #
     # アプリの実行

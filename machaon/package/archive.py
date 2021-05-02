@@ -19,7 +19,7 @@ class BasicArchive():
         self._arc = None
         self._arcroot = None
     
-    def add_credential(self, _hostname, _username, _cred):
+    def add_credential(self, _cred):
         return False
     
     #
@@ -120,6 +120,9 @@ class LocalFile():
     def __init__(self, filepath):
         self.filepath = filepath
 
+    def add_credential(self, _cred):
+        return False
+    
     def get_source(self) -> str:
         return "file:{}".format(self.filepath)
     
@@ -140,5 +143,8 @@ class LocalModule():
     def __init__(self):
         pass
 
+    def add_credential(self, _cred):
+        return False
+    
     def get_source(self) -> str:
         return "module"

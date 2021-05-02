@@ -10,6 +10,10 @@ class RepositoryURLError(Exception):
     def get_basic(self):
         return super().args[0]
 
+class PUBLIC_REPOSITORY():
+    pass
+
+
 #
 #
 #
@@ -101,11 +105,15 @@ class RepositoryArchive(BasicArchive):
             raise RepositoryURLError(e)
     
     #
-    def add_credential(self, hostname, username, cred):
-        if type(self).hostname == hostname and self.username == username:
+    def add_credential(self, cred):
+        if (not self.is_public() 
+            and type(self).hostname == cred.hostname and self.username == cred.username):
             self.credential = cred
             return True
         return False
+    
+    def is_public(self):
+        return self.credential is PUBLIC_REPOSITORY
 
 #
 #
