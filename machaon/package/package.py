@@ -252,12 +252,12 @@ def create_package(name, package, module=None, **kwargs):
             module = mod if sep else pkgsource.name
         elif host == "package":
             from machaon.package.archive import LocalModule
-            pkgsource = LocalModule()
             module = desc
+            pkgsource = LocalModule(module)
         elif host == "module":
             from machaon.package.archive import LocalModule
-            pkgsource = LocalModule()
             module = desc
+            pkgsource = LocalModule(module)
             pkgtype = PACKAGE_TYPE_SINGLE_MODULE
         elif host == "file":
             from machaon.package.archive import LocalFile
@@ -375,13 +375,16 @@ class PackageManager():
 
     #
     def install(self, pkg: Package, newinstall: bool):
-        rep = pkg.get_source()
-
         tmpdir = ''
         def cleanup_tmpdir(d):
             shutil.rmtree(d)
             return ''
-
+            
+        rep = pkg.get_source()
+        if hasattr(rep, "is_module"):
+            # インストールは不要
+            return
+        
         if rep.is_remote:
             # ダウンロードする
             if not tmpdir: tmpdir = tempfile.mkdtemp()
@@ -418,7 +421,7 @@ class PackageManager():
         else:
             # 単にパスを取得する
             localpath = rep.get_local_path()
-            
+        
         # pipにインストールさせる
         yield PackageManager.PIP_INSTALLING
         try:

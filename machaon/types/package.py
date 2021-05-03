@@ -28,7 +28,7 @@ class AppPackageType:
         elif package.is_load_failed():
             loadstatus = "failed"
         
-        installstatus = spirit.root.query_package_status(package)
+        installstatus = spirit.root.query_package_status(package, isinstall=True)
 
         if "none" == loadstatus:
             if "none" == installstatus:
@@ -48,12 +48,26 @@ class AppPackageType:
         if "ready" == loadstatus:
             if "none" == installstatus:
                 return "アンインストール済"
-            elif "old" == installstatus:
-                return "準備完了：アップデートあり"
             else:
                 return "準備完了"
         
         return "unexpected status：{}{}".format(loadstatus, installstatus)
+    
+    def update_status(self, package, spirit):
+        """ @task
+        アップデート状態を示す文字列
+        Returns:
+            Str:
+        """
+        installstatus = spirit.root.query_package_status(package)
+        if "none" == installstatus:
+            return "ローカルに存在しません"
+        elif "old" == installstatus:
+            return "アップデートがあります"
+        elif "latest" == installstatus:
+            return "最新の状態です"
+        
+        return "unexpected status：{}".format(installstatus)
 
     def load_errors(self, package):
         """ @method
@@ -103,39 +117,38 @@ class AppPackageType:
     def _update(self, package, context, app, forceinstall=False):
         approot = app.get_root()
 
-        app.post("message-em", " ====== パッケージ'{}'のインストール ====== ".format(package.name))
+        app.post("message-em", "パッケージ'{}'の更新を開始".format(package.name))
         rep = package.get_source()
         if rep:
-            app.post("message", "  --> {}".format(rep.get_source()))
+            app.post("message", "ソース = {}".format(rep.get_source()))
         
         operation = approot.update_package
         status = approot.query_package_status(package)
         if status == "none":
-            app.post("message-em", "新たにインストールします")
+            app.post("message", "新たにインストールします")
             operation = approot.install_package
         elif status == "old":
-            app.post("message-em", "より新しいバージョンが存在します")
+            app.post("message", "より新しいバージョンが存在します")
         elif status == "latest":
             app.post("message", "最新の状態です")
             if not forceinstall:
                 return
         elif status == "unknown":
-            app.post("error", "状態不明：リモートリポジトリの読み込みに失敗")
+            app.post("error", "不明：パッケージの状態の取得に失敗")
             return
 
         # ダウンロード・インストール処理
-        app.post("message", "パッケージの取得を開始")
         for state in operation(package):
             # ダウンロード中
             if state == PackageManager.DOWNLOAD_START:
+                app.post("message", "パッケージのダウンロードを開始 --> {}".format(rep.get_download_url()))
                 app.start_progress_display(total=state.total)
             elif state == PackageManager.DOWNLOADING:
                 app.interruption_point(progress=state.size)
             elif state == PackageManager.DOWNLOAD_END:
                 app.finish_progress_display(total=state.total)
             elif state == PackageManager.DOWNLOAD_ERROR:
-                app.post("error", "ダウンロードでエラー発生：{}".format(state.error))
-                app.post("error", "インストール失敗")
+                app.post("error", "ダウンロードに失敗しました：\n  {}".format(state.error))
                 return
 
             # インストール処理
@@ -153,7 +166,7 @@ class AppPackageType:
                     return
 
             elif state == PackageManager.PRIVATE_REQUIREMENTS:
-                app.post("warn", "次の依存パッケージを後で手動でインストールする必要があります：")
+                app.post("warn", "次の依存パッケージを手動でインストールする必要があります：")
                 for name in state.names:
                     app.message("  " + name)
 
@@ -161,15 +174,9 @@ class AppPackageType:
         approot.load_pkg(package)
 
         if operation is approot.install_package:
-            if package.is_modules():
-                app.post("message-em", "モジュール'{}'のインストールが完了".format(package.scope))
-            else:
-                app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
+            app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
         else:
-            if package.is_modules():
-                app.post("message-em", "モジュール'{}'の更新が完了".format(package.scope))
-            else:
-                app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
+            app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
             
         return
     

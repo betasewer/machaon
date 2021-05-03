@@ -150,8 +150,10 @@ class LocalModule(DummyArchive):
     """
     配置されたモジュール（参照のみ）
     """
-    def __init__(self):
-        pass
+    is_module = True
+
+    def __init__(self, module):
+        self.module = module
 
     def get_source(self) -> str:
-        return "module"
+        return self.module

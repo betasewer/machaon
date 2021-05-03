@@ -161,8 +161,13 @@ class AppRoot:
         yield from self.pkgmanager.install(package, newinstall=False)
     
     # パッケージにアップデートが必要か
-    def query_package_status(self, package):
-        return self.pkgmanager.query_status(package)
+    def query_package_status(self, package, *, isinstall=False):
+        if isinstall:
+            if not package.is_remote_source():
+                return "ready"
+            return self.pkgmanager.is_installed(package) # ローカルにあるかだけ確認
+        else:
+            return self.pkgmanager.query_status(package) # 通信して最新か確かめる
 
     def load_pkg(self, package, *, force=False):
         """ パッケージオブジェクトから型をロードする """
