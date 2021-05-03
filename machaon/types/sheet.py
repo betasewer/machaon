@@ -76,6 +76,7 @@ class BasicDataColumn():
 
 class DataOperationColumn(BasicDataColumn):
     def __init__(self, function, *, name=None):
+        super().__init__()
         self._fn = function
         self._name = name
     
@@ -89,8 +90,7 @@ class DataOperationColumn(BasicDataColumn):
 
     def eval(self, subject, context):
         obj = self._fn.run_function(subject, context)
-        if self._t.is_any() and not obj.is_error(): # 型を記憶する
-            self._t = obj.type
+        self.get_type(context, obj) # 型を記憶する
         return obj.value
 
 class DataMemberColumn(DataOperationColumn):
@@ -136,12 +136,12 @@ class DataItemItselfColumn(BasicDataColumn):
 DataColumnUnion = Union[DataMemberColumn, DataOperationColumn, DataItemItselfColumn]
 
 #
-def make_data_columns(type, *expressions) -> List[DataColumnUnion]:
+def make_data_columns(itemtype, *expressions) -> List[DataColumnUnion]:
     columns: List[DataColumnUnion] = []
 
     names: List[str] = []
     for expr in expressions:
-        aliases = type.get_member_group(expr)
+        aliases = itemtype.get_member_group(expr)
         if aliases is not None:
             names.extend(aliases)
         else:
@@ -149,7 +149,7 @@ def make_data_columns(type, *expressions) -> List[DataColumnUnion]:
 
     for member_name in names:
         if member_name == "=":
-            columns.append(DataItemItselfColumn(type))
+            columns.append(DataItemItselfColumn(itemtype))
             continue
         
         parts = member_name.split()
@@ -619,11 +619,11 @@ class Sheet():
         # データを展開する：列を追加
         self.generate_rows_concat(context, newcolumns)
     
-    def operate(self, context, function, name=None):
+    def operate(self, context, message, name=None):
         """ @method context [opr]
         任意の関数によって新しいカラムを作成し、最後に追加する。
         Params:
-            function(Function): 1変数関数
+            message(Str): カラム名/1変数関数
             name(Str): *カラム名
         """
         # 空のデータからは空のビューしか作られない
@@ -631,8 +631,8 @@ class Sheet():
             self.rows = []
             return self
 
-        col = DataOperationColumn(function, name=name) # 型は推定する
-        self.generate_rows_concat(context, [col])
+        cols = make_data_columns(self.itemtype, message) # 型は推定する
+        self.generate_rows_concat(context, cols)
     
     def clone(self):
         """ @method
