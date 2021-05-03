@@ -20,22 +20,40 @@ class AppPackageType:
         Returns:
             Str:
         """
-        if not package.is_installed():
-            status = spirit.root.query_package_status(package)
-            if "none" == status:
+        loadstatus = "ready"
+        if not package.is_ready():
+            loadstatus = "none"
+        elif not package.once_loaded():
+            loadstatus = "delayed"
+        elif package.is_load_failed():
+            loadstatus = "failed"
+        
+        installstatus = spirit.root.query_package_status(package)
+
+        if "none" == loadstatus:
+            if "none" == installstatus:
                 return "未インストール"
             else:
                 return "モジュールが見つからない"
-        if not package.once_loaded():
-            status = spirit.root.query_package_status(package)
-            if "none" == status:
-                return "削除済"
+        if "delayed" == loadstatus:
+            if "none" == installstatus:
+                return "アンインストール済"
             else:
                 return "読み込み待機中"
-        if package.is_load_failed():
-            return "読み込み済: エラー"
-        else:
-            return "読み込み済: 準備完了"
+        if "failed" == loadstatus:
+            if "none" == installstatus:
+                return "アンインストール済"
+            else:
+                return "読み込みエラー"
+        if "ready" == loadstatus:
+            if "none" == installstatus:
+                return "アンインストール済"
+            elif "old" == installstatus:
+                return "準備完了：アップデートあり"
+            else:
+                return "準備完了"
+        
+        return "unexpected status：{}{}".format(loadstatus, installstatus)
 
     def load_errors(self, package):
         """ @method

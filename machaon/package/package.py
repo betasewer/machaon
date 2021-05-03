@@ -108,7 +108,7 @@ class Package():
     def is_undefined(self) -> bool:
         return self._type == PACKAGE_TYPE_UNDEFINED
     
-    def is_installed(self) -> bool:
+    def is_ready(self) -> bool:
         if self._type == PACKAGE_TYPE_RESOURCE:
             return False
         if self.entrypoint is None:
@@ -123,6 +123,9 @@ class Package():
                 return False
         
         return True
+    
+    def is_remote_source(self) -> bool:
+        return self.source.is_remote
 
     def iter_type_describers(self):
         """ パッケージ内のモジュールにあるすべての型定義クラスを得る """
@@ -481,6 +484,8 @@ class PackageManager():
         self.remove_database(pkg.name)
             
     def query_status(self, pkg) -> str:
+        if not pkg.is_remote_source():
+            return "latest"
         if not self.is_installed(pkg.name):
             return "none"
         entry = self.database[pkg.name]
