@@ -100,6 +100,7 @@ class AppRoot:
         package=None,
         *,
         module=None,
+        locked=False,
         delayload=False, 
         type=None,
         separate=True,
@@ -109,9 +110,10 @@ class AppRoot:
         パッケージ概要を追加する。
         Params:
             name(str): パッケージ名
-            module(str): モジュール名
             package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
-            preload(bool): 起動時にロードする
+            module(str): トップモジュール名
+            locked(bool): Trueの場合、認証情報を同時にロードする
+            delayload(bool): 参照時にロードする
             type(int): モジュールの種類
             separate(bool): site-packageにインストールしない
             hashval(str): パッケージハッシュ値の指定
@@ -124,8 +126,15 @@ class AppRoot:
         else:
             self.pkgs.append(newpkg)
         
-        if not delayload: # この時点でロードしておく
+        if locked:
+            src = newpkg.get_source()
+            from machaon.package.auth import create_credential
+            cred = create_credential(self, repository=src)
+            src.add_credential(cred)
+
+        if not delayload:
             self.load_pkg(newpkg)
+        
         return newpkg
 
     # パッケージ概要を取得する
@@ -173,21 +182,20 @@ class AppRoot:
             self.typemodule.remove_scope(package.scope)
         return True
    
-    def add_credential(self, target, cred):
+    def add_credential(self, cred):
         """ 
         ダウンロードの認証情報をパッケージに追加する。  
         Params:
             target(str): 対象［ホスト名:ユーザー名］
-            cred(str/Any): 認証タイプ／認証オブジェクト
+            cred(Any): *認証オブジェクト
         """
-        from machaon.package.auth import create_credential
-        cred = create_credential(self, target, cred)
-
         mark = False
         for pkg in self.pkgs:
             src = pkg.get_source()
-            if src.add_credential(cred):
-                mark = True
+            if not src.match_credential(cred):
+                continue
+            src.add_credential(cred)
+            mark = True
         
         if not mark:
             raise ValueError("認証情報はどのパッケージにも設定されませんでした")

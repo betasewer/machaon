@@ -29,21 +29,35 @@ class BasicAuth(Credential):
         return req
 
 
-def create_credential(root, target, typename):  
-    # ホスト名とユーザー名
-    username, sep, hostname = target.partition("@")
-    if not sep:
-        raise ValueError("'ユーザー名@ホスト名'の形式で指定してください")
-    hostname = hostname.strip()
-    username = username.strip()
+def create_credential(root, target=None, *, repository=None):  
+    # username@hostname
+    # username/repositoryname@hostname
+    keys = []
+    if target:
+        # 文字列で指定
+        user, sep, hostname = target.partition("@")
+        if not sep:
+            raise ValueError("'ユーザー名@ホスト名'の形式で指定してください")
+        username, sep, repositoryname = user.partition("/")
+        hostname, username, repositoryname = [x.strip() for x in (hostname, username, repositoryname)]
+        keys.append(target)
+        if repositoryname:
+            keys.append("{}@{}".format(username, hostname))
+    elif repository:
+        hostname = repository.hostname
+        username = repository.username
+        repositoryname = repository.name
+        keys.append("{}/{}@{}".format(username, repositoryname, hostname))
+        keys.append("{}@{}".format(username, hostname))
 
     # パスワードをディレクトリから開いて読みだす
-    password = None
     d = root.get_credential_dir()
     if not os.path.isdir(d):
         os.makedirs(d) # ディレクトリを作成しておく
-        raise ValueError("認証情報iniファイルsをmachaon/credentialに配置してください")
+        raise ValueError("認証情報iniファイルをmachaon/credentialに配置してください")
     
+    password = None
+    typename = None
     for name in os.listdir(d):
         p = os.path.join(d, name)
         if os.path.isfile(p):
@@ -52,18 +66,19 @@ def create_credential(root, target, typename):
                 c.read(p)
             except:
                 continue
-            if c.has_option(target, "password"):
-                password = c[target]["password"]
+            # レポジトリ指定のキーと指定なしのキーで検索する
+            hitkey = next((x for x in keys if c.has_option(x, "password")), None)
+            if hitkey:
+                password = c.get(hitkey, "password")
+                typename = c.get(hitkey, "type", fallback=None)
                 break
     
     if password is None:
         raise ValueError("認証情報が見つかりませんでした")
-
+    
     # 認証オブジェクト
     if typename == "basic":
-        cred = BasicAuth(hostname, username, password)
+        return BasicAuth(hostname, username, password)
     else:
-        raise ValueError("'{}': サポートされていない認証形式です".format(typename))
-
-    return cred
+        raise ValueError("type='{}': サポートされていない認証形式です".format(typename))
 

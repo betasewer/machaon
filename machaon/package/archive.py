@@ -2,14 +2,16 @@ import os
 import shutil
 import zipfile
 
-#
 class ArchiveNotOpenedError(Exception):
     pass
 
 #
-# アーカイブファイル
+#
 #
 class BasicArchive():
+    """
+    アーカイブファイル
+    """
     is_remote = False
     is_archive = True
 
@@ -20,6 +22,9 @@ class BasicArchive():
         self._arcroot = None
     
     def add_credential(self, _cred):
+        pass
+    
+    def match_credential(self, _cred):
         return False
     
     #
@@ -109,20 +114,29 @@ class LocalArchive(BasicArchive):
     def query_hash(self):
         return None
 
-
-class LocalFile():
+#
+#
+#
+class DummyArchive():
     """
-    ファイルパスで指定するモジュール
+    アーカイブではない
     """
     is_remote = False
     is_archive = False
 
+    def add_credential(self, _cred):
+        pass
+    
+    def match_credential(self, _cred):
+        return False
+
+class LocalFile(DummyArchive):
+    """
+    ファイルパスで指定するモジュール
+    """
     def __init__(self, filepath):
         self.filepath = filepath
 
-    def add_credential(self, _cred):
-        return False
-    
     def get_source(self) -> str:
         return "file:{}".format(self.filepath)
     
@@ -132,19 +146,12 @@ class LocalFile():
     def get_local_path(self):
         return self.filepath
 
-
-class LocalModule():
+class LocalModule(DummyArchive):
     """
     配置されたモジュール（参照のみ）
     """
-    is_remote = False
-    is_archive = False
-
     def __init__(self):
         pass
 
-    def add_credential(self, _cred):
-        return False
-    
     def get_source(self) -> str:
         return "module"
