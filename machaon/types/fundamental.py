@@ -203,7 +203,7 @@ class StoredObject():
         self.object = object
 
     def get_object(self):
-        """ @method alias-name [object]
+        """ @method alias-name [object obj]
         オブジェクトを取得する。
         Returns:
             Object:
@@ -239,7 +239,7 @@ class StoredObject():
         else:
             context.spirit.post("message", "'{}'より無名オブジェクトをロード".format(path))
         
-        return ImportedObject(o)
+        return StoredObject(o)
 
 
 
