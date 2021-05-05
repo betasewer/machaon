@@ -935,12 +935,32 @@ class ProcessError():
         self.error = error
         self.context = context
     
-    def get_error_typename(self):
+    def get_error(self):
         if isinstance(self.error, InternalMessageError):
-            err = self.error.error
+            return self.error.error
         else:
-            err = self.error
+            return self.error
+    
+    def get_error_typename(self):
+        """ @method alias-name [error_typename]
+        例外の型名。
+        Returns:
+            Str:
+        """
+        err = self.get_error()
         return err.__class__.__name__
+    
+    def local(self, level, name):
+        """ @method 
+        トレースバックから変数にアクセスする。
+        Params:
+            level(int): トレースバックの深度
+            name(str): 変数名
+        Returns:
+            Any:
+        """
+        err = self.get_error()
+        return get_local_from_traceback(err.__traceback__, level, name)
 
     def summarize(self):
         if isinstance(self.error, InternalMessageError):
@@ -975,12 +995,14 @@ def verbose_display_traceback(tb, linewidth):
     import inspect
 
     lines = []
+
+    level = 0
     while tb:
         frame = tb.tb_frame
         filename = frame.f_code.co_filename
         fnname = frame.f_code.co_name
         lineno = tb.tb_lineno
-        msg_location = "{}, {}行目".format(filename, lineno)
+        msg_location = "[{}] {}, {}行目".format(level, filename, lineno)
 
         msg_line = linecache.getline(filename, lineno).strip()
 
@@ -1021,6 +1043,7 @@ def verbose_display_traceback(tb, linewidth):
         lines.append("\n")
 
         tb = tb.tb_next
+        level += 1
 
     return '\n'.join(lines)
 
@@ -1037,3 +1060,25 @@ def display_parameters(fn):
         return "({})".format(", ".join(params))
     except ValueError as e:
         return "(<error: {}>)".format(e)
+
+
+def get_local_from_traceback(tb, level, name):
+    # トレースバックを探す
+    l = 0
+    tbk = None
+    while tb:
+        if level == l:
+            tbk = tb
+            break
+        l += 1
+        tb = tb.tb_next
+    if tbk is None:
+        raise ValueError("トレースバックの深さの限界に到達")
+    
+    # フレームから変数を取り出す
+    frame = tbk.tb_frame
+    localdict = frame.f_locals
+    if name not in localdict:
+        raise ValueError("変数が見つかりません")
+    
+    return localdict[name]
