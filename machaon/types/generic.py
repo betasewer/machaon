@@ -533,11 +533,9 @@ class GenericMethods:
         オブジェクトの説明、メソッドを表示する。
         Arguments:
             obj(Object): 対象
-        Returns:
-            Object:
         """
         from machaon.types.fundamental import TypeType
-        return TypeType().help(obj.type, context)
+        return TypeType().help(obj.type, context, obj.value)
     
     def convertas(self, obj, context, type):
         """ @method reciever-param context

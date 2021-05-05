@@ -265,17 +265,17 @@ class ObjectTuple():
                 rows.append((i, [sm, tn]))
             app.post("object-sheetview", rows=rows, columns=columns, context=context)
 
-    def conversion_construct(self, context, value):
+    def conversion_construct(self, context, value, homotype=None):
         try:
             iter(value)
         except TypeError:
             value = (value,)
         
-        # 型を値から推定する
         objs = []
+        # 型を値から推定する
         for val in value:
             if not isinstance(val, Object):
-                val = context.new_object(val)
+                val = context.new_object(val, type=homotype)
             objs.append(val)
 
         return ObjectTuple(objs)
