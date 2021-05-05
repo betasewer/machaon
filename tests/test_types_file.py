@@ -8,7 +8,7 @@ from machaon.core.invocation import instant_return_test, instant_context
 def test_construct(tmp_path):
     FILEPATH = __file__
     context = instant_context()
-    context.new_type(TextFile)
+    context.define_type(TextFile)
     f = instant_return_test(context, FILEPATH, "TextFile").value
     assert isinstance(f, TextFile)
     assert isinstance(f.path(), Path)

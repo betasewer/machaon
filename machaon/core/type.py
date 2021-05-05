@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
-from machaon.core.symbol import normalize_typename, BadTypename, BadMethodName, PythonBuiltinTypenames, full_qualified_name
+from machaon.core.symbol import normalize_typename, BadMethodName, PythonBuiltinTypenames, full_qualified_name
 from machaon.core.method import Method, methoddecl_collect_attributes, UnloadedMethod, MethodLoadError
 from machaon.core.importer import attribute_loader
 from machaon.core.docstring import DocStringParser
@@ -431,7 +431,7 @@ class Type():
                         mth = Method(key)
                         mth.load_from_string("\n".join(docs), action)
                     else:
-                        raise ValueError("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
+                        raise BadTraitDeclaration("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
                     self.add_method(mth)
                 
         elif hasattr(describer, "describe_object"):
@@ -462,10 +462,10 @@ class Type():
             if hasattr(describer, "__name__"):
                 self.typename = normalize_typename(describer.__name__)
             if not self.typename:
-                raise BadTypename("{}: 型名を指定してください".format(self.get_describer_qualname()))
+                raise BadTraitDeclaration("{}: 型名を指定してください".format(self.get_describer_qualname()))
 
         if self.typename[0].islower():
-            raise BadTypename("{}: 型名は大文字で始めてください".format(self.typename))
+            raise BadTraitDeclaration("{}: 型名は大文字で始めてください".format(self.typename))
 
         if not self.doc:
             if hasattr(describer, "__doc__"):
@@ -599,7 +599,7 @@ class TypeModule():
     #
     # 型を取得する
     #
-    def get(self, typecode: Any, fallback=True, *, scope=None) -> Optional[Type]:
+    def get(self, typecode: Any, *, scope=None) -> Optional[Type]:
         if self._typelib is None:
             raise ValueError("No type library set up")
         
@@ -616,12 +616,8 @@ class TypeModule():
             else:
                 thisscope, typename = None, fulltypename
             t = self.find(typename, scope=thisscope)
-        elif not fallback:
-            raise ValueError("型識別子として無効な値です：{}".format(typecode))
         
         if t is None:
-            if not fallback:
-                raise BadTypename(typecode)
             return None
 
         return t
@@ -641,19 +637,6 @@ class TypeModule():
                         pass
                     else:
                         raise e
-    
-    #
-    # 取得し、無ければ定義する
-    #
-    def new(self, typecode, *, scope=None):
-        tt = self.get(typecode, scope=scope)
-        if tt is None:
-            if isinstance(typecode, str):
-                # 実質は文字列と同一の新しい型を作成
-                tt = self.define(typename=typecode, doc="<Prototype {}>".format(typecode), scope=scope)
-            else:
-                tt = self.define(typecode, scope=scope)
-        return tt
         
     #
     # 値型に適合する型を取得する
@@ -662,10 +645,6 @@ class TypeModule():
         if not isinstance(value_type, type):
             raise TypeError("value_type must be type instance, not value")
 
-        t = self.get(value_type)
-        if t:
-            return t
-        
         if hasattr(value_type, "__name__"): 
             typename = value_type.__name__
             if typename in PythonBuiltinTypenames.literals: # 基本型
@@ -674,6 +653,10 @@ class TypeModule():
                 return self.get("ObjectCollection")
             elif typename in PythonBuiltinTypenames.iterables: # イテラブル型
                 return self.get("Tuple")
+        
+        t = self.get(value_type)
+        if t:
+            return t
 
         for _tn, ts in self._typelib.items(): # 型を比較する
             for t in ts:

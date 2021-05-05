@@ -4,7 +4,7 @@ from itertools import zip_longest
 from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
 from machaon.core.symbol import (
-    PythonBuiltinTypenames, normalize_method_name,
+    PythonBuiltinTypenames, normalize_method_name, BadTypename,
     SIGIL_OBJECT_ID,
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
@@ -236,14 +236,9 @@ def select_object(context, *, name=None, typename=None) -> Object:
             raise BadExpressionError("オブジェクト'{}'は存在しません".format(name))
     return obj
 
-#
-def select_type(context, typeexpr) -> Type:
-    if SIGIL_SCOPE_RESOLUTION in typeexpr:
-        typename, _, scope = typeexpr.partition(SIGIL_SCOPE_RESOLUTION) # パッケージ名を指定する
-        return context.select_type(typename, scope=scope)
-    else:
-        # 型名のみ
-        return context.select_type(typeexpr)
+# 型
+def select_type(context, typeexpr) -> Optional[Type]:
+    return context.select_type(typeexpr)
 
 # リテラル
 def select_literal(context, literal) -> Object:

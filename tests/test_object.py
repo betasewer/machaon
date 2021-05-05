@@ -15,7 +15,7 @@ def test_desktop():
     desk.push("obj-1", Object(Int, 100))
     desk.push("obj-2", Object(Int, 7))
     desk.push("obj-3", Object(Complex, 3+5j))
-    desk.push("obj-4", Object(fundamental_type.new("IpAddress"), "128.0.0.1"))
+#    desk.push("obj-4", Object(fundamental_type.new("IpAddress"), "128.0.0.1"))
 
     assert desk.get("obj-1").value == 100
 

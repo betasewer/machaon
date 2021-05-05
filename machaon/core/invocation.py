@@ -6,7 +6,12 @@ from collections import defaultdict
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
-from machaon.core.symbol import normalize_method_target, normalize_method_name, is_valid_object_bind_name, BadObjectBindName, full_qualified_name, SIGIL_DEFAULT_RESULT
+from machaon.core.symbol import (
+    BadTypename,
+    normalize_method_target, normalize_method_name, 
+    is_valid_object_bind_name, BadObjectBindName, full_qualified_name, 
+    SIGIL_DEFAULT_RESULT, SIGIL_SCOPE_RESOLUTION
+)
 
 #
 # 
@@ -36,7 +41,7 @@ def _default_result_object(context):
 
 def _new_process_error_object(context, error, objectType):
     from machaon.process import ProcessError
-    errtype = context.new_type(ProcessError)
+    errtype = context.get_type("ProcessError")
     return objectType(errtype, ProcessError(context, error))
 
 #
@@ -153,7 +158,10 @@ class InvocationEntry():
             if retspec.is_any():
                 rettype = None
             else:
-                rettype = context.select_type(retspec.get_typename())
+                typename = retspec.get_typename()
+                rettype = context.select_type(typename)
+                if rettype is None:
+                    return _new_process_error_object(context, BadTypename(typename), objectType)
 
         # 型指定がない、あるいはAny型の場合は、値から型を推定する
         if rettype is None or rettype.is_any():
@@ -164,7 +172,7 @@ class InvocationEntry():
                 rettype = context.get_type("Any")
         
         if rettype is None:
-            raise ValueError("Cannot deduce value type")
+            return _new_process_error_object(context, ValueError("値から型を推定できません"), objectType)
 
         # 返り値型に値が適合しない場合は、暗黙の型変換を行う
         if not rettype.check_value_type(type(value)):
@@ -279,32 +287,30 @@ class InvocationContext:
         self.subject_object = None
     
     #    
-    def get_type(self, typename, *, scope=None) -> Optional[Type]:
+    def get_type(self, typename, *, scope=None) -> Type:
         """ 型名を渡し、型定義を取得する """
-        return self.type_module.get(typename, scope=scope, fallback=False)
+        t = self.type_module.get(typename, scope=scope)
+        if t is None:
+            raise BadTypename(typename)
+        return t
     
-    def select_type(self, typename, *, scope=None) -> Type:
-        """ 型名を渡し、無ければAny型を取得する """
-        if scope is None and "." in typename:
-            scope, _, typename = typename.rpartition(".")
+    def select_type(self, typecode, *, scope=None) -> Optional[Type]:
+        """ 型名を渡し、型定義を取得する。関連するパッケージをロードする """
+        if scope is None:
+            if isinstance(typecode, str) and SIGIL_SCOPE_RESOLUTION in typecode:
+                typecode, _, scope = typecode.rpartition(SIGIL_SCOPE_RESOLUTION)
 
         if scope:
-            # 自動的にスコープをロードする
+            # 関連パッケージをロードする
             package = self.root.get_package(scope, fallback=False)
             self.root.load_pkg(package)
         
-        t = self.type_module.get(typename, scope=scope)
-        if t is None:
-            anytype = self.type_module.get("Any")
-            if anytype is None:
-                raise ValueError("Any type is not defined")
-            return anytype
-        else:
-            return t
-
-    def new_type(self, typecode: Any, scope=None) -> Type:
-        """ 型定義クラス／型名を渡し、無ければ新たに定義して返す """
-        return self.type_module.new(typecode, scope=scope)
+        t = self.type_module.get(typecode, scope=scope)
+        return t
+    
+    def define_type(self, typecode, *, scope=None):
+        """ 型を定義する """
+        return self.type_module.define(typecode, scope=scope)
     
     def new_temp_type(self, describer: Any) -> Type:
         """ 新しい型を作成するが、モジュールに登録しない """
@@ -327,15 +333,19 @@ class InvocationContext:
         """
         from machaon.process import ProcessError
         if isinstance(value, ProcessError):
-            return self.new_type(ProcessError).new_object(value) # エラーオブジェクトは型変換しない
+            return self.get_type("ProcessError").new_object(value) # エラーオブジェクトは型変換しない
         if type:
-            t = self.new_type(type)
+            t = self.select_type(type)
+            if t is None:
+                t = self.type_module.define(type) # 無ければ定義して返す 
             convvalue = t.construct_from_value(self, value)
             return t.new_object(convvalue)
         elif conversion:
             tname, _, doc = conversion.partition(":")
             typename, doc, typeparams = parse_typename_syntax(tname.strip(), doc.strip())
-            t = self.new_type(typename)
+            t = self.select_type(typename)
+            if t is None:
+                raise BadTypename(typename)
             convvalue = t.construct_from_value(self, value, *typeparams)
             return t.new_object(convvalue)
         else:
@@ -344,7 +354,7 @@ class InvocationContext:
                 convvalue = valtype.construct_from_value(self, value)
                 return valtype.new_object(convvalue)
             else:
-                return self.new_type("Any").new_object(value)
+                return self.get_type("Any").new_object(value)
     
     def new_invocation_error_object(self, exception=None):
         """ エラーオブジェクトを作る """

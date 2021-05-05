@@ -165,7 +165,7 @@ class Path():
         """ @method
         ファイルサイズ
         Returns:
-            Number[Byte]:
+            Int:
         """
         if self.isdir():
             return None

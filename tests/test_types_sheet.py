@@ -250,7 +250,7 @@ class Room:
 def hotelrooms(name):
     h = Hotel(name)
     cxt = instant_context()
-    o = Sheet(h.rooms(), cxt.new_type(Room))
+    o = Sheet(h.rooms(), cxt.define_type(Room))
     return o, cxt
 
 #
