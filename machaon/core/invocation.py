@@ -289,7 +289,7 @@ class InvocationContext:
             scope, _, typename = typename.rpartition(".")
 
         if scope:
-            # スコープ名でパッケージを検索
+            # 自動的にスコープをロードする
             package = self.root.get_package(scope, fallback=False)
             self.root.load_pkg(package)
         
@@ -685,7 +685,6 @@ class InstanceMethodInvocation(BasicInvocation):
     def __init__(self, attrname, modifier=0):
         super().__init__(modifier)
         self.attrname = normalize_method_target(attrname)
-        self._m = None
     
     def get_method_name(self):
         return normalize_method_name(self.attrname)
@@ -696,11 +695,8 @@ class InstanceMethodInvocation(BasicInvocation):
     def display(self):
         return ("InstanceMethod", self.attrname, self.modifier_name())
     
-    def query_method(self, this_type):
-        if self._m:
-            return self._m
-        
-        value_type = this_type.get_value_type()
+    def query_method_from_value_type(self, value_type):
+        """ インスタンス型から推定してMethodオブジェクトを作成する """
         fn = getattr(value_type, self.attrname, None)
         if fn is None:
             raise BadInstanceMethodInvocation(self.attrname)
@@ -714,12 +710,18 @@ class InstanceMethodInvocation(BasicInvocation):
             return None
 
         mth = Method(normalize_method_name(self.attrname), flags=METHOD_FROM_INSTANCE)
-        mth.load_from_function(fn, this_type)
+        mth.load_from_function(fn)
         self._m = mth
         return mth
     
-    def resolve_instance_method(self, args):
-        instance, *trailingargs = args
+    def query_method_from_instance(self, instance):
+        """ インスタンスからMethodオブジェクトを作成する """
+        fn = self.resolve_instance_method(instance)
+        mth = Method(normalize_method_name(self.attrname), flags=METHOD_FROM_INSTANCE)
+        mth.load_from_function(fn)
+        return mth
+    
+    def resolve_instance_method(self, instance):
         method = getattr(instance, self.attrname, None)
         if method is None:
             raise BadInstanceMethodInvocation(self.attrname)
@@ -728,11 +730,12 @@ class InstanceMethodInvocation(BasicInvocation):
             # 引数なしの関数に変換する
             method = _nullary(method)
         
-        return method, instance, trailingargs
+        return method
     
     def prepare_invoke(self, context, *argobjects):
         a = [self.resolve_object_value(x) for x in argobjects]
-        method, _inst, args = self.resolve_instance_method(a)
+        instance, *args = a
+        method = self.resolve_instance_method(instance)
         return InvocationEntry(self, method, args, {})
     
     def get_result_spec(self):
@@ -770,7 +773,7 @@ class FunctionInvocation(BasicInvocation):
         name = full_qualified_name(self.fn)
         return ("Function", name, self.modifier_name())
     
-    def query_method(self, _this_type):
+    def get_method(self):
         mth = Method(normalize_method_name(self.fn.__name__), flags=METHOD_FROM_FUNCTION)
         mth.load_from_function(self.fn)
         return mth
@@ -799,9 +802,6 @@ class ObjectMemberGetterInvocation(BasicInvocation):
         super().__init__(modifier)
         self.typename = typename
         self.name = name
-    
-    def query_method(self, this_type):
-        return None
     
     def is_task(self):
         return False
@@ -876,10 +876,6 @@ class ObjectMemberInvocation(BasicInvocation):
         if self._resolved is None:
             raise UnresolvedObjectMemberInvocation(self.name)
 
-    def query_method(self, this_type):
-        self.must_be_resolved()
-        return self._resolved.query_method(this_type)
-    
     def is_task(self):
         self.must_be_resolved()
         return self._resolved.is_task()
@@ -937,9 +933,6 @@ class TypeConstructorInvocation(BasicInvocation):
 
     def display(self):
         return ("TypeConstructor", self._typename, self.modifier_name())
-    
-    def query_method(self, this_type):
-        raise ValueError("型変換関数は取得できません")
     
     def is_task(self):
         return False

@@ -316,7 +316,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     name = normalize_method_name(name)
 
     # 型メソッド
-    using_type_method = typetraits and not typetraits.is_any()
+    using_type_method = typetraits is not None
     if using_type_method:
         meth = typetraits.select_method(name)
         if meth is not None:
@@ -344,7 +344,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
 #
 # 型で利用可能なセレクタを列挙する
 #
-def enum_selectable_method(typetraits) -> Generator[Method, None, None]:
+def enum_selectable_method(typetraits, instance=None) -> Generator[Method, None, None]:
     # 型メソッドの列挙
     for meth in typetraits.enum_methods():
         tinv = TypeMethodInvocation(typetraits, meth)
@@ -354,15 +354,23 @@ def enum_selectable_method(typetraits) -> Generator[Method, None, None]:
         return
     
     # インスタンスメソッド
-    valtype = typetraits.get_value_type()
-    for name in dir(valtype):
-        if name.startswith("__"):
+    if instance is not None:
+        names = dir(instance)
+        def query_method(inv):
+            return inv.query_method_from_instance(instance)
+    else:
+        valtype = typetraits.get_value_type()
+        names = dir(valtype)
+        def query_method(inv):
+            return inv.query_method_from_value_type(valtype)
+    
+    for name in names:
+        if name.startswith("_"):
             continue
         if typetraits.select_method(name) is not None:
             # TypeMethodと被りがある場合はスキップ
             continue
-        inv = InstanceMethodInvocation(name)
-        meth = inv.query_method(typetraits)
+        meth = query_method(InstanceMethodInvocation(name))
         if meth is None:
             continue
         yield meth

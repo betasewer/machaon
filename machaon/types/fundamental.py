@@ -16,7 +16,7 @@ fundamental_type = TypeModule()
 オブジェクトの型。
 """)
 class TypeType():
-    """@type
+    """@type trait
     """
 
     def stringify(self, v):
@@ -46,7 +46,7 @@ class TypeType():
         value = type.construct_from_string(context, s)
         return Object(type, value)
 
-    def help(self, type, context):
+    def help(self, type, context, value=None):
         """ @method context
         型の説明、メソッド一覧を表示する。
         """
@@ -59,11 +59,11 @@ class TypeType():
         docs.append("［メソッド］")
         context.spirit.post("message", "\n".join(docs))
         # メソッドの表示
-        meths = self.methods(type, context)
+        meths = self.methods(type, context, value)
         meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection]: (names,doc,signature)")
         meths_sheet.pprint(context.spirit)
 
-    def methods(self, type, context):
+    def methods(self, type, context, instance=None):
         '''@method context
         使用可能なメソッドを列挙する。
         Params:
@@ -72,7 +72,7 @@ class TypeType():
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
-        for meth in enum_selectable_method(type):
+        for meth in enum_selectable_method(type, instance):
             names = type.get_member_identical_names(meth.get_name())
             helps.append({
                 "names" : context.new_object(names),
@@ -146,8 +146,38 @@ class TypeType():
 あらゆる型を受け入れる型。
 """)
 class AnyType():
-    """@type trait
+    """@type trait use-instance-method
     """
+    def vars(self, v):
+        """ @method
+        属性の一覧を返す。
+        Returns:
+            Sheet[ObjectCollection]: (name, type)
+        """
+        return [{
+            "name" : k,
+            "type" : full_qualified_name(type(v))
+        } for (k,v) in vars(v).items()]
+    
+    def pick(self, v, name):
+        """ @method alias-name [#]
+        属性にアクセスする。
+        Params:
+            name(str):
+        Returns:
+            Any:
+        """
+        return getattr(v, name)
+    
+    def call(self, v, *args):
+        """ @method
+        この値を実行する。
+        Params:
+            *args(Any):
+        Returns:
+            Any:
+        """
+        return v(*args)
 
     def construct(self, s):
         raise UnsupportedMethod()
@@ -169,7 +199,7 @@ class AnyType():
 一つの引数をとるメッセージ。
 """)
 class FunctionType():
-    """@type
+    """@type trait
     ValueType: machaon.core.message.MessageEngine
     """
     def construct(self, s):
@@ -252,7 +282,7 @@ class StoredObject():
 文字列。
 """)
 class StrType():
-    """ @type use-instance-method
+    """ @type trait use-instance-method
     """
     def construct(self, s):
         return s
@@ -356,7 +386,7 @@ class StrType():
 真偽値。
 """)
 class BoolType():
-    """@type use-instance-method
+    """@type trait use-instance-method
     """
 
     def construct(self, s):
@@ -450,7 +480,7 @@ class NumericType():
 整数型。
 """)
 class IntType(NumericType):
-    """@type use-instance-method
+    """@type trait use-instance-method
     """
 
     def construct(self, s):
@@ -497,7 +527,7 @@ class IntType(NumericType):
 浮動小数点型。
 """)
 class FloatType(NumericType):
-    """@type use-instance-method
+    """@type trait use-instance-method
     """
 
     def construct(self, s):
@@ -520,7 +550,7 @@ class FloatType(NumericType):
 複素数型。
 """)
 class ComplexType():
-    """@type use-instance-method
+    """@type trait use-instance-method
     """
 
     def construct(self, s):
@@ -531,7 +561,7 @@ class ComplexType():
 日付時刻型。
 """)
 class DatetimeType():
-    """@type use-instance-method
+    """@type trait use-instance-method
     """
 
     def construct(self, s):
