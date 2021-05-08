@@ -130,10 +130,7 @@ class InvocationEntry():
 
         # エラーが発生した
         if self.exception:
-            if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
-                return _default_result_object(context)
-            else:
-                return _new_process_error_object(context, self.exception, objectType)
+            return _new_process_error_object(context, self.exception, objectType)
 
         # return reciever
         if isinstance(retspec, MethodResult) and retspec.is_return_self():
