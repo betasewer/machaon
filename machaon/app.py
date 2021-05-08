@@ -165,7 +165,10 @@ class AppRoot:
         if isinstall:
             if not package.is_remote_source():
                 return "ready"
-            return self.pkgmanager.is_installed(package) # ローカルにあるかだけ確認
+            if self.pkgmanager.is_installed(package.name): # ローカルにあるかだけ確認
+                return "ready"
+            else:
+                return "none"
         else:
             return self.pkgmanager.query_status(package) # 通信して最新か確かめる
 

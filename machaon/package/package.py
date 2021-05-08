@@ -369,9 +369,15 @@ class PackageManager():
         if self.database is None:
             raise DatabaseNotLoadedError()
              
-    def is_installed(self, pkg_name: str):
+    def is_installed(self, pkg):
         self.check_database()
-        return pkg_name in self.database
+        if isinstance(pkg, Package):
+            pkgname = pkg.name
+        elif isinstance(pkg, str):
+            pkgname = pkg
+        else:
+            raise TypeError(repr(pkg))
+        return self.database.has_section(pkgname)
 
     #
     def install(self, pkg: Package, newinstall: bool):
