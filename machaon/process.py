@@ -961,6 +961,13 @@ class ProcessError():
         """
         err = self.get_error()
         return get_local_from_traceback(err.__traceback__, level, name)
+        
+    def conversion_construct(self, context, value, *args):
+        """ 例外オブジェクトからの変換をサポート """
+        if isinstance(value, Exception):
+            return ProcessError(context, value)
+        else:
+            raise TypeError(repr(value))
 
     def summarize(self):
         if isinstance(self.error, InternalMessageError):

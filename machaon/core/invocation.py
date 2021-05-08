@@ -388,6 +388,11 @@ class InvocationContext:
         return ent.result_object(self)
 
     def get_last_exception(self) -> Optional[Exception]:
+        """ @method alias-name [last-exception]
+        直前の呼び出しで発生した例外を返す。
+        Returns:
+            ProcessError:
+        """
         return self._last_exception
     
     def is_failed(self):
