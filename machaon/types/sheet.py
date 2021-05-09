@@ -809,11 +809,21 @@ class Sheet():
     #
     # オブジェクト共通関数
     #
+    def constructor(self, context, value, itemtypename, *columnnames):
+        """ @meta extra-args """
+        if not isinstance(value, list):
+            value = list(value)
+
+        itemtype = context.select_type(itemtypename)
+        return Sheet(value, itemtype, context, columnnames)
+    
     def summarize(self):
+        """ @meta """
         col = ", ".join([x.get_name() for x in self.get_current_columns()])
         return "{}({}) {}件のアイテム".format(self.itemtype.typename, col, self.count()) 
 
     def pprint(self, app):
+        """ @meta """
         if len(self.rows) == 0:
             text = "結果は0件です" + "\n"
             app.post("message", text)
@@ -823,12 +833,6 @@ class Sheet():
             columns = [x.get_name() for x in self.get_current_columns()]
             app.post("object-sheetview", rows=rows, columns=columns, context=context)
 
-    def conversion_construct(self, context, value, itemtypename, *columnnames):
-        if not isinstance(value, list):
-            value = list(value)
-
-        itemtype = context.select_type(itemtypename)
-        return Sheet(value, itemtype, context, columnnames)
 
 
 

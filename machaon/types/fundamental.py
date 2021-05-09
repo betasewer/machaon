@@ -18,8 +18,15 @@ fundamental_type = TypeModule()
 class TypeType():
     """@type trait
     """
+    def constructor(self, context, value):
+        """ @meta """
+        if isinstance(value, str):
+            return context.select_type(value)
+        else:
+            raise TypeError("value")
 
     def stringify(self, v):
+        """ @meta """
         return "<{}>".format(v.typename)
 
     #
@@ -43,7 +50,7 @@ class TypeType():
         Returns:
             Object: オブジェクト
         '''
-        value = type.construct_from_string(context, s)
+        value = type.construct(context, s)
         return Object(type, value)
 
     def help(self, type, context, value=None):
@@ -179,16 +186,16 @@ class AnyType():
         """
         return v(*args)
 
-    def construct(self, s):
-        raise UnsupportedMethod()
-
-    def conversion_construct(self, _context, value):
+    def constructor(self, _context, value):
+        """ @meta """
         return value # そのままの値を返す
     
     def summarize(self, v):
+        """ @meta """
         return "<AnyObject: {}>".format(full_qualified_name(type(v)))
     
     def stringify(self, v):
+        """ @meta """
         if type(v).__repr__ is object.__repr__:
             return "<Object {:0X}({})>".format(id(v), full_qualified_name(type(v)))
         else:
@@ -202,11 +209,13 @@ class FunctionType():
     """@type trait
     ValueType: machaon.core.message.MessageEngine
     """
-    def construct(self, s):
+    def constructor(self, _context, s):
+        """ @meta """
         from machaon.core.message import MessageEngine
         return MessageEngine(s)
 
     def stringify(self, f):
+        """ @meta """
         return f.get_expression()
     
     #
@@ -248,7 +257,8 @@ class StoredObject():
         """
         context.push_object(name, self.object)
 
-    def conversion_construct(self, context, value):
+    def constructor(self, context, value):
+        """ @meta """
         # 外部ファイルからロードする
         from machaon.core.persistence import get_persistent_path, load_persistent_file
         from machaon.types.shell import Path
@@ -284,13 +294,12 @@ class StoredObject():
 class StrType():
     """ @type trait use-instance-method
     """
-    def construct(self, s):
-        return s
-    
-    def conversion_construct(self, _context, v):
+    def constructor(self, _context, v):
+        """ @meta """
         return str(v)
     
     def stringify(self, v):
+        """ @meta """
         return v
     
     #
@@ -388,8 +397,8 @@ class StrType():
 class BoolType():
     """@type trait use-instance-method
     """
-
-    def construct(self, s):
+    def constructor(self, _context, s):
+        """ @meta """
         if s == "True":
             return True
         elif s == "False":
@@ -482,11 +491,10 @@ class NumericType():
 class IntType(NumericType):
     """@type trait use-instance-method
     """
-
-    def construct(self, s):
+    def constructor(self, _context, s):
+        """ @meta """
         return int(s, 0)
-        
-    #
+    
     def hex(self, n):
         """ @method
         16進表記を得る。
@@ -511,7 +519,6 @@ class IntType(NumericType):
         """
         return bin(n)
     
-    #
     def pow(self, n, exp):
         """ @method
         べき乗を計算する。
@@ -529,8 +536,8 @@ class IntType(NumericType):
 class FloatType(NumericType):
     """@type trait use-instance-method
     """
-
-    def construct(self, s):
+    def constructor(self, _context, s):
+        """ @meta """
         return float(s)
     
     # math
@@ -552,8 +559,8 @@ class FloatType(NumericType):
 class ComplexType():
     """@type trait use-instance-method
     """
-
-    def construct(self, s):
+    def constructor(self, _context, s):
+        """ @meta """
         return complex(s)
     
 
@@ -563,11 +570,11 @@ class ComplexType():
 class DatetimeType():
     """@type trait use-instance-method
     """
-
-    def construct(self, s):
-        pass
+    def constructor(self, _context, s):
+        """ @meta """
     
     def stringify(self, date):
+        """ @meta """
         return date.strftime("%y/%m/%d (%a) %H:%M.%S")
 
 #
@@ -647,10 +654,12 @@ class InputStream(BasicStream):
         for l in self._stream:
             yield l
     
-    def conversion_construct(self, context, value):
+    def constructor(self, _context, value):
+        """ @meta """
         return InputStream(value)
     
     def stringify(self, _v):
+        """ @meta """
         return "<InputStream>"
 
 
@@ -666,10 +675,12 @@ class OutputStream(BasicStream):
         self._must_be_opened()
         return self._stream.write(v)
 
-    def conversion_construct(self, context, value):
+    def constructor(self, _context, value):
+        """ @meta """
         return OutputStream(value)
-    
+
     def stringify(self, _v):
+        """ @meta """
         return "<OutputStream>"
     
 # ----------------------------------------------------------

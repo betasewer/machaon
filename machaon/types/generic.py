@@ -1,6 +1,6 @@
 from machaon.core.type import Type
 from machaon.core.symbol import normalize_method_target
-from machaon.core.method import methoddecl_collect
+from machaon.core.method import make_method_prototype
 from machaon.core.invocation import TypeMethodInvocation
 
 #
@@ -23,7 +23,7 @@ def resolve_generic_method_invocation(name, modbits=None):
         if attr is None:
             return None
 
-        method, aliases = methoddecl_collect(attr, attrname)
+        method, aliases = make_method_prototype(attr, attrname)
         if method is None:
             return None
         
@@ -546,7 +546,7 @@ class GenericMethods:
         Returns:
             Object: 変換されたオブジェクト
         """
-        v = type.construct_from_value(context, obj.value)
+        v = type.construct(context, obj.value)
         return type.new_object(v)
 
     def bind(self, left, context, right):

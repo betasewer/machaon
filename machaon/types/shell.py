@@ -396,7 +396,8 @@ class Path():
 
         return Path(os.path.join(self._path, r))
     
-    def conversion_construct(self, context, value):
+    def constructor(self, context, value):
+        """ @meta """
         if isinstance(value, str):
             head, tail = os.path.split(value)
             if not head: # no slash in path
@@ -414,6 +415,7 @@ class Path():
             return Path(str(value))
     
     def stringify(self):
+        """ @meta """
         return self._path   
 
 #

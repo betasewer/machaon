@@ -74,3 +74,55 @@ class DocStringParser():
             else:
                 lines.extend(ls)
         return lines
+
+
+class DocStringDeclaration:
+    def __init__(self, decltype, name, aliases, props):
+        self.decltype = decltype
+        self.name = name
+        self.aliases = aliases 
+        self.props = props
+
+
+def parse_doc_declaration(obj, decltypes):
+    if isinstance(obj, str):
+        doc = obj
+    else:
+        doc = getattr(obj, "__doc__", None)
+        if doc is None:
+            return None
+    
+    doc = doc.strip()
+
+    # 印
+    if not doc.startswith("@"):
+        return None
+    doc = doc[1:] # 落とす
+
+    # ドキュメントの第一行目に書かれている
+    line, br, _ = doc.partition("\n") 
+    if not br:
+        line = doc
+
+    # エイリアス
+    aliasrow = ""
+    if "[" in line and "]" in line: # [name1 name2 name3]
+        line, _, aliasrow = line.partition("[")
+        aliasrow, _, _ = aliasrow.partition("]")
+    aliasnames = aliasrow.strip().split()
+
+    # 指定子
+    decls = line.split()
+    if not decls:
+        return None
+    decltype = decls[0]
+
+    if decltype not in decltypes:
+        return None
+    
+    if "alias-name" in decls:
+        if not aliasnames:
+            raise ValueError("alias-nameが指定されましたが、エイリアスの定義がありません")
+        return DocStringDeclaration(decltype, aliasnames[0], aliasnames[1:], set(decls))
+    else:
+        return DocStringDeclaration(decltype, None, aliasnames, set(decls))

@@ -4,7 +4,7 @@ import inspect
 from collections import defaultdict
 
 from machaon.core.symbol import normalize_typename, normalize_method_target, normalize_method_name, normalize_return_typename
-from machaon.core.docstring import DocStringParser
+from machaon.core.docstring import DocStringParser, parse_doc_declaration
 
 # imported from...
 # type
@@ -20,7 +20,8 @@ METHOD_TYPE_BOUND = 0x0010
 METHOD_CONSUME_TRAILING_PARAMS = 0x0020
 
 METHOD_LOADED = 0x0100
-METHOD_HAS_RECIEVER_PARAM = 0x0200 # レシーバオブジェクトもパラメータとして扱う
+METHOD_DECL_LOADED = 0x0200
+METHOD_HAS_RECIEVER_PARAM = 0x0400 # レシーバオブジェクトもパラメータとして扱う
 
 METHOD_PARAMETER_UNSPECIFIED = 0x1000
 METHOD_RESULT_UNSPECIFIED = 0x2000
@@ -30,6 +31,8 @@ METHOD_UNSPECIFIED_MASK = 0xF000
 METHOD_FROM_INSTANCE = 0x10000 
 METHOD_FROM_FUNCTION = 0x20000
 METHOD_FROM_MASK = 0xF0000
+
+METHOD_META_EXTRAARGS = 0x100000
 
 #
 PARAMETER_REQUIRED = 0x0100
@@ -361,25 +364,12 @@ class Method():
         ))
 
         # メソッド宣言
-        decl = sections.get_string("Decl").strip()
-        if decl.startswith("@method"):
-            pass
-        elif decl.startswith("@task"):
-            self.flags |= METHOD_TASK # こちらで指定
-        else:
-            raise BadMethodDeclaration("いずれかのメソッドタイプ指定が必要です：@method @task")
-        
-        declparts = decl.split()
-        if "spirit" in declparts:
-            self.flags |= METHOD_SPIRIT_BOUND
-        if "context" in declparts:
-            self.flags |= METHOD_CONTEXT_BOUND
-        if "reciever-param" in declparts:
-            self.flags |= METHOD_HAS_RECIEVER_PARAM
-        if "task" in declparts:
-            self.flags |= METHOD_TASK # こちらで指定してもよい
-        if "nospirit" in declparts:
-            self.flags &= ~METHOD_SPIRIT_BOUND
+        if self.flags & METHOD_DECL_LOADED == 0:
+            declline = sections.get_string("Decl").strip()
+            decl = parse_doc_declaration(declline, ("method", "task"))
+            if decl is None:
+                raise BadMethodDeclaration("宣言の構文に誤りがあります")            
+            self.load_declaration_properties(decl.props)
 
         # 説明
         desc = sections.get_string("Description")
@@ -446,6 +436,23 @@ class Method():
 
             typename, doc, typeparams = parse_typename_syntax(typename, doc)
             self.add_result(typename, doc, typeparams)
+        
+    def load_declaration_properties(self, props: Sequence[str]):
+        """
+        宣言の値を読み込んでフラグを設定する
+        """
+        if "spirit" in props:
+            self.flags |= METHOD_SPIRIT_BOUND
+        if "context" in props:
+            self.flags |= METHOD_CONTEXT_BOUND
+        if "reciever-param" in props:
+            self.flags |= METHOD_HAS_RECIEVER_PARAM
+        if "task" in props:
+            self.flags |= METHOD_TASK
+        if "nospirit" in props:
+            self.flags &= ~METHOD_SPIRIT_BOUND
+        
+        self.flags |= METHOD_DECL_LOADED
             
     def load_from_function(self, fn, self_typename=None):
         """
@@ -568,8 +575,8 @@ class Method():
         parts.append(", ".join(results))
         return " ".join(parts)
     
-    #
     def pprint(self, app):
+        """ @meta """
         sig = self.get_signature(fully=True)
         app.post("message", sig)
         app.post("message", self.doc)
@@ -695,57 +702,57 @@ class MethodResult:
     
     def is_return_self(self):
         return self.typeparams and self.typeparams[0] is RETURN_SELF
-        
 
 #
-# 
-# 特定のドキュメント文字列を持った属性を列挙する
 #
 #
-def methoddecl_collect_attributes(traits, describer):
-    for attrname in dir(describer):
-        attr = getattr(describer, attrname)
-        if attrname.startswith("__"):
-            continue
-
-        method, aliasnames = methoddecl_collect(attr, attrname)
-        if method is None:
-            continue
-
-        traits.add_method(method)
-        for aliasname in aliasnames:
-            traits.add_member_alias(aliasname, method.name)
-
-
-# ドキュメントを解析して空のメソッドオブジェクトを構築
-def methoddecl_collect(attr, attrname) -> Tuple[Optional[Method], List[str]]:
-    doc = getattr(attr, "__doc__", "")
-    if not doc:
-        return None, []
+class MetaMethod():
+    def __init__(self, target, flags=0):
+        self.target = target
+        self.flags = flags
     
-    # @method/taskの指定が必要
-    doc = doc.strip()
-    if not doc.startswith(("@method", "@task")):
+    def get_action_target(self):
+        return self.target
+    
+    def new(self, declprops):
+        """ 特殊メソッドを構築 """
+        flags = self.flags
+        if "extra-args" in declprops:
+            flags |= METHOD_META_EXTRAARGS
+        if "context" in declprops:
+            flags |= METHOD_CONTEXT_BOUND
+        if "spirit" in declprops:
+            flags |= METHOD_SPIRIT_BOUND
+        return MetaMethod(self.target, flags)
+    
+    def has_extra_args(self):
+        return (self.flags & METHOD_META_EXTRAARGS) > 0
+    
+    def is_type_bound(self):
+        return (self.flags & METHOD_TYPE_BOUND) > 0
+    
+    def is_context_bound(self):
+        return (self.flags & METHOD_CONTEXT_BOUND) > 0
+
+    def is_spirit_bound(self):
+        return (self.flags & METHOD_SPIRIT_BOUND) > 0
+
+
+def make_method_prototype(attr, attrname) -> Tuple[Optional[Method], List[str]]:
+    """ ドキュメントを解析して空のメソッドオブジェクトを構築 """ 
+    decl = parse_doc_declaration(attr, ("method", "task"))
+    if decl is None:
         return None, []
 
-    # エイリアス指定はここで解析する必要がある
-    firstline, br, _ = doc.partition("\n") # ドキュメントの第一行目に書かれている
-    if not br:
-        firstline = doc
-
-    aliasrow = ""
-    if "[" in firstline and "]" in firstline: # [name1 name2 name3]
-        firstline, _, aliasrow = firstline.partition("[")
-        aliasrow, _, _ = aliasrow.partition("]")
-    aliasnames = aliasrow.strip().split()
-
-    if "alias-name" in firstline:
-        if not aliasnames:
-            raise ValueError("alias-nameが指定されましたが、エイリアスの定義がありません")
-        mname = aliasnames[0]
-        aliasnames = aliasnames[1:]
-    else:
-        mname = attrname
-
+    mname = decl.name or attrname
     method = Method(name=normalize_method_name(mname), target=attrname)
-    return method, aliasnames
+    method.load_declaration_properties(decl.props)
+    return method, decl.aliases
+
+meta_method_prototypes = (
+    MetaMethod("constructor", METHOD_TYPE_BOUND),
+    MetaMethod("stringify"),
+    MetaMethod("summarize"),
+    MetaMethod("pprint"),
+)
+

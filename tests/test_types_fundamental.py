@@ -28,7 +28,7 @@ def test_typemodule_move():
 
     fundamental_type.add_ancestor(new_typeset)
     
-    assert fundamental_type.get("Int").construct_from_string(None, "0x35") == 0x35
+    assert fundamental_type.get("Int").construct(None, "0x35") == 0x35
     assert fundamental_type.get("AltString").typename == "AltString"
     assert fundamental_type.get("Dummy_Rabbit") is not None
     assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
@@ -39,25 +39,25 @@ def test_typemodule_move():
 def test_fundamental():
     Int = fundamental_type.get("int")
     assert Int.typename == "Int"
-    assert Int.construct_from_string(None, "32") == 32
+    assert Int.construct(None, "32") == 32
     assert Int.convert_to_string(32) == "32"
     assert Int.convert_to_string(0xFF) == "255"
 
     Bool = fundamental_type.get("bool")
     assert Bool.typename == "Bool"
-    assert Bool.construct_from_string(None, "False") is False
+    assert Bool.construct(None, "False") is False
 
     Float = fundamental_type.get("float")
     assert Float.typename == "Float"
-    assert Float.construct_from_string(None, "-0.05") == -0.05
+    assert Float.construct(None, "-0.05") == -0.05
 
     Complex = fundamental_type.get("complex")
     assert Complex.typename == "Complex"
-    assert Complex.construct_from_string(None, "2+3j") == 2+3j
+    assert Complex.construct(None, "2+3j") == 2+3j
 
     Str = fundamental_type.get("str")
     assert Str.typename == "Str"
-    assert Str.construct_from_string(None, "AAA") == "AAA"
+    assert Str.construct(None, "AAA") == "AAA"
 
 def test_method():
     regmatch = fundamental_type.get("Str").select_method("reg-match")
@@ -78,7 +78,7 @@ def test_any():
 
 def test_function():
     fntype = fundamental_type.get("Function")
-    fnpower = fntype.construct_from_string(None, "@ * @")
+    fnpower = fntype.construct(None, "@ * @")
     assert fnpower
     from machaon.core.message import MessageEngine
     assert isinstance(fnpower, MessageEngine)

@@ -221,10 +221,8 @@ class Process:
         self.last_input = text
         self.event_inputend.set()
     
-    #
-    #
-    #
-    def conversion_construct(self, context, value):
+    def constructor(self, context, value):
+        """ @meta """
         if isinstance(value, int):
             return context.root.find_process(value)
         else:
@@ -962,14 +960,17 @@ class ProcessError():
         err = self.get_error()
         return get_local_from_traceback(err.__traceback__, level, name)
         
-    def conversion_construct(self, context, value, *args):
-        """ 例外オブジェクトからの変換をサポート """
+    def constructor(self, context, value):
+        """ @meta 
+        例外オブジェクトからの変換をサポート
+        """
         if isinstance(value, Exception):
             return ProcessError(context, value)
         else:
             raise TypeError(repr(value))
 
     def summarize(self):
+        """ @meta """
         if isinstance(self.error, InternalMessageError):
             error = self.error.error
             return "文法エラー：{}[{}]".format(str(error), self.get_error_typename())
@@ -978,6 +979,7 @@ class ProcessError():
             return "実行エラー：{}[{}]".format(str(error), self.get_error_typename())
 
     def pprint(self, app):
+        """ @meta """
         if isinstance(self.error, InternalMessageError):
             excep = self.error.error
             title = "（内部エラー）"

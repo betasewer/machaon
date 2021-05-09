@@ -132,11 +132,12 @@ class BasicContextFile():
             subject = context.new_object(self, type=type(self))
             block.run_as_function(subject, context)
     
-    #
-    def conversion_construct(self, context, v):
+    def constructor(self, context, v):        
+        """ @meta """
         return self.get_value_type()(context.new_object(v, type=Path).value)
 
     def stringify(self):
+        """ @meta """
         return self.pathstr
 
 

@@ -102,7 +102,8 @@ class RootObject:
         self._clear_processes(app, is_failed)
 
     def stringify(self):
-        return "<^o^>"
+        """ @meta """
+        return "<-_->"
 
 #
 #

@@ -6,9 +6,9 @@ from collections import defaultdict
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
 from machaon.core.symbol import normalize_typename, BadMethodName, PythonBuiltinTypenames, full_qualified_name
-from machaon.core.method import Method, methoddecl_collect_attributes, UnloadedMethod, MethodLoadError
+from machaon.core.method import Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
 from machaon.core.importer import attribute_loader
-from machaon.core.docstring import DocStringParser
+from machaon.core.docstring import DocStringParser, parse_doc_declaration
 
 # imported from...
 # desktop
@@ -53,10 +53,10 @@ class Type():
         self.flags = bits
         self.value_type: Callable = value_type
         self.scope: Optional[str] = scope
-        self.ctordoc: str = ""
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
+        self._metamethods: Dict[str, MetaMethod] = {}
     
     @property
     def fulltypename(self):
@@ -123,36 +123,58 @@ class Type():
             return Object(self, value)
 
     #
-    #
-    #
-    def construct_from_string(self, context, arg: str):
-        r = self.call_internal_method("construct", "t", arg)
-        if r:
-            return r[0]
+    # 内部実装で使うメソッドを実行する
+    #  -> タプルで返り値を返す。見つからなければNone
+    def invoke_meta_method(self, method, *args, **kwargs):
+        """ 
+        内部実装で使うメソッドを実行する
+        Params:
+            method(MetaMethod): メソッド
+            calltype(str): i = selfは第一オブジェクト  t = selfは型インスタンス
+            *args
+            **kwargs
+        Returns:
+            Any: 実行したメソッドの返り値
+        """
+        if method.is_type_bound():
+            args = (self, *args)
         else:
-            # 別の実装へ転送
-            return self.conversion_construct(context, arg)
+            if self.is_methods_instance_bound():
+                pass
+            elif self.is_methods_type_bound():
+                args = (self, *args)
 
-    def convert_to_string(self, v: Any):
-        r = self.call_internal_method("stringify", "i", v)
-        if r:
-            return r[0]
+        fn = self.delegate_method(method.get_action_target())
+        return fn(*args, **kwargs)
+    
+    def construct(self, context, value, *args):
+        if self.check_value_type(type(value)):
+            return value # 変換の必要なし
+        
+        fn = self._metamethods.get("constructor")
+        if fn is None:
+            raise UnsupportedMethod("'{}'型には型変換関数'constructor'が定義されていません".format(self.typename))
+        
+        if fn.has_extra_args():
+            return self.invoke_meta_method(fn, context, value, *args)
         else:
+            return self.invoke_meta_method(fn, context, value)
+
+    def convert_to_string(self, value: Any) -> str:
+        fn = self._metamethods.get("stringify")
+        if fn is None:
             # デフォルト動作
-            if type(v).__str__ is object.__str__:
-                return "<Object {:0X}>".format(id(v))
+            if type(value).__str__ is object.__str__:
+                return "<Object {:0X}>".format(id(value))
             else:
-                return str(v)
+                return str(value)
 
-    def summarize_value(self, v: Any):
-        r = self.call_internal_method("summarize", "i", v)
-        if r:
-            return r[0]
-        else:
-            try:
-                s = self.convert_to_string(v)
-            except UnsupportedMethod:
-                return "{} <summary unsupported>".format(v)
+        return self.invoke_meta_method(fn, value)
+
+    def summarize_value(self, value: Any):
+        fn = self._metamethods.get("summarize")
+        if fn is None:
+            s = self.convert_to_string(value)
             if not isinstance(s, str):
                 s = repr(s) # オブジェクトに想定されない値が入っている
             s = s.replace("\n", " ").strip()
@@ -160,36 +182,17 @@ class Type():
                 return s[0:30] + "..." + s[-20:]
             else:
                 return s
-    
-    def pprint_value(self, app, v: Any):
-        r = self.call_internal_method("pprint", "i", v, app)
-        if r:
-            return None
-        else:
-            try:
-                s = self.convert_to_string(v)
-            except UnsupportedMethod:
-                s = "{} <pretty print unsupported>".format(v)
-            app.post("message", s)
-    
-    def conversion_construct(self, context, value, *params):
-        if self.value_type is None: # 制限なし
-            return value
-        r = self.call_internal_method("conversion_construct", "t", context, value, *params)
-        if r:
-            return r[0]
-        else:
-            l_name = full_qualified_name(type(value))
-            raise UnsupportedMethod("'{}'型の変換関数は定義されていません （from '{}'）".format(self.typename, l_name))
+        
+        return self.invoke_meta_method(fn, value)
 
-    def construct_from_value(self, context, value, *params):
-        if self.check_value_type(type(value)):
-            return value 
-        elif isinstance(value, str):
-            return self.construct_from_string(context, value)
-        else:
-            return self.conversion_construct(context, value, *params)
-    
+    def pprint_value(self, app, value: Any):
+        fn = self._metamethods.get("pprint")
+        if fn is None:
+            s = self.convert_to_string(value)
+            app.post("message", s)
+
+        return self.invoke_meta_method(fn, value, app)
+
     def check_value_type(self, value_type):
         if self.value_type is None: # 制限なし
             return True
@@ -242,26 +245,6 @@ class Type():
                 raise BadMethodDelegation(attrname)
             return None
         return fn
-    
-    # 内部実装で使うメソッドを実行する
-    #  -> タプルで返り値を返す。見つからなければNone
-    def call_internal_method(self, attrname, calltype, *args, **kwargs):
-        fn = self.delegate_method(attrname) # 実装クラスから探す
-        if fn:
-            if calltype == "i":
-                if self.is_methods_instance_bound():
-                    pass
-                elif self.is_methods_type_bound():
-                    args = (self, *args)
-            elif calltype == "t":
-                args = (self, *args)
-            else:
-                raise ValueError("bad calltype")
-
-            r = (fn(*args, **kwargs),)
-            return r
-
-        return None
     
     @classmethod
     def from_dict(cls, d):
@@ -401,9 +384,6 @@ class Type():
             if dest[0] == "(" and dest[-1] == ")":
                 row = dest[1:-1].split()
                 self.add_member_alias(name, row)
-        
-        ctordoc = "\n".join([x.lstrip() for x in sections.get_lines("Constructor")])
-        self.ctordoc = ctordoc
 
     #
     #
@@ -433,7 +413,7 @@ class Type():
                     else:
                         raise BadTraitDeclaration("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
                     self.add_method(mth)
-                
+
         elif hasattr(describer, "describe_object"):
             # 記述メソッドを呼び出す
             describer.describe_object(self) # type: ignore
@@ -442,8 +422,8 @@ class Type():
             # ドキュメント文字列を解析する
             self.describe_from_docstring(describer.__doc__)
             # メソッド属性を列挙する
-            methoddecl_collect_attributes(self, describer)
-
+            self.load_methods_from_attributes(describer)
+        
         else:
             raise BadTraitDeclaration("型定義がありません。辞書か、定義クラスのドキュメント文字列で記述してください")
         
@@ -472,13 +452,41 @@ class Type():
                 self.doc = describer.__doc__
         
         if isinstance(describer, type):
-            # typemodule.getで識別子として使用可能にする
+            # describerをtypemodule.getで識別子として使用可能にする
             setattr(describer, "Type_typename", self.fulltypename) 
-        
+
         # ロード完了
         self.flags |= TYPE_LOADED
 
         return self
+
+    def load_methods_from_attributes(self, describer):
+        for attrname in dir(describer):
+            if attrname.startswith("__"):
+                continue
+
+            attr = getattr(describer, attrname)
+            method, aliasnames = make_method_prototype(attr, attrname)
+            if method is None:
+                continue
+
+            self.add_method(method)
+            for aliasname in aliasnames:
+                self.add_member_alias(aliasname, method.name)
+        
+        for meth in meta_method_prototypes:
+            name = meth.get_action_target()
+            attr = getattr(describer, name, None)
+            if attr is None:
+                continue
+            
+            decl = parse_doc_declaration(attr, ("meta",))
+            if decl is None:
+                continue
+    
+            meth = meth.new(decl.props)
+            self._metamethods[name] = meth
+
 
 #
 # 型の取得時まで定義の読み込みを遅延する

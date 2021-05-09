@@ -174,10 +174,10 @@ class InvocationEntry():
         # 返り値型に値が適合しない場合は、暗黙の型変換を行う
         if not rettype.check_value_type(type(value)):
             if isinstance(retspec, Type):
-                value = rettype.conversion_construct(context, value)
+                value = rettype.construct(context, value)
             else:
                 typeparams = retspec.get_typeparams() if retspec else tuple()
-                value = rettype.conversion_construct(context, value, *typeparams)
+                value = rettype.construct(context, value, *typeparams)
         
         return objectType(rettype, value)
 
@@ -335,7 +335,7 @@ class InvocationContext:
             t = self.select_type(type)
             if t is None:
                 t = self.type_module.define(type) # 無ければ定義して返す 
-            convvalue = t.construct_from_value(self, value)
+            convvalue = t.construct(self, value)
             return t.new_object(convvalue)
         elif conversion:
             tname, _, doc = conversion.partition(":")
@@ -343,12 +343,12 @@ class InvocationContext:
             t = self.select_type(typename)
             if t is None:
                 raise BadTypename(typename)
-            convvalue = t.construct_from_value(self, value, *typeparams)
+            convvalue = t.construct(self, value, *typeparams)
             return t.new_object(convvalue)
         else:
             valtype = self.deduce_type(value)
             if valtype:
-                convvalue = valtype.construct_from_value(self, value)
+                convvalue = valtype.construct(self, value)
                 return valtype.new_object(convvalue)
             else:
                 return self.get_type("Any").new_object(value)
@@ -955,11 +955,12 @@ class TypeConstructorInvocation(BasicInvocation):
     def prepare_invoke(self, context: InvocationContext, *argobjects):
         argobj, *_args = argobjects
         # 型の実装を取得する
-        from machaon.core.message import select_type
-        t = select_type(context, self._typename)
+        t = context.select_type(self._typename)
+        if t is None:
+            raise BadTypename(self._typename)
         # 変換コンストラクタの呼び出しを作成
         arg = self.resolve_object_value(argobj)
-        return InvocationEntry(self, t.construct_from_value, (context, arg), {})
+        return InvocationEntry(self, t.construct, (context, arg), {})
     
     def get_action(self):
         raise ValueError("型変換関数は取得できません")

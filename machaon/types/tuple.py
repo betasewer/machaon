@@ -144,7 +144,7 @@ class ObjectTuple():
         for x in self.objects:
             # 変換コンストラクタを呼び出す
             try:
-                v = type.construct_from_value(context, x.value)
+                v = type.construct(context, x.value)
             except:
                 continue
             objs.append(Object(type, v))
@@ -239,33 +239,15 @@ class ObjectTuple():
         strs = [x.to_string() for x in self.objects]
         return sep.join(strs)
 
+    # 内部使用
+    def values(self):
+        return [x.value for x in self.objects]
+
     #
     # オブジェクト共通関数
     #
-    def summarize(self):
-        if len(self.objects) < 5:
-            summ = [o.summary() for o in self.objects]
-            return "{}".format(", ".join(summ))
-        else:
-            summ1 = [o.summary() for o in self.objects[0:2]]
-            summ2 = [o.summary() for o in self.objects[-2:]]
-            return "{}".format(", ".join(summ1) + "..." + ", ".join(summ2))
-
-    def pprint(self, app):
-        if len(self.objects) == 0:
-            text = "空です" + "\n"
-            app.post("message", text)
-        else:
-            context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
-            columns = ["値", "型"]
-            rows = []
-            for i, o in enumerate(self.objects):
-                sm = o.summary()  
-                tn = o.get_typename()
-                rows.append((i, [sm, tn]))
-            app.post("object-sheetview", rows=rows, columns=columns, context=context)
-
-    def conversion_construct(self, context, value, homotype=None):
+    def constructor(self, context, value, homotype=None):
+        """ @meta extra-args """
         try:
             iter(value)
         except TypeError:
@@ -280,6 +262,27 @@ class ObjectTuple():
 
         return ObjectTuple(objs)
     
-    # 内部使用
-    def values(self):
-        return [x.value for x in self.objects]
+    def summarize(self):
+        """ @meta """
+        if len(self.objects) < 5:
+            summ = [o.summary() for o in self.objects]
+            return "{}".format(", ".join(summ))
+        else:
+            summ1 = [o.summary() for o in self.objects[0:2]]
+            summ2 = [o.summary() for o in self.objects[-2:]]
+            return "{}".format(", ".join(summ1) + "..." + ", ".join(summ2))
+
+    def pprint(self, app):
+        """ @meta """
+        if len(self.objects) == 0:
+            text = "空です" + "\n"
+            app.post("message", text)
+        else:
+            context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
+            columns = ["値", "型"]
+            rows = []
+            for i, o in enumerate(self.objects):
+                sm = o.summary()  
+                tn = o.get_typename()
+                rows.append((i, [sm, tn]))
+            app.post("object-sheetview", rows=rows, columns=columns, context=context)

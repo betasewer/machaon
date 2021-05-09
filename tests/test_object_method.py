@@ -1,6 +1,7 @@
 from machaon.core.docstring import DocStringParser
 from machaon.core.method import Method
 from machaon.types.fundamental import fundamental_type
+from machaon.core.invocation import instant_context
 
 class SomeValue:
     """
@@ -27,6 +28,16 @@ class SomeValue:
         """
         self.x = a+b
         self.y = a-b
+    
+    def constructor(self, context, value, param1):
+        """ @meta extra-args """
+        p = int(param1)
+        return SomeValue(value, value*p)
+    
+    def stringify(self):
+        """ @meta """
+        return "({},{})".format(self.x, self.y)
+
 
 
 def test_valuetype_define():
@@ -97,3 +108,16 @@ def test_method_return_self():
     t = fundamental_type.define(SomeValue)
     m = t.select_method("modify")
     assert m.get_result().is_return_self()
+
+#
+def test_meta_method():
+    cxt = instant_context()
+    t = fundamental_type.define(SomeValue)
+    v = t.construct(cxt, 3, "2")
+    assert isinstance(v, SomeValue)
+    assert v.x == 3
+    assert v.y == 6
+
+    v = t.convert_to_string(SomeValue(1,2))
+    assert v == "(1,2)"
+

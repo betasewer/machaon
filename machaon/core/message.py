@@ -805,14 +805,15 @@ class MessageEngine():
             val = values[0]
             spec = values[1]
             paramtype = context.get_type(spec.get_typename())
-            convval = paramtype.construct_from_value(context, val, *spec.get_typeparams())
+            convval = paramtype.construct(context, val, *spec.get_typeparams())
             obj = paramtype.new_object(convval)
 
         elif objcode == TERM_OBJ_TUPLE:
             from machaon.types.tuple import ObjectTuple
             elems = values[0].split() # 文字列を空白で区切る
-            tpl = ObjectTuple.conversion_construct(None, context, elems)
-            obj = context.new_object(tpl, type="Tuple")
+            tupletype = context.get_type("Tuple")
+            tpl = tupletype.construct(context, elems)
+            obj = tupletype.new_object(tpl)
 
         elif objcode == TERM_OBJ_LITERAL:
             obj = select_literal(context, values[0])

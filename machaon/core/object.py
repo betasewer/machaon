@@ -180,21 +180,17 @@ class ObjectCollection():
     #
     #
     #
-    def construct(self, s):
-        pass
-
-    def conversion_construct(self, context, value, *_args):
-        if isinstance(value, dict):
-            col = ObjectCollection()
-            for k, v in value.items():
-                if not isinstance(v, Object):
-                    v = context.new_object(v)
-                col.push(k, v)
-            return col
-        else:
-            raise ValueError("'{}'からの型変換は定義されていません".format(type(value).__name__))
+    def constructor(self, context, value):
+        """ @meta """
+        col = ObjectCollection()
+        for k, v in value.items():
+            if not isinstance(v, Object):
+                v = context.new_object(v)
+            col.push(k, v)
+        return col
 
     def summarize(self):
+        """ @meta """
         heads = []
         trail = ""
         for name, ids in self._namemap.items():
@@ -207,6 +203,7 @@ class ObjectCollection():
         return ", ".join(heads) + trail
 
     def pprint(self, app):
+        """ @meta """
         if len(self._items) == 0:
             text = "空です" + "\n"
             app.post("message", text)
