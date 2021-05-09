@@ -228,6 +228,47 @@ class ObjectTuple():
     #
     #
     #
+    def push(self, value):
+        """ @method
+        要素を最後に追加する。
+        Params:
+            value(Object): 
+        """
+        self.objects.append(value)
+    
+    def pop(self):
+        """ @method
+        最後の要素を取り出す。
+        Returns:
+            Object:
+        """
+        return self.objects.pop()
+    
+    def shift(self):
+        """ @method
+        最初の要素を取り出す。
+        Returns:
+            Object:
+        """
+        return self.objects.pop(0)
+    
+    def unshift(self, value):
+        """ @method
+        要素を最初に追加する。
+        Params:
+            value(Object): 
+        """
+        self.objects.insert(0, value)
+
+    def insert(self, pos, value):
+        """ @method
+        要素をある位置に挿入する。
+        Params:
+            pos(int):
+            value(Object): 
+        """
+        self.objects.insert(pos, value)
+    
     def join(self, sep):
         """ @method
         セパレータ文字で値を一つの文字列に連結する。
