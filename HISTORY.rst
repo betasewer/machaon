@@ -3,6 +3,10 @@
 Release History
 ---------------
 
+0.1.0.2 (2021-5-10)
++++++++++++++++++++
+prepare for first test run
+
 0.1.0.1 (2021-2-6)
 +++++++++++++++++++
 rename Objectset(Set) -> Sheet(Sheet)
