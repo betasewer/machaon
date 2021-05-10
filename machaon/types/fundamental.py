@@ -61,8 +61,6 @@ class TypeType():
         docs.append(type.fulltypename)
         docs.extend(type.doc.splitlines())
         docs.append("［実装］\n{}".format(type.get_describer_qualname()))
-        docs.append("［引数］")
-        docs.extend(type.ctordoc.splitlines())
         docs.append("［メソッド］")
         context.spirit.post("message", "\n".join(docs))
         # メソッドの表示
