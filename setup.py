@@ -1,23 +1,30 @@
 # -*- coding: utf-8 -*-
 
 from setuptools import setup, find_packages
-from codecs import open
+#from codecs import open
 import os
 import re
 
 root_dir = os.path.abspath(os.path.dirname(__file__))
 
 def filetext(path):
+    text = ""
     with open(os.path.join(root_dir, path), "r", encoding="utf-8") as fi:
         text = fi.read()
     return text
-        
+
+def version(text):
+    m = re.search("__version__\\s+=\\s+'([^']+)'", text)
+    if m:
+        return m.group(1)
+    raise ValueError("バージョン番号がありません")
+
 #
 #
 #
 package_name = "machaon"
 
-version = re.search("__version__\\s+=\\s+'([^']+)'", filetext("machaon/__init__.py")).group(1)
+version = version(filetext("machaon/__init__.py"))
 licence = filetext("LICENSE")
 requirements = [x.strip() for x in filetext("REQUIREMENTS.txt").splitlines()]
 test_requirements = [x.strip() for x in filetext("TEST-REQUIREMENTS.txt").splitlines()]
