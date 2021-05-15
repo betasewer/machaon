@@ -190,7 +190,7 @@ def make_data_search_predicate(code, column, bound_context):
 #
 #
 class Sheet():  
-    """ @type
+    """
     同じ型のオブジェクトに対する式を縦列とするデータの配列。
     Typename: Sheet
     """

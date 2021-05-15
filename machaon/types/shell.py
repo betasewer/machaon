@@ -20,9 +20,9 @@ from machaon.types.shellplatform import shellpath
 class Path():
     """ @type
     ファイル・フォルダのパス。
-    Constructor:
-        パス、または場所の名前を受ける。
-        使用できる場所の名前の一覧は、known-names。
+    コンストラクタ＝
+    パス、または場所の名前を受ける。
+    使用できる場所の名前の一覧は、known-names。
     """
     def __init__(self, path=""):
         self._path = path

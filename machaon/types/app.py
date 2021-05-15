@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-from machaon.cui import test_yesno, composit_text
-
 class RootObject:
-    """ @type
+    """
     アプリケーションを表すグローバルなオブジェクト。
     """
 
@@ -15,11 +13,11 @@ class RootObject:
     # メソッド
     #
     def types(self, spirit):
-        '''@method spirit
+        '''@task
         使用可能な型を列挙する。
         Params:
         Returns:
-            Sheet[Type]: (name, doc, scope) 型のリスト
+            Sheet[Type]: (name, scope, doc) 型のリスト
         '''
         types = []
         for t in self.context.type_module.enum():
@@ -109,8 +107,8 @@ class RootObject:
 #
 #
 class AppChamber:
-    """ @type
-    プロセスとその結果を保持するチャンバーオブジェクト
+    """
+    プロセスとその結果を保持するチャンバーオブジェクト。
     ValueType:
         machaon.process.ProcessChamber
     """

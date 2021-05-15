@@ -4,7 +4,6 @@ from machaon.core.type import Type, TypeModule
 def run(fn):
     fn()
 
-@fundamental_type.definition(typename="Dummy-Rabbit")
 class Dummy_Rabbit():
     describe_count = 0
     
@@ -12,7 +11,9 @@ class Dummy_Rabbit():
     def describe_object(cls, traits):
         traits.describe(doc="うさぎ")
         cls.describe_count += 1
-    
+
+fundamental_type.define(Dummy_Rabbit, typename="Dummy-Rabbit")
+
 def test_fundamental_find():
     assert fundamental_type.find("Int") is not None
 

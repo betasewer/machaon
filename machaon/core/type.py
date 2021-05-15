@@ -5,7 +5,7 @@ from collections import defaultdict
 
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
-from machaon.core.symbol import normalize_typename, BadMethodName, PythonBuiltinTypenames, full_qualified_name
+from machaon.core.symbol import BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, full_qualified_name, is_valid_typename
 from machaon.core.method import Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
 from machaon.core.importer import attribute_loader
 from machaon.core.docstring import DocStringParser, parse_doc_declaration
@@ -18,7 +18,7 @@ from machaon.core.docstring import DocStringParser, parse_doc_declaration
 #
 
 # 型宣言における間違い
-class BadTraitDeclaration(Exception):
+class BadTypeDeclaration(Exception):
     pass
 
 # メソッド宣言における間違い
@@ -40,13 +40,12 @@ TYPE_TYPETRAIT_DESCRIBER = 0x100
 TYPE_VALUETYPE_DESCRIBER = 0x200
 TYPE_USE_INSTANCE_METHOD = 0x400
 TYPE_LOADED = 0x1000
+TYPE_DELAY_LOAD_METHODS = 0x2000
 
 #
 #
 #
 class Type():
-    __mark = True
-
     def __init__(self, describer=None, name=None, value_type=None, scope=None, *, bits = 0):
         self.typename: str = name
         self.doc: str = ""
@@ -115,11 +114,11 @@ class Type():
         from machaon.core.object import Object
         if isinstance(value, Object):
             if value.type is not self:
-                raise ValueError("'{}' 違う型のオブジェクトです".format(value.type))
+                raise ValueError("'{}' -> '{}' 違う型のオブジェクトです".format(value.get_typename(), self.typename))
             return value
         else:
             if not self.check_value_type(type(value)):
-                raise ValueError("'{}' 値の型が違います".format(type(value).__name__))
+                raise ValueError("'{}' -> '{}' 値の型に互換性がありません".format(type(value).__name__, self.typename))
             return Object(self, value)
 
     #
@@ -190,11 +189,11 @@ class Type():
         if fn is None:
             s = self.convert_to_string(value)
             app.post("message", s)
-
-        return self.invoke_meta_method(fn, value, app)
+            return
+        self.invoke_meta_method(fn, value, app)
 
     def check_value_type(self, value_type):
-        if self.value_type is None: # 制限なし
+        if self.flags & TYPE_ANYTYPE: # 制限なし
             return True
         return self.value_type is value_type
 
@@ -321,111 +320,24 @@ class Type():
         return self
     
     #
-    def describe_from_docstring(self, doc):
-        # structure of type docstring
-        """ @type (no-instance-method)
-        detailed description...
-        .......................
-        ....
-        ValueType:
-            <Typename>
-
-        Typename:
-            <Alias names>
-
-        MemberAlias:
-            long: (mode ftype modtime size name)
-            short: (ftype name)
-            link: path
-        
-        Constructor:
-            <document>
-        """
-        #
-        # 型定義の解析
-        #
-        sections = DocStringParser(doc, ("Typename", "Params", "ValueType", "MemberAlias", "Constructor"))
-
-        typename = sections.get_value("Typename")
-        if typename:
-            if typename[0].islower():
-                typename = typename[0].upper() + typename[1:]
-            self.typename = typename
-    
-        doc = ""
-        sumline = sections.get_string("Decl")
-        for line in sumline.split():
-            if line == "@type":
-                continue
-            elif line == "use-instance-method":
-                self.flags |= TYPE_USE_INSTANCE_METHOD
-            elif line == "trait":
-                self.flags |= TYPE_TYPETRAIT_DESCRIBER
-            else:
-                doc += line
-
-        doc += sections.get_string("Description")
-        if doc:
-            self.doc = doc.strip()
-
-        valtypename = sections.get_value("ValueType")
-        if valtypename == "Any":
-            self.value_type = None # Any型
-        elif valtypename:
-            loader = attribute_loader(valtypename)
-            self.value_type = loader() # 例外発生の可能性
-        
-        aliases = sections.get_lines("MemberAlias")
-        for alias in aliases:
-            name, _, dest = [x.strip() for x in alias.partition(":")]
-            if not name or not dest:
-                raise BadTraitDeclaration()
-
-            if dest[0] == "(" and dest[-1] == ")":
-                row = dest[1:-1].split()
-                self.add_member_alias(name, row)
-
     #
     #
-    #
-    def load(self):
+    def load(self, loadbits=0):
         if self.is_loaded():
             return
 
         describer = self._describer
         
-        if isinstance(describer, dict):
-            # 辞書オブジェクトによる記述
-            for key, value in describer.items():
-                if key == "Typename":
-                    self.typename = value
-                elif key == "Doc":
-                    self.doc = value
-                elif key == "ValueType":
-                    self.value_type = value
-                else:
-                    # メソッド定義
-                    from machaon.core.object import Object
-                    if len(value)>1 and callable(value[-1]):                      
-                        *docs, action = value
-                        mth = Method(key)
-                        mth.load_from_string("\n".join(docs), action)
-                    else:
-                        raise BadTraitDeclaration("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
-                    self.add_method(mth)
-
-        elif hasattr(describer, "describe_object"):
-            # 記述メソッドを呼び出す
-            describer.describe_object(self) # type: ignore
-
-        elif hasattr(describer, "__doc__") and describer.__doc__:
-            # ドキュメント文字列を解析する
-            self.describe_from_docstring(describer.__doc__)
-            # メソッド属性を列挙する
-            self.load_methods_from_attributes(describer)
+        # メソッド属性を列挙する
+        if loadbits & TYPE_DELAY_LOAD_METHODS == 0:
+            if isinstance(describer, dict):
+                self.load_methods_from_dict(describer)
+            else:
+                self.load_methods_from_attributes(describer)
         
-        else:
-            raise BadTraitDeclaration("型定義がありません。辞書か、定義クラスのドキュメント文字列で記述してください")
+        if hasattr(describer, "describe_object"):
+            # 追加の記述メソッドを呼び出す
+            describer.describe_object(self) # type: ignore
         
         # TYPE_XXX_DESCRIBERフラグを推定する
         if self.flags & (TYPE_TYPETRAIT_DESCRIBER|TYPE_VALUETYPE_DESCRIBER) == 0:
@@ -442,14 +354,15 @@ class Type():
             if hasattr(describer, "__name__"):
                 self.typename = normalize_typename(describer.__name__)
             if not self.typename:
-                raise BadTraitDeclaration("{}: 型名を指定してください".format(self.get_describer_qualname()))
+                raise BadTypeDeclaration("{}: 型名を指定してください".format(self.get_describer_qualname()))
 
         if self.typename[0].islower():
-            raise BadTraitDeclaration("{}: 型名は大文字で始めてください".format(self.typename))
+            raise BadTypeDeclaration("{}: 型名は大文字で始めてください".format(self.typename))
 
         if not self.doc:
             if hasattr(describer, "__doc__"):
-                self.doc = describer.__doc__
+                doc = describer.__doc__
+                self.doc = doc.strip() if doc else ""
         
         if isinstance(describer, type):
             # describerをtypemodule.getで識別子として使用可能にする
@@ -461,6 +374,7 @@ class Type():
         return self
 
     def load_methods_from_attributes(self, describer):
+        # クラス属性による記述
         for attrname in dir(describer):
             if attrname.startswith("__"):
                 continue
@@ -486,12 +400,31 @@ class Type():
     
             meth = meth.new(decl.props)
             self._metamethods[name] = meth
+        
+    def load_methods_from_dict(self, describer):
+        # 辞書オブジェクトによる記述
+        for key, value in describer.items():
+            if key == "Typename":
+                self.typename = value
+            elif key == "Doc":
+                self.doc = value
+            elif key == "ValueType":
+                self.value_type = value
+            else:
+                # メソッド定義
+                if len(value)>1 and callable(value[-1]):                      
+                    *docs, action = value
+                    mth = Method(key)
+                    mth.load_from_string("\n".join(docs), action)
+                else:
+                    raise BadTypeDeclaration("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
+                self.add_method(mth)
 
 
 #
 # 型の取得時まで定義の読み込みを遅延する
 #
-class TypeDelayLoader():
+class TypeDefinition():
     def __init__(self, traits: Union[str, Any], typename: str, value_type = None, doc = "", scope = None, bits = 0):
         self.traits = traits
         self.typename = typename
@@ -513,37 +446,98 @@ class TypeDelayLoader():
         return self._t is not None
 
     def get_value_type(self):
-        if self.value_type is not None:
-            return self.value_type
-        elif self.bits & TYPE_ANYTYPE:
-            return None
-        else:
+        if isinstance(self.value_type, str):
+            loader = attribute_loader(self.value_type)
+            return loader()
+        elif self.value_type is None:
             trait = self._load_trait()
             return trait 
+        else:
+            return self.value_type
 
     def is_scope(self, scope):
         return self.scope == scope
     
     def _load_trait(self):
         if isinstance(self.traits, str):
-            from machaon.core.importer import attribute_loader
             loader = attribute_loader(self.traits)
             return loader()
+        elif not isinstance(self.traits, type) and callable(self.traits):
+            return self.traits()
         else:
             return self.traits
 
-    def load(self, typemodule):
+    def define(self, typemodule):
         if self._t is None:
             traits = self._load_trait()            
             self._t = typemodule.define(
                 traits, 
                 typename=self.typename, 
-                value_type=self.value_type,
-                doc=self.doc, scope=self.scope, 
+                value_type=self.get_value_type(),
+                doc=self.doc, 
+                scope=self.scope, 
                 bits=self.bits,
                 delayedload=True
             )
         return self._t
+    
+    def load_declaration_docstring(self, doc):
+        """
+        型定義の解析
+        """
+        """ @type (no-instance-method)
+        detailed description...
+        .......................
+        ....
+        ValueType:
+            <Typename>
+
+        Typename:
+            <Alias names>
+
+        MemberAlias:
+            long: (mode ftype modtime size name)
+            short: (ftype name)
+            link: path
+        
+        Constructor:
+            <document>
+        """
+        decl = parse_doc_declaration(doc, ("type",))
+        if decl is None:
+            return False
+        
+        if "use-instance-method" in decl.props:
+            self.bits |= TYPE_USE_INSTANCE_METHOD
+        if "trait" in decl.props:
+            self.bits |= TYPE_TYPETRAIT_DESCRIBER
+
+        sections = DocStringParser(decl.rest, ("ValueType", "MemberAlias",))
+    
+        document = ""
+        document += sections.get_string("Decl")
+        document += sections.get_string("Description")
+        if document:
+            self.doc = document.strip()
+
+        valtypename = sections.get_value("ValueType")
+        if valtypename == "Any":
+            self.value_type = None # Any型
+        elif valtypename:
+            loader = attribute_loader(valtypename)
+            self.value_type = loader() # 例外発生の可能性
+        
+        aliases = sections.get_lines("MemberAlias")
+        for alias in aliases:
+            name, _, dest = [x.strip() for x in alias.partition(":")]
+            if not name or not dest:
+                raise BadTypeDeclaration()
+
+            if dest[0] == "(" and dest[-1] == ")":
+                row = dest[1:-1].split()
+                self.add_member_alias(name, row)
+
+        return True
 
 #
 #
@@ -569,9 +563,9 @@ class TypeModule():
         self._typelib: DefaultDict[str, List[Type]] = defaultdict(list)
         self._ancestors: List[TypeModule] = [] 
     
-    def _load_type(self, t: Union[Type, TypeDelayLoader]):
-        if isinstance(t, TypeDelayLoader):
-            return t.load(self)
+    def _load_type(self, t: Union[Type, TypeDefinition]):
+        if isinstance(t, TypeDefinition):
+            return t.define(self)
         else:
             return t
     
@@ -698,7 +692,7 @@ class TypeModule():
         if traits is None:
             # 実質文字列型
             t = Type({})
-        elif isinstance(traits, TypeDelayLoader):
+        elif isinstance(traits, TypeDefinition):
             t = traits
         elif isinstance(traits, Type):
             # Traitsまたは派生型のインスタンスが渡された
@@ -718,13 +712,6 @@ class TypeModule():
 
         return t
     
-    # 遅延登録デコレータ
-    def definition(self, *, typename, value_type=None, doc="", scope=None, bits=0):
-        def _deco(traits):
-            self.define(traits=TypeDelayLoader(traits, typename, value_type, doc, scope, bits))
-            return traits
-        return _deco
-    
     #
     def remove_scope(self, scope):
         raise NotImplementedError()
@@ -739,6 +726,26 @@ class TypeModule():
         from machaon.types.fundamental import fundamental_type
         self.add_ancestor(fundamental_type)
 
-
-
+    # 型登録の構文を提供
+    class DefinitionSyntax():
+        def __init__(self, parent):
+            self._parent = parent
+        
+        def __getattr__(self, typename):
+            if not is_valid_typename(typename):
+                raise BadTypename(typename)
+            def _define(doc, *, describer=None, value_type=None, scope=None, bits=0):
+                d = TypeDefinition(describer, typename, value_type, doc, scope, bits)
+                self._parent.define(d)
+            return _define
+        
+    # 遅延登録
+    def definitions(self):
+        return self.DefinitionSyntax(self)
     
+    
+    
+
+
+
+

@@ -16,7 +16,6 @@ class PythonBuiltinTypenames:
         "list", "tuple", "set", "bytes", 
     }
 
-#
 def normalize_typename(name: str) -> str:
     if not name[0].isupper():
         if name in PythonBuiltinTypenames.literals:
@@ -26,7 +25,12 @@ def normalize_typename(name: str) -> str:
         name = name[:bracket]
     return name.replace("_","-")
 
-#
+def is_valid_typename(name: str):
+    if not name[0].isupper():
+        if name not in PythonBuiltinTypenames.literals:
+            return False
+    return True
+
 def normalize_return_typename(name: str) -> Tuple[str, str]:
     if "[" in name:
         name1, _, name2 = name.partition("[")
@@ -38,7 +42,6 @@ def normalize_return_typename(name: str) -> Tuple[str, str]:
         secondtypename = ""
     
     return typename, secondtypename
-
 
 # 型名の間違い
 class BadTypename(Exception):

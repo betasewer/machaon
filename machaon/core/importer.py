@@ -1,8 +1,9 @@
 import importlib
 import builtins
-import inspect
 import os
+import ast
 
+from machaon.core.docstring import parse_doc_declaration
 
 def module_loader(expr, *, location=None):
     if location:
@@ -41,6 +42,16 @@ class PyBasicModuleLoader:
         
     def load_module(self):
         raise NotImplementedError()
+
+    def load_filepath(self):
+        raise NotImplementedError()
+    
+    def load_source(self):
+        p = self.load_filepath()
+        if not os.path.isfile(p):
+            raise ValueError("ファイルではないのでソースコードを取得できません")
+        with open(p, "r", encoding="utf-8") as fi:
+            return fi.read()
     
     def load_attr(self, name=None, *, fallback=False):
         mod = self.module
@@ -59,18 +70,38 @@ class PyBasicModuleLoader:
         else:
             raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
     
-    def enum_type_describers(self):
-        """ 型を定義しているクラスをモジュールから列挙する """
-        mod = self.module
-        for _name, value in inspect.getmembers(mod, inspect.isclass):
-            if value.__module__ != mod.__name__: # インポートされた要素を無視する
+    def scan_type_definitions(self):
+        """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す """
+        source = self.load_source()
+        disp = str(self)
+        tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+        for node in ast.iter_child_nodes(tree):
+            if not isinstance(node, ast.ClassDef):
                 continue
-            doc = getattr(value, "__doc__", None)
-            if doc is None:
+
+            doc = ast.get_docstring(node)
+            if not doc:
                 continue
             doc = doc.lstrip()
-            if doc.startswith("@type"):
-                yield value
+            
+            classname = None
+            for name, field in ast.iter_fields(node):
+                if name == "name":
+                    classname = field
+                    break
+            if classname is None:
+                raise ValueError("no classname")
+            
+            loader = AttributeLoader(self, classname)
+
+            from machaon.core.type import TypeDefinition
+            d = TypeDefinition(loader, classname)
+            if not d.load_declaration_docstring(doc):
+                continue
+
+            yield d
+
+
 
 class PyModuleLoader(PyBasicModuleLoader):
     """
@@ -89,8 +120,22 @@ class PyModuleLoader(PyBasicModuleLoader):
             mod = importlib.import_module(self.module_name)
         return mod
     
+    def load_filepath(self):
+        spec = importlib.util.find_spec(self.module_name)
+        if spec is None:
+            raise ValueError("モジュールが見つかりません")
+        if not spec.has_location:
+            raise ValueError("モジュールの場所が参照不能です")
+        return spec.origin
+    
+    def load_source(self):
+        p = self.load_filepath()
+        with open(p, "r", encoding="utf-8") as fi:
+            return fi.read()
+    
     def __str__(self) -> str:
         return self.module_name
+
 
 class PyModuleFileLoader(PyBasicModuleLoader):
     """
@@ -129,6 +174,7 @@ class AttributeLoader():
         else:
             return getattr(builtins, self.attr_name, None)
 
+
 def walk_modules(path, package_name=None):
     """
     このパス以下にあるすべてのモジュールを列挙する。
@@ -144,6 +190,7 @@ def walk_modules(path, package_name=None):
             filepath = os.path.join(dirpath, filename)
             qual_name = module_name_from_path(filepath, path, package_name)
             yield PyModuleLoader(qual_name)
+
 
 def module_name_from_path(path, basepath, basename=None):
     """

@@ -151,17 +151,17 @@ class AppRoot:
             yield pkg
     
     # パッケージをローカル上で展開・削除・更新する
-    def install_package(self, package):
+    def install_package(self, package: Package):
         yield from self.pkgmanager.install(package, newinstall=True)
     
-    def uninstall_package(self, package):
+    def uninstall_package(self, package: Package):
         yield from self.pkgmanager.uninstall(package)
     
-    def update_package(self, package):
+    def update_package(self, package: Package):
         yield from self.pkgmanager.install(package, newinstall=False)
     
     # パッケージにアップデートが必要か
-    def query_package_status(self, package, *, isinstall=False):
+    def query_package_status(self, package: Package, *, isinstall=False):
         if isinstall:
             if not package.is_remote_source():
                 return "ready"
@@ -172,14 +172,14 @@ class AppRoot:
         else:
             return self.pkgmanager.query_status(package) # 通信して最新か確かめる
 
-    def load_pkg(self, package, *, force=False):
+    def load_pkg(self, package: Package, *, force=False):
         """ パッケージオブジェクトから型をロードする """
         if not force and package.is_load_succeeded():
             return True
         
         package.reset_loading()
-        for klass in package.iter_type_describers():
-            self.typemodule.define(klass, scope=package.scope)
+        for typedef in package.iter_type_definitions():
+            self.typemodule.define(typedef)
         package.finish_loading()
         
         return package.is_load_succeeded()

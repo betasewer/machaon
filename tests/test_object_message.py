@@ -215,6 +215,10 @@ def test_parse_function():
         
         engine = MessageEngine(s)
         returned = engine.run(context)
+        if returned.is_error():
+            spi = TempSpirit()
+            returned.pprint(spi)
+            spi.printout()
         assert parse_test(engine, context, returned.get_typename(), "Function")
 
         fundamental_type.define({

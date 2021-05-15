@@ -1,23 +1,17 @@
 import re
 import datetime
 
-from machaon.core.type import Type, TypeModule, TypeDelayLoader, UnsupportedMethod, TYPE_ANYTYPE, TYPE_OBJCOLTYPE
+from machaon.core.type import Type, TypeModule, TYPE_ANYTYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import full_qualified_name
 
-fundamental_type = TypeModule()
 
 # ----------------------------------------------------------
 #
 #  基本型
 #
 # ----------------------------------------------------------
-@fundamental_type.definition(typename="Type", value_type=Type, doc="""
-オブジェクトの型。
-""")
 class TypeType():
-    """@type trait
-    """
     def constructor(self, context, value):
         """ @meta """
         if isinstance(value, str):
@@ -146,13 +140,7 @@ class TypeType():
         from machaon.types.sheet import Sheet
         return Object(context.get_type("Sheet"), Sheet([], type))
 
-
-@fundamental_type.definition(typename="Any", bits=TYPE_ANYTYPE, doc="""
-あらゆる型を受け入れる型。
-""")
 class AnyType():
-    """@type trait use-instance-method
-    """
     def vars(self, v):
         """ @method
         属性の一覧を返す。
@@ -199,14 +187,7 @@ class AnyType():
         else:
             return "{}({})".format(v, full_qualified_name(type(v)))
 
-
-@fundamental_type.definition(typename="Function", doc="""
-一つの引数をとるメッセージ。
-""")
 class FunctionType():
-    """@type trait
-    ValueType: machaon.core.message.MessageEngine
-    """
     def constructor(self, _context, s):
         """ @meta """
         from machaon.core.message import MessageEngine
@@ -230,12 +211,7 @@ class FunctionType():
         return f.run_function(subject, context)
 
 
-@fundamental_type.definition(typename="Stored", doc="""
-外部ファイルのオブジェクトを操作する。
-""")
 class StoredObject():
-    """@type
-    """
     def __init__(self, object):
         self.object = object
 
@@ -286,12 +262,7 @@ class StoredObject():
 #  Pythonのビルトイン型
 #
 # ----------------------------------------------------------
-@fundamental_type.definition(typename="Str", value_type=str, doc="""
-文字列。
-""")
 class StrType():
-    """ @type trait use-instance-method
-    """
     def constructor(self, _context, v):
         """ @meta """
         return str(v)
@@ -389,12 +360,7 @@ class StrType():
             return imported() # 関数実行
 
 
-@fundamental_type.definition(typename="Bool", value_type=bool, doc="""
-真偽値。
-""")
 class BoolType():
-    """@type trait use-instance-method
-    """
     def constructor(self, _context, s):
         """ @meta """
         if s == "True":
@@ -481,14 +447,7 @@ class NumericType():
         """
         return round(n, digits)
     
-
-
-@fundamental_type.definition(typename="Int", value_type=int, doc="""
-整数型。
-""")
 class IntType(NumericType):
-    """@type trait use-instance-method
-    """
     def constructor(self, _context, s):
         """ @meta """
         return int(s, 0)
@@ -527,13 +486,7 @@ class IntType(NumericType):
         """
         return pow(n, exp)
 
-
-@fundamental_type.definition(typename="Float", value_type=float, doc="""
-浮動小数点型。
-""")
 class FloatType(NumericType):
-    """@type trait use-instance-method
-    """
     def constructor(self, _context, s):
         """ @meta """
         return float(s)
@@ -550,24 +503,12 @@ class FloatType(NumericType):
         import math
         return math.pow(n, exp)
 
-
-@fundamental_type.definition(typename="Complex", value_type=complex, doc="""
-複素数型。
-""")
 class ComplexType():
-    """@type trait use-instance-method
-    """
     def constructor(self, _context, s):
         """ @meta """
         return complex(s)
-    
 
-@fundamental_type.definition(typename="Datetime", value_type=datetime.datetime, doc="""
-日付時刻型。
-""")
 class DatetimeType():
-    """@type trait use-instance-method
-    """
     def constructor(self, _context, s):
         """ @meta """
     
@@ -638,10 +579,7 @@ class BasicStream():
         self._must_be_opened()
         self._stream.close()
     
-    
-@fundamental_type.definition(typename="InputStream", doc="""
-入力ストリーム
-""")
+
 class InputStream(BasicStream):
     def open(self, binary=False, encoding=None):
         self._stream = self._open_stream("read", binary=binary, encoding=encoding)
@@ -661,9 +599,6 @@ class InputStream(BasicStream):
         return "<InputStream>"
 
 
-@fundamental_type.definition(typename="OutputStream", doc="""
-出力ストリーム
-""")
 class OutputStream(BasicStream):
     def open(self, binary=False, encoding=None):
         self._stream = self._open_stream("write", binary=binary, encoding=encoding)
@@ -683,38 +618,145 @@ class OutputStream(BasicStream):
     
 # ----------------------------------------------------------
 #
-#  その他のデータ型
+#  データ型登録
 #
 # ----------------------------------------------------------
-fundamental_type.definition(typename="Tuple")(
-    "machaon.types.tuple.ObjectTuple"
+fundamental_type = TypeModule()
+typedef = fundamental_type.definitions()
+typedef.Type("""
+    オブジェクトの型。
+    """,
+    describer="machaon.types.fundamental.TypeType", 
+    value_type=Type, 
 )
-fundamental_type.definition(typename="Sheet")(
-    "machaon.types.sheet.Sheet"
+typedef.Any(
+    """
+    あらゆるオブジェクトを受け入れる型。
+    """,
+    describer="machaon.types.fundamental.AnyType",
+    bits=TYPE_ANYTYPE|TYPE_USE_INSTANCE_METHOD,
 )
-fundamental_type.definition(typename="ObjectCollection", bits=TYPE_OBJCOLTYPE)(
-    "machaon.core.object.ObjectCollection"
+typedef.Function( # Message
+    """
+    1引数をとるメッセージ。
+    """,
+    describer="machaon.types.fundamental.FunctionType",
+    value_type="machaon.core.message.MessageEngine",
 )
-fundamental_type.definition(typename="Method")(
-    "machaon.core.method.Method"
+typedef.Str(
+    """
+    文字列。
+    """,
+    value_type=str, 
+    describer="machaon.types.fundamental.StrType",
+    bits=TYPE_USE_INSTANCE_METHOD
 )
-fundamental_type.definition(typename="InvocationContext")(
-    "machaon.core.invocation.InvocationContext"
+typedef.Bool(
+    """
+    真偽値。
+    """,
+    value_type=bool, 
+    describer="machaon.types.fundamental.BoolType",
+    bits=TYPE_USE_INSTANCE_METHOD
 )
-fundamental_type.definition(typename="Process")(
-    "machaon.process.Process"
+typedef.Int(
+    """
+    整数。
+    """,
+    value_type=int,
+    describer="machaon.types.fundamental.IntType",
+    bits=TYPE_USE_INSTANCE_METHOD
 )
-fundamental_type.definition(typename="ProcessError")(
-    "machaon.process.ProcessError"
+typedef.Float(
+    """
+    浮動小数点数。
+    """,
+    value_type=float, 
+    describer="machaon.types.fundamental.FloatType",
+    bits=TYPE_USE_INSTANCE_METHOD
 )
-fundamental_type.definition(typename="Package")(
-    "machaon.types.package.AppPackageType"
+typedef.Complex(
+    """
+    複素数。
+    """,
+    value_type=complex, 
+    describer="machaon.types.fundamental.ComplexType",
+    bits=TYPE_USE_INSTANCE_METHOD
 )
-fundamental_type.definition(typename="RootObject")(
-    "machaon.types.app.RootObject"
+typedef.Datetime(
+    """
+    日付時刻。
+    """,
+    value_type=datetime.datetime, 
+    describer="machaon.types.fundamental.DatetimeType",
+    bits=TYPE_USE_INSTANCE_METHOD
 )
-fundamental_type.definition(typename="AppChamber")(
-    "machaon.types.app.AppChamber"
+typedef.Tuple(
+    """
+    任意の型のタプル。
+    """,
+    describer="machaon.types.tuple.ObjectTuple",
+)
+typedef.Sheet(
+    """
+    同型の配列から作られる表。
+    """,
+    describer="machaon.types.sheet.Sheet",
+)
+typedef.ObjectCollection(
+    """
+    辞書。
+    """,
+    describer="machaon.core.object.ObjectCollection",
+    bits=TYPE_OBJCOLTYPE
+)
+typedef.Method(
+    """
+    メソッド。
+    """,
+    describer="machaon.core.method.Method"
+)
+typedef.InvocationContext(
+    """
+    メソッドの呼び出しコンテキスト。
+    """,
+    describer="machaon.core.invocation.InvocationContext"
+)
+typedef.Process(
+    """
+    メッセージを実行するプロセス。
+    """,
+    describer="machaon.process.Process"
+)
+typedef.ProcessChamber(
+    """
+    プロセスのリスト。
+    """,
+    describer="machaon.types.app.AppChamber"
+)
+typedef.ProcessError( # Error
+    """
+    発生したエラー。
+    """,
+    describer="machaon.process.ProcessError"
+)
+typedef.Package(
+    """
+    パッケージ。
+    """,
+    describer="machaon.types.package.AppPackageType"
+)
+typedef.Stored(
+    """
+    外部ファイルのオブジェクトを操作する。
+    """,
+    describer="machaon.types.fundamental.StoredObject",
+)
+typedef.RootObject(
+    """
+    アプリのインスタンス。
+    """,
+    describer="machaon.types.app.RootObject"
 )
 
 #

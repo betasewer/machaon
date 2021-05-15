@@ -21,7 +21,7 @@ def approot():
     
 def test_load_singlemodule_fundamental():
     root = approot()
-    pkg = create_package("fundamentals", "module:machaon.types.fundamental")
+    pkg = create_package("fundamentals", "module:machaon.types.shell")
 
     assert not pkg.once_loaded()
     assert not pkg.is_load_succeeded()
@@ -31,24 +31,24 @@ def test_load_singlemodule_fundamental():
     root.load_pkg(pkg)
 
     assert pkg.once_loaded()
+    if pkg.is_load_failed(): raise pkg.get_load_errors()[0]
     assert pkg.is_load_succeeded()
-    assert not pkg.is_load_failed()
     assert len(pkg.get_load_errors()) == 0
     
-    import machaon.types.fundamental as fa
+    import machaon.types.shell as shell
 
     tm = root.get_type_module()
-    assert tm.get("Type")
-    assert tm.get("Type").get_describer() is fa.TypeType
+    assert tm.get("Path")
+    assert tm.get("Path").get_describer() is shell.Path
     
-    import machaon.types.app
-    assert tm.get("RootObject")
-    assert tm.get("RootObject").get_describer() is machaon.types.app.RootObject
+    assert tm.get("PathDialog")
+    assert tm.get("PathDialog").get_describer() is shell.PathDialog
 
+test_load_singlemodule_fundamental()
 
 def test_load_submodules_types():
     root = approot()
-    pkg = create_package("types", "package:machaon.types")
+    pkg = create_package("types", "package:machaon.types", scope="ion")
 
     assert not pkg.once_loaded()
     assert not pkg.is_load_succeeded()
@@ -58,25 +58,21 @@ def test_load_submodules_types():
     root.load_pkg(pkg)
 
     assert pkg.once_loaded()
+    if pkg.is_load_failed(): raise pkg.get_load_errors()[0]
     assert pkg.is_load_succeeded()
-    assert not pkg.is_load_failed()
     assert len(pkg.get_load_errors()) == 0
 
     #
     tm = root.get_type_module()
 
-    import machaon.types.fundamental
-    assert tm.get("Type")
-    assert tm.get("Type").get_describer() is machaon.types.fundamental.TypeType
+    import machaon.types.app
+    assert tm.get("AppTestObject", scope="ion")
+    assert tm.get("AppTestObject", scope="ion").get_describer() is machaon.types.app.AppTestObject
 
     import machaon.types.shell
-    assert tm.get("Path")
-    assert tm.get("Path").get_describer() is machaon.types.shell.Path
-
-    import machaon.types.tuple
-    assert tm.get("Tuple")
-    assert tm.get("Tuple").get_describer() is machaon.types.tuple.ObjectTuple
-
+    assert tm.get("Path", scope="ion")
+    assert tm.get("Path", scope="ion").get_describer() is machaon.types.shell.Path
+    
 
 @pytest.mark.skip()
 def test_package_setup(approot):

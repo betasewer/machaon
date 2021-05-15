@@ -175,10 +175,13 @@ class InvocationEntry():
         if not rettype.check_value_type(type(value)):
             if isinstance(retspec, Type):
                 value = rettype.construct(context, value)
-            else:
+            elif isinstance(retspec, MethodResult):
                 typeparams = retspec.get_typeparams() if retspec else tuple()
                 value = rettype.construct(context, value, *typeparams)
-        
+            else:
+                err = ValueError("'{}' -> '{}' 返り値が型に適合しません".format(type(value).__name__, rettype.typename))
+                return _new_process_error_object(context, err, objectType)
+
         return objectType(rettype, value)
 
     def is_failed(self):

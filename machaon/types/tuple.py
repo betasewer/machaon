@@ -16,8 +16,6 @@ from machaon.types.fundamental import NotFound
 class ElemObject():
     """ @type
     データ集合に含まれる値。
-    typename:
-        ElemObject
     """
     def __init__(self, object, key, value=None):
         self.object = object
@@ -52,9 +50,8 @@ class ElemObject():
 #
 #
 class ObjectTuple():  
-    """ @type
+    """
     異なる型のオブジェクトを格納する配列。
-    Typename: Tuple
     """
     def __init__(self, objects):
         self.objects = objects

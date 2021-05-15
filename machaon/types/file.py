@@ -144,7 +144,6 @@ class BasicContextFile():
 class TextFile(BasicContextFile):
     """ @type
     テキストファイル。
-    Typename: TextFile    
     """
     def __init__(self, path):
         super().__init__(path)

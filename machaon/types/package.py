@@ -1,7 +1,7 @@
 from machaon.package.package import PackageManager
 
 class AppPackageType:
-    """ @type
+    """
     プログラムパッケージを操作するための型。
     ValueType: 
         machaon.package.package.Package

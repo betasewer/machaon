@@ -1,3 +1,4 @@
+from machaon.core.type import TypeDefinition
 import os
 import shutil
 import sys
@@ -5,11 +6,10 @@ import tempfile
 import configparser
 import re
 import importlib
-import inspect
 import traceback
-from typing import Dict, Any, Union, List, Optional
+from typing import Dict, Any, Union, List, Optional, Iterator
 
-from machaon.core.importer import module_loader, attribute_loader, walk_modules, module_name_from_path
+from machaon.core.importer import module_loader, walk_modules, module_name_from_path
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
 
@@ -43,10 +43,11 @@ class Package():
         module: Optional[str] = None, 
         separate = True, 
         hashval = None, 
+        scope = None
     ):
         self.name: str = name
         self.source = source
-        self.scope = self.name
+        self.scope = scope or self.name
         self.separate = separate
         
         if type is None: 
@@ -127,7 +128,7 @@ class Package():
     def is_remote_source(self) -> bool:
         return self.source.is_remote
 
-    def iter_type_describers(self):
+    def iter_type_definitions(self) -> Iterator[TypeDefinition]:
         """ パッケージ内のモジュールにあるすべての型定義クラスを得る """
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
@@ -149,7 +150,7 @@ class Package():
                 # サブモジュール全て
                 modules = []
                 basepkg = aloader.module_name
-                for pkgpath in aloader.load_package_directories():
+                for pkgpath in aloader.load_package_directories(): # パッケージのルートディレクトリから下降する
                     # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
                     skip_names = []
                     for fr in traceback.extract_stack():
@@ -168,24 +169,22 @@ class Package():
             modules = [loader]
         
         if not modules:
-            ex = PackageLoadError("モジュールを1つも読み込めませんでした")
-            self._loaded.append(ex)
+            self._loaded.append(PackageLoadError("モジュールを1つも読み込めませんでした"))
             return False
 
         typecount = 0
         for modloader in modules:
             try:
-                for klass in modloader.enum_type_describers():
-                    yield klass
+                for typedef in modloader.scan_type_definitions():
+                    typedef.scope = self.scope
+                    yield typedef
                     typecount += 1
             except Exception as e:
-                ex = PackageTypeDefLoadError(e, str(modloader))
-                self._loaded.append(ex)
+                self._loaded.append(PackageTypeDefLoadError(e, str(modloader)))
                 continue
         
         if typecount == 0:
-            ex = PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules)))
-            self._loaded.append(ex)
+            self._loaded.append(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
             return False
     
     def reset_loading(self):

@@ -1,4 +1,4 @@
-from machaon.core.type import Type
+from machaon.core.type import TYPE_DELAY_LOAD_METHODS, Type
 from machaon.core.symbol import normalize_method_target
 from machaon.core.method import make_method_prototype
 from machaon.core.invocation import TypeMethodInvocation
@@ -84,10 +84,6 @@ class GenericMethods:
     エイリアス名はメソッドの設定で指定しても読み込まれません。
     operatorsに追加してください。
     """
-    @classmethod
-    def describe_object(cls, typeobj):
-        # メソッドの収集は行わず、型のみを定義する
-        typeobj.describe_from_docstring(""" @no-instance-method """)
 
     # 比較
     def equal(self, left, right):
@@ -584,4 +580,4 @@ class GenericMethodValue():
 
 # メソッドオブジェクトのキャッシュ
 _GenericMethodsType = Type(GenericMethods, name="GenericMethods", value_type=GenericMethodValue)
-_GenericMethodsType.load()
+_GenericMethodsType.load(TYPE_DELAY_LOAD_METHODS)

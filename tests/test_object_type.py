@@ -30,10 +30,8 @@ def test_valuetype_define():
 # スコープ付きの型を定義する
 #
 class SpecStrType:
-    """ @type
-    スコープ限定の型。
-    Typename:
-        Str
+    """
+    スコープ限定のStr型。
     """
     def __init__(self, num):
         self.num = num
@@ -52,7 +50,7 @@ def test_scoped_define():
     types = TypeModule()
 
     assert not hasattr(SpecStrType, "Type_typename")
-    spec_str_t = types.define(SpecStrType, scope="spec")
+    spec_str_t = types.define(SpecStrType, typename="Str", scope="spec")
     assert spec_str_t is not None
     assert spec_str_t.is_scope("spec")
     assert spec_str_t.typename == "Str"
@@ -67,25 +65,11 @@ def test_scoped_define():
     assert types.get("Str", scope="spec") is spec_str_t
     assert types.get("Str") is str_t
 
-# definitionで登録
-def test_scoped_delayed_define():
-    types = TypeModule()
-    types.definition(typename="Str", scope="spec")(SpecStrType)
-    types.definition(typename="Str")(fundamental_type.get("Str").describer)
-
-    t = types.get("Str")
-    assert t is not None
-    assert not t.is_scope("spec")
-
-    ts = types.get("Str", scope="spec")
-    assert ts is not None
-    assert ts.is_scope("spec")
-
     # enum
     typelist = list(types.enum())
     assert len(typelist) == 2
-    assert typelist[0] is ts # 追加順で取り出される
-    assert typelist[1] is t
+    assert typelist[0] is spec_str_t # 追加順で取り出される
+    assert typelist[1] is str_t
 
 # 値から型を推定
 def test_deduce():

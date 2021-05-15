@@ -34,4 +34,3 @@ def test_newobject_conversion():
     assert t.value.column(context, "=").values() == ["A","BB","CCC"]
     assert t.value.column(context, "length").values() == [1,2,3]
 
-

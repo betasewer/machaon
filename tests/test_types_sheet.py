@@ -40,7 +40,7 @@ class Employee():
 def objectdesk():
     typemod = TypeModule()
     typemod.add_fundamental_types()
-    typemod.definition(typename="Employee")(Employee)
+    typemod.define(Employee, typename="Employee")
     desk = InvocationContext(input_objects=ObjectCollection(), type_module=typemod)
     return desk
 
