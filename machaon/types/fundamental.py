@@ -1,7 +1,7 @@
 import re
 import datetime
 
-from machaon.core.type import Type, TypeModule, TYPE_ANYTYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+from machaon.core.type import Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import full_qualified_name
 
@@ -13,9 +13,19 @@ from machaon.core.symbol import full_qualified_name
 # ----------------------------------------------------------
 class TypeType():
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta 
+        Params:
+            Str: 型名 / クラスの完全な名前(qualname)
+        """
         if isinstance(value, str):
-            return context.select_type(value)
+            if "." in value:
+                from machaon.core.importer import attribute_loader
+                d = TypeDefinition(attribute_loader(value))
+                if not d.load_declaration_docstring():
+                    raise ValueError("型定義ドキュメントの解析中にエラーが発生")
+                return d.define(context.type_module) # 即座にロードする
+            else:
+                return context.select_type(value)
         else:
             raise TypeError("value")
 

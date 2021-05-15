@@ -435,8 +435,8 @@ class TypeDefinition():
     ):
         self.describer = describer
         self.typename = typename
-        if not isinstance(typename, str):
-            raise ValueError("型名を文字列で指定してください")
+        if typename and not isinstance(typename, str):
+            raise ValueError("型名を文字列で指定してください")     
         self.value_type = value_type
         if self.describer is None and self.value_type is not None:
             self.describer = self.value_type
@@ -481,9 +481,13 @@ class TypeDefinition():
 
     def define(self, typemodule):
         if self._t is None:
-            traits = self._load_describer()            
+            describer = self._load_describer()
+            
+            if self.typename is None:
+                self.typename = normalize_typename(describer.__name__)
+
             self._t = typemodule.define(
-                traits, 
+                describer, 
                 typename=self.typename, 
                 value_type=self.get_value_type(),
                 doc=self.doc, 
@@ -491,9 +495,10 @@ class TypeDefinition():
                 bits=self.bits,
                 delayedload=True
             )
+        
         return self._t
     
-    def load_declaration_docstring(self, doc):
+    def load_declaration_docstring(self, doc=None):
         """
         型定義の解析
         """
@@ -509,6 +514,12 @@ class TypeDefinition():
             short: (ftype name)
             link: path
         """
+        if doc is None:
+            describer = self._load_describer()
+            doc = getattr(describer, "__doc__", None)
+            if doc is None:
+                raise ValueError("ドキュメント文字列がありません")
+
         decl = parse_doc_declaration(doc, ("type",))
         if decl is None:
             return False
@@ -714,7 +725,10 @@ class TypeModule():
             t.load()
 
         if not delayedload:
-            self._typelib[t.typename].append(t)
+            key = t.typename
+            if key is None:
+                raise ValueError("TypeDefinition typename is not defined")
+            self._typelib[key].append(t)
 
         return t
     
