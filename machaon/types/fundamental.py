@@ -626,8 +626,8 @@ typedef = fundamental_type.definitions()
 typedef.Type("""
     オブジェクトの型。
     """,
-    describer="machaon.types.fundamental.TypeType", 
     value_type=Type, 
+    describer="machaon.types.fundamental.TypeType", 
 )
 typedef.Any(
     """
@@ -640,8 +640,8 @@ typedef.Function( # Message
     """
     1引数をとるメッセージ。
     """,
-    describer="machaon.types.fundamental.FunctionType",
     value_type="machaon.core.message.MessageEngine",
+    describer="machaon.types.fundamental.FunctionType",
 )
 typedef.Str(
     """
@@ -695,68 +695,70 @@ typedef.Tuple(
     """
     任意の型のタプル。
     """,
-    describer="machaon.types.tuple.ObjectTuple",
+    value_type="machaon.types.tuple.ObjectTuple",
 )
 typedef.Sheet(
     """
     同型の配列から作られる表。
     """,
-    describer="machaon.types.sheet.Sheet",
+    value_type="machaon.types.sheet.Sheet",
 )
 typedef.ObjectCollection(
     """
     辞書。
     """,
-    describer="machaon.core.object.ObjectCollection",
+    value_type="machaon.core.object.ObjectCollection",
     bits=TYPE_OBJCOLTYPE
 )
 typedef.Method(
     """
     メソッド。
     """,
-    describer="machaon.core.method.Method"
+    value_type="machaon.core.method.Method"
 )
 typedef.InvocationContext(
     """
     メソッドの呼び出しコンテキスト。
     """,
-    describer="machaon.core.invocation.InvocationContext"
+    value_type="machaon.core.invocation.InvocationContext"
 )
 typedef.Process(
     """
     メッセージを実行するプロセス。
     """,
-    describer="machaon.process.Process"
+    value_type="machaon.process.Process"
 )
 typedef.ProcessChamber(
     """
     プロセスのリスト。
     """,
+    value_type="machaon.process.ProcessChamber",
     describer="machaon.types.app.AppChamber"
 )
-typedef.ProcessError( # Error
+typedef.Error( # Error
     """
     発生したエラー。
     """,
-    describer="machaon.process.ProcessError"
+    value_type="machaon.process.ProcessError"
 )
 typedef.Package(
     """
     パッケージ。
     """,
+    value_type="machaon.package.package.Package",
     describer="machaon.types.package.AppPackageType"
 )
 typedef.Stored(
     """
     外部ファイルのオブジェクトを操作する。
     """,
-    describer="machaon.types.fundamental.StoredObject",
+    value_type="machaon.types.fundamental.StoredObject",
 )
 typedef.RootObject(
     """
     アプリのインスタンス。
     """,
-    describer="machaon.types.app.RootObject"
+    value_type="machaon.types.app.RootObject"
 )
 
 #
