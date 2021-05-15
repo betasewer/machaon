@@ -1020,7 +1020,10 @@ def verbose_display_traceback(tb, linewidth):
         localdict = frame.f_locals
         localself = localdict.pop("self", None)
         if localself is not None:
-            fn = getattr(localself, fnname, None)
+            try:
+                fn = getattr(localself, fnname, None)
+            except:
+                fn = None # プロパティの場合エラー発生の可能性あり
             if fn is not None:
                 msg_fn = "{}{}:".format(fnname, display_parameters(fn))
             
