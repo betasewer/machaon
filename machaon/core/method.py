@@ -62,7 +62,7 @@ class MethodParameterNoDefault:
 #
 #
 class Method():
-    """ @type
+    """
     メソッド定義。
     """
     def __init__(self, name = None, target = None, doc = "", flags = 0):

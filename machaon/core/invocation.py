@@ -41,16 +41,15 @@ def _default_result_object(context):
 
 def _new_process_error_object(context, error, objectType):
     from machaon.process import ProcessError
-    errtype = context.get_type("ProcessError")
+    errtype = context.get_type("Error")
     return objectType(errtype, ProcessError(context, error))
 
 #
 #
 #
 class InvocationEntry():
-    """ @type
+    """
     関数の呼び出し引数と返り値。
-    Typename: Invocation
     """
     def __init__(self, invocation, action, args, kwargs, *, exception=None):
         self.invocation = invocation
@@ -210,7 +209,7 @@ def instant_return_test(context, value, typename, typeparams=()):
 #
 #
 class InvocationContext:
-    """ @type
+    """
     メソッドの呼び出しコンテキスト
     """
     def __init__(self, *, input_objects, type_module, spirit=None, subject=None):
@@ -333,7 +332,7 @@ class InvocationContext:
         """
         from machaon.process import ProcessError
         if isinstance(value, ProcessError):
-            return self.get_type("ProcessError").new_object(value) # エラーオブジェクトは型変換しない
+            return self.get_type("Error").new_object(value) # エラーオブジェクトは型変換しない
         if type:
             t = self.select_type(type)
             if t is None:

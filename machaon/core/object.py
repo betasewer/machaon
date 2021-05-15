@@ -111,7 +111,7 @@ class ObjectCollectionItem:
 
 
 class ObjectCollection():
-    """ @type
+    """
     オブジェクトを文字列によるキーで集めた辞書。
     メソッド名がそのままメンバ参照になる。
     """

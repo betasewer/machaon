@@ -18,7 +18,7 @@ from machaon.core.symbol import full_qualified_name
 
 
 class Process:
-    """ @type
+    """
     プロセスの開始、スレッドの実行、停止、操作を行う 
     """
     def __init__(self, index, message):
@@ -925,9 +925,8 @@ class ProcessHive:
 #
 #
 class ProcessError():
-    """@type
+    """
     プロセスの実行時に起きたエラー。
-    Typename: ProcessError
     """
     def __init__(self, context, error):
         self.error = error

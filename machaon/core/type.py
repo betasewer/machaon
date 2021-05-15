@@ -425,22 +425,31 @@ class Type():
 # 型の取得時まで定義の読み込みを遅延する
 #
 class TypeDefinition():
-    def __init__(self, traits: Union[str, Any], typename: str, value_type = None, doc = "", scope = None, bits = 0):
-        self.traits = traits
+    def __init__(self, 
+        describer: Union[str, Any] = None, 
+        typename: str = None, 
+        value_type = None, 
+        doc = "", 
+        scope = None, 
+        bits = 0
+    ):
+        self.describer = describer
         self.typename = typename
         if not isinstance(typename, str):
             raise ValueError("型名を文字列で指定してください")
         self.value_type = value_type
+        if self.describer is None and self.value_type is not None:
+            self.describer = self.value_type
         self.doc = doc
         self.scope = scope
         self.bits = bits
         self._t = None
     
     def get_describer_qualname(self):
-        if isinstance(self.traits, str):
-            return self.traits
+        if isinstance(self.describer, str):
+            return self.describer
         else:
-            return full_qualified_name(self.traits)
+            return full_qualified_name(self.describer)
     
     def is_loaded(self):
         return self._t is not None
@@ -450,7 +459,7 @@ class TypeDefinition():
             loader = attribute_loader(self.value_type)
             return loader()
         elif self.value_type is None:
-            trait = self._load_trait()
+            trait = self._load_describer()
             return trait 
         else:
             return self.value_type
@@ -458,18 +467,18 @@ class TypeDefinition():
     def is_scope(self, scope):
         return self.scope == scope
     
-    def _load_trait(self):
-        if isinstance(self.traits, str):
-            loader = attribute_loader(self.traits)
+    def _load_describer(self):
+        if isinstance(self.describer, str):
+            loader = attribute_loader(self.describer)
             return loader()
-        elif not isinstance(self.traits, type) and callable(self.traits):
-            return self.traits()
+        elif not isinstance(self.describer, type) and callable(self.describer):
+            return self.describer()
         else:
-            return self.traits
+            return self.describer
 
     def define(self, typemodule):
         if self._t is None:
-            traits = self._load_trait()            
+            traits = self._load_describer()            
             self._t = typemodule.define(
                 traits, 
                 typename=self.typename, 
@@ -485,23 +494,17 @@ class TypeDefinition():
         """
         型定義の解析
         """
-        """ @type (no-instance-method)
+        """ @type no-instance-method alias-name [aliases...]
         detailed description...
         .......................
-        ....
+
         ValueType:
             <Typename>
-
-        Typename:
-            <Alias names>
 
         MemberAlias:
             long: (mode ftype modtime size name)
             short: (ftype name)
             link: path
-        
-        Constructor:
-            <document>
         """
         decl = parse_doc_declaration(doc, ("type",))
         if decl is None:
@@ -733,7 +736,7 @@ class TypeModule():
         
         def __getattr__(self, typename):
             if not is_valid_typename(typename):
-                raise BadTypename(typename)
+                raise BadTypename(typename)            
             def _define(doc, *, describer=None, value_type=None, scope=None, bits=0):
                 d = TypeDefinition(describer, typename, value_type, doc, scope, bits)
                 self._parent.define(d)
