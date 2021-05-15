@@ -9,7 +9,7 @@ import importlib
 import traceback
 from typing import Dict, Any, Union, List, Optional, Iterator
 
-from machaon.core.importer import module_loader, walk_modules, module_name_from_path
+from machaon.core.importer import module_loader, walk_modules, module_name_from_path, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
 
@@ -128,8 +128,8 @@ class Package():
     def is_remote_source(self) -> bool:
         return self.source.is_remote
 
-    def iter_type_definitions(self) -> Iterator[TypeDefinition]:
-        """ パッケージ内のモジュールにあるすべての型定義クラスを得る """
+    def collect_submodules(self) -> List[PyBasicModuleLoader]:
+        """ パッケージ内のすべてのサブモジュールを取得する """
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
         
@@ -140,7 +140,7 @@ class Package():
                 moduleindex = aloader.load_attr("machaon_modules", fallback=True)
             except Exception as e:
                 self._loaded.append(PackageLoadError(e))
-                return False
+                return []
 
             # 型が定義されたモジュールをロードする
             if moduleindex:
@@ -170,6 +170,13 @@ class Package():
         
         if not modules:
             self._loaded.append(PackageLoadError("モジュールを1つも読み込めませんでした"))
+            return []
+        return modules
+    
+    def iter_type_definitions(self) -> Iterator[TypeDefinition]:
+        """ モジュールにあるすべての型定義クラスを得る """
+        modules = self.collect_submodules()
+        if not modules:
             return False
 
         typecount = 0

@@ -214,3 +214,31 @@ class AppPackageType:
         """
         context.root.unload_pkg(package)
         context.root.load_pkg(package, force=True)
+    
+    def scan(self, package, app):
+        """ @task
+        パッケージに定義された型を収集しログを表示する。登録はしない。
+        Returns:
+            Sheet[ObjectCollection]: (typename, qualname)
+        """
+        elems = []
+        for mod in package.collect_submodules():
+            modqualname = str(mod)
+            app.post("message", "モジュール {}".format(modqualname))
+
+            defs = []
+            for typedef in mod.scan_type_definitions():
+                typename = typedef.typename
+                qualname = typedef.get_describer_qualname()
+                defs.append({
+                    "typename" : typename,
+                    "qualname" : qualname
+                })
+            
+            if defs:
+                app.post("message", "　型定義を{}個発見".format(len(defs)))
+            
+            elems.extend(defs)
+        
+        return elems
+

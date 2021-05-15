@@ -448,8 +448,11 @@ class TypeDefinition():
     def get_describer_qualname(self):
         if isinstance(self.describer, str):
             return self.describer
-        else:
+        elif isinstance(self.describer, type):
             return full_qualified_name(self.describer)
+        else:
+            t = self._load_describer()
+            return full_qualified_name(t)
     
     def is_loaded(self):
         return self._t is not None
