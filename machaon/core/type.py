@@ -28,6 +28,15 @@ class BadMemberDeclaration(Exception):
 # メソッド実装を読み込めない
 class BadMethodDelegation(Exception):
     pass
+
+# メタメソッド呼び出し時のエラー
+class BadMetaMethod(Exception):
+    def __init__(self, error, type, method):
+        super().__init__(error, type, method)
+    
+    def __str__(self):
+        methname = self.args[2].get_action_target()
+        return "BadMetaMethod {}.{} {}".format(self.args[1], methname, self.args[0])
     
 # サポートされない
 class UnsupportedMethod(Exception):
@@ -144,7 +153,10 @@ class Type():
                 args = (self, *args)
 
         fn = self.delegate_method(method.get_action_target())
-        return fn(*args, **kwargs)
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            raise BadMetaMethod(e, self, method)
     
     def construct(self, context, value, *args):
         if self.check_value_type(type(value)):
@@ -339,30 +351,39 @@ class Type():
             # 追加の記述メソッドを呼び出す
             describer.describe_object(self) # type: ignore
         
+        # 値を補完する
+        # value_type
+        if self.value_type is None:
+            if self.describer and self.flags & TYPE_ANYTYPE == 0:
+                self.value_type = self.describer
+
+        # typename
+        if not self.typename:
+            raise BadTypeDeclaration("{}: 型名を指定してください".format(self.get_describer_qualname()))
+
+        if self.typename[0].islower():
+            raise BadTypeDeclaration("{}: 型名は大文字で始めてください".format(self.typename))
+
+        # doc
+        if not self.doc:
+            if hasattr(describer, "__doc__"):
+                doc = describer.__doc__
+                self.doc = doc.strip() if doc else ""
+        
+        # フラグの整合性をチェックする
+        if self.flags & TYPE_TYPETRAIT_DESCRIBER:
+            if describer is self.value_type:
+                raise BadTypeDeclaration("trait実装が明示的に指定されましたが、型が値型と同じです")
+        
         # TYPE_XXX_DESCRIBERフラグを推定する
         if self.flags & (TYPE_TYPETRAIT_DESCRIBER|TYPE_VALUETYPE_DESCRIBER) == 0:
-            if self.value_type and describer is not self.value_type: 
+            if describer is not self.value_type: 
                 # 別の値型が定義されているならTYPETRAIT
                 self.flags |= TYPE_TYPETRAIT_DESCRIBER
             else: 
                 # describerを値型とする
                 self.flags |= TYPE_VALUETYPE_DESCRIBER
                 self.value_type = describer
-
-        # 専用のフォールバック値として
-        if not self.typename:
-            if hasattr(describer, "__name__"):
-                self.typename = normalize_typename(describer.__name__)
-            if not self.typename:
-                raise BadTypeDeclaration("{}: 型名を指定してください".format(self.get_describer_qualname()))
-
-        if self.typename[0].islower():
-            raise BadTypeDeclaration("{}: 型名は大文字で始めてください".format(self.typename))
-
-        if not self.doc:
-            if hasattr(describer, "__doc__"):
-                doc = describer.__doc__
-                self.doc = doc.strip() if doc else ""
         
         if isinstance(describer, type):
             # describerをtypemodule.getで識別子として使用可能にする
@@ -421,10 +442,13 @@ class Type():
                 self.add_method(mth)
 
 
-#
-# 型の取得時まで定義の読み込みを遅延する
-#
+# describer の文字列に value_typeが書かれている場合もある
+
+
 class TypeDefinition():
+    """
+    クラス文字列から型をロードする
+    """
     def __init__(self, 
         describer: Union[str, Any] = None, 
         typename: str = None, 
@@ -439,10 +463,12 @@ class TypeDefinition():
             raise ValueError("型名を文字列で指定してください")     
         self.value_type = value_type
         if self.describer is None and self.value_type is not None:
+            # 型名のみが指定されているなら、クラス実装もそこにあるとみなす
             self.describer = self.value_type
         self.doc = doc
         self.scope = scope
         self.bits = bits
+        self._decl = None
         self._t = None
     
     def get_describer_qualname(self):
@@ -461,16 +487,10 @@ class TypeDefinition():
         if isinstance(self.value_type, str):
             loader = attribute_loader(self.value_type)
             return loader()
-        elif self.value_type is None:
-            trait = self._load_describer()
-            return trait 
         else:
             return self.value_type
 
-    def is_scope(self, scope):
-        return self.scope == scope
-    
-    def _load_describer(self):
+    def get_describer(self):
         if isinstance(self.describer, str):
             loader = attribute_loader(self.describer)
             return loader()
@@ -479,26 +499,51 @@ class TypeDefinition():
         else:
             return self.describer
 
-    def define(self, typemodule):
-        if self._t is None:
-            describer = self._load_describer()
-            
-            if self.typename is None:
-                self.typename = normalize_typename(describer.__name__)
-
-            self._t = typemodule.define(
-                describer, 
-                typename=self.typename, 
-                value_type=self.get_value_type(),
-                doc=self.doc, 
-                scope=self.scope, 
-                bits=self.bits,
-                delayedload=True
-            )
-        
-        return self._t
+    def is_scope(self, scope):
+        return self.scope == scope
     
+    def define(self, typemodule):
+        if self._t is not None:
+            return self._t
+        
+        if self._decl is not None:
+            self.load_definition_docstring(self._decl)
+    
+        describer = self.get_describer()
+
+        value_type = self.get_value_type()
+
+        self._t = typemodule.define(
+            describer, 
+            typename=self.typename, 
+            value_type=value_type,
+            doc=self.doc, 
+            scope=self.scope, 
+            bits=self.bits,
+            delayedload=True
+        )
+        return self._t
+
     def load_declaration_docstring(self, doc=None):
+        """
+        先頭の宣言のみを読み込み、型名を決める
+        """
+        if doc is None:
+            describer = self.get_describer()
+            doc = getattr(describer, "__doc__", None)
+            if doc is None:
+                return False
+        
+        decl = parse_doc_declaration(doc, ("type",))
+        if decl is None:
+            return False
+        
+        if decl.name:
+            self.typename = decl.name
+        self._decl = decl
+        return True
+    
+    def load_definition_docstring(self, decl):
         """
         型定義の解析
         """
@@ -514,16 +559,6 @@ class TypeDefinition():
             short: (ftype name)
             link: path
         """
-        if doc is None:
-            describer = self._load_describer()
-            doc = getattr(describer, "__doc__", None)
-            if doc is None:
-                raise ValueError("ドキュメント文字列がありません")
-
-        decl = parse_doc_declaration(doc, ("type",))
-        if decl is None:
-            return False
-        
         if "use-instance-method" in decl.props:
             self.bits |= TYPE_USE_INSTANCE_METHOD
         if "trait" in decl.props:
@@ -538,11 +573,7 @@ class TypeDefinition():
             self.doc = document.strip()
 
         valtypename = sections.get_value("ValueType")
-        if valtypename == "Any":
-            self.value_type = None # Any型
-        elif valtypename:
-            loader = attribute_loader(valtypename)
-            self.value_type = loader() # 例外発生の可能性
+        self.value_type = valtypename
         
         aliases = sections.get_lines("MemberAlias")
         for alias in aliases:
@@ -553,8 +584,6 @@ class TypeDefinition():
             if dest[0] == "(" and dest[-1] == ")":
                 row = dest[1:-1].split()
                 self.add_member_alias(name, row)
-
-        return True
 
 #
 #
@@ -695,7 +724,7 @@ class TypeModule():
     # 型を定義する
     #
     def define(self, 
-        traits: Any = None,
+        describer: Any = None,
         *,
         typename = None, 
         value_type = None,
@@ -706,19 +735,24 @@ class TypeModule():
     ) -> Type:
         # 登録処理
         t: Any = None # 型オブジェクトのインスタンス
-        if traits is None:
+        if describer is None:
             # 実質文字列型
             t = Type({})
-        elif isinstance(traits, TypeDefinition):
-            t = traits
-        elif isinstance(traits, Type):
+        elif isinstance(describer, TypeDefinition):
+            t = describer
+        elif isinstance(describer, Type):
             # Traitsまたは派生型のインスタンスが渡された
-            t = traits.copy() # 複製する
-        elif isinstance(traits, type) or isinstance(traits, dict):
-            # 実装移譲先のクラス型が渡された
-            t = Type(traits)
+            t = describer.copy() # 複製する
+        elif isinstance(describer, dict):
+            # 実装を記述した辞書型
+            t = Type(describer)
+        elif isinstance(describer, type):
+            t = Type(describer)
+            if typename is None:
+                if getattr(describer, "__name__", None) is not None:
+                    typename = normalize_typename(describer.__name__)
         else:
-            raise TypeError("TypeModule.defineの引数型が間違っています：{}".format(type(traits).__name__))
+            raise TypeError("TypeModule.defineは'{}'型に対応していません：".format(type(describer).__name__))
         
         if isinstance(t, Type):
             t.describe(typename=typename, value_type=value_type, doc=doc, scope=scope, bits=bits)
@@ -753,7 +787,7 @@ class TypeModule():
         
         def __getattr__(self, typename):
             if not is_valid_typename(typename):
-                raise BadTypename(typename)            
+                raise BadTypename(typename)
             def _define(doc, *, describer=None, value_type=None, scope=None, bits=0):
                 d = TypeDefinition(describer, typename, value_type, doc, scope, bits)
                 self._parent.define(d)

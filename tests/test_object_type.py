@@ -1,4 +1,5 @@
-from machaon.core.type import TypeModule, TypeMemberAlias
+import pytest
+from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias
 from machaon.types.fundamental import fundamental_type
 
 def run(fn): fn()
@@ -19,12 +20,44 @@ class SomeValue:
         """
         return self.x * 2 + self.y * 2
 
+# defineで登録
 def test_valuetype_define():
     t = fundamental_type.define(SomeValue)
+    assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト"
-    assert not t.is_methods_type_bound()
+    assert t.is_methods_instance_bound()
 
+# TypeDefinitionで登録
+def test_valuetype_td_define():
+    td = TypeDefinition(SomeValue, "SomeValue2")
+    t = td.define(fundamental_type)
+    assert t.typename == "SomeValue2"
+    assert t.value_type is SomeValue
+    assert t.doc == "適当な値オブジェクト"
+    assert t.is_methods_instance_bound()
+
+# 文字列で登録
+def test_valuetype_td_docstring_define():
+    td = TypeDefinition(SomeValue, "SomeValue")
+    assert td.load_declaration_docstring('''@type use-instance-method alias-name [BigEntity]
+    巨大なオブジェクト
+    ''')
+    t = td.define(fundamental_type)
+    assert t.typename == "BigEntity"
+    assert t.value_type is SomeValue
+    assert t.doc == "巨大なオブジェクト"
+    assert t.is_methods_instance_bound()
+    assert t.is_using_instance_method()
+
+# 宣言と値がかみ合わない場合
+@pytest.mark.xfail()
+def test_valuetype_td_docstring_failure():
+    td = TypeDefinition(SomeValue, "SomeValue")
+    assert td.load_declaration_docstring('''@type trait
+    巨大なオブジェクト
+    ''') # traitだが値型を指定していない
+    td.define(fundamental_type)
 
 #
 # スコープ付きの型を定義する
