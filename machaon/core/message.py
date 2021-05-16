@@ -65,9 +65,9 @@ class Message:
         selector = None, 
         args = None
     ):
-        self.reciever = reciever # type: Union[Object, LeafResultRef, None]
-        self.selector = selector # type: Union[BasicInvocation, None]
-        self.args = args or []   # type: List[Union[Object, LeafResultRef]]
+        self.reciever = reciever
+        self.selector = selector
+        self.args = args or []  
         self._argwaiting = False
     
     def set_reciever(self, reciever):
@@ -660,9 +660,10 @@ class MessageEngine():
                 return (tokenbits | TERM_NEW_BLOCK_ISOLATED, )
 
         # 引数リストの終わり
-        if not isstringtoken and token == SIGIL_END_OF_KEYWORDS:
-            if expect == EXPECT_ARGUMENT:
-                return (tokenbits | TERM_OBJ_NOTHING | TERM_END_LAST_BLOCK, )
+        if not isstringtoken:
+            if token == SIGIL_END_OF_KEYWORDS:
+                if expect == EXPECT_ARGUMENT:
+                    return (tokenbits | TERM_OBJ_NOTHING | TERM_END_LAST_BLOCK, )
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:
@@ -677,7 +678,7 @@ class MessageEngine():
             if expect == EXPECT_SELECTOR:
                 raise BadExpressionError("セレクタが必要です") 
 
-            def new_block_bits(selector_id):
+            def new_block_bits(memberid):
                 if expect == EXPECT_ARGUMENT:
                     return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, memberid)
                 elif expect == EXPECT_RECIEVER:

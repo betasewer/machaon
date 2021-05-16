@@ -479,7 +479,7 @@ class TypeDefinition():
         elif isinstance(self.describer, type):
             return full_qualified_name(self.describer)
         else:
-            t = self._load_describer()
+            t = self.get_describer()
             return full_qualified_name(t)
     
     def is_loaded(self):
