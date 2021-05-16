@@ -16,6 +16,23 @@ from machaon.cui import get_text_width, ljust, composit_text, collapse_text
 import machaon.platforms
 
 #
+class tkCallWrapper:
+    """ 例外を投げるように変更 """
+    def __init__(self, func, subst, _widget):
+        self.func = func
+        self.subst = subst
+    
+    def __call__(self, *args):
+        try:
+            if self.subst:
+                args = self.subst(*args)
+            return self.func(*args)
+        except:
+            raise 
+
+tk.CallWrapper = tkCallWrapper # type: ignore
+
+#
 class TextIndex():
     def __init__(self, tkindex=None, *, line=None, char=None):
         if tkindex:

@@ -140,6 +140,20 @@ class ObjectCollection():
         self._items[newident] = item
         self._namemap[name].append(newident)
         return item
+    
+    def store(self, name: str, obj: Object) -> ObjectCollectionItem:
+        # オブジェクトを代入
+        if not isinstance(name, str) or not isinstance(obj, Object):
+            raise TypeError()
+        if name not in self._namemap:
+            raise ValueError("{} is not found".format(name))
+        idents = self._namemap[name]
+        ident = idents[0]
+        item = ObjectCollectionItem(ident, name, obj)
+        self._items[ident] = item
+        for delident in idents[1:]:
+            del self._items[delident]
+        return item
 
     def pick(self, name) -> Generator[ObjectCollectionItem, None, None]:
         # 名前で検索する

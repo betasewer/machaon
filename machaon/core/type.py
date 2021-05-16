@@ -35,8 +35,10 @@ class BadMetaMethod(Exception):
         super().__init__(error, type, method)
     
     def __str__(self):
+        err = type(self.args[0]).__name__
+        typename = self.args[1].typename
         methname = self.args[2].get_action_target()
-        return "BadMetaMethod {}.{} {}".format(self.args[1], methname, self.args[0])
+        return " BadMetaMethod({}.{}) {} {}".format(typename, methname, err, self.args[0])
     
 # サポートされない
 class UnsupportedMethod(Exception):
@@ -176,7 +178,7 @@ class Type():
         if fn is None:
             # デフォルト動作
             if type(value).__str__ is object.__str__:
-                return "<Object {:0X}>".format(id(value))
+                return "<Object {:0X}({})>".format(id(value), type(value).__name__)
             else:
                 return str(value)
 

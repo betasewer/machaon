@@ -9,7 +9,7 @@ import pprint
 from typing import Tuple, Sequence, List, Optional
 
 from machaon.cui import composit_text
-from machaon.process import ProcessMessage, NotExecutedYet, ProcessChamber, TempSpirit
+from machaon.process import ProcessError, ProcessMessage, NotExecutedYet, ProcessChamber, TempSpirit
 
 #
 #
@@ -42,12 +42,14 @@ class Launcher():
     #
     #
     #
-    def message_handler(self, msg):
+    def message_handler(self, msg, *, nested=False):
         """ メッセージを処理する """
-        if msg.is_embeded():
-            for msg in msg.expand():
-                self.message_handler(msg)
-        else:
+        try:
+            if msg.is_embeded():
+                for msg in msg.expand():
+                    self.message_handler(msg)
+                return
+
             tag = msg.tag
             if tag == "on-exec-process":
                 process_id = msg.argument("process")
@@ -115,6 +117,21 @@ class Launcher():
 
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_message(msg.tag, msg.text, **msg.args)
+        
+        except Exception as e:
+            # メッセージ処理中にエラーが起きた
+            # エラー内容をメッセージで詳細表示する
+            if nested:
+                raise e # エラーの詳細表示中にさらにエラーが起きた
+            context = process.get_last_invocation_context()
+            error = ProcessError(context, e)
+            error.pprint(context.spirit)
+            # ただちにメッセージを取得し処理する
+            for msg in process.handle_post_message():
+                self.message_handler(msg, nested=True)
+            # オブジェクトを追加
+            context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
+    
     
     # プロセスから送られたメッセージをひとつひとつ処理する
     def handle_chamber_message(self, chamber):

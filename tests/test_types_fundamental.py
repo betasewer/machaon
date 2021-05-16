@@ -1,5 +1,6 @@
 from machaon.types.fundamental import fundamental_type
 from machaon.core.type import Type, TypeModule
+from machaon.core.object import Object
 
 def run(fn):
     fn()
@@ -11,6 +12,7 @@ class Dummy_Rabbit():
     def describe_object(cls, traits):
         traits.describe(doc="うさぎ")
         cls.describe_count += 1
+    
 
 fundamental_type.define(Dummy_Rabbit, typename="Dummy-Rabbit")
 
@@ -76,6 +78,9 @@ def test_any():
     anytype = fundamental_type.get("Any")
     assert anytype.is_loaded()
     assert anytype.is_any()
+    assert anytype.value_type is None
+    inst = Dummy_Rabbit()
+    assert anytype.convert_to_string(inst) == anytype.describer.stringify(anytype, inst)
 
 def test_function():
     fntype = fundamental_type.get("Function")

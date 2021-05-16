@@ -278,6 +278,9 @@ class InvocationContext:
             raise BadObjectBindName(name)
         self.input_objects.push(name, obj)
     
+    def store_object(self, name: str, obj: Object):
+        self.input_objects.store(name, obj)
+    
     #
     def set_subject(self, subject: Object):
         self.subject_object = subject

@@ -188,7 +188,7 @@ class AnyType():
     
     def summarize(self, v):
         """ @meta """
-        return "<AnyObject: {}>".format(full_qualified_name(type(v)))
+        return "<Object: {}>".format(full_qualified_name(type(v)))
     
     def stringify(self, v):
         """ @meta """
@@ -643,7 +643,7 @@ typedef.Any(
     """
     あらゆるオブジェクトを受け入れる型。
     """,
-    describer="machaon.types.fundamental.AnyType",
+describer="machaon.types.fundamental.AnyType",
     bits=TYPE_ANYTYPE|TYPE_USE_INSTANCE_METHOD,
 )
 typedef.Function( # Message
