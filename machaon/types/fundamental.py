@@ -221,52 +221,6 @@ class FunctionType():
         return f.run_function(subject, context)
 
 
-class StoredObject():
-    def __init__(self, object):
-        self.object = object
-
-    def get_object(self):
-        """ @method alias-name [object obj]
-        オブジェクトを取得する。
-        Returns:
-            Object:
-        """
-        return self.object
-    
-    def bind(self, context, name):
-        """ @method context [=>]
-        オブジェクトを名前に束縛する。
-        Params:
-            name(Str):
-        """
-        context.push_object(name, self.object)
-
-    def constructor(self, context, value):
-        """ @meta """
-        # 外部ファイルからロードする
-        from machaon.core.persistence import get_persistent_path, load_persistent_file
-        from machaon.types.shell import Path
-        if isinstance(value, str):
-            path = get_persistent_path(context.root, value)
-            o = load_persistent_file(context, path)
-            name = value
-        elif isinstance(value, Path):
-            path = value
-            o = load_persistent_file(context, path)
-            name = None
-        else:
-            raise TypeError("")
-        
-        if name is not None:
-            context.push_object(name, o)
-            context.spirit.post("message", "'{}'よりオブジェクト'{}'をロード".format(path, name))
-        else:
-            context.spirit.post("message", "'{}'より無名オブジェクトをロード".format(path))
-        
-        return StoredObject(o)
-
-
-
 # ----------------------------------------------------------
 #
 #  Pythonのビルトイン型
@@ -762,7 +716,7 @@ typedef.Stored(
     """
     外部ファイルのオブジェクトを操作する。
     """,
-    value_type="machaon.types.fundamental.StoredObject",
+    value_type="machaon.core.persistence.StoredMessage",
 )
 typedef.RootObject(
     """
