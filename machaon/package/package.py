@@ -12,6 +12,7 @@ from typing import Dict, Any, Union, List, Optional, Iterator
 from machaon.core.importer import module_loader, walk_modules, module_name_from_path, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryURLError
+from machaon.core.docstring import DocStringParser, parse_doc_declaration
 
 #
 class DatabaseNotLoadedError(Exception):
@@ -59,6 +60,8 @@ class Package():
         self._hash = hashval
 
         self._loaded: List[Exception] = []
+        self._modules: List[PyBasicModuleLoader] = [] # 読み込み済みモジュール
+        self._extra_reqs: List[str] = [] # 追加の依存パッケージ名
     
     def assign_definition(self, pkg):
         if not self.is_undefined():
@@ -125,27 +128,46 @@ class Package():
         
         return True
     
+    def check_required_modules_ready(self) -> Dict[str, bool]:
+        """ machaon """
+        rets = {}
+        for module_name in self._extra_reqs:
+            spec = importlib.util.find_spec(module_name)
+            est = spec is not None
+            rets[module_name] = est
+        return rets
+    
     def is_remote_source(self) -> bool:
         return self.source.is_remote
 
-    def collect_submodules(self) -> List[PyBasicModuleLoader]:
-        """ パッケージ内のすべてのサブモジュールを取得する """
+    def load_type_definitions(self) -> Iterator[TypeDefinition]:
+        """ モジュールにあるすべての型定義クラスを得る """
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
         
         if self._type == PACKAGE_TYPE_MODULES:
-            # __init__を読みに行く
+            # モジュールのdocstringを読みに行く
             aloader = module_loader(self.entrypoint)
-            try:
-                moduleindex = aloader.load_attr("machaon_modules", fallback=True)
-            except Exception as e:
-                self._loaded.append(PackageLoadError(e))
-                return []
+            moduledoc = aloader.get_docstring()
+            
+            # docstringを解析する
+            modulelist: List[str] = []
+            if moduledoc:
+                pser = DocStringParser(moduledoc, (
+                    "@Extra-Requirements @Extra-Req",
+                    "@Modules",
+                ))
+                # 追加のmachaonパッケージ名
+                reqs = pser.get_lines("@Extra-Requirements")
+                self._extra_reqs = reqs
+                # 型定義が含まれるモジュールを明示する
+                mods = pser.get_lines("@Modules")
+                modulelist = mods
 
             # 型が定義されたモジュールをロードする
-            if moduleindex:
+            if modulelist:
                 # 指定されたモジュールのみ
-                modules = [module_loader(x) for x in moduleindex]
+                modules = [module_loader(x) for x in modulelist]
             else:
                 # サブモジュール全て
                 modules = []
@@ -170,14 +192,7 @@ class Package():
         
         if not modules:
             self._loaded.append(PackageLoadError("モジュールを1つも読み込めませんでした"))
-            return []
-        return modules
-    
-    def iter_type_definitions(self) -> Iterator[TypeDefinition]:
-        """ モジュールにあるすべての型定義クラスを得る """
-        modules = self.collect_submodules()
-        if not modules:
-            return False
+            return
 
         typecount = 0
         for modloader in modules:
@@ -189,10 +204,10 @@ class Package():
             except Exception as e:
                 self._loaded.append(PackageTypeDefLoadError(e, str(modloader)))
                 continue
+            self._modules.append(modloader)
         
         if typecount == 0:
             self._loaded.append(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
-            return False
     
     def reset_loading(self):
         self._loaded.clear()
@@ -306,7 +321,6 @@ class PackageManager():
     DOWNLOAD_END = milestone_msg("total")
     DOWNLOAD_ERROR = milestone_msg("error")
     EXTRACTED_FILES = milestone_msg("path")
-    PRIVATE_REQUIREMENTS = milestone_msg("names")
     NOT_INSTALLED = milestone()
     UNINSTALLING = milestone()
     PIP_INSTALLING = milestone()
@@ -442,13 +456,6 @@ class PackageManager():
                     installtarget=localpath, 
                     installdir=self.dir if pkg.is_installation_separated() else None
                 )
-
-                # 非公開の依存パッケージを表示
-                if os.path.isdir(localpath): # アーカイブの直接のインストールの場合は見に行かない
-                    private_reqs = _read_private_requirements(localpath)
-                    private_reqs = [name for name in private_reqs if not self.is_installed(name)]
-                    if private_reqs:
-                        yield PackageManager.PRIVATE_REQUIREMENTS.bind(names=private_reqs)
 
                 # pipが作成したデータを見に行く
                 distinfo: Dict[str, str] = {}
@@ -590,15 +597,6 @@ def canonicalize_package_name(name):
 #
 class PipDistInfoFolderNotFound(Exception):
     pass
-
-#
-def _read_private_requirements(localdir):
-    lines = []
-    if localdir:
-        reqs = os.path.join(localdir, "PRIVATE-REQUIREMENTS.txt")
-        if os.path.isfile(reqs):
-            lines = [l for l in _readfilelines(reqs)]
-    return lines
 
 #
 def _readfilelines(p):

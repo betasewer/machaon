@@ -178,10 +178,10 @@ class AppRoot:
             return True
         
         package.reset_loading()
-        for typedef in package.iter_type_definitions():
+        for typedef in package.load_type_definitions():
             self.typemodule.define(typedef)
         package.finish_loading()
-        
+
         return package.is_load_succeeded()
     
     def unload_pkg(self, package):

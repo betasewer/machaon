@@ -49,7 +49,10 @@ class AppPackageType:
             if "none" == installstatus:
                 return "アンインストール済"
             else:
-                return "準備完了"
+                if all(package.check_required_modules_ready().values()):
+                    return "準備完了"
+                else:
+                    return "未インストールの追加依存モジュールあり"
         
         return "unexpected status：{}{}".format(loadstatus, installstatus)
     
@@ -173,6 +176,11 @@ class AppPackageType:
         # 型をロードする
         approot.load_pkg(package)
 
+        # 追加依存モジュールを表示する
+        for name, ready in package.check_required_modules_ready().items():
+            if not ready:
+                app.post("warn", "モジュール'{}'がありません。後で追加する必要があります".format(name))
+
         if operation is approot.install_package:
             app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
         else:
@@ -241,4 +249,13 @@ class AppPackageType:
             elems.extend(defs)
         
         return elems
+    
+    def extra_requires(self, package):
+        """ @method [extra]
+        このパッケージが追加で依存するモジュール名。
+        Returns:
+            Sheet[ObjectCollection]: (name, ready)
+        """
+        return [{"name":x, "ready":y} for x, y in package.check_required_modules_ready().items()]
+
 

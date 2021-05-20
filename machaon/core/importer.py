@@ -2,8 +2,8 @@ import importlib
 import builtins
 import os
 import ast
+from typing import Any, Iterator, Optional
 
-from machaon.core.docstring import parse_doc_declaration
 
 def module_loader(expr, *, location=None):
     if location:
@@ -70,8 +70,21 @@ class PyBasicModuleLoader:
         else:
             raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
     
+    def get_docstring(self):
+        """ ソースコードの構文木からモジュールのドキュメント文字列を取り出す 
+        Returns:
+            Optional[str]:
+        """
+        source = self.load_source()
+        disp = str(self)
+        tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+        return ast.get_docstring(tree)
+    
     def scan_type_definitions(self):
-        """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す """
+        """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す
+        Yields:
+            TypeDefinition: ドキュメント文字列解析済みの定義オブジェクト
+        """
         source = self.load_source()
         disp = str(self)
         tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
