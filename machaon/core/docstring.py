@@ -1,3 +1,4 @@
+from collections import defaultdict
 from itertools import takewhile
 import os.path
 
@@ -10,38 +11,66 @@ class DocStringParseError(Exception):
 #
 class DocStringParser():
     def __init__(self, doc, section_names):
-        sections = {k:[] for k in section_names + ("Decl", "Description")}
-
         lines = doc.splitlines()
         if not lines:
             raise DocStringParseError()
 
-        # 無視するべき余分なインデント
-        indent = len(os.path.commonprefix(lines[1:]))
-
-        sections["Decl"].append(lines[0])
-
-        key = "Description"
+        # 無視するべき余分なインデントを計算（1行目は考慮しない）
+        indent = 0
         for line in lines[1:]:
-            line = line[indent:]
+            spaced = len(line) - len(line.lstrip())
+            if spaced == 0:
+                continue
+            if indent == 0:
+                indent = spaced
+            else:
+                indent = min(indent, spaced)
+
+        keymap = {}
+        for secnames in section_names:
+            keys = secnames.split()
+            for k in keys:
+                keymap[k] = keys[0]
+        
+        sections = defaultdict(list)
+        curkey = "Document"
+        for i, line in enumerate(lines):
+            if i == 0:
+                line = line.strip() # 一行目は全インデントを削除
+            else:
+                line = line[indent:]
             part, sep, rest = line.partition(":")
             if sep:
                 newkey = part.strip()
                 if part.startswith(("  ", "\t")) or " " in newkey:
-                    sections[key].append(line) # タブまたは空白2つ以上ではじまるか、空白が語中に含まれているならセクション名とみなさない
+                    sections[curkey].append(line) # タブまたは空白2つ以上ではじまるか、空白が語中に含まれているならセクション名とみなさない
                     continue
                 if newkey[0].islower():
                     newkey = newkey[0].upper() + newkey[1:]
-                if newkey not in sections:
+                if newkey not in keymap:
                     raise DocStringParseError("定義されていないセクションです: {}".format(newkey), doc)
                 else:
+                    k = keymap[newkey]
                     if rest:
-                        sections[newkey].append(rest)
-                    key = newkey
+                        sections[k].append(rest)
+                    curkey = k
             else:
-                sections[key].append(line)
+                sections[curkey].append(line)
         
-        self.sections = sections
+        # 最後の改行を落とす
+        self.sections = {}
+        for k, ls in sections.items():
+            lls = []
+            # 前後についている空行を落とす
+            itr = (l for l in ls)
+            for l in itr:
+                if len(l.strip()) == 0: continue                
+                lls.append(l)
+                break
+            for l in itr:
+                if len(l.strip()) == 0: break
+                lls.append(l)
+            self.sections[k] = lls
 
     def get_value(self, key, default=None):
         """
@@ -67,12 +96,7 @@ class DocStringParser():
             if k not in self.sections:
                 continue
             ls = self.sections[k]
-            # 末尾についている空行を落とす
-            tail = len(list(takewhile(lambda l:len(l.strip())==0, reversed(ls))))
-            if tail>0:
-                lines.extend(ls[:-tail])
-            else:
-                lines.extend(ls)
+            lines.extend(ls)
         return lines
 
 

@@ -40,9 +40,10 @@ def test_valuetype_td_define():
 # 文字列で登録
 def test_valuetype_td_docstring_define():
     td = TypeDefinition(SomeValue, "SomeValue")
-    assert td.load_declaration_docstring('''@type use-instance-method alias-name [BigEntity]
+    td.load_docstring('''@type use-instance-method alias-name [BigEntity]
     巨大なオブジェクト
     ''')
+    assert td._decl.rest == "    巨大なオブジェクト"
     t = td.define(fundamental_type)
     assert t.typename == "BigEntity"
     assert t.value_type is SomeValue
@@ -54,7 +55,7 @@ def test_valuetype_td_docstring_define():
 @pytest.mark.xfail()
 def test_valuetype_td_docstring_failure():
     td = TypeDefinition(SomeValue, "SomeValue")
-    assert td.load_declaration_docstring('''@type trait
+    td.load_docstring('''@type trait
     巨大なオブジェクト
     ''') # traitだが値型を指定していない
     td.define(fundamental_type)

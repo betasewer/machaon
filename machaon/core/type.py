@@ -6,7 +6,7 @@ from collections import defaultdict
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
 from machaon.core.symbol import BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, full_qualified_name, is_valid_typename
-from machaon.core.method import Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
+from machaon.core.method import BadMethodDeclaration, Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
 from machaon.core.importer import attribute_loader
 from machaon.core.docstring import DocStringParser, parse_doc_declaration
 
@@ -569,8 +569,7 @@ class TypeDefinition():
         sections = DocStringParser(decl.rest, ("ValueType", "MemberAlias",))
     
         document = ""
-        document += sections.get_string("Decl")
-        document += sections.get_string("Description")
+        document += sections.get_string("Document")
         if document:
             self.doc = document.strip()
 
@@ -586,6 +585,13 @@ class TypeDefinition():
             if dest[0] == "(" and dest[-1] == ")":
                 row = dest[1:-1].split()
                 self.add_member_alias(name, row)
+    
+    def load_docstring(self, doc=None):
+        """ デバッグ用 """
+        if not self.load_declaration_docstring(doc):
+            raise BadMethodDeclaration()
+        self.load_definition_docstring(self._decl)
+
 
 #
 #

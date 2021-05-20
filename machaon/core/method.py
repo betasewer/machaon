@@ -355,24 +355,24 @@ class Method():
             doc(str): docstring
             function(Callable): *関数の実態。引数デフォルト値を得る
         """
-        sections = DocStringParser(doc, (
-            "Returns", 
-            "Params",
-            "Parameters",
-            "Arguments",
-            "Args",
-        ))
-
-        # メソッド宣言
+        # 1行目はメソッド宣言
         if self.flags & METHOD_DECL_LOADED == 0:
-            declline = sections.get_string("Decl").strip()
-            decl = parse_doc_declaration(declline, ("method", "task"))
+            decl = parse_doc_declaration(doc, ("method", "task"))
             if decl is None:
                 raise BadMethodDeclaration("宣言の構文に誤りがあります")            
             self.load_declaration_properties(decl.props)
+            restdoc = decl.rest
+        else:
+            _, _, restdoc = doc.partition("\n")
 
-        # 説明
-        desc = sections.get_string("Description")
+        # 残りの定義部
+        sections = DocStringParser(restdoc, (
+            "Params Parameters Arguments Args",
+            "Returns", 
+        ))
+
+        # 説明文
+        desc = sections.get_string("Document")
         if desc:
             self.doc = desc.strip()
 
@@ -382,7 +382,7 @@ class Method():
             funcsig = inspect.signature(function)
         
         # 引数
-        lines = sections.get_lines("Params", "Parameters", "Arguments", "Args")
+        lines = sections.get_lines("Params")
         for line in lines:
             head, _, paramdoc = [x.strip() for x in line.partition(":")]
             if not head and not paramdoc:

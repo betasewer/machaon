@@ -59,11 +59,6 @@ def test_method_docstring():
         """
         return a + b
     
-    p = DocStringParser(plus.__doc__, ("Params", "Returns"))
-    assert p.get_string("Description") == "整数の加算を行う。"
-    assert p.get_lines("Params") == ["    a (int): Number A", "    b (int): Number B"]
-    assert p.get_lines("Returns") == ["    int: result."]
-    
     m = Method("test")
     m.parse_syntax_from_docstring(plus.__doc__, plus)
     assert m.get_param_count() == 2
