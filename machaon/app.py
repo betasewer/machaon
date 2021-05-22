@@ -186,7 +186,7 @@ class AppRoot:
     
     def unload_pkg(self, package):
         """ パッケージオブジェクトの型スコープを削除する """
-        if package.is_modules() and package.once_loaded():
+        if package.once_loaded():
             self.typemodule.remove_scope(package.scope)
         return True
    

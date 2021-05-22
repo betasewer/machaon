@@ -89,6 +89,12 @@ class Package():
     def get_source(self):
         return self.source
     
+    def is_remote_source(self) -> bool:
+        return self.source.is_remote
+
+    def is_module_source(self) -> bool:
+        return getattr(self.source, "is_module", False) is True
+    
     def get_hash(self):
         return self._hash
 
@@ -106,7 +112,7 @@ class Package():
             self._hash = "" if _hash is None else _hash
         return self._hash
 
-    def is_modules(self) -> bool:
+    def is_type_modules(self) -> bool:
         return self._type == PACKAGE_TYPE_MODULES or self._type == PACKAGE_TYPE_SINGLE_MODULE
     
     def is_undefined(self) -> bool:
@@ -137,18 +143,18 @@ class Package():
             rets[module_name] = est
         return rets
     
-    def is_remote_source(self) -> bool:
-        return self.source.is_remote
-
     def load_type_definitions(self) -> Iterator[TypeDefinition]:
         """ モジュールにあるすべての型定義クラスを得る """
         if self._type == PACKAGE_TYPE_UNDEFINED:
-            raise PackageLoadError("パッケージの定義がありません")
+            return self._loadfail(PackageLoadError("パッケージの定義がありません"))
         
         if self._type == PACKAGE_TYPE_MODULES:
             # モジュールのdocstringを読みに行く
             aloader = module_loader(self.entrypoint)
-            moduledoc = aloader.get_docstring()
+            try:
+                moduledoc = aloader.get_docstring()
+            except Exception as e:
+                return self._loadfail(PackageLoadError("", e))
             
             # docstringを解析する
             modulelist: List[str] = []
@@ -191,8 +197,7 @@ class Package():
             modules = [loader]
         
         if not modules:
-            self._loaded.append(PackageLoadError("モジュールを1つも読み込めませんでした"))
-            return
+            return self._loadfail("モジュールを1つも読み込めませんでした")
 
         typecount = 0
         for modloader in modules:
@@ -202,12 +207,12 @@ class Package():
                     yield typedef
                     typecount += 1
             except Exception as e:
-                self._loaded.append(PackageTypeDefLoadError(e, str(modloader)))
+                self._loadfail(PackageModuleLoadError(e, str(modloader)))
                 continue
             self._modules.append(modloader)
         
         if typecount == 0:
-            self._loaded.append(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
+            self._loadfail(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
     
     def reset_loading(self):
         self._loaded.clear()
@@ -217,6 +222,9 @@ class Package():
 
     def once_loaded(self):
         return len(self._loaded) > 0
+    
+    def _loadfail(self, e):
+        self._loaded.append(e)
     
     def is_load_failed(self):
         if not self._loaded:
@@ -301,10 +309,19 @@ class PackageNotFoundError(Exception):
     pass
 
 class PackageLoadError(Exception):
-    def get_basic(self):
+    def __init__(self, s, e=None):
+        super().__init__(s, e)
+    
+    def get_string(self):
         return super().args[0]
+    
+    def get_basic(self):
+        return super().args[1]
 
-class PackageTypeDefLoadError(Exception):
+class PackageModuleLoadError(Exception):
+    def __init__(self, e, name):
+        super().__init__(e, name)
+    
     def get_basic(self):
         return super().args[0]
     
@@ -401,16 +418,16 @@ class PackageManager():
 
     #
     def install(self, pkg: Package, newinstall: bool):
+        if pkg.is_module_source():
+            # インストールは不要
+            return
+        
         tmpdir = ''
         def cleanup_tmpdir(d):
             shutil.rmtree(d)
             return ''
-            
-        rep = pkg.get_source()
-        if hasattr(rep, "is_module"):
-            # インストールは不要
-            return
         
+        rep = pkg.get_source()
         if rep.is_remote:
             # ダウンロードする
             if not tmpdir: tmpdir = tempfile.mkdtemp()
@@ -487,6 +504,10 @@ class PackageManager():
         
     #
     def uninstall(self, pkg):
+        if pkg.is_module_source():
+            # アンインストールは不要
+            return
+        
         separate = self.database.getboolean(pkg.name, "separate", fallback=False)
         if separate:
             # 手動でディレクトリを削除する

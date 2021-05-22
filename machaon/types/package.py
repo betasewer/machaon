@@ -58,7 +58,8 @@ class AppPackageType:
     
     def update_status(self, package, spirit):
         """ @task
-        アップデート状態を示す文字列
+        更新状態を示す文字列。
+        リモートソースに接続して最新かどうか確認する。
         Returns:
             Str:
         """
@@ -72,7 +73,7 @@ class AppPackageType:
         
         return "unexpected status：{}".format(installstatus)
 
-    def load_errors(self, package):
+    def errors(self, package):
         """ @method
         前回のロード時に発生したエラー
         Returns:
@@ -118,6 +119,10 @@ class AppPackageType:
 
     # 
     def _update(self, package, context, app, forceinstall=False):
+        if not package.is_remote_source():
+            app.post("message", "リモートソースの指定がありません")
+            return
+        
         approot = app.get_root()
 
         app.post("message-em", "パッケージ'{}'の更新を開始".format(package.name))
@@ -192,6 +197,10 @@ class AppPackageType:
         """ @task context
         パッケージをアンインストールする。
         """
+        if package.is_module_source():
+            app.post("message", "このモジュールはアンインストールできません")
+            return
+
         approot = app.get_root()
 
         app.post("message-em", " ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
@@ -204,7 +213,7 @@ class AppPackageType:
             elif state == PackageManager.PIP_MSG:
                 app.post("message", "  " + state.msg)
 
-        if package.is_modules():
+        if package.is_type_modules():
             app.post("message", "スコープ'{}'を取り除きます".format(package.scope))
             approot.unload_pkg(package)
 
