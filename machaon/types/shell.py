@@ -354,7 +354,7 @@ class Path():
                 app.post("message-em", "プロセスはコード={}で終了しました".format(msg.returncode))
     
     def start(self, operation=None):
-        """ @method
+        """ @method [open]
         ファイル・フォルダをデフォルトの方法で開く。
         Params:
             operation(str): *動作のカテゴリ。[open|print|edit|explore|find|...]
@@ -418,9 +418,6 @@ class Path():
         """ @meta """
         return self._path   
 
-#
-#
-#
 class PathDialog:
     """ @type
     パスを選択するダイアログ。
@@ -473,6 +470,77 @@ class PathDialog:
         """
         p = app.open_pathdialog("s", self.p.dir())
         return p
+
+class TextPath:
+    """ @type
+    テキストファイル内のある場所を示す位置情報。
+    パス、行番号、カラム番号。
+    """
+    def __init__(self, filepath, line=None, column=None) -> None:
+        """
+        Params:
+            filepath(Path):
+            line(int):
+            column(int):
+        """
+        self._path = filepath
+        self._line = line
+        self._column = column
+    
+    def get_path(self):
+        """ @method alias-name [path]
+        ファイルパス。
+        Returns:
+            Path:
+        """
+        return self._path
+    
+    def get_line(self):
+        """ @method alias-name [line]
+        行番号。
+        Returns:
+            Int:
+        """
+        return self._line
+    
+    def get_column(self):
+        """ @method alias-name [column]
+        カラム番号。
+        Returns:
+            Int:
+        """
+        return self._column
+    
+    def open(self, context):
+        """ @method context
+        設定されたテキストエディタで開く。
+        """
+        context.root.open_by_text_editor(self._path.get(), self._line, self._column)
+
+    def constructor(self, context, value):
+        """ @meta """
+        path = None
+        line = None
+        column = None
+        if isinstance(value, tuple):
+            path, line, column, *_ = (value + (None, None))
+        else:
+            path = value
+        
+        if not isinstance(path, Path):
+            path = Path.constructor(Path, context, path)
+        
+        return TextPath(path, line, column)
+    
+    def stringify(self):
+        """ @meta """
+        parts = []
+        parts.append('"{}"')
+        if self._line is not None:
+            parts.append("line {}".format(self._line))
+        if self._column is not None:
+            parts.append("column {}".format(self._column))
+        return ", ".join(parts)
 
 #
 #
