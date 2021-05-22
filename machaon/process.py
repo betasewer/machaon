@@ -115,7 +115,7 @@ class Process:
         return self.index
 
     def get_last_invocation_context(self):
-        """ @method alias-name [last-context]
+        """ @method alias-name [context]
         紐づけられた実行中／実行済みコンテキストを得る。
         Returns:
             InvocationContext:
@@ -970,7 +970,15 @@ class ProcessError():
         err = self.get_error()
         fpath, line = get_location_from_traceback(err, level)
         return fpath, line
-        
+    
+    def get_context(self):
+        """ @method alias-name [context]
+        関連づけられたコンテキストを得る。
+        Returns:
+            InvocationContext:
+        """
+        return self.context
+
     def constructor(self, context, value):
         """ @meta 
         例外オブジェクトからの変換をサポート

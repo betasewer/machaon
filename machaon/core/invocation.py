@@ -390,7 +390,7 @@ class InvocationContext:
         """ @method alias-name [last-exception]
         直前の呼び出しで発生した例外を返す。
         Returns:
-            ProcessError:
+            Error:
         """
         return self._last_exception
     
@@ -467,7 +467,49 @@ class InvocationContext:
         if self._last_exception:
             err = self._last_exception
             printer("  ERROR: {}".format(type(err).__name__))
+        
+    def get_message(self):
+        """ @method alias-name [message] 
+        実行されたメッセージ。
+        Returns:
+            Str:
+        """
+        for code, *values in self._log:
+            if code == LOG_MESSAGE_BEGIN:
+                return values[0]
+        raise ValueError("実行ログに記録がありません")
     
+    def get_all_eval_result(self):
+        """ @method alias-name [all-result] 
+        実行され、返されたすべての値。
+        Returns:
+            Sheet[ObjectCollection]: (message, result)
+        """
+        vals = []
+        row = None
+        for code, *values in self._log:
+            if code == LOG_MESSAGE_EVAL:
+                message = values[0]
+                row = {}
+                row["message"] = message.sexprs()
+            if code == LOG_MESSAGE_EVALRET:
+                result = values[0]
+                if row:
+                    row["result"] = result
+                    vals.append(row)
+        return vals
+    
+    def get_last_eval_result(self):
+        """ @method alias-name [result] 
+        実行され、最後に返された値。
+        Returns:
+            Any:
+        """
+        for code, *values in reversed(self._log):
+            if code == LOG_MESSAGE_EVALRET:
+                return values[0]
+        raise ValueError("実行ログに記録がありません")
+
     def get_subcontext(self, index):
         """ @method alias-name [sub-context]
         呼び出しの中でネストしたコンテキストを取得する。
@@ -491,6 +533,19 @@ class InvocationContext:
             # 次のレベルへ
             logs = subcxt._log 
         return subcxt
+    
+    def get_subcontext_list(self):
+        """ @method alias-name [all-sub-context]
+        サブコンテキストの一覧。
+        Returns:
+            Sheet[InvocationContext]: (is-failed, message, result)
+        """
+        rets = []
+        submessages = [x for x in self._log if x[0] == LOG_RUN_FUNCTION]
+        for values in submessages:
+            subcxt = values[1]
+            rets.append(subcxt)
+        return rets
 
     def pprint_log_as_message(self, app):
         """ @method spirit alias-name [log]
@@ -545,7 +600,7 @@ class BasicInvocation():
 
     def __str__(self):
         inv = " ".join([x for x in self.display() if x])
-        return "<Invocation {}>".format(inv)
+        return "<{}>".format(inv)
     
     def get_method_name(self):
         raise NotImplementedError()
