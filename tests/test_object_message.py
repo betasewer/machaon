@@ -263,10 +263,14 @@ def test_message_failure():
 
     # 関数の実行中のエラー
     context = test_context()
-    r = run_function("2 * 3 + 5 - (--[10 / 0] eval) + 9 non-existent-method", None, context)
+    r = run_function("--[10 / 0] eval non-existent-method", None, context)
     assert r.is_error() # bad method
-    assert r.value.get_error_typename() == "ZeroDivisionError"
-
+    assert r.value.get_error_typename() == "BadExpressionError" # 中断されない
+    
+    context = test_context()
+    r = run_function("--[10 / 0] do non-existent-method", None, context)
+    assert r.is_error() # bad method
+    assert r.value.get_error_typename() == "ZeroDivisionError" # 中断される
 
 #
 def test_message_reenter():

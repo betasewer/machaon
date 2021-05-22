@@ -219,6 +219,19 @@ class FunctionType():
             Object: 返り値
         """
         return f.run_function(subject, context)
+    
+    def do(self, f, context, subject=None):
+        """ @method context
+        関数を実行する。発生したエラーを伝播する。
+        Params:
+            subject(Object): *引数
+        Returns:
+            Object: 返り値
+        """
+        r = f.run_function(subject, context)
+        if r.is_error():
+            raise r.value.error
+        return r
 
 
 # ----------------------------------------------------------
@@ -300,7 +313,7 @@ class StrType():
     #
     def eval(self, s, context, subject=None):
         """ @method context
-        文字列を関数として評価する。
+        文字列をメッセージとして評価する。
         Params:
             subject(Object): *引数
         Returns:
@@ -308,6 +321,20 @@ class StrType():
         """
         from machaon.core.message import run_function
         return run_function(s, subject, context)
+    
+    def do(self, s, context, subject=None):
+        """ @method context
+        文字列をメッセージとして評価する。発生したエラーを伝播する。
+        Params:
+            subject(Object): *引数
+        Returns:
+            Object: 返り値
+        """
+        from machaon.core.message import run_function
+        r = run_function(s, subject, context)
+        if r.is_error():
+            raise r.value.error
+        return r
     
     def pyvalue(self, symbol, context):
         """ @method context
