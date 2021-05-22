@@ -310,7 +310,7 @@ class Method():
                 typefn = this_type.delegate_method(self.target)
                 if typefn is not None:
                     callobj = typefn
-                    source = "{}:{}".format(this_type.get_describer_qualname(), self.name)
+                    source = "{}:{}".format(this_type.get_scoped_typename(), self.name)
                     if this_type.is_methods_type_bound():
                         self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
             

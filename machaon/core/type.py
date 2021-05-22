@@ -5,7 +5,11 @@ from collections import defaultdict
 
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
 
-from machaon.core.symbol import BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, full_qualified_name, is_valid_typename
+from machaon.core.symbol import (
+    BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, 
+    full_qualified_name, is_valid_typename,
+    SIGIL_SCOPE_RESOLUTION
+)
 from machaon.core.method import BadMethodDeclaration, Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
 from machaon.core.importer import attribute_loader
 from machaon.core.docstring import DocStringParser, parse_doc_declaration
@@ -95,6 +99,12 @@ class Type():
     
     def is_scope(self, scope):
         return self.scope == scope
+    
+    def get_scoped_typename(self):
+        if self.scope:
+            return self.typename + SIGIL_SCOPE_RESOLUTION + self.scope
+        else:
+            return self.typename
     
     def get_describer(self):
         return self._describer
@@ -475,6 +485,12 @@ class TypeDefinition():
         self.bits = bits
         self._decl = None
         self._t = None
+    
+    def get_scoped_typename(self):
+        if self.scope:
+            return self.typename + SIGIL_SCOPE_RESOLUTION + self.scope
+        else:
+            return self.typename
     
     def get_describer_qualname(self):
         if isinstance(self.describer, str):
