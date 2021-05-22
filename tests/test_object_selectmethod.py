@@ -11,7 +11,7 @@ def test_straight_select():
 
     tm = select_method("reg-match", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "machaon.types.fundamental.StrType:reg-match", "")
+    assert tm.display() == ("TypeMethod", "Str:reg-match", "")
 
     im = select_method("startswith", StrType)
     assert im
@@ -19,7 +19,7 @@ def test_straight_select():
 
     gm = select_method("+", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "machaon.types.generic.GenericMethods:add", "")
+    assert gm.display() == ("TypeMethod", "GenericMethods:add", "")
 
 
 def test_modified_select():
@@ -27,7 +27,7 @@ def test_modified_select():
 
     tm = select_method("!reg-search", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "machaon.types.fundamental.StrType:reg-search", "negate")
+    assert tm.display() == ("TypeMethod", "Str:reg-search", "negate")
 
     im = select_method("!startswith", StrType)
     assert im
@@ -35,11 +35,11 @@ def test_modified_select():
 
     gm = select_method("~in", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "machaon.types.generic.GenericMethods:is-in", "reverse-args")
+    assert gm.display() == ("TypeMethod", "GenericMethods:is-in", "reverse-args")
 
     gm = select_method("`=", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "machaon.types.generic.GenericMethods:identical", "basic")
+    assert gm.display() == ("TypeMethod", "GenericMethods:identical", "basic")
 
 
 def test_anyobject_method_select():
@@ -51,7 +51,7 @@ def test_anyobject_method_select():
 
     gm = select_method("<", AnyType)
     assert gm
-    assert gm.display() == ("TypeMethod", "machaon.types.generic.GenericMethods:less", "")
+    assert gm.display() == ("TypeMethod", "GenericMethods:less", "")
 
 def test_objcol_select():
     StrType = fundamental_type.get("Str")
