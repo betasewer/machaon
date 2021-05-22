@@ -815,6 +815,12 @@ class Sheet():
             value = list(value)
 
         itemtype = context.select_type(itemtypename)
+
+        # 型変換を行う
+        if len(value)>0:
+            if not itemtype.check_value_type(type(value[0])): # 先頭だけ調べる（全て同型が前提）
+                value = [context.new_object(x, type=itemtype).value for x in value]
+
         return Sheet(value, itemtype, context, columnnames)
     
     def summarize(self):
