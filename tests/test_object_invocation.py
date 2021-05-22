@@ -1,6 +1,7 @@
 from machaon.core.invocation import (
     InvocationEntry, BasicInvocation, TypeMethodInvocation, 
     InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
+    Bind1stInvocation,
     instant_context
 )
 from machaon.core.object import ObjectCollection, Object
@@ -109,3 +110,18 @@ def test_objectref():
     inv = ObjectMemberInvocation("=", BasicInvocation.MOD_BASE_RECIEVER)
     assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
     assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"
+
+
+def test_bind1st():
+    StrType = fundamental_type.get("Str")
+    cxt = instant_context()
+    
+    meth = StrType.select_method("reg-match")
+    oinv = TypeMethodInvocation(StrType, meth)
+    inv = Bind1stInvocation(oinv, "[A-Za-z]+", "str")
+
+    arg = cxt.new_object("aiueo", type="str")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction() is True
+
+
+

@@ -933,7 +933,7 @@ class ObjectMemberInvocation(BasicInvocation):
         self.must_be_resolved()
         return self._resolved.get_parameter_spec(index)
 
-#
+
 class TypeConstructorInvocation(BasicInvocation):
     def __init__(self, typename, modifier):
         super().__init__(modifier)
@@ -974,8 +974,51 @@ class TypeConstructorInvocation(BasicInvocation):
         return 0
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        return MethodParameter("str", "Str", "")
+        return None
     
     def get_result_spec(self):
         return MethodResult(self._typename)
 
+
+class Bind1stInvocation(BasicInvocation):
+    def __init__(self, method, arg, argtype, modifier=0):
+        super().__init__(modifier)
+        self._method = method # TypeMethodInvocation
+        self._arg = arg # Object
+        self._argtype = argtype # str
+    
+    def get_method_name(self):
+        return self._method.get_method_name()
+
+    def get_method_doc(self):
+        return self._method.get_method_doc()
+
+    def display(self):
+        return ("Bind1st[{}({})]".format(self._arg, self._argtype), self._method.display()[1], self.modifier_name())
+    
+    def is_task(self):
+        return False
+
+    def is_parameter_consumer(self):
+        return False
+
+    def prepare_invoke(self, context: InvocationContext, *argobjects):
+        argobj, *_args = argobjects
+        bindargobj = context.new_object(self._arg, type=self._argtype)
+        return self._method.prepare_invoke(context, argobj, bindargobj)
+    
+    def get_action(self):
+        raise self._method.get_action()
+    
+    def get_max_arity(self):
+        return 0
+
+    def get_min_arity(self):
+        return 0
+
+    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
+        return None
+    
+    def get_result_spec(self):
+        return self._method.get_result_spec()
+    

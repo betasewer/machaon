@@ -20,9 +20,9 @@ from machaon.core.invocation import (
     BasicInvocation,
     TypeMethodInvocation,
     InstanceMethodInvocation,
-    FunctionInvocation,
     ObjectMemberInvocation,
     TypeConstructorInvocation,
+    Bind1stInvocation,
     INVOCATION_RETURN_RECIEVER,
     LOG_MESSAGE_BEGIN,
     LOG_MESSAGE_CODE,
@@ -39,7 +39,6 @@ from machaon.core.invocation import (
 #
 #
 # ----------------------------------------------------------------------------
-
 #
 class BadExpressionError(Exception):
     """ メッセージの構文のエラー """
@@ -303,6 +302,12 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     # モディファイアを分離する
     if modbits is None:
         name, modbits = extract_selector_modifiers(name)
+
+    # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
+    if name.isdigit():
+        if not typetraits or not typetraits.is_object_collection(): # ObjectCollectionには対応しない
+            inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
+            return Bind1stInvocation(inv, int(name), "Int", modbits)
 
     # 大文字のメソッドは型変換コンストラクタ
     if name[0].isupper():
