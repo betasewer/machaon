@@ -957,7 +957,19 @@ class ProcessError():
             Any:
         """
         err = self.get_error()
-        return get_local_from_traceback(err.__traceback__, level, name)
+        return get_local_from_traceback(err, level, name)
+    
+    def location(self, level):
+        """ @method
+        エラーの発生個所を得る。
+        Params:
+            level(int): トレースバックの深度
+        Returns:
+            TextPath:
+        """
+        err = self.get_error()
+        fpath, line = get_location_from_traceback(err, level)
+        return fpath, line
         
     def constructor(self, context, value):
         """ @meta 
@@ -997,11 +1009,9 @@ class ProcessError():
         self.context.pprint_log_as_message(app)
 
 
-
-def verbose_display_traceback(exception, linewidth):
-    import linecache
+def walk_traceback(exception):
+    # 子のエラーのトレースバックにも自動的に遡行
     def next_nested_traceback(exc):
-        # 子の例外のスタックトレースを自動的にロードする
         if hasattr(exc, "child_exception"):
             e = exc.child_exception()
             if e:
@@ -1011,10 +1021,26 @@ def verbose_display_traceback(exception, linewidth):
     tb = exception.__traceback__
     if tb is None:
         tb, exception = next_nested_traceback(exception)
-
-    lines = []
+    
     level = 0
     while tb:
+        yield level, tb, exception
+        tb = tb.tb_next
+        if tb is None:
+            tb, exception = next_nested_traceback(exception)
+        level += 1
+
+def goto_traceback(exception, level):
+    for l, tb, excep in walk_traceback(exception):
+        if level == l:
+            return tb, excep
+    raise ValueError("トレースバックの深さの限界に到達")
+
+def verbose_display_traceback(exception, linewidth):
+    import linecache
+
+    lines = []
+    for level, tb, _excep in walk_traceback(exception):
         frame = tb.tb_frame
         filename = frame.f_code.co_filename
         fnname = frame.f_code.co_name
@@ -1062,12 +1088,6 @@ def verbose_display_traceback(exception, linewidth):
         lines.append(indent + "-" * 30)
         lines.append("\n")
 
-        tb = tb.tb_next
-        if tb is None:
-            tb, exception = next_nested_traceback(exception)
-
-        level += 1
-
     return '\n'.join(lines)
 
 def display_parameters(fn):
@@ -1085,23 +1105,24 @@ def display_parameters(fn):
         return "(<error: {}>)".format(e)
 
 
-def get_local_from_traceback(tb, level, name):
-    # トレースバックを探す
-    l = 0
-    tbk = None
-    while tb:
-        if level == l:
-            tbk = tb
-            break
-        l += 1
-        tb = tb.tb_next
-    if tbk is None:
-        raise ValueError("トレースバックの深さの限界に到達")
+def get_local_from_traceback(exception, level, name):
+    """ フレームから変数を取り出す """
+    tb, _excep = goto_traceback(exception, level)
     
-    # フレームから変数を取り出す
-    frame = tbk.tb_frame
+    frame = tb.tb_frame
     localdict = frame.f_locals
     if name not in localdict:
-        raise ValueError("変数が見つかりません")
+        raise ValueError("変数'{}'が見つかりません".format(name))
     
     return localdict[name]
+
+
+def get_location_from_traceback(exception, level):
+    """ エラーの起きた行を調べる """
+    tb, _excep = goto_traceback(exception, level)
+    
+    frame = tb.tb_frame
+    filename = frame.f_code.co_filename
+    lineno = tb.tb_lineno
+
+    return filename, lineno
