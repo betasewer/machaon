@@ -65,9 +65,9 @@ class Message:
         selector = None, 
         args = None
     ):
-        self.reciever = reciever
-        self.selector = selector
-        self.args = args or []  
+        self.reciever = reciever # Object
+        self.selector = selector # Invocation
+        self.args = args or []   # List[Object]
         self._argwaiting = False
     
     def set_reciever(self, reciever):
@@ -810,7 +810,6 @@ class MessageEngine():
             obj = paramtype.new_object(convval)
 
         elif objcode == TERM_OBJ_TUPLE:
-            from machaon.types.tuple import ObjectTuple
             elems = values[0].split() # 文字列を空白で区切る
             tupletype = context.get_type("Tuple")
             tpl = tupletype.construct(context, elems)
@@ -993,7 +992,7 @@ class MessageEngine():
 
                     # 返り値をスタックに乗せる
                     context.push_local_object(result)
-                    if result.is_error(): # エラーオブジェクトが返ったら実行を中断する
+                    if context.is_failed(): # エラーが発生したら実行を中断する
                         return
 
             except Exception as e:

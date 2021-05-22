@@ -333,9 +333,6 @@ class InvocationContext:
             type(Any): 型を示す値
             conversion(str): 値の変換方法を示す文字列
         """
-        from machaon.process import ProcessError
-        if isinstance(value, ProcessError):
-            return self.get_type("Error").new_object(value) # エラーオブジェクトは型変換しない
         if type:
             t = self.select_type(type)
             if t is None:
