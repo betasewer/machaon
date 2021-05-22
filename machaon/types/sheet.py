@@ -53,10 +53,15 @@ class BasicDataColumn():
             return "<{}>".format(value.summarize())
         if isinstance(value, str) and value == SIGIL_DEFAULT_RESULT:
             return value
+        
+        t = self.get_type(context, value)
+        if t.is_any():
+            t = context.deduce_type(value) or t
+        
         if method == DATASET_STRINGIFY_SUMMARIZE:
-            return self.get_type(context, value).summarize_value(value)
+            return t.summarize_value(value)
         else:
-            return self.get_type(context, value).convert_to_string(value)
+            return t.convert_to_string(value)
 
     def is_nonstring_column(self):
         if self._t is None:
