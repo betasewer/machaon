@@ -35,11 +35,14 @@ class BadMetaMethod(Exception):
         super().__init__(error, type, method)
     
     def __str__(self):
-        err = type(self.args[0]).__name__
+        errtype = type(self.args[0]).__name__
         typename = self.args[1].typename
         methname = self.args[2].get_action_target()
-        return " BadMetaMethod({}.{}) {} {}".format(typename, methname, err, self.args[0])
+        return " BadMetaMethod({}.{}) {} {}".format(typename, methname, errtype, self.args[0])
     
+    def child_exception(self):
+        return self.args[0]
+
 # サポートされない
 class UnsupportedMethod(Exception):
     pass

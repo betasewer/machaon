@@ -154,7 +154,7 @@ class Package():
             try:
                 moduledoc = aloader.get_docstring()
             except Exception as e:
-                return self._loadfail(PackageLoadError("", e))
+                return self._loadfail(PackageLoadError(type(e).__name__, e))
             
             # docstringを解析する
             modulelist: List[str] = []
@@ -312,17 +312,17 @@ class PackageLoadError(Exception):
     def __init__(self, s, e=None):
         super().__init__(s, e)
     
+    def child_exception(self):
+        return super().args[1]
+    
     def get_string(self):
         return super().args[0]
-    
-    def get_basic(self):
-        return super().args[1]
 
 class PackageModuleLoadError(Exception):
     def __init__(self, e, name):
         super().__init__(e, name)
     
-    def get_basic(self):
+    def child_exception(self):
         return super().args[0]
     
     def get_module_name(self):

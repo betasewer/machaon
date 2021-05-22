@@ -990,7 +990,7 @@ class ProcessError():
         app.post("error", details[-1] if details else "")
         app.post("message-em", "スタックトレース{}：".format(title))
 
-        msg = verbose_display_traceback(excep.__traceback__, app.get_ui_wrap_width())
+        msg = verbose_display_traceback(excep.__traceback__, app.get_ui_wrap_width(), excep)
         app.post("message", msg + "\n")
 
         app.post("message-em", "メッセージ解決：")
@@ -998,9 +998,8 @@ class ProcessError():
 
 
 
-def verbose_display_traceback(tb, linewidth):
+def verbose_display_traceback(tb, linewidth, nested_exception=None):
     import linecache
-    import inspect
 
     lines = []
 
@@ -1054,6 +1053,14 @@ def verbose_display_traceback(tb, linewidth):
         lines.append("\n")
 
         tb = tb.tb_next
+        if tb is None:
+            # 子の例外のスタックトレースを自動的にロードする
+            if nested_exception and hasattr(nested_exception, "child_exception"):
+                e = nested_exception.child_exception()
+                if e:
+                    tb = e.__traceback__
+                nested_exception = e
+
         level += 1
 
     return '\n'.join(lines)

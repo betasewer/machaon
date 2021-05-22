@@ -77,9 +77,9 @@ class AppPackageType:
         """ @method
         前回のロード時に発生したエラー
         Returns:
-            Tuple:
+            Sheet[Error]: 
         """
-        return [str(x) for x in package.get_load_errors()]
+        return package.get_load_errors()
 
     def scope(self, package):
         """ @method
