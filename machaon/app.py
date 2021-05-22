@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+import configparser
 import os
 import sys
 import queue
@@ -34,6 +35,7 @@ class AppRoot:
         self.pkgs = []
         self.typemodule = None
         self.objcol = ObjectCollection()
+        self._extapps = None # 外部アプリコンフィグファイル
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
         if isinstance(ui, str):
@@ -349,3 +351,51 @@ class AppRoot:
     def select_object_collection(self):
         return self.objcol
 
+    #
+    # 外部アプリ
+    #
+    @property
+    def _external_apps(self):
+        if self._extapps is None:
+            p = os.path.join(self.basicdir, "apps.ini")
+            if os.path.isfile(p):
+                cfg = configparser.ConfigParser()
+                cfg.read(p)
+                self._extapps = cfg
+        return self._extapps
+    
+    def _has_external_app(self, section):
+        if self._external_apps:
+            return self._external_apps.has_section(section)
+        return False
+
+    def open_by_text_editor(self, filepath, line=None, column=None):
+        """ テキストエディタで開く。
+        Params:
+            filepath(str): ファイルパス
+            line(int): 行番号
+            column(int): 文字カラム番号
+        """
+        if self._has_external_app("text-editor"):
+            editor = None
+            lineopt = None
+            charopt = None
+            
+            editor = self._external_apps.get_option("text-editor", "path")
+            if line is not None and self._external_apps.has_option("text-editor", "line"):
+                lineopt = self._external_apps.get_option("text-editor", "line").format(line)
+            if column is not None and self._external_apps.has_option("text-editor", "column"):
+                charopt = self._external_apps.get_option("text-editor", "column").format(column)
+        
+            args = []
+            args.append(editor)
+            args.append(filepath)
+            if lineopt is not None:
+                args.append(lineopt)
+            if charopt is not None:
+                args.append(charopt)
+            subprocess.Popen(args, shell=False)
+        
+        else:
+            from machaon.types.shellplatform import shellpath
+            shellpath().open_by_text_editor(filepath, line, column)

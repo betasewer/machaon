@@ -207,3 +207,12 @@ def start_file(path, operation=None):
     """
     os.startfile(path, operation or "open")
 
+def open_by_text_editor(path, line=None, column=None):
+    """
+    メモ帳でファイルを開く。
+    """
+    import subprocess
+    args = []
+    args.append("notepad.exe")
+    args.append(path)
+    subprocess.Popen(args)
