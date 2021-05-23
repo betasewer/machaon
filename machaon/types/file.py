@@ -194,11 +194,11 @@ class TextFile(BasicContextFile):
 
     def read_stream(self):
         """ ファイルを開いて読み込みストリームを返す。 """
-        return self.open("r").file()
+        return self.open("r")
 
     def write_stream(self):
         """ ファイルを開いて書き込みストリームを返す。 """
-        return self.open("w").file()
+        return self.open("w")
 
 
 #

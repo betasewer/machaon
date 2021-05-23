@@ -15,5 +15,3 @@ def test_deploy(tmpdir):
     assert deploydir.join("machaon", "local").check()
     assert deploydir.join("machaon", "apps.ini").check()
     assert deploydir.join("main.py").check()
-    
-    
