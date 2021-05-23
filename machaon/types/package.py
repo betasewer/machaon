@@ -239,7 +239,7 @@ class AppPackageType:
             Sheet[ObjectCollection]: (typename, qualname)
         """
         elems = []
-        for mod in package.collect_submodules():
+        for mod in package.load_module_loaders():
             modqualname = str(mod)
             app.post("message", "モジュール {}".format(modqualname))
 

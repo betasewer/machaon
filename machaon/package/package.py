@@ -143,18 +143,18 @@ class Package():
             rets[module_name] = est
         return rets
     
-    def load_type_definitions(self) -> Iterator[TypeDefinition]:
-        """ モジュールにあるすべての型定義クラスを得る """
+    def load_module_loaders(self):
+        """ サブモジュールのローダを生成する """
         if self._type == PACKAGE_TYPE_UNDEFINED:
-            return self._loadfail(PackageLoadError("パッケージの定義がありません"))
+            raise PackageLoadError("パッケージの定義がありません")
         
-        if self._type == PACKAGE_TYPE_MODULES:
+        elif self._type == PACKAGE_TYPE_MODULES:
             # モジュールのdocstringを読みに行く
             aloader = module_loader(self.entrypoint)
             try:
                 moduledoc = aloader.get_docstring()
             except Exception as e:
-                return self._loadfail(PackageLoadError(type(e).__name__, e))
+                raise PackageLoadError(type(e).__name__, e)
             
             # docstringを解析する
             modulelist: List[str] = []
@@ -195,6 +195,16 @@ class Package():
         elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
             loader = module_loader(self.entrypoint)
             modules = [loader]
+
+        return modules
+    
+    def load_type_definitions(self) -> Iterator[TypeDefinition]:
+        """ モジュールにあるすべての型定義クラスを得る """
+        try:
+            # サブモジュールのローダ
+            modules = self.load_module_loaders()
+        except Exception as e:
+            return self._loadfail(e)
         
         if not modules:
             return self._loadfail("モジュールを1つも読み込めませんでした")
