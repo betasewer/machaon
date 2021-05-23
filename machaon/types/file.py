@@ -145,9 +145,9 @@ class TextFile(BasicContextFile):
     """ @type
     テキストファイル。
     """
-    def __init__(self, path):
+    def __init__(self, path, *, encoding=None):
         super().__init__(path)
-        self._enc = None
+        self._enc = encoding
     
     def openfile(self, mode):
         self.detect_encoding()

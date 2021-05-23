@@ -69,7 +69,7 @@ class RootObject:
         return chm.last_process.get_last_invocation_context()
     
     def _clear_processes(self, app, pred):
-        ''' プロセスの実行結果とプロセス字体を削除する。 '''
+        ''' プロセスの実行結果とプロセス自体を削除する。 '''
         chm = self.context.root.get_active_chamber()
         chm.drop_processes(pred=pred)
         msgs = chm.get_process_messages()
@@ -98,6 +98,15 @@ class RootObject:
         def is_failed(pr):
             return pr.is_failed()
         self._clear_processes(app, is_failed)
+    
+    def deploy(self, path):
+        ''' @method
+        machaonディレクトリを配置する。
+        Params:
+            path(Path):
+        '''
+        from machaon.app import deploy_directory
+        deploy_directory(path)
 
     def stringify(self):
         """ @meta """

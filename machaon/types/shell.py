@@ -318,6 +318,65 @@ class Path():
             raise ValueError("パスは既に存在しています")
         os.makedirs(self.normpath)
     
+    def move_to(self, d):
+        """ @method
+        別のディレクトリにこのファイルを移動する。
+        Params:
+            d(Path): 宛先ディレクトリ
+        Returns:
+            Path: コピーされたファイルパス
+        """
+        dest = d.dir() / self.name()
+        if dest.exists():
+            raise ValueError("すでに同名ファイルが宛先に存在しています")
+        p = shutil.move(self.get(), dest.get())
+        return Path(p)
+    
+    def move_from(self, p):
+        """ @method
+        このディレクトリにファイルを移動する。
+        Params:
+            p(Path): 移動するファイル
+        Returns:
+            Path: コピーされたファイルパス
+        """
+        dest = self.dir() / p.name()
+        if dest.exists():
+            raise ValueError("すでに同名ファイルが宛先に存在しています")
+        p = shutil.move(p.get(), dest.get())
+        return Path(p)
+    
+    def copy_to(self, d):
+        """ @method
+        このディレクトリにファイルをコピーする。
+        Params:
+            d(Path): コピー先のディレクトリ
+        Returns:
+            Path: コピーされたファイルパス
+        """ 
+        dest = d.dir() / self.name()
+        if dest.exists():
+            raise ValueError("すでに同名ファイルが宛先に存在しています")
+        p = shutil.copy(self.get(), dest.get())
+        return Path(p)
+    
+    def copy_from(self, p):
+        """ @method
+        このディレクトリにファイルをコピーする。
+        Params:
+            p(Path): コピーするファイル
+        Returns:
+            Path: コピーされたファイルパス
+        """ 
+        dest = self.dir() / p.name()
+        if dest.exists():
+            raise ValueError("すでに同名ファイルが宛先に存在しています")
+        p = shutil.copy(p.get(), dest.get())
+        return Path(p)
+
+    #
+    #
+    #
     def run(self, app, params=None):
         """ @task
         ファイルを実行し、終わるまで待つ。
@@ -375,12 +434,6 @@ class Path():
         if self.isdir():
             raise ValueError("Unsupported")
         shellpath().start_file(self._path, "print")
-    
-    def write_startup(self):
-        """ @method
-        スタートアップスクリプトのひな形をこのパスに書き出す。
-        """
-        pass
     
     #
     # 型の振る舞い

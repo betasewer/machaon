@@ -4,20 +4,15 @@
 import configparser
 import os
 import sys
-import queue
-import threading
-import traceback
 import subprocess
 
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
-from machaon.cui import test_yesno
-from machaon.milestone import milestone, milestone_msg
-from machaon.types.shellplatform import shellpath
+from machaon.types.shellplatform import is_osx, is_windows, shellpath
 
 #
 # ###################################################################
@@ -399,3 +394,44 @@ class AppRoot:
         else:
             from machaon.types.shellplatform import shellpath
             shellpath().open_by_text_editor(filepath, line, column)
+
+
+def deploy_directory(path):
+    """
+    machaonディレクトリを配備する。
+    Params:
+        path(Path):
+    """
+    from machaon.types.shell import Path
+    from machaon.types.file import TextFile
+    machaon = path / "machaon"
+    packages = machaon / "packages"
+    credentials = machaon / "credential"
+    store = machaon / "store"
+    local = machaon / "local"
+    
+    # ディレクトリの作成
+    for p in (packages, credentials, store, local):
+        p.makedirs()
+    
+    # 空ファイルの配置
+    configs = Path(__file__).dir() / "configs"
+    machaon.copy_from(configs / "readme.txt")
+    machaon.copy_from(configs / "apps.ini")
+    credentials.copy_from(configs / "credential.ini")
+    
+    # スタートアップスクリプトの配置
+    if is_osx():
+        main = path.copy_from(configs / "main.py")
+        # スクリプトパスを書き込んだ立ち上げスクリプト
+        starter = path / "start.command"
+        starter_template = TextFile(configs / "osx" / "start.command").text()
+        with TextFile(starter, encoding="utf-8").write_stream() as fo:
+            fo.write(starter_template.format(main))
+        # 実行権限を与える
+        os.chmod(starter.get(), 0o755)
+    
+    elif is_windows():
+        path.copy_from(configs / "main.py")
+
+
