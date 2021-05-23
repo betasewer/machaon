@@ -114,8 +114,9 @@ class RootObject:
         Params:
             path(Path): 新たにmachaonが配備されるディレクトリ
         '''
+        from machaon.types.shell import Path
         from machaon.app import transfer_deployed_directory
-        transfer_deployed_directory(app, self.context.root.get_basic_dir(), path)
+        transfer_deployed_directory(app, Path(self.context.root.get_basic_dir()), path)
 
     def stringify(self):
         """ @meta """
