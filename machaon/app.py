@@ -106,7 +106,7 @@ class AppRoot:
         hashval=None,
     ):
         """
-        パッケージ概要を追加する。
+        パッケージ定義を追加する。
         Params:
             name(str): パッケージ名
             package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
@@ -135,6 +135,27 @@ class AppRoot:
             self.load_pkg(newpkg)
         
         return newpkg
+    
+    def add_dependency(self,
+        name,
+        package=None,
+        *,
+        locked=False,
+        separate=True,
+        hashval=None,
+    ):
+        """
+        依存パッケージを追加する。
+        Params:
+            name(str): パッケージ名
+            package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
+            locked(bool): Trueの場合、認証情報を同時にロードする
+            separate(bool): site-packageにインストールしない
+            hashval(str): パッケージハッシュ値の指定
+        """
+        from machaon.package.package import PACKAGE_TYPE_DEPENDENCY
+        spectype = PACKAGE_TYPE_DEPENDENCY
+        return self.add_package(name, package, locked=locked, type=spectype, separate=separate, hashval=hashval)
 
     # パッケージ概要を取得する
     def get_package(self, name, *, fallback=True):

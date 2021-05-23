@@ -739,6 +739,12 @@ typedef.Package(
     value_type="machaon.package.package.Package",
     describer="machaon.types.package.AppPackageType"
 )
+typedef.PyModule(
+    """
+    Pythonのモジュール。
+    """,
+    value_type="machaon.types.package.Module",
+)
 typedef.Stored(
     """
     外部ファイルのオブジェクトを操作する。

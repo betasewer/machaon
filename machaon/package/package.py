@@ -48,12 +48,16 @@ class Package():
     ):
         self.name: str = name
         self.source = source
-        self.scope = scope or self.name
         self.separate = separate
         
         if type is None: 
-            type = Package.MODULES
+            type = PACKAGE_TYPE_MODULES
         self._type = type
+        
+        if self.is_type_modules():
+            self.scope = scope or self.name
+        else:
+            self.scope = None
 
         self.entrypoint: Optional[str] = module
 
@@ -115,6 +119,9 @@ class Package():
     def is_type_modules(self) -> bool:
         return self._type == PACKAGE_TYPE_MODULES or self._type == PACKAGE_TYPE_SINGLE_MODULE
     
+    def is_dependency_modules(self) -> bool:
+        return self._type == PACKAGE_TYPE_DEPENDENCY
+    
     def is_undefined(self) -> bool:
         return self._type == PACKAGE_TYPE_UNDEFINED
     
@@ -145,40 +152,44 @@ class Package():
     
     def load_module_loaders(self):
         """ サブモジュールのローダを生成する """
+        modules = []
+
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
+        elif self._type not in (PACKAGE_TYPE_MODULES, PACKAGE_TYPE_SINGLE_MODULE, PACKAGE_TYPE_DEPENDENCY):
+            return modules
         
-        elif self._type == PACKAGE_TYPE_MODULES:
-            # モジュールのdocstringを読みに行く
-            aloader = module_loader(self.entrypoint)
-            try:
-                moduledoc = aloader.get_docstring()
-            except Exception as e:
-                raise PackageLoadError(type(e).__name__, e)
-            
-            # docstringを解析する
-            modulelist: List[str] = []
-            if moduledoc:
-                pser = DocStringParser(moduledoc, (
-                    "@Extra-Requirements @Extra-Req",
-                    "@Modules",
-                ))
-                # 追加のmachaonパッケージ名
-                reqs = pser.get_lines("@Extra-Requirements")
-                self._extra_reqs = reqs
-                # 型定義が含まれるモジュールを明示する
-                mods = pser.get_lines("@Modules")
-                modulelist = mods
+        # モジュールのdocstringを読みに行く
+        initial_module = module_loader(self.entrypoint)
+        try:
+            moduledoc = initial_module.get_docstring()
+        except Exception as e:
+            raise PackageLoadError(type(e).__name__, e)
+        
+        # docstringを解析する
+        modulelist: List[str] = []
+        if moduledoc:
+            pser = DocStringParser(moduledoc, (
+                "@Extra-Requirements @Extra-Req",
+                "@Modules",
+            ))
+            # 追加のmachaonパッケージ名
+            reqs = pser.get_lines("@Extra-Requirements")
+            self._extra_reqs = reqs
+            # 型定義が含まれるモジュールを明示する
+            mods = pser.get_lines("@Modules")
+            modulelist = mods
 
-            # 型が定義されたモジュールをロードする
+        # サブモジュールのロード
+        if self._type == PACKAGE_TYPE_MODULES:
             if modulelist:
                 # 指定されたモジュールのみ
                 modules = [module_loader(x) for x in modulelist]
             else:
-                # サブモジュール全て
+                # 全てのサブモジュールを走査する
                 modules = []
-                basepkg = aloader.module_name
-                for pkgpath in aloader.load_package_directories(): # パッケージのルートディレクトリから下降する
+                basepkg = initial_module.module_name
+                for pkgpath in initial_module.load_package_directories(): # 開始モジュールのディレクトリから下降する
                     # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
                     skip_names = []
                     for fr in traceback.extract_stack():
@@ -193,19 +204,20 @@ class Package():
                         modules.append(loader)
 
         elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
-            loader = module_loader(self.entrypoint)
-            modules = [loader]
+            modules = [initial_module]
 
         return modules
     
     def load_type_definitions(self) -> Iterator[TypeDefinition]:
         """ モジュールにあるすべての型定義クラスを得る """
         try:
-            # サブモジュールのローダ
             modules = self.load_module_loaders()
         except Exception as e:
             return self._loadfail(e)
-        
+
+        if not self.is_type_modules():
+            return
+
         if not modules:
             return self._loadfail("モジュールを1つも読み込めませんでした")
 
@@ -280,15 +292,11 @@ def create_package(name, package, module=None, **kwargs):
         if not sep:
             raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
         if host == "github":
-            desc, sep, mod = desc.rpartition(":")
             from machaon.package.repository import GithubRepArchive
-            pkgsource = GithubRepArchive(desc)
-            module = mod if sep else pkgsource.name
+            pkgsource, module = _parse_repository_source(desc, GithubRepArchive)
         elif host == "bitbucket":
-            desc, sep, mod = desc.rpartition(":")
             from machaon.package.repository import BitbucketRepArchive
-            pkgsource = BitbucketRepArchive(desc)
-            module = mod if sep else pkgsource.name
+            pkgsource, module = _parse_repository_source(desc, BitbucketRepArchive)
         elif host == "package":
             from machaon.package.archive import LocalModule
             module = desc
@@ -313,6 +321,17 @@ def create_package(name, package, module=None, **kwargs):
     if pkgtype is not None:
         kwargs["type"] = pkgtype
     return Package(name, pkgsource, module=module, **kwargs)
+
+def _parse_repository_source(src, repository_class):
+    desc, sep, mod = src.rpartition(":")
+    if not sep:
+        desc = src
+        mod = None
+    rep = repository_class(desc)
+    if not mod:
+        mod = rep.name
+    return rep, mod
+
 
 #
 class PackageNotFoundError(Exception):

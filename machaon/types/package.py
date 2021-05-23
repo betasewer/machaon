@@ -1,4 +1,6 @@
+from typing import Type
 from machaon.package.package import PackageManager
+from types import ModuleType
 
 class AppPackageType:
     """
@@ -16,18 +18,11 @@ class AppPackageType:
     
     def status(self, package, spirit):
         """ @method spirit
-        ロード状態を示す文字列
+        パッケージの状態を示す文字列
         Returns:
             Str:
         """
-        loadstatus = "ready"
-        if not package.is_ready():
-            loadstatus = "none"
-        elif not package.once_loaded():
-            loadstatus = "delayed"
-        elif package.is_load_failed():
-            loadstatus = "failed"
-        
+        loadstatus = self.loading_status(package)
         installstatus = spirit.root.query_package_status(package, isinstall=True)
 
         if "none" == loadstatus:
@@ -47,7 +42,7 @@ class AppPackageType:
                 return "読み込みエラー"
         if "ready" == loadstatus:
             if "none" == installstatus:
-                return "アンインストール済"
+                return "利用可能"
             else:
                 if all(package.check_required_modules_ready().values()):
                     return "準備完了"
@@ -55,6 +50,21 @@ class AppPackageType:
                     return "未インストールの追加依存モジュールあり"
         
         return "unexpected status：{}{}".format(loadstatus, installstatus)
+    
+    def loading_status(self, package):
+        """ @method
+        モジュールのロード状態を示す文字列。
+        Returns:
+            Str:
+        """
+        loadstatus = "ready"
+        if not package.is_ready():
+            loadstatus = "none"
+        elif not package.once_loaded():
+            loadstatus = "delayed"
+        elif package.is_load_failed():
+            loadstatus = "failed"
+        return loadstatus
     
     def update_status(self, package, spirit):
         """ @task
@@ -268,3 +278,51 @@ class AppPackageType:
         return [{"name":x, "ready":y} for x, y in package.check_required_modules_ready().items()]
 
 
+#
+#
+#
+class Module():
+    """
+    Pythonのモジュール型。
+    """
+    def __init__(self, m) -> None:
+        self._m = m
+
+    def constructor(self, context, value):
+        """ @meta """
+        if isinstance(value, str):
+            from machaon.core.importer import module_loader
+            loader = module_loader(value)
+            return Module(loader.load_module())
+        elif isinstance(value, ModuleType):
+            return Module(value)
+        else:
+            raise TypeError("")
+    
+    def name(self):
+        """ @method
+        モジュール名
+        Returns:
+            Str:
+        """
+        return self._m.__name__
+    
+    def location(self):
+        """ @method
+        ファイルの場所
+        Returns:
+            Path:
+        """
+        spec = self._m.__spec__
+        if not spec.has_location:
+            raise ValueError("ビルトインモジュールなので場所を参照できません")
+        return spec.origin
+    
+    def module(self):
+        """ @method
+        モジュール。
+        Returns:
+            Any:
+        """
+        return self._m
+    
