@@ -100,13 +100,22 @@ class RootObject:
         self._clear_processes(app, is_failed)
     
     def deploy(self, path):
-        ''' @method
+        ''' @task
         machaonディレクトリを配置する。
         Params:
             path(Path):
         '''
         from machaon.app import deploy_directory
         deploy_directory(path)
+    
+    def trans_deploy(self, app, path):
+        ''' @task
+        machaonディレクトリを移譲する。
+        Params:
+            path(Path): 新たにmachaonが配備されるディレクトリ
+        '''
+        from machaon.app import transfer_deployed_directory
+        transfer_deployed_directory(app, self.context.root.get_basic_dir(), path)
 
     def stringify(self):
         """ @meta """

@@ -373,6 +373,15 @@ class Path():
             raise ValueError("すでに同名ファイルが宛先に存在しています")
         p = shutil.copy(p.get(), dest.get())
         return Path(p)
+    
+    def remove(self):
+        """ @method
+        このパスを削除する。
+        """
+        if self.isfile():
+            os.remove(self._path)
+        elif self.isdir():
+            os.rmdir(self._path) # 空のディレクトリのみ
 
     #
     #

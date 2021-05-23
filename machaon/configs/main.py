@@ -29,15 +29,17 @@ import os
 
 # machaonフォルダの場所を指定する
 basic_dir = os.path.join(os.path.dirname(__file__), "machaon")
-
 root = AppRoot()
+
 root.initialize(
     ui="tk", 
     basic_dir=basic_dir 
 )
+
 root.add_package(
     "machaon.shell",
     "module:machaon.types.shell"
 )
 
 
+root.run()

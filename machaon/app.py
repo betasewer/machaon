@@ -4,6 +4,7 @@
 import configparser
 import os
 import sys
+import shutil
 import subprocess
 
 from typing import Optional, List, Any, Text
@@ -13,6 +14,7 @@ from machaon.core.type import TypeModule
 from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
 from machaon.types.shellplatform import is_osx, is_windows, shellpath
+from machaon.types.shell import Path
 
 #
 # ###################################################################
@@ -395,15 +397,15 @@ class AppRoot:
             from machaon.types.shellplatform import shellpath
             shellpath().open_by_text_editor(filepath, line, column)
 
-
+#
+# 
+#
 def deploy_directory(path):
     """
     machaonディレクトリを配備する。
     Params:
-        path(Path):
+        path(Path): 配備先のディレクトリ
     """
-    from machaon.types.shell import Path
-    from machaon.types.file import TextFile
     machaon = path / "machaon"
     packages = machaon / "packages"
     credentials = machaon / "credential"
@@ -423,15 +425,45 @@ def deploy_directory(path):
     # スタートアップスクリプトの配置
     if is_osx():
         main = path.copy_from(configs / "main.py")
-        # スクリプトパスを書き込んだ立ち上げスクリプト
-        starter = path / "start.command"
-        starter_template = TextFile(configs / "osx" / "start.command").text()
-        with TextFile(starter, encoding="utf-8").write_stream() as fo:
-            fo.write(starter_template.format(main))
-        # 実行権限を与える
-        os.chmod(starter.get(), 0o755)
+        # main.pyのパスを書き込んだ立ち上げスクリプトを生成
+        deploy_osx_start_command(main)
     
     elif is_windows():
         path.copy_from(configs / "main.py")
 
+def deploy_osx_start_command(main):
+    from machaon.types.file import TextFile
+    starter = main.with_name("start.command")
+    configs = Path(__file__).dir() / "configs"
+    starter_template = TextFile(configs / "osx" / "start.command").text()
+    with TextFile(starter, encoding="utf-8").write_stream() as fo:
+        fo.write(starter_template.format(main))
+    # 実行権限を与える
+    os.chmod(starter.get(), 0o755)
+    return starter
+
+
+def transfer_deployed_directory(app, src, destdir):
+    """
+    machaonディレクトリを移動する。
+    Params:
+        src(Path): 移動元のmachaonディレクトリ
+        destdir(Path): 移動先のディレクトリ（存在しないパスか、空の環境）
+    """
+    destmachaon = destdir / "machaon"
+    if destmachaon.isdir():
+        for dirpath, _dirnames, filenames in os.walk(destmachaon.get()):
+            if len(filenames)>0:
+                raise ValueError("移動先に{}が存在します。全てのファイルを削除してください".format(os.path.join(dirpath, filenames[0])))
+    
+    shutil.move(src.get(), destmachaon.get())
+
+    main = destdir / "main.py"
+    shutil.move((src.up() / "main.py").get(), main.get())
+    
+    if is_osx():
+        oldcmd = destdir / "start.command"
+        if oldcmd.isfile():
+            oldcmd.remove()
+        deploy_osx_start_command(main)
 
