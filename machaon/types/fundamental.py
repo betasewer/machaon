@@ -155,11 +155,12 @@ class AnyType():
         """ @method
         属性の一覧を返す。
         Returns:
-            Sheet[ObjectCollection]: (name, type)
+            Sheet[ObjectCollection]: (name, type, value)
         """
         return [{
             "name" : k,
-            "type" : full_qualified_name(type(v))
+            "type" : full_qualified_name(type(v)),
+            "value" : str(v),
         } for (k,v) in vars(v).items()]
     
     def pick(self, v, name):

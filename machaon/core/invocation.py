@@ -756,7 +756,7 @@ class InstanceMethodInvocation(BasicInvocation):
         self.attrname = normalize_method_target(attrname)
     
     def get_method_name(self):
-        return normalize_method_name(self.attrname)
+        return self.attrname
     
     def get_method_doc(self):
         return ""
@@ -778,7 +778,7 @@ class InstanceMethodInvocation(BasicInvocation):
             # 定数の類を取り除く
             return None
 
-        mth = Method(normalize_method_name(self.attrname), flags=METHOD_FROM_INSTANCE)
+        mth = Method(self.attrname, flags=METHOD_FROM_INSTANCE)
         mth.load_from_function(fn)
         self._m = mth
         return mth
@@ -786,7 +786,7 @@ class InstanceMethodInvocation(BasicInvocation):
     def query_method_from_instance(self, instance):
         """ インスタンスからMethodオブジェクトを作成する """
         fn = self.resolve_instance_method(instance)
-        mth = Method(normalize_method_name(self.attrname), flags=METHOD_FROM_INSTANCE)
+        mth = Method(self.attrname, flags=METHOD_FROM_INSTANCE)
         mth.load_from_function(fn)
         return mth
     

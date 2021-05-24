@@ -318,6 +318,14 @@ class Module():
             raise ValueError("ビルトインモジュールなので場所を参照できません")
         return spec.origin
     
+    def version(self):
+        """ @method
+        バージョン番号
+        Returns:
+            Str:
+        """
+        return self._m.__version__
+    
     def module(self):
         """ @method
         モジュール。
