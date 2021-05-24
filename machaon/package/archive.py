@@ -26,6 +26,9 @@ class BasicArchive():
     
     def match_credential(self, _cred):
         return False
+        
+    def query_hash(self):
+        return None
     
     #
     # アーカイブを操作する
@@ -135,10 +138,14 @@ class LocalFile(DummyArchive):
     ファイルパスで指定するモジュール
     """
     def __init__(self, filepath):
+        super().__init__()
         self.filepath = filepath
 
     def get_source(self) -> str:
         return "file:{}".format(self.filepath)
+    
+    def query_hash(self):
+        return None
     
     #
     # パスを取得
@@ -153,6 +160,7 @@ class LocalModule(DummyArchive):
     is_module = True
 
     def __init__(self, module):
+        super().__init__()
         self.module = module
 
     def get_source(self) -> str:

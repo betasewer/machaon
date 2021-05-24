@@ -99,13 +99,10 @@ class Package():
     def is_module_source(self) -> bool:
         return getattr(self.source, "is_module", False) is True
     
-    def get_hash(self):
-        return self._hash
-
     def is_installation_separated(self) -> bool:
         return self.separate
     
-    def load_hash(self) -> Optional[str]:
+    def load_latest_hash(self) -> Optional[str]:
         if self.source is None:
             return None
         if self._hash is None:
@@ -405,7 +402,7 @@ class PackageManager():
             self.database[pkg.name] = {}
         
         self.database.set(pkg.name, "source", pkg.get_source_signature())
-        self.database.set(pkg.name, "hash", pkg.load_hash())
+        self.database.set(pkg.name, "hash", pkg.load_latest_hash())
         
         separated = pkg.is_installation_separated()
         if separated is not None:
@@ -554,18 +551,27 @@ class PackageManager():
             )
             
         self.remove_database(pkg.name)
-            
+    
+    def get_installed_hash(self, pkg) -> Optional[str]:
+        """ インストールされたバージョンのハッシュ値 """
+        if not self.is_installed(pkg.name):
+            return None
+        entry = self.database[pkg.name]
+        if "hash" not in entry:
+            raise ValueError("Bad Entry")
+        return entry["hash"]
+    
     def query_status(self, pkg) -> str:
         if not pkg.is_remote_source():
             return "latest"
-        if not self.is_installed(pkg.name):
+        installed_hash = self.get_installed_hash(pkg)
+        if installed_hash is None:
             return "none"
-        entry = self.database[pkg.name]
         # hashを比較して変更を検知する
-        hash_ = pkg.load_hash()
-        if hash_ is None or "hash" not in entry:
+        latest_hash = pkg.load_latest_hash()
+        if latest_hash is None:
             return "unknown"
-        if entry["hash"] == hash_:
+        if installed_hash == latest_hash:
             return "latest"
         else:
             return "old"

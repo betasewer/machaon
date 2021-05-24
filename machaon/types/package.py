@@ -114,7 +114,29 @@ class AppPackageType:
             Str:
         """
         return package.entrypoint
+    
+    def hash(self, package, context):
+        """ @method context
+        インストールされているバージョンのハッシュ値
+        Returns:
+            Str:
+        """
+        h = context.root.pkgmanager.get_installed_hash(package)
+        if not h:
+            return "<no-hash>"
+        return h
 
+    def latest_hash(self, package, app):
+        """ @task
+        パッケージの最新のハッシュ値
+        Returns:
+            Str:
+        """
+        h = package.load_latest_hash()
+        if not h:
+            return "<no-hash>"
+        return h
+    
     def install(self, package, context, app):
         """ @task context
         パッケージをインストールし、ロードする。
