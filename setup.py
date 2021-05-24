@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-
+"""
+setuptools>=40.1.0
+"""
 from setuptools import setup, find_packages
 #from codecs import open
 import os
@@ -36,6 +38,7 @@ setup(
     version=version,
     
     packages=find_packages(exclude=['tests', 'tests.*']),
+    package_data={"machaon" : ["configs/*.*", "configs/osx/*.*"]},
     
     license=license,
     
