@@ -99,7 +99,7 @@ class RootObject:
             return pr.is_failed()
         self._clear_processes(app, is_failed)
     
-    def deploy(self, path):
+    def deploy(self, app, path):
         ''' @task
         machaonディレクトリを配置する。
         Params:
