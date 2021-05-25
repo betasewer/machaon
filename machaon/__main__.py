@@ -18,6 +18,15 @@ def launch():
         "hello",
         "bitbucket:betasewer/test_module:hello"
     )
+    root.add_package(
+        "xuthus",
+        "bitbucket:rosedesvents/xuthus:xuthus",
+        locked=True
+    )
+    root.add_package(
+        "docxx",
+        "github:betasewer/python-docx-xtended:docxx"
+    )
 
     root.run()
 

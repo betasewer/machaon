@@ -11,6 +11,7 @@ from machaon.core.symbol import (
     SIGIL_SCOPE_RESOLUTION,
     SIGIL_DEFAULT_RESULT,
     SIGIL_END_OF_KEYWORDS,
+    SIGIL_DISCARD_MESSAGE,
     QUOTE_ENDPARENS
 )
 from machaon.core.type import Type, TypeModule
@@ -404,7 +405,6 @@ TOKEN_ALL_BLOCK_END = 0x08
 TOKEN_STRING = 0x10
 TOKEN_ARGUMENT = 0x20
 TOKEN_FIRSTTERM = 0x40
-TOKEN_IMPLICIT_SELECTOR = 0x80
 
 EXPECT_NOTHING = 0
 EXPECT_RECIEVER = 0x10
@@ -445,6 +445,7 @@ TERM_START_KEYWORD_ARGS = 0x010000
 TERM_END_LAST_BLOCK = 0x020000
 TERM_END_ALL_BLOCK = 0x040000
 TERM_BEGIN_NEW_BLOCK = 0x080000
+TERM_DISCARD_LAST_BLOCK_MESSAGE = 0x100000
 
 #
 #
@@ -470,15 +471,14 @@ class MessageTokenBuffer():
         string = self.lastflush
         self.lastflush = ""
         
-        if (tokentype & TOKEN_IMPLICIT_SELECTOR) > 0:
-            tokentype = (tokentype & ~TOKEN_IMPLICIT_SELECTOR)
-            string = "new_from_string"
-        
         if self.firstterm and (tokentype & TOKEN_TERM): 
             tokentype |= TOKEN_FIRSTTERM
             self.firstterm = False
         
         return (string, tokentype)
+    
+    def set_next_token_firstterm(self):
+        self.firstterm = True
     
     def quoting(self):
         return self.quote_beg is not None
@@ -522,6 +522,7 @@ class MessageTokenBuffer():
 class MessageEngine():
     def __init__(self, expression=""):
         self.source = expression
+        self.buffer = None
         self._tokens = []    # type: List[Tuple[str, int]]
         self._readings = []  # type: List[Message]
         self._codes = []     # type: List[Tuple[int, Tuple[Any,...]]]
@@ -539,9 +540,10 @@ class MessageEngine():
         Yields:
             Tuple[str, int]: 文字列, トークンの意味を示す整数値
         """
-        buffer = MessageTokenBuffer()
+        self.buffer = MessageTokenBuffer() # バッファをリセット
         user_quote_prelude = ""
         paren_count = 0
+        buffer = self.buffer
         for ch in source:
             if buffer.quoting():
                 buffer.add(ch)
@@ -664,11 +666,17 @@ class MessageEngine():
             if expect == EXPECT_NOTHING: 
                 return (tokenbits | TERM_NEW_BLOCK_ISOLATED, )
 
-        # 引数リストの終わり
+        # 特殊な記号
         if not isstringtoken:
+            # 引数リストの終わり
             if token == SIGIL_END_OF_KEYWORDS:
                 if expect == EXPECT_ARGUMENT:
                     return (tokenbits | TERM_OBJ_NOTHING | TERM_END_LAST_BLOCK, )
+            # メッセージの連鎖をリセットする
+            if token == SIGIL_DISCARD_MESSAGE:
+                if expect == EXPECT_NOTHING:
+                    return (tokenbits | TERM_OBJ_NOTHING | TERM_DISCARD_LAST_BLOCK_MESSAGE, )
+                raise BadExpressionError("メッセージの要素が足りません")
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:
@@ -777,7 +785,7 @@ class MessageEngine():
                     tokenbits |= TERM_OBJ_RECIEVER
                 return (tokenbits | TERM_NEW_BLOCK_RECIEVER, token) 
             else:
-                # 先行するメッセージをレシーバとするセレクタとする
+                # 先行するメッセージの返り値をレシーバとするセレクタとする
                 tokenbits |= TERM_OBJ_SELECTOR
                 return (tokenbits | TERM_NEW_BLOCK_SELECTOR, token)
         
@@ -928,6 +936,9 @@ class MessageEngine():
                     raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
                 msg.end_keyword_args()
             self._curblockstack.clear()
+        
+        if astinstr & TERM_DISCARD_LAST_BLOCK_MESSAGE:
+            self.buffer.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
         
         # 完成したメッセージをキューから取り出す
         completed = 0

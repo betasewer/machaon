@@ -309,3 +309,17 @@ def test_message_block():
     r = run_function("100 / ((1 + 2 + 3) * (4 + 5 + 6))", None, context)
     assert r.value == 100 / ((1 + 2 + 3) * (4 + 5 + 6))
 
+#
+def test_message_discard():
+    context = test_context()
+
+    r = run_function("10 + 20 . 2 * 4", None, context)
+    assert r.value == 2 * 4
+
+    r = run_function(". 10 + 20 . 3 * 5 .", None, context)
+    assert r.value == 3 * 5
+
+    r = run_function("100 * (1 + 2 + 3 . 8 =)", None, context)
+    assert r.value == 100 * 8
+
+
