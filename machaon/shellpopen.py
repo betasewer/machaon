@@ -33,7 +33,7 @@ class StdoutReader():
                     else:
                         break
                 else:
-                    raise e
+                    text = "<{}>".format(e) # エンコードエラー
             
             for ch in text:
                 if ch == '\r':
