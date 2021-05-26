@@ -15,7 +15,7 @@ def filetext(path):
         text = fi.read()
     return text
 
-def version(text):
+def get_version(text):
     m = re.search("__version__\\s+=\\s+'([^']+)'", text)
     if m:
         return m.group(1)
@@ -26,8 +26,8 @@ def version(text):
 #
 package_name = "machaon"
 
-version = version(filetext("machaon/__init__.py"))
-licence = filetext("LICENSE")
+version = get_version(filetext("machaon/__init__.py"))
+license = filetext("LICENSE")
 requirements = [x.strip() for x in filetext("REQUIREMENTS.txt").splitlines()]
 test_requirements = [x.strip() for x in filetext("TEST-REQUIREMENTS.txt").splitlines()]
 long_description = filetext("README.rst") + "\n" + filetext("HISTORY.rst")
