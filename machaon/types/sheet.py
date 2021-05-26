@@ -719,7 +719,10 @@ class Sheet():
         }
         for i, col in enumerate(self.viewcolumns):
             key = col.get_name()
-            values[key] = col.new_object(context, row[i])
+            value = row[i]
+            if value == "-" and col.is_nonstring_column():  # boilerplate
+                value = col.new_object(context, None)       #
+            values[key] = col.new_object(context, value)
         return context.new_object(values, type="ObjectCollection")
 
     def foreach(self, context, predicate):

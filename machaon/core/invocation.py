@@ -328,7 +328,7 @@ class InvocationContext:
     def new_object(self, value: Any, *, type=None, conversion=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 
         Params:
-            value(Any): 値
+            value(Any): 値; Noneの場合、デフォルトコンストラクタを呼び出す
         KeywordParams:
             type(Any): 型を示す値
             conversion(str): 値の変換方法を示す文字列
@@ -337,9 +337,14 @@ class InvocationContext:
             t = self.select_type(type)
             if t is None:
                 t = self.type_module.define(type) # 無ければ定義して返す 
-            convvalue = t.construct(self, value)
-            return t.new_object(convvalue)
+            if value is None:
+                return t.get_value_type()() # デフォルトコンストラクタ
+            else:
+                convvalue = t.construct(self, value)
+                return t.new_object(convvalue)
         elif conversion:
+            if value is None:
+                raise ValueError("Cannot convert None to '{}'".format(conversion))
             tname, _, doc = conversion.partition(":")
             typename, doc, typeparams = parse_typename_syntax(tname.strip(), doc.strip())
             t = self.select_type(typename)
@@ -348,7 +353,9 @@ class InvocationContext:
             convvalue = t.construct(self, value, *typeparams)
             return t.new_object(convvalue)
         else:
-            valtype = self.deduce_type(value)
+            valtype = None
+            if value is not None:
+                valtype = self.deduce_type(value)
             if valtype:
                 convvalue = valtype.construct(self, value)
                 return valtype.new_object(convvalue)
@@ -894,10 +901,16 @@ class ObjectMemberGetterInvocation(BasicInvocation):
         return 0
 
     def prepare_invoke(self, _context, colarg):
-        item = colarg.value.get(self.name)
-        if item is not None:
-            return InvocationEntry(self, _nullary(item.object), (), {})
-        raise BadObjectMemberInvocation()
+        if self.name == "#=":
+            obj = colarg.value.get_delegation()
+            if obj is None:
+                raise BadObjectMemberInvocation()
+        else:
+            elem = colarg.value.get(self.name)
+            if elem is None:
+                raise BadObjectMemberInvocation()
+            obj = elem.object
+        return InvocationEntry(self, _nullary(obj), (), {})
 
 def _nullary(v):
     def _method():
@@ -913,6 +926,10 @@ class ObjectMemberInvocation(BasicInvocation):
     
     def resolve(self, collection):
         if self._resolved is not None:
+            return
+        
+        if self.name == "#=":
+            self._resolved = ObjectMemberGetterInvocation(self.name, collection.get_delegation().get_typename(), self.modifier)
             return
 
         item = collection.get(self.name)
