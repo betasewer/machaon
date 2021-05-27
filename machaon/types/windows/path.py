@@ -1,4 +1,5 @@
 import os
+import stat
 from ctypes import (
     windll, c_wchar_p, byref, wintypes, POINTER
 )
@@ -207,7 +208,15 @@ def start_file(path, operation=None):
     """
     os.startfile(path, operation or "open")
 
-def open_by_text_editor(path, line=None, column=None):
+def has_hidden_attribute(path):
+    """
+    隠し属性がついているファイルか。
+    """
+    if os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN:
+        return True
+    return False
+
+def open_by_system_text_editor(path, line=None, column=None):
     """
     メモ帳でファイルを開く。
     """
@@ -216,3 +225,5 @@ def open_by_text_editor(path, line=None, column=None):
     args.append("notepad.exe")
     args.append(path)
     subprocess.Popen(args)
+
+

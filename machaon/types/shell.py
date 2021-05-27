@@ -1,11 +1,8 @@
+from genericpath import exists
 import os
 import shutil
 import stat
-import re
-import time
 import datetime
-import math
-import sys
 from collections import defaultdict
 
 from typing import Optional
@@ -145,6 +142,19 @@ class Path():
         """
         return os.path.isfile(self._path)
     
+    def ishidden(self):
+        """ @method
+        隠しファイルかどうか
+        ファイル名がピリオドで始まるか、隠し属性がついているか
+        Returns:
+            Bool:
+        """
+        if self.name().startswith("."):
+            return True
+        if shellpath().has_hidden_attribute(self._path):
+            return True
+        return False
+    
     def exists(self):
         """ @method
         ファイル・フォルダとして存在するか
@@ -259,10 +269,7 @@ class Path():
         Returns:
             Sheet[Path]: (name, filetype, modtime, size)
         """
-        if not self.isdir():
-            return [Path(self._path)]
-        items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
-        return items
+        return [x for x in self.listdirall() if x.exists() and not x.ishidden()]
     
     def listdirdir(self):
         """ @method [lsd]
@@ -283,6 +290,17 @@ class Path():
         if not self.isdir():
             return [Path(self._path)]
         return [x for x in self.listdir() if x.isfile()]
+    
+    def listdirall(self):
+        """ @method [lsa]
+        隠しファイルも含めた全てのファイルとサブディレクトリの一覧を返す。
+        Returns:
+            Sheet[Path]: (name, filetype, modtime, size)
+        """
+        if not self.isdir():
+            return [Path(self._path)]
+        items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
+        return items
     
     def dialog(self):
         """ @method [dlg]

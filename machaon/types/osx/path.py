@@ -56,6 +56,17 @@ def start_file(path, operation=None):
         subprocess.run(["open", path])
     else:
         raise ValueError("Unsupported")
+
+def has_hidden_attribute(path):
+    """
+    隠し属性がついているファイルか。
+    """
+    import importlib
+    Foundation = importlib.import_module('Foundation')    
+    if Foundation is None:
+        return False
+    url = Foundation.NSURL.fileURLWithPath_(path)
+    return url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)[0]
     
 def which_path(name):
     """

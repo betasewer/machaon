@@ -416,7 +416,7 @@ class AppRoot:
         
         else:
             from machaon.types.shellplatform import shellpath
-            shellpath().open_by_text_editor(filepath, line, column)
+            shellpath().open_by_system_text_editor(filepath, line, column)
 
 #
 # 
