@@ -27,13 +27,13 @@ def test_function():
     assert not ent.is_failed()
     ent.invoke()
     assert get_first_result(ent)
-    assert get_first_result(ent)[0] == plus2mul(2,3)
+    assert get_first_result(ent) == plus2mul(2,3)
 
     inv = FunctionInvocation(divide, BasicInvocation.MOD_REVERSE_ARGS)
     ent = InvocationEntry(inv, inv.get_action(), (4,2), {})
     ent.invoke()
     assert get_first_result(ent)
-    assert get_first_result(ent)[0] == 2/4
+    assert get_first_result(ent) == 2/4
 
     
 def test_type():

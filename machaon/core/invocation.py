@@ -3,7 +3,7 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 import inspect
 
 from machaon.core.type import Type, TypeModule
-from machaon.core.object import Object, ObjectCollection
+from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
 from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
 from machaon.core.symbol import (
     BadTypename,
@@ -55,7 +55,7 @@ class InvocationEntry():
         self.action = action
         self.args = args
         self.kwargs = kwargs
-        self.result = None
+        self.result = EMPTY_OBJECT
         self.exception = exception
         
         if self.invocation:
@@ -108,33 +108,35 @@ class InvocationEntry():
             raise e
         except Exception as e:
             self.exception = e
-
-        # 返り値をまとめる
-        if isinstance(result, Object):
-            self.result = (result.value, result)
-        else:
-            self.result = (result, self.invocation.get_result_spec())
+        # 返り値を保存
+        self.result = result
     
     def result_spec(self):
         return self.invocation.get_result_spec()
 
-    def result_object(self, context) -> Object:
+    def result_object(self, context, *, value=None, retspec=None, objectType=None) -> Object:
         """ 返り値をオブジェクトに変換する """
-        if self.result is None:
-            raise ValueError("返り値がまだありません")
-
-        value, retspec = self.result
-        if isinstance(retspec, Object):
-            objectType = type(retspec)
+        rettype = None
+        if self.result is EMPTY_OBJECT:
+            # 引数を使用する
+            objectType = objectType or Object
+            if value is None or retspec is None:
+                raise ValueError("返り値が読み込まれていません")
+        elif isinstance(self.result, Object):
+            value = self.result.value
+            rettype = self.result.type
+            objectType = type(self.result)
         else:
+            value = self.result
             objectType = Object
+            retspec = self.result_spec()
 
         # エラーが発生した
         if self.exception:
             return _new_process_error_object(context, self.exception, objectType)
 
         # return reciever
-        if isinstance(retspec, MethodResult) and retspec.is_return_self():
+        if retspec and retspec.is_return_self():
             return objectType(context.get_type("Any"), INVOCATION_RETURN_RECIEVER)
 
         # Noneが返された
@@ -148,30 +150,22 @@ class InvocationEntry():
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
             value = not value
         
-        # 型を決定する
-        rettype = None
-        if isinstance(retspec, Object):
-            rettype = retspec.type
-        elif retspec:
-            if retspec.is_any():
-                rettype = None
-            else:
-                typename = retspec.get_typename()
-                rettype = context.select_type(typename)
-                if rettype is None:
-                    return _new_process_error_object(context, BadTypename(typename), objectType)
+        # 型指定から型を決定する
+        if retspec and not retspec.is_any():
+            typename = retspec.get_typename()
+            rettype = context.select_type(typename)
+            if rettype is None:
+                return _new_process_error_object(context, BadTypename(typename), objectType)
 
-        # 型指定がない、あるいはAny型の場合は、値から型を推定する
+        # 型指定がない、型がAny型の場合は、値から推定する
         if rettype is None or rettype.is_any():
             deducedtype = context.deduce_type(value)
             if deducedtype is not None:
                 rettype = deducedtype
-            else:
-                rettype = context.get_type("Any")
         
         if rettype is None:
-            return _new_process_error_object(context, ValueError("値から型を推定できません"), objectType)
-
+            rettype = context.get_type("Any") # 推定もできなかった
+        
         # 返り値型に値が適合しない場合は、暗黙の型変換を行う
         if not rettype.check_value_type(type(value)):
             if isinstance(retspec, Type):
@@ -180,7 +174,7 @@ class InvocationEntry():
                 typeparams = retspec.get_typeparams() if retspec else tuple()
                 value = rettype.construct(context, value, *typeparams)
             else:
-                err = ValueError("'{}' -> '{}' 返り値が型に適合しません".format(type(value).__name__, rettype.typename))
+                err = ValueError("返り値が型に適合しません '{}' -> '{}'".format(type(value).__name__, rettype.typename))
                 return _new_process_error_object(context, err, objectType)
 
         return objectType(rettype, value)
@@ -201,11 +195,9 @@ LOG_RUN_FUNCTION = 11
 def instant_return_test(context, value, typename, typeparams=()):
     """ メソッド返り値テスト用 """
     from machaon.core.method import MethodResult
-    typespec = MethodResult(typename, typeparams=typeparams)
     inv = BasicInvocation(0)
     entry = InvocationEntry(inv, None, (), {})
-    entry.result = (value, typespec)
-    return entry.result_object(context)
+    return entry.result_object(context, value=value, retspec=MethodResult(typename, typeparams=typeparams))
 
 #
 #
