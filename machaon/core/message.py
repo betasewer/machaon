@@ -1042,12 +1042,12 @@ class MessageEngine():
         ret = self.finish(context)
         return ret # Objectを返す
     
-    def run_function(self, subject, context, *, noraise=False) -> Object:
+    def run_function(self, subject, context, *, raiseerror=False) -> Object:
         """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
         subcontext = context.inherit(subject) # コンテキストが入れ子になる
         ret = self.run(subcontext)
         context.add_log(LOG_RUN_FUNCTION, subcontext)
-        if noraise and ret.is_error(): # エラーを伝播する
+        if raiseerror and ret.is_error(): # エラーを伝播する
             raise ret.value.error
         return ret
 
@@ -1119,7 +1119,7 @@ class MemberGetter():
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         return result
     
-def run_function(expression: str, subject, context, *, noraise=False) -> Object:
+def run_function(expression: str, subject, context, *, raiseerror=False) -> Object:
     """
     文字列をメッセージとして実行する。
     Params:
@@ -1130,6 +1130,6 @@ def run_function(expression: str, subject, context, *, noraise=False) -> Object:
         Object: 実行の戻り値
     """
     f = MessageEngine(expression)
-    return f.run_function(subject, context, noraise=noraise)
+    return f.run_function(subject, context, raiseerror=raiseerror)
     
 

@@ -219,7 +219,7 @@ class FunctionType():
         Returns:
             Object: 返り値
         """
-        r = f.run_function(subject, context)
+        r = f.run_function(subject, context, raiseerror=True)
         return r
 
     def eval(self, f, context, _app, subject=None):
@@ -230,7 +230,7 @@ class FunctionType():
         Returns:
             Object: 返り値
         """
-        return f.run_function(subject, context, noraise=True)
+        return f.run_function(subject, context)
     
 
 # ----------------------------------------------------------
@@ -319,7 +319,7 @@ class StrType():
             Object: 返り値
         """
         from machaon.core.message import run_function
-        r = run_function(s, subject, context)
+        r = run_function(s, subject, context, raiseerror=True)
         return r
     
     def eval(self, s, context, _app, subject=None):
@@ -331,7 +331,7 @@ class StrType():
             Object: 返り値
         """
         from machaon.core.message import run_function
-        return run_function(s, subject, context, noraise=True)
+        return run_function(s, subject, context)
     
     def pyvalue(self, symbol, _app):
         """ @task
