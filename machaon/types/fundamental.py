@@ -211,29 +211,27 @@ class FunctionType():
     #
     #
     #
-    def eval(self, f, context, subject=None):
-        """ @method context
+    def do(self, f, context, _app, subject=None):
+        """ @task context
         関数を実行する。
         Params:
             subject(Object): *引数
         Returns:
             Object: 返り値
         """
-        return f.run_function(subject, context)
-    
-    def do(self, f, context, subject=None):
-        """ @method context
-        関数を実行する。発生したエラーを伝播する。
+        r = f.run_function(subject, context)
+        return r
+
+    def eval(self, f, context, _app, subject=None):
+        """ @task context
+        関数を実行する。発生したエラーは返り値で返す。
         Params:
             subject(Object): *引数
         Returns:
             Object: 返り値
         """
-        r = f.run_function(subject, context)
-        if r.is_error():
-            raise r.value.error
-        return r
-
+        return f.run_function(subject, context, noraise=True)
+    
 
 # ----------------------------------------------------------
 #
@@ -312,8 +310,8 @@ class StrType():
     # 
     # 制御構文
     #
-    def eval(self, s, context, subject=None):
-        """ @method context
+    def do(self, s, context, _app, subject=None):
+        """ @task context
         文字列をメッセージとして評価する。
         Params:
             subject(Object): *引数
@@ -321,24 +319,22 @@ class StrType():
             Object: 返り値
         """
         from machaon.core.message import run_function
-        return run_function(s, subject, context)
+        r = run_function(s, subject, context)
+        return r
     
-    def do(self, s, context, subject=None):
-        """ @method context
-        文字列をメッセージとして評価する。発生したエラーを伝播する。
+    def eval(self, s, context, _app, subject=None):
+        """ @task context
+        文字列をメッセージとして評価する。発生したエラーは返り値で返す。
         Params:
             subject(Object): *引数
         Returns:
             Object: 返り値
         """
         from machaon.core.message import run_function
-        r = run_function(s, subject, context)
-        if r.is_error():
-            raise r.value.error
-        return r
+        return run_function(s, subject, context, noraise=True)
     
-    def pyvalue(self, symbol, context):
-        """ @method context
+    def pyvalue(self, symbol, _app):
+        """ @task
         外部モジュールの変数あるいは引数無し関数呼び出しとして評価する。
         Returns:
             Any:
