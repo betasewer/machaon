@@ -1,7 +1,6 @@
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
 import inspect
-from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object, ObjectCollection
@@ -259,13 +258,14 @@ class InvocationContext:
 
     #
     def get_object(self, name) -> Optional[Object]:
-        for x in self.input_objects.pick(name):
-            return x.object
+        elem = self.input_objects.get(name)
+        if elem:
+            return elem.object
         return None
 
     def get_selected_objects(self) -> List[Object]:
         li = [] # type: List[Object]
-        for x in self.input_objects.pick_all():
+        for x in reversed(self.input_objects.pick_all()):
             if x.selected:
                 li.append(x.object)
         return li
