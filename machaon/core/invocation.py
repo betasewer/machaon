@@ -114,6 +114,9 @@ class InvocationEntry():
             self.result = (result.value, result)
         else:
             self.result = (result, self.invocation.get_result_spec())
+    
+    def result_spec(self):
+        return self.invocation.get_result_spec()
 
     def result_object(self, context) -> Object:
         """ 返り値をオブジェクトに変換する """
@@ -265,10 +268,10 @@ class InvocationContext:
 
     def get_selected_objects(self) -> List[Object]:
         li = [] # type: List[Object]
-        for x in reversed(self.input_objects.pick_all()):
+        for x in self.input_objects.pick_all():
             if x.selected:
                 li.append(x.object)
-        return li
+        return list(reversed(li))
 
     def push_object(self, name: str, obj: Object):
         self.input_objects.push(name, obj)
@@ -516,6 +519,15 @@ class InvocationContext:
             if code == LOG_MESSAGE_EVALRET:
                 return values[0]
         raise ValueError("実行ログに記録がありません")
+    
+    def get_last_invocation_result_spec(self):
+        """ @method alias-name [last-result-spec]
+        最後に実行された呼び出しの宣言する返り値型。
+        Returns:
+            Any:
+        """
+        entry = self.get_last_invocation()
+        return entry.result_spec()
 
     def get_subcontext(self, index):
         """ @method alias-name [sub-context]

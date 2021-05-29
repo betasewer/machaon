@@ -31,6 +31,6 @@ def test_newobject_conversion():
     t = context.new_object(["A","BB","CCC"], conversion="Sheet[str]: (=, length)")
     assert t.get_typename() == "Sheet"
     assert t.value.count() == 3
-    assert t.value.column(context, "=").values() == ["A","BB","CCC"]
-    assert t.value.column(context, "length").values() == [1,2,3]
+    assert [x.value for x in t.value.column_values(context, "=")] == ["A","BB","CCC"]
+    assert [x.value for x in t.value.column_values(context, "length")] == [1,2,3]
 

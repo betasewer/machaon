@@ -33,43 +33,44 @@ DATASET_STRINGIFY_SUMMARIZE = 1
 #
 class BasicDataColumn():
     def __init__(self):
-        self._t = None
+        self._t = None # この列の値の、概ね共通の型
     
-    def get_type(self, context, deduce):
-        if self._t is None:
-            if deduce is None:
-                raise ValueError("Cannot deduce value type of Sheet column '{}' because value is not provided here".format(self._name))
-            self._t = context.deduce_type(deduce)
-            if self._t is None:
-                raise ValueError("value type of Sheet column '{}' is undefined")
+    def get_type(self):
         return self._t
     
+    def set_type(self, t):
+        self._t = t
+    
+    def is_type_unspecified(self):
+        return self._t is None
+
+    def current_type(self, context):
+        if self._t is None:
+            return context.get_type("Any")
+        return self._t
+
     def new_object(self, context, value):
-        t = self.get_type(context, value)
+        t = self.current_type(context)
         return context.new_object(value, type=t)
 
-    def stringify(self, context, value, method=DATASET_STRINGIFY):
-        if isinstance(value, ProcessError):
-            return "<{}>".format(value.summarize())
-        if isinstance(value, str) and value == SIGIL_DEFAULT_RESULT:
-            return value
-        
-        t = self.get_type(context, value)
-        if t.is_any():
-            t = context.deduce_type(value) or t
-        
-        if method == DATASET_STRINGIFY_SUMMARIZE:
-            return t.summarize_value(value)
-        else:
-            return t.convert_to_string(value)
+    def stringify(self, context, object, method=DATASET_STRINGIFY):
+        if object.is_error():
+            return "<{}>".format(object.summary())
+        if isinstance(object.value, str) and object.value == SIGIL_DEFAULT_RESULT:
+            return object.value
 
+        if method == DATASET_STRINGIFY_SUMMARIZE:
+            return object.summary()
+        else:
+            return object.to_string()
+    
     def is_nonstring_column(self):
-        if self._t is None:
-            raise ValueError("まだ読み込まれていない")
+        if self.is_type_unspecified():
+            return True
         return not self._t.is_any() and self._t.typename != "Str"
     
     def make_compare_operator(self, context, lessthan=True):
-        typ = self.get_type(context, None)
+        typ = self.current_type(context)
         if lessthan:
             inv = select_method("lt", typ)
         else:
@@ -78,6 +79,17 @@ class BasicDataColumn():
             return None
         inv.set_result_typehint("Bool")
         return inv
+    
+    def _compose_last_eval_type(self, newtype, context):
+        lasttype = self._t
+        if lasttype:
+            if lasttype.is_any():
+                return
+            elif lasttype.is_supertype(newtype):
+                pass
+            else:
+                newtype = context.get_type("Any")
+        self.set_type(newtype)
 
 class DataOperationColumn(BasicDataColumn):
     def __init__(self, function, *, name=None):
@@ -95,31 +107,35 @@ class DataOperationColumn(BasicDataColumn):
 
     def eval(self, subject, context):
         obj = self._fn.run_function(subject, context)
-        self.get_type(context, obj) # 型を記憶する
-        return obj.value
+        # 共通型を定義しなおす：値型ではなく、宣言された型を参照する
+        entry = context.get_last_invocation()
+        decltype = context.get_type(entry.result_spec().get_typename()) # 最後の呼び出しの返り値型
+        self._compose_last_eval_type(decltype, context)
+        return obj
 
-class DataMemberColumn(DataOperationColumn):
+class DataMemberColumn(BasicDataColumn):
     def __init__(self, membername):
-        super().__init__(None, name=membername)
+        super().__init__()
+        self._name = membername
         self._method = "&" + membername
     
-    def resolve(self, subject, context):
-        inv = select_method(self._method, subject.type, reciever=subject.value)
-        self._fn = MemberGetter(self._method, inv)
-        self._t = context.select_type(inv.get_result_spec().get_typename())
-
     def get_name(self):
         return self._name
     
     def eval(self, subject, context):
-        if self._fn is None:
-            self.resolve(subject, context)
-        return super().eval(subject, context)
+        # 呼び出しの度に解決する
+        inv = select_method(self._method, subject.type, reciever=subject.value)
+        fn = MemberGetter(self._method, inv)
+        obj = fn.run_function(subject, context)
+        # 共通型を定義しなおす：値型ではなく、宣言された型を参照する
+        decltype = context.get_type(inv.get_result_spec().get_typename())
+        self._compose_last_eval_type(decltype, context)
+        return obj
 
 class DataItemItselfColumn(BasicDataColumn):
     def __init__(self, type):
         super().__init__()
-        self._t = type
+        self.set_type(type)
     
     @property
     def method(self):
@@ -131,11 +147,8 @@ class DataItemItselfColumn(BasicDataColumn):
     def get_doc(self):
         return "要素"
     
-    def get_type(self, _context, _deduce):
-        return self._t
-    
     def eval(self, subject, _context):
-        return subject.value
+        return subject
 
 #
 DataColumnUnion = Union[DataMemberColumn, DataOperationColumn, DataItemItselfColumn]
@@ -159,11 +172,9 @@ def make_data_columns(itemtype, *expressions) -> List[DataColumnUnion]:
         
         parts = member_name.split()
         if len(parts) == 1:
-            col = DataMemberColumn(member_name)
-            columns.append(col)
+            columns.append(DataMemberColumn(member_name))
         elif len(parts) > 1:
-            col = DataOperationColumn(member_name)
-            columns.append(col)
+            columns.append(DataOperationColumn(member_name))
 
     return columns
 
@@ -262,11 +273,10 @@ class Sheet():
         itemindex, r = self.rows[row]
         icol, col = self.select_column(column)
         if icol == -1:
-            val = col.eval(self.items[itemindex], context)
+            obj = col.eval(self.items[itemindex], context)
         else:
-            val = r[icol]
-
-        return col.new_object(context, val)
+            obj = r[icol]
+        return obj
     
     def find(self, context, app, column, value):
         """ @method task context
@@ -301,12 +311,11 @@ class Sheet():
             if pred(obj.value, value):
                 item = self.items[self.get_item_from_row(ival)]
                 index = context.new_object(ival, type="Int")
-                ovalue = col.new_object(context, obj.value)
-                return ElemObject(item, index, ovalue)
+                return ElemObject(item, index, obj)
 
         raise NotFound() # 見つからなかった
     
-    def pick_first_column(self, context, app, value):
+    def pick_in_first_column(self, context, app, value):
         """ @method task context [#]
         最初のカラムの値で検索を行う。
         前方一致で見つからなければ後方一致の結果を返す。
@@ -331,11 +340,6 @@ class Sheet():
             return context.new_object(item, type=self.itemtype)
         raise NotFound()
 
-    def get_row(self, index):
-        """ 行を取得する。 """
-        _itemindex, row = self.rows[index]
-        return row
-    
     def get_row_from_item(self, itemindex) -> int:
         """ アイテムIDから行番号を取得する。 線形探索を行う。"""
         for irow, (iitem, _row) in enumerate(self.rows):
@@ -349,20 +353,28 @@ class Sheet():
         return iitem
 
     def current_rows(self):
-        """ 現在あるすべての行を取得する。 """
+        """ 現在有効なすべての行を取得する。 """
         for itemindex, rows in self.rows:
             yield itemindex, rows
     
     def current_items(self):
-        """ 現在あるすべての行のアイテムを取得する。 """
+        """ 現在有効なアイテムを取得する。 """
         for itemindex, _ in self.rows:
             yield self.items[itemindex]
 
+    def columns(self):
+        """ @method
+        カラムを返す。
+        Returns:
+            Tuple[Any]:
+        """
+        return self.viewcolumns
+    
     def column_values(self, context, index, column=None):
         """ @method context
-        ある列をタプルにして得る。
+        ある列をタプルで得る。
         Params:
-            column(Str): カラム名
+            index(Str): カラム番号／カラム名
         Returns:
             Tuple:
         """
@@ -379,8 +391,19 @@ class Sheet():
 
         for itemindex, _row in self.rows:
             subject = context.new_object(self.items[itemindex], type=self.itemtype)
-            value = col.eval(subject, context)
-            yield col.new_object(context, value)
+            obj = col.eval(subject, context)
+            yield obj
+    
+    def row_values(self, index):
+        """ @method
+        ある行をタプルで得る。
+        Params:
+            index(Str): 行番号
+        Returns:
+            Tuple:
+        """
+        _itemindex, row = self.rows[index]
+        return row
     
     #
     # シーケンス関数
@@ -535,6 +558,23 @@ class Sheet():
                 srow[i] = s
             srows.append((itemindex, srow))
         return srows
+    
+    def _deduce_column_types_from_subcontexts(self, subcontexts, columns):
+        """ 計算中の最後の呼び出しで宣言された返り値型を集計し、列の型を決定する """
+        column_types = [col.get_type() for col in columns]
+        for i, subcxt in enumerate(subcontexts):
+            icol = i % len(columns)
+            lasttype = column_types[icol]
+            if lasttype.is_any():
+                continue
+            spec = subcxt.get_last_invocation_result_spec()
+            spectype = subcxt.get_type(spec.get_typename())
+            if lasttype is None:
+                column_types[icol] = spectype
+            elif not lasttype.is_supertype(spectype):
+                column_types[icol] = subcxt.get_type("Any")
+        for column_type, column in zip(column_types, columns):
+            column.set_type(column_type)
 
     def generate_rows(self, context, newcolumns):
         """ 値を計算し、新たに設定する """
@@ -543,6 +583,7 @@ class Sheet():
             subject = context.new_object(item, type=self.itemtype)
             newrow = [col.eval(subject, context) for col in newcolumns]
             newrows.append((itemindex, newrow)) # 新しい行
+
         self.rows = newrows
         self.viewcolumns = newcolumns
 
@@ -554,6 +595,7 @@ class Sheet():
             subject = context.new_object(item, type=self.itemtype)
             newrow = [col.eval(subject, context) for col in newcolumns]
             newrows.append((itemindex, currow+newrow)) # 既存の行の後ろに結合
+
         self.rows = newrows
         self.viewcolumns = self.viewcolumns + newcolumns
     
@@ -636,7 +678,7 @@ class Sheet():
             self.rows = []
             return self
 
-        cols = make_data_columns(self.itemtype, message) # 型は推定する
+        cols = make_data_columns(self.itemtype, message)
         self.generate_rows_concat(context, cols)
     
     def clone(self):
@@ -656,8 +698,8 @@ class Sheet():
     #
     # アイテム関数
     #
-    def map(self, context, predicate):
-        """ @method context
+    def map(self, context, _app, predicate):
+        """ @task context
         アイテムに値に関数を適用し、タプルとして返す。
         Params:
             predicate(Function): 述語関数
@@ -667,12 +709,12 @@ class Sheet():
         values = []
         for item in self.current_items():
             o = context.new_object(item, type=self.itemtype)
-            v = predicate.run_function(o, context)
+            v = predicate.run_function(o, context,)
             values.append(v)
         return values
 
-    def collect(self, context, predicate):
-        """ @method context
+    def collect(self, context, _app, predicate):
+        """ @task context
         アイテムに関数を適用し、同じ型の有効な返り値のみを集めたタプルを返す。
         Params:
             predicate(Function): 述語関数
@@ -719,10 +761,10 @@ class Sheet():
         }
         for i, col in enumerate(self.viewcolumns):
             key = col.get_name()
-            value = row[i]
-            if value == "-" and col.is_nonstring_column():  # boilerplate
-                value = col.new_object(context, None)       #
-            values[key] = col.new_object(context, value)
+            obj = row[i]
+            if obj.value == "-" and col.is_nonstring_column():  # boilerplate
+                obj = col.new_object(context, None)       #
+            values[key] = obj
         return context.new_object(values, type="ObjectCollection")
 
     def foreach(self, context, _app, predicate):
@@ -771,48 +813,21 @@ class Sheet():
     #
     # タプルの取得
     #
-    def getallitems(self, context):
+    def get_all_items(self, context):
         """ @method context alias-name [items]
-        全アイテムオブジェクトのタプルを得る。
+        全てのアイテムオブジェクトを得る。
         Returns:
             Tuple: 
         """
         return [context.new_object(x, type=self.itemtype) for x in self.items]
 
-    def getitems(self, context):
-        """ @method context alias-name [curitems]
-        現在の行のアイテムをタプルで得る。
+    def get_current_items(self, context):
+        """ @method context alias-name [cur-items]
+        現在有効な行のアイテムオブジェクトを得る。
         Returns:
             Tuple
         """
         return [context.new_object(x, type=self.itemtype) for x in self.current_items()]
-    
-    def column(self, context, name):
-        """ @method context
-        ある列をタプルにして得る。
-        Params:
-            name(Str): カラム名
-        Returns:
-            Tuple:
-        """
-        objs = []
-        for obj in self.column_values(context, name):
-            objs.append(obj)
-        return ObjectTuple(objs)
-    
-    def row(self, context, index):
-        """ @method context
-        ある行をタプルにして得る。
-        Params:
-            index(Str): 行番号
-        Returns:
-            Tuple:
-        """
-        objs = []
-        row = self.get_row(index)
-        for col, value in zip(self.viewcolumns, row):
-            objs.append(col.new_object(context, value))
-        return ObjectTuple(objs)
 
     #
     # オブジェクト共通関数

@@ -45,6 +45,10 @@ def objectdesk():
     return desk
 
 #
+def values(objects):
+    return [x.value for x in objects]
+
+#
 #
 #
 def test_column(objectdesk):
@@ -64,19 +68,17 @@ def test_column(objectdesk):
 
     namecol = view.get_current_columns()[0]
     assert namecol.get_name() == "name"
-    assert namecol.get_type(objectdesk, None) is objectdesk.get_type("Str")
+    assert namecol.get_type() is objectdesk.get_type("Str")
 
     # カラムの値を得る 
     subject = Object(employee, view.items[0])
-    assert namecol.get_function()
-    assert namecol.get_function().get_expression() == "&name"
-    namecol.eval(subject, objectdesk) == "ken"
+    namecol.eval(subject, objectdesk).value == "ken"
 
     subject = Object(employee, view.items[2])
-    assert namecol.eval(subject, objectdesk) == "shin"
+    assert namecol.eval(subject, objectdesk).value == "shin"
 
     subject = Object(employee, view.items[1])
-    assert namecol.eval(subject, objectdesk) == "ren"
+    assert namecol.eval(subject, objectdesk).value == "ren"
 
 #
 #
@@ -91,13 +93,11 @@ def test_create_no_mod(objectdesk):
     assert len(view.get_current_columns()) == 1
     assert view.get_current_columns()[0].get_name() == "name"
 
-    assert view.rows == [(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])]
-
     assert view.rows_to_string_table(objectdesk) == [(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])]
     view.select(1)
     assert view.selection_index() == 1
-    assert view.get_row(0) == ["ken"]
-    assert view.get_row(view.selection_index()) == ["yuuji"]
+    assert values(view.row_values(0)) == ["ken"]
+    assert values(view.row_values(view.selection_index())) == ["yuuji"]
 
 #
 #
@@ -111,7 +111,7 @@ def test_expand_view(objectdesk):
 
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
     assert view.count() == 3
-    assert view.get_row(0) == ["ken", "111-1111", 3]
+    assert values(view.row_values(0)) == ["ken", "111-1111", 3]
 
 
 
@@ -137,7 +137,7 @@ def test_filtered_manytimes(objectdesk):
     view = parse_new_setview(objectdesk, datas, "name postcode")
     view.select(1)
     assert view.count() == 3
-    assert view.get_row(view.selection()) == ["ishulalmandij", "000-0000"]
+    assert values(view.row_values(view.selection())) == ["ishulalmandij", "000-0000"]
     
     view2 = parse_setview(objectdesk, view, "/where @tall < 10")
     assert view2.count() == 2
@@ -271,14 +271,14 @@ def test_append():
     rooms.view(cxt, ["name", "type"])
     rooms.append(cxt, Room("502", "Single", "Bed"))
     rooms.append(cxt, Room("503", "Single", "Bed"))
-    assert [x[0] for _, x in rooms.current_rows()] == ["101", "102", "103", "201", "202", "203", "501", "502", "503"]
+    assert [x[0].value for _, x in rooms.current_rows()] == ["101", "102", "103", "201", "202", "203", "501", "502", "503"]
 
 #
 def test_conversion_construct():
     cxt = instant_context()
     r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str]: (length, =)")
     sh = r.value
-    assert sh.get_row(0) == [2, "A1"]
-    assert sh.get_row(1) == [3, "B2B"]
-    assert sh.get_row(2) == [4, "C3C3"]
+    assert values(sh.row_values(0)) == [2, "A1"]
+    assert values(sh.row_values(1)) == [3, "B2B"]
+    assert values(sh.row_values(2)) == [4, "C3C3"]
 

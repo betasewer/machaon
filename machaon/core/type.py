@@ -223,6 +223,14 @@ class Type():
         if self.flags & TYPE_ANYTYPE: # 制限なし
             return True
         return self.value_type is value_type
+    
+    def is_supertype(self, other):
+        """ 対象の型の基底タイプであるか """
+        if self.is_any():
+            return True
+        if self is other:
+            return True
+        return False
 
     # 
     # メソッド呼び出し

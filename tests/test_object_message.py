@@ -1,3 +1,4 @@
+from machaon.core.invocation import _new_process_error_object
 import pytest
 import re
 
