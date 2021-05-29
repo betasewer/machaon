@@ -725,8 +725,8 @@ class Sheet():
             values[key] = col.new_object(context, value)
         return context.new_object(values, type="ObjectCollection")
 
-    def foreach(self, context, predicate):
-        """ @method context [%]
+    def foreach(self, context, _app, predicate):
+        """ @task context [%]
         行に関数を適用する。
         Params:
             predicate(Function): 関数
@@ -735,8 +735,8 @@ class Sheet():
             subject = self.row_to_object(context, *entry)
             predicate.run_function(subject, context)
     
-    def filter(self, context, predicate):
-        """ @method context [&]
+    def filter(self, context, _app, predicate):
+        """ @task context [&]
         行を絞り込む。
         Params:
             predicate(Function): 述語関数
@@ -751,8 +751,8 @@ class Sheet():
         # 選択を引き継ぐ
         self._reselect()
     
-    def sort(self, context, sorter):
-        """ @method context
+    def sort(self, context, _app, sorter):
+        """ @task context
         行の順番を並べ替える。
         Params:
             sorter(Function): 並べ替え関数

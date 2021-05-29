@@ -150,8 +150,8 @@ class ObjectTuple():
     #
     # アルゴリズム関数
     #
-    def filter(self, context, predicate):
-        """ @method context [&]
+    def filter(self, context, _app, predicate):
+        """ @task context [&]
         行を絞り込む。
         Params:
             predicate(Function): 述語関数
@@ -162,8 +162,8 @@ class ObjectTuple():
         
         self.objects = list(filter(fn, self.objects))
     
-    def sort(self, context, key):
-        """ @method context
+    def sort(self, context, _app, key):
+        """ @task context
         行の順番を並べ替える。
         Params:
             key(Function): 並べ替え関数
@@ -173,8 +173,8 @@ class ObjectTuple():
 
         self.objects.sort(key=sortkey)
         
-    def foreach(self, context, predicate):
-        """ @method context [%]
+    def foreach(self, context, _app, predicate):
+        """ @task context [%]
         値に関数を適用する。
         Params:
             predicate(Function): 述語関数
@@ -182,8 +182,8 @@ class ObjectTuple():
         for o in self.objects:
             predicate.run_function(o, context)
 
-    def map(self, context, predicate):
-        """ @method context
+    def map(self, context, _app, predicate):
+        """ @task context
         値に関数を適用し、新しいタプルとして返す。
         Params:
             predicate(Function): 述語関数
@@ -196,8 +196,8 @@ class ObjectTuple():
             rets.append(r)
         return ObjectTuple(rets)
     
-    def reduce_(self, context, predicate, start=None):
-        """ @method context alias-name [reduce]
+    def reduce_(self, context, _app, predicate, start=None):
+        """ @task context alias-name [reduce]
         要素に次々と関数を適用し、一つの値として返す。
         Params:
             predicate(Function): 述語関数
@@ -220,7 +220,7 @@ class ObjectTuple():
             
         return cur
 
-    # iota: 1 :to 10 reduce: [@/left + @/right] :start 
+    # 1 to 10 reduce [@.left + @.right]
     
     #
     #
