@@ -42,6 +42,22 @@ class StoredMessage():
         self.path = path
         self.name = name
     
+    def get_path(self):
+        """ @method alias-name [path]
+        ファイルパス
+        Returns:
+            Str:
+        """
+        return self.path
+    
+    def get_name(self):
+        """ @method alias-name [name]
+        ファイルパス
+        Returns:
+            Str:
+        """
+        return self.name or "<no-name>"
+            
     def message(self):
         """ @method
         メッセージを表示する。
@@ -51,15 +67,14 @@ class StoredMessage():
         f = TextFile(Path(self.path))
         return f.text()
 
-    def load(self, context):
-        """ @method context
-        オブジェクトを取得する。
+    def do(self, context, _app):
+        """ @task context
+        メッセージを実行し、返り値を返す。
         Returns:
             Object:
         """
         content = self.message()
-        o = run_function(content, None, context)
-        return o
+        return run_function(content, None, context, raiseerror=True)
     
     def bind(self, context):
         """ @method context
@@ -67,7 +82,7 @@ class StoredMessage():
         Returns:
             Object:
         """
-        o = self.load(context)
+        o = self.do(context, None)
         context.push_object(self.name, o)
         context.spirit.post("message", "'{}'からロード => @{}".format(self.path, self.name))
         return o
@@ -89,7 +104,7 @@ class StoredMessage():
     
     def stringify(self):
         """ @meta """
-        name = self.name or "<no-name>"
+        name = self.get_name()
         return "<StoredMessage {} from '{}'>".format(name, self.path)
 
 
