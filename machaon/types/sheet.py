@@ -1,13 +1,10 @@
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
-from collections import defaultdict
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.message import MessageEngine, MemberGetter, select_method
-from machaon.core.invocation import InvocationContext
 from machaon.core.symbol import SIGIL_DEFAULT_RESULT
-from machaon.process import ProcessError
 
-from machaon.types.tuple import ObjectTuple, ElemObject
+from machaon.types.tuple import ElemObject
 from machaon.types.fundamental import NotFound
 
 #
@@ -558,23 +555,6 @@ class Sheet():
                 srow[i] = s
             srows.append((itemindex, srow))
         return srows
-    
-    def _deduce_column_types_from_subcontexts(self, subcontexts, columns):
-        """ 計算中の最後の呼び出しで宣言された返り値型を集計し、列の型を決定する """
-        column_types = [col.get_type() for col in columns]
-        for i, subcxt in enumerate(subcontexts):
-            icol = i % len(columns)
-            lasttype = column_types[icol]
-            if lasttype.is_any():
-                continue
-            spec = subcxt.get_last_invocation_result_spec()
-            spectype = subcxt.get_type(spec.get_typename())
-            if lasttype is None:
-                column_types[icol] = spectype
-            elif not lasttype.is_supertype(spectype):
-                column_types[icol] = subcxt.get_type("Any")
-        for column_type, column in zip(column_types, columns):
-            column.set_type(column_type)
 
     def generate_rows(self, context, newcolumns):
         """ 値を計算し、新たに設定する """
