@@ -1,8 +1,9 @@
+from machaon.core.object import Object
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.message import MessageEngine, MemberGetter, select_method
-from machaon.core.symbol import SIGIL_DEFAULT_RESULT
+from machaon.core.symbol import BadTypename, SIGIL_DEFAULT_RESULT
 
 from machaon.types.tuple import ElemObject
 from machaon.types.fundamental import NotFound
@@ -583,7 +584,8 @@ class Sheet():
         """ アイテム自体を値とし、"="演算子を列に設定する """
         newrows = []
         for itemindex, item in enumerate(self.items):
-            newrows.append((itemindex, [item]))
+            subject = Object(self.itemtype, item)
+            newrows.append((itemindex, [subject]))
         self.rows = newrows
         self.viewcolumns = [DataItemItselfColumn(self.itemtype)] # identical
     
@@ -818,6 +820,8 @@ class Sheet():
             value = list(value)
 
         itemtype = context.select_type(itemtypename)
+        if itemtype is None:
+            raise BadTypename(itemtypename)
 
         # 型変換を行う
         if len(value)>0:

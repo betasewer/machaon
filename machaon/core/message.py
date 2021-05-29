@@ -27,8 +27,6 @@ from machaon.core.invocation import (
     INVOCATION_RETURN_RECIEVER,
     LOG_MESSAGE_BEGIN,
     LOG_MESSAGE_CODE,
-    LOG_MESSAGE_EVAL,
-    LOG_MESSAGE_EVALRET,
     LOG_MESSAGE_END,
     LOG_RUN_FUNCTION
 )
@@ -152,9 +150,12 @@ class Message:
         args.reverse() # 元の順番に戻す
 
         # 実行する
-        self.selector.invoke(context, *args)
+        invocation = self.selector.prepare_invoke(context, *args)
+        invocation.set_message(self)
+        context.begin_invocation(invocation)
+        retobj = invocation.invoke(context)
+        context.finish_invocation(invocation)
 
-        retobj = context.last_result_object()
         if retobj is None:
             raise BadMessageError("No return value exists on the context stack")
     
@@ -166,7 +167,7 @@ class Message:
     #
     # デバッグ用
     #
-    def sexprs(self):
+    def sexpr(self):
         # S式風に表示：不完全なメッセージであっても表示する
         exprs = []
 
@@ -918,22 +919,22 @@ class MessageEngine():
             if self._readings:
                 msg = self._readings[-1]
                 if not msg.is_reciever_specified():
-                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexprs()))
+                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexpr()))
                 if not msg.is_selector_specified():
-                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexprs()))
+                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexpr()))
                 if not msg.is_min_arg_specified():
-                    raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
+                    raise BadExpressionError("引数が足りません：{}".format(msg.sexpr()))
                 msg.end_keyword_args()
                 self._curblockstack.pop()
 
         if astinstr & TERM_END_ALL_BLOCK:
             for msg in self._readings:
                 if not msg.is_reciever_specified():
-                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexprs()))
+                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexpr()))
                 if not msg.is_selector_specified():
-                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexprs()))
+                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexpr()))
                 if not msg.is_min_arg_specified():
-                    raise BadExpressionError("引数が足りません：{}".format(msg.sexprs()))
+                    raise BadExpressionError("引数が足りません：{}".format(msg.sexpr()))
                 msg.end_keyword_args()
             self._curblockstack.clear()
         
@@ -985,7 +986,7 @@ class MessageEngine():
                 for code, values in self._codes:
                     yield (code, values)
                     
-        context.add_log(LOG_MESSAGE_BEGIN, self.source)
+        context.add_log(LOG_MESSAGE_BEGIN, self)
 
         coderuniter = build_run_codes()
         codes = []
@@ -999,12 +1000,7 @@ class MessageEngine():
 
                 for msg in self.reduce_step(code, values, context):
                     yield msg
-
-                    context.add_log(LOG_MESSAGE_EVAL, msg)
-
                     result = msg.eval(context)
-                    
-                    context.add_log(LOG_MESSAGE_EVALRET, result)
 
                     # 返り値をスタックに乗せる
                     context.push_local_object(result)
@@ -1112,10 +1108,8 @@ class MemberGetter():
         """ その場でメッセージを構築し実行 """
         subcontext = context.inherit(subject)
         message = Message(subject, self.method)
-        subcontext.add_log(LOG_MESSAGE_BEGIN, self.name)
-        subcontext.add_log(LOG_MESSAGE_EVAL, message)
+        subcontext.add_log(LOG_MESSAGE_BEGIN, message)
         result = message.eval(subcontext)
-        subcontext.add_log(LOG_MESSAGE_EVALRET, result)
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         return result
     

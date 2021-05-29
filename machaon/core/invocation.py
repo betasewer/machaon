@@ -57,6 +57,7 @@ class InvocationEntry():
         self.kwargs = kwargs
         self.result = EMPTY_OBJECT
         self.exception = exception
+        self.message = None
         
         if self.invocation:
             mod = self.invocation.modifier
@@ -71,7 +72,7 @@ class InvocationEntry():
         return inv
     
     def get_args(self):
-        """ @method
+        """ @method alias-name [args]
         引数。
         Returns:
             Tuple:
@@ -79,26 +80,26 @@ class InvocationEntry():
         return self.args
     
     def get_kwargs(self):
-        """ @method
+        """ @method alias-name [kwargs]
         キーワード引数。
         Returns:
             ObjectCollection:
         """
         return self.kwargs
 
-    def get_result(self, context):
-        """ @method context
+    def get_result(self):
+        """ @method alias-name [result]
         返り値。
         Returns:
             Object:
         """
-        return self.result_object(context)
+        return self.result
 
     def _invokeaction(self):
         """ アクションを実行（デバッグ用） """
         return self.action(*self.args, **self.kwargs)
 
-    def invoke(self):
+    def invoke(self, context):
         """ アクションを実行し、返り値を保存する """
         from machaon.process import ProcessInterrupted
         result = None
@@ -108,28 +109,26 @@ class InvocationEntry():
             raise e
         except Exception as e:
             self.exception = e
-        # 返り値を保存
-        self.result = result
+        
+        # 返り値を構成
+        self.result = self.result_object(context, value=result)
+        return self.result
     
     def result_spec(self):
         return self.invocation.get_result_spec()
 
-    def result_object(self, context, *, value=None, retspec=None, objectType=None) -> Object:
+    def result_object(self, context, *, value, spec=None, objectType=None) -> Object:
         """ 返り値をオブジェクトに変換する """
         rettype = None
-        if self.result is EMPTY_OBJECT:
-            # 引数を使用する
-            objectType = objectType or Object
-            if value is None or retspec is None:
-                raise ValueError("返り値が読み込まれていません")
-        elif isinstance(self.result, Object):
-            value = self.result.value
-            rettype = self.result.type
-            objectType = type(self.result)
+        retspec = None
+        if isinstance(value, Object):
+            rettype = value.type
+            retval = value.value
+            objectType = type(value)
         else:
-            value = self.result
-            objectType = Object
-            retspec = self.result_spec()
+            retval = value
+            objectType = objectType or Object
+            retspec = spec or self.result_spec()
 
         # エラーが発生した
         if self.exception:
@@ -140,7 +139,7 @@ class InvocationEntry():
             return objectType(context.get_type("Any"), INVOCATION_RETURN_RECIEVER)
 
         # Noneが返された
-        if value is None:
+        if retval is None:
             if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
                 return _default_result_object(context)
             else:
@@ -148,7 +147,7 @@ class InvocationEntry():
         
         # NEGATEモディファイアを適用            
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
-            value = not value
+            retval = not retval
         
         # 型指定から型を決定する
         if retspec and not retspec.is_any():
@@ -159,7 +158,7 @@ class InvocationEntry():
 
         # 型指定がない、型がAny型の場合は、値から推定する
         if rettype is None or rettype.is_any():
-            deducedtype = context.deduce_type(value)
+            deducedtype = context.deduce_type(retval)
             if deducedtype is not None:
                 rettype = deducedtype
         
@@ -167,28 +166,32 @@ class InvocationEntry():
             rettype = context.get_type("Any") # 推定もできなかった
         
         # 返り値型に値が適合しない場合は、暗黙の型変換を行う
-        if not rettype.check_value_type(type(value)):
+        if not rettype.check_value_type(type(retval)):
             if isinstance(retspec, Type):
-                value = rettype.construct(context, value)
+                retval = rettype.construct(context, retval)
             elif isinstance(retspec, MethodResult):
                 typeparams = retspec.get_typeparams() if retspec else tuple()
-                value = rettype.construct(context, value, *typeparams)
+                retval = rettype.construct(context, retval, *typeparams)
             else:
-                err = ValueError("返り値が型に適合しません '{}' -> '{}'".format(type(value).__name__, rettype.typename))
+                err = ValueError("返り値が型に適合しません '{}' -> '{}'".format(type(retval).__name__, rettype.typename))
                 return _new_process_error_object(context, err, objectType)
 
-        return objectType(rettype, value)
+        return objectType(rettype, retval)
 
     def is_failed(self):
         if self.exception:
             return True
         return False
+    
+    def set_message(self, message):
+        self.message = message
+
 
 #    
 LOG_MESSAGE_BEGIN = 1
 LOG_MESSAGE_CODE = 2
-LOG_MESSAGE_EVAL = 3
-LOG_MESSAGE_EVALRET = 4
+LOG_MESSAGE_EVAL_BEGIN = 3
+LOG_MESSAGE_EVAL_END = 4
 LOG_MESSAGE_END = 10
 LOG_RUN_FUNCTION = 11
 
@@ -197,7 +200,7 @@ def instant_return_test(context, value, typename, typeparams=()):
     from machaon.core.method import MethodResult
     inv = BasicInvocation(0)
     entry = InvocationEntry(inv, None, (), {})
-    return entry.result_object(context, value=value, retspec=MethodResult(typename, typeparams=typeparams))
+    return entry.result_object(context, value=value, spec=MethodResult(typename, typeparams=typeparams))
 
 #
 #
@@ -363,30 +366,25 @@ class InvocationContext:
             exception = self.get_last_exception()
         return _new_process_error_object(self, exception, Object)
     
-    #
-    def push_invocation(self, entry: InvocationEntry):
+    def begin_invocation(self, entry: InvocationEntry):
+        """ 呼び出しの直前に """
         self.invocations.append(entry)
+        index = len(self.invocations)-1
+        self.add_log(LOG_MESSAGE_EVAL_BEGIN, index)
+        return index
+
+    def finish_invocation(self, entry: InvocationEntry):
+        """ 呼び出しの直後に """
+        index = len(self.invocations)-1
+        self.add_log(LOG_MESSAGE_EVAL_END, index)
         if entry.is_failed():
             self._last_exception = entry.exception
+        return index
     
     def get_last_invocation(self) -> Optional[InvocationEntry]:
         if self.invocations:
             return self.invocations[-1]
         return None
-    
-    def get_invocations(self):
-        """ @method alias-name [invocations]
-        呼び出された関数のリスト。
-        Returns:
-            Sheet[Invocation]:
-        """ 
-        return self.invocations
-
-    def last_result_object(self) -> Optional[Object]:
-        ent = self.get_last_invocation()
-        if ent is None:
-            return None
-        return ent.result_object(self)
 
     def get_last_exception(self) -> Optional[Exception]:
         """ @method alias-name [last-exception]
@@ -403,6 +401,14 @@ class InvocationContext:
             bool:
         """
         return self._last_exception is not None
+    
+    def get_process(self):
+        """ @method alias-name [process]
+        紐づけられたプロセスを得る。
+        Returns:
+            Process:
+        """
+        return self.spirit.process
     
     def push_extra_exception(self, exception):
         """ 呼び出し以外の場所で起きた例外を保存する """
@@ -436,14 +442,14 @@ class InvocationContext:
                     term = " "
                 title = "term"
                 line = "{} -> {}".format(term, ", ".join([ccode.as_term_flags()] + [str(x) for x in values]))
-            elif code == LOG_MESSAGE_EVAL:
-                msg = args[0]
+            elif code == LOG_MESSAGE_EVAL_BEGIN:
+                invindex = args[0]
                 title = "evaluating"
-                line = msg.sexprs()
-            elif code == LOG_MESSAGE_EVALRET:
-                value = args[0]
+                line = self.invocations[invindex].message.sexpr()
+            elif code == LOG_MESSAGE_EVAL_END:
+                invindex = args[0]
                 title = "return"
-                line = str(value)
+                line = str(self.invocations[invindex].result)
             elif code == LOG_MESSAGE_END:
                 title = "end-of-message"
                 line = ""
@@ -478,48 +484,22 @@ class InvocationContext:
         """
         for code, *values in self._log:
             if code == LOG_MESSAGE_BEGIN:
-                return values[0]
+                return values[0].source
         raise ValueError("実行ログに記録がありません")
     
-    def get_all_eval_result(self):
-        """ @method alias-name [all-result] 
-        実行され、返されたすべての値。
+    def get_invocations(self):
+        """ @method alias-name [all-invocation]
+        呼び出された関数のリスト。
         Returns:
-            Sheet[ObjectCollection]: (message, result)
-        """
+            Sheet[ObjectCollection]: (message-expression, result)
+        """ 
         vals = []
-        row = None
-        for code, *values in self._log:
-            if code == LOG_MESSAGE_EVAL:
-                message = values[0]
-                row = {}
-                row["message"] = message.sexprs()
-            if code == LOG_MESSAGE_EVALRET:
-                result = values[0]
-                if row:
-                    row["result"] = result
-                    vals.append(row)
+        for inv in self.invocations:
+            vals.append({
+                "message-expression" : inv.message.sexpr(),
+                "#delegate" : inv
+            })
         return vals
-    
-    def get_last_eval_result(self):
-        """ @method alias-name [result] 
-        実行され、最後に返された値。
-        Returns:
-            Any:
-        """
-        for code, *values in reversed(self._log):
-            if code == LOG_MESSAGE_EVALRET:
-                return values[0]
-        raise ValueError("実行ログに記録がありません")
-    
-    def get_last_invocation_result_spec(self):
-        """ @method alias-name [last-result-spec]
-        最後に実行された呼び出しの宣言する返り値型。
-        Returns:
-            Any:
-        """
-        entry = self.get_last_invocation()
-        return entry.result_spec()
 
     def get_subcontext(self, index):
         """ @method alias-name [sub-context]
@@ -527,7 +507,7 @@ class InvocationContext:
         Params:
             index(str): ネスト位置を示すインデックス。(例:0-4-1)
         Returns:
-            InvocationContext:
+            Context:
         """
         if isinstance(index, str):
             indices = [int(x) for x in index.split("-")]
@@ -549,7 +529,7 @@ class InvocationContext:
         """ @method alias-name [all-sub-context]
         サブコンテキストの一覧。
         Returns:
-            Sheet[InvocationContext]: (is-failed, message, result)
+            Sheet[Context]: (is-failed, message, last-result)
         """
         rets = []
         submessages = [x for x in self._log if x[0] == LOG_RUN_FUNCTION]
@@ -557,12 +537,34 @@ class InvocationContext:
             subcxt = values[1]
             rets.append(subcxt)
         return rets
+    
+    def get_last_result(self):
+        """ @method alias-name [last-result]
+        最後に返されたメッセージの実行結果。
+        Returns:
+            Any:
+        """
+        inv = self.get_last_invocation()
+        if inv:
+            return inv.result
+        return None
 
     def pprint_log_as_message(self, app):
         """ @method spirit alias-name [log]
         ログを表示する。
         """ 
         self.pprint_log(lambda x: app.post("message", x))
+    
+    def constructor(self, context, value):
+        """ @meta """
+        if isinstance(value, int):
+            proc = context.root.find_process(value)
+            cxt = proc.get_last_invocation_context()
+            if cxt is None:
+                raise ValueError("プロセスにコンテキストが紐づいていません")
+            return cxt
+        else:
+            raise TypeError(value)
 
 
 def instant_context(subject=None):
@@ -634,11 +636,6 @@ class BasicInvocation():
         if not m and straight:
             m.append("straight")
         return " ".join(m)
-    
-    def invoke(self, context: InvocationContext, *argobjects: Object):
-        inventry = self.prepare_invoke(context, *argobjects)
-        inventry.invoke()
-        context.push_invocation(inventry)
     
     def set_result_typehint(self, typename: str):
         self.result_typehint = typename

@@ -22,18 +22,20 @@ def get_first_result(ent):
 #
 #
 def test_function():
+    cxt = instant_context()
+
     inv = FunctionInvocation(plus2mul)
     ent = InvocationEntry(inv, inv.get_action(), (2,3), {})
     assert not ent.is_failed()
-    ent.invoke()
+    ent.invoke(cxt)
     assert get_first_result(ent)
-    assert get_first_result(ent) == plus2mul(2,3)
+    assert get_first_result(ent).value == plus2mul(2,3)
 
     inv = FunctionInvocation(divide, BasicInvocation.MOD_REVERSE_ARGS)
     ent = InvocationEntry(inv, inv.get_action(), (4,2), {})
-    ent.invoke()
+    ent.invoke(cxt)
     assert get_first_result(ent)
-    assert get_first_result(ent) == 2/4
+    assert get_first_result(ent).value == 2/4
 
     
 def test_type():

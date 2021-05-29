@@ -118,7 +118,7 @@ class Process:
         """ @method alias-name [context]
         紐づけられた実行中／実行済みコンテキストを得る。
         Returns:
-            InvocationContext:
+            Context:
         """
         return self.last_context
     
@@ -221,13 +221,6 @@ class Process:
         self.last_input = text
         self.event_inputend.set()
     
-    def constructor(self, context, value):
-        """ @meta """
-        if isinstance(value, int):
-            return context.root.find_process(value)
-        else:
-            raise ValueError("Unsupported Conversion")
-
 
 #
 # プロセスの中断指示
@@ -975,7 +968,7 @@ class ProcessError():
         """ @method alias-name [context]
         関連づけられたコンテキストを得る。
         Returns:
-            InvocationContext:
+            Context:
         """
         return self.context
 

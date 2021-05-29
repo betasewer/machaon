@@ -704,7 +704,7 @@ typedef.Method(
     """,
     value_type="machaon.core.method.Method"
 )
-typedef.InvocationContext(
+typedef.Context(
     """
     メソッドの呼び出しコンテキスト。
     """,
