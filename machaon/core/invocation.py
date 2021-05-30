@@ -559,6 +559,8 @@ class InvocationContext:
         """ @meta """
         if isinstance(value, int):
             proc = context.root.find_process(value)
+            if proc is None:
+                raise ValueError("プロセスが存在しません")
             cxt = proc.get_last_invocation_context()
             if cxt is None:
                 raise ValueError("プロセスにコンテキストが紐づいていません")

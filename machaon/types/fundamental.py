@@ -333,6 +333,16 @@ class StrType():
         from machaon.core.message import run_function
         return run_function(s, subject, context)
     
+    def st_do(self, s, context, app):
+        """ @task context
+        文字列をストアドメッセージの名前として評価し、実行して返す。
+        Returns:
+            Object: 返り値
+        """
+        o = context.new_object(s, type="Stored")
+        ret = o.value.do(context, app)
+        return ret
+
     def pyvalue(self, symbol, _app):
         """ @task
         外部モジュールの変数あるいは引数無し関数呼び出しとして評価する。
@@ -346,7 +356,6 @@ class StrType():
             return imported # 変数
         else:
             return imported() # 関数実行
-
 
 class BoolType():
     def constructor(self, _context, s):
