@@ -24,10 +24,11 @@ def enum_persistent_names(root):
     for dirpath, _dirnames, filenames in os.walk(d):
         parts = []
         if not os.path.samefile(dirpath, d):
-            head = os.path.relpath(dirpath, d)
-            while head:
-                head, p = os.path.split(head)
-                parts.append(p)
+            p = os.path.relpath(dirpath, d)
+            while p:
+                p, tail = os.path.split(p)
+                parts.append(tail)
+            parts.reverse()
 
         for filename in filenames:
             name, _ = os.path.splitext(filename)
