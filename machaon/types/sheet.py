@@ -306,7 +306,7 @@ class Sheet():
         
         # 順に検索
         for ival, obj in enumerate(self.column_values(context, icol, col)):
-            if pred(obj.value, value):
+            if pred(obj, value):
                 item = self.items[self.get_item_from_row(ival)]
                 index = context.new_object(ival, type="Int")
                 return ElemObject(item, index, obj)
@@ -325,7 +325,7 @@ class Sheet():
         fi, bi = None, None
         col = self.get_first_column()
         for ival, obj in enumerate(self.column_values(context, None, col)):
-            s = col.stringify(context, obj.value)
+            s = col.stringify(context, obj)
             if s.startswith(value):
                 fi = ival
                 break

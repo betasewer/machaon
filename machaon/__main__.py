@@ -8,8 +8,6 @@ def launch():
     root = AppRoot()
     root.initialize(ui=ui)
     
-    from machaon.package.repository import BitbucketRepArchive
-    from machaon.package.auth import BasicAuth
     root.add_package(
         "machaon.shell",
         "module:machaon.types.shell",
@@ -20,10 +18,13 @@ def launch():
     )
     root.add_package(
         "xuthus",
-        "bitbucket:rosedesvents/xuthus:xuthus",
-        locked=True
+        "package:xuthus",
     )
     root.add_package(
+        "protenor",
+        "package:protenor",
+    )
+    root.add_dependency(
         "docxx",
         "github:betasewer/python-docx-xtended:docxx"
     )
