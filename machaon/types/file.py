@@ -58,7 +58,7 @@ class BasicLoadFile():
             else:
                 break
         else:
-            app.post("error", '"{}"に保存できません。別のアプリで開かれています。'.format(self._pathstr))
+            app.post("error", '"{}"に保存できません。別のアプリで開かれています。'.format(savepath))
         self._path = Path(savepath)
     
     def savefile(self, path):
