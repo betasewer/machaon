@@ -528,6 +528,7 @@ class MessageEngine():
         self._readings = []  # type: List[Message]
         self._codes = []     # type: List[Tuple[int, Tuple[Any,...]]]
         self._curblockstack = [] # type: List[int]
+        self._lastdone = ""  # 最後に完成したメッセージの文字列
         
     def get_expression(self) -> str:
         """ コード文字列を返す """
@@ -546,6 +547,8 @@ class MessageEngine():
         paren_count = 0
         buffer = self.buffer
         for ch in source:
+            self._lastdone += ch
+
             if buffer.quoting():
                 buffer.add(ch)
             else:
@@ -613,6 +616,10 @@ class MessageEngine():
                 yield buffer.token(TOKEN_TERM|TOKEN_ALL_BLOCK_END)
         else:
             yield buffer.token(TOKEN_ALL_BLOCK_END)
+    
+    def get_last_done_expression(self):
+        """ 読み取りの終わったメッセージの部分 """
+        return self._lastdone.strip()
     
     # 現在評価している途中のメッセージ
     def current_reading_message(self):
@@ -1000,6 +1007,8 @@ class MessageEngine():
 
                 for msg in self.reduce_step(code, values, context):
                     yield msg
+                    self._lastdone = ""
+
                     result = msg.eval(context)
 
                     # 返り値をスタックに乗せる
@@ -1020,7 +1029,7 @@ class MessageEngine():
 
         self._codes = codes # type: ignore
     
-    def finish(self, context) -> Object:
+    def finish(self, context, *, raiseerror=False) -> Object:
         """ 結果を取得し、スタックをクリアする """
         returns = context.clear_local_objects() # 返り値はローカルスタックに置かれている
         if not returns:
@@ -1028,24 +1037,30 @@ class MessageEngine():
         ret = returns[-1]
 
         self._readings.clear()
-        return ret
     
-    def run(self, context) -> Object:
-        """ このコンテキストでメッセージを実行し、返り値を一つ返す """
-        runner = self.runner(context)
-        for _ in runner: pass
-
-        ret = self.finish(context)
-        return ret # Objectを返す
-    
-    def run_function(self, subject, context, *, raiseerror=False) -> Object:
-        """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
-        subcontext = context.inherit(subject) # コンテキストが入れ子になる
-        ret = self.run(subcontext)
-        context.add_log(LOG_RUN_FUNCTION, subcontext)
         if raiseerror and ret.is_error(): # エラーを伝播する
             raise ret.value.error
         return ret
+    
+    def start_subcontext(self, subject, context):
+        """ 入れ子のコンテキストを開始する """
+        subcontext = context.inherit(subject) # コンテキストが入れ子になる
+        context.add_log(LOG_RUN_FUNCTION, subcontext)
+        return subcontext
+    
+    def run_function(self, subject, context, *, raiseerror=False) -> Object:
+        """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
+        subcontext = self.start_subcontext(subject, context)
+        for _ in self.runner(subcontext):
+            pass
+        return self.finish(subcontext, raiseerror=raiseerror)
+
+    def run_function_step(self, subject, context, *, raiseerror=False):
+        """ 実行するたびにメッセージを返す """
+        subcontext = self.start_subcontext(subject, context)
+        for msg in self.runner(subcontext):
+            yield msg   # Messageを返す
+        yield self.finish(subcontext, raiseerror=raiseerror) # Objectを返す
 
 #
 # ログ表示用に定数名を出力する
@@ -1107,10 +1122,13 @@ class MemberGetter():
     def run_function(self, subject, context):
         """ その場でメッセージを構築し実行 """
         subcontext = context.inherit(subject)
+        
         message = Message(subject, self.method)
         subcontext.add_log(LOG_MESSAGE_BEGIN, message)
+        
         result = message.eval(subcontext)
         context.add_log(LOG_RUN_FUNCTION, subcontext)
+        
         return result
     
 def run_function(expression: str, subject, context, *, raiseerror=False) -> Object:
@@ -1126,4 +1144,15 @@ def run_function(expression: str, subject, context, *, raiseerror=False) -> Obje
     f = MessageEngine(expression)
     return f.run_function(subject, context, raiseerror=raiseerror)
     
+def run_function_print_step(expression: str, subject, context, *, raiseerror=False):
+    f = MessageEngine(expression)
+    app = context.spirit
+    for msg in f.run_function_step(subject, context, raiseerror=raiseerror):
+        if isinstance(msg, Object):
+            return msg
+        else:
+            expr = f.get_last_done_expression()
+            if expr:
+                app.post("message", expr + " ")
 
+    return None

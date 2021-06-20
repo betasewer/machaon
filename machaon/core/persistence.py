@@ -1,7 +1,8 @@
 import os
 from machaon.types.shell import Path
 from machaon.types.file import TextFile
-from machaon.core.message import run_function
+from machaon.core.object import Object
+from machaon.core.message import run_function_print_step
 
 def get_persistent_path(root, name):
     """ オブジェクト名からファイルパスを得る
@@ -68,14 +69,14 @@ class StoredMessage():
         f = TextFile(Path(self.path))
         return f.text()
 
-    def do(self, context, _app):
+    def do(self, context, app):
         """ @task context
         メッセージを実行し、返り値を返す。
         Returns:
             Object:
         """
         content = self.message()
-        return run_function(content, None, context, raiseerror=True)
+        return run_function_print_step(content, None, context, raiseerror=True)
     
     def bind(self, context):
         """ @method context
