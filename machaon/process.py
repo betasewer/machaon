@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
+import inspect
 import os
 import sys
 import threading
@@ -1054,15 +1055,15 @@ def verbose_display_traceback(exception, linewidth):
         msg_fn = "{}:".format(fnname)
         msg_locals = []
         localdict = frame.f_locals
+
         localself = localdict.pop("self", None)
         if localself is not None:
-            try:
-                fn = getattr(localself, fnname, None)
-            except:
-                fn = None # プロパティの場合エラー発生の可能性あり
-            if fn is not None:
-                msg_fn = "{}{}:".format(fnname, display_parameters(fn))
-            
+            sig = find_frame_function_signature(localself, fnname)
+            if isinstance(sig, Exception):
+                msg_fn = "{}(<error: {}>):".format(fnname, sig)
+            elif sig is not None:
+                msg_fn = "{}{}:".format(fnname, display_parameters(sig))
+
             msg_locals.append("self = <{}>".format(full_qualified_name(type(localself))))
 
         for name, value in sorted(localdict.items()):
@@ -1091,19 +1092,27 @@ def verbose_display_traceback(exception, linewidth):
 
     return '\n'.join(lines)
 
-def display_parameters(fn):
-    import inspect
-    params = ["self"]
+def find_frame_function_signature(selfobj, fnname):
+    """ inspect.Signatureを抽出して返す """
+    selftype = type(selfobj)
+    cfn = getattr(selftype, fnname, None)
+    if cfn is None or isinstance(cfn, property): # プロパティをはじく
+        return None
+    
+    fn = getattr(selfobj, fnname, None)
     try:
-        sig = inspect.signature(fn)
-        for p in sig.parameters.values():
-            if p.default == inspect.Parameter.empty:
-                params.append(p.name)
-            else:
-                params.append("{} = {}".format(p.name, p.default))
-        return "({})".format(", ".join(params))
-    except ValueError as e:
-        return "(<error: {}>)".format(e)
+        return inspect.signature(fn)
+    except Exception as e:
+        return e
+
+def display_parameters(sig):
+    params = ["self"]
+    for p in sig.parameters.values():
+        if p.default == inspect.Parameter.empty:
+            params.append(p.name)
+        else:
+            params.append("{} = {}".format(p.name, p.default))
+    return "({})".format(", ".join(params))
 
 
 def get_local_from_traceback(exception, level, name):
