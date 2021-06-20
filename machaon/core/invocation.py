@@ -431,7 +431,7 @@ class InvocationContext:
         subindex = None
         for code, *args in self._log:
             if code == LOG_MESSAGE_BEGIN:
-                source = args[0]
+                source = args[0].source
                 title = "message"
                 line = source
             elif code == LOG_MESSAGE_CODE:
@@ -500,6 +500,38 @@ class InvocationContext:
                 "#delegate" : inv
             })
         return vals
+    
+    def get_errors(self, _app):
+        """ @task alias-name [all-errors]
+        サブコンテキストも含めたすべてのエラーを表示する。
+        Returns:
+            Sheet[ObjectCollection]: (level, message-expression, error)
+        """
+        errors = []
+
+        cxts = []
+        cxts.append(("", self))
+        i = 0
+        while i < len(cxts):
+            l, cxt = cxts[i]
+            err = cxt.get_last_exception()
+            if err:
+                errors.append({
+                    "level" : l,
+                    "message-expression" : cxt.get_message(),
+                    "error" : err,
+                    "#delegate" : cxt
+                })
+            
+            for j, subcxt in enumerate(cxt.get_subcontext_list()):
+                if not l:
+                    sublevel = "{}".format(j)
+                else:
+                    sublevel = "{}-{}".format(l,j)
+                cxts.append((sublevel, subcxt))
+            i += 1
+
+        return errors
 
     def get_subcontext(self, index):
         """ @method alias-name [sub-context]
