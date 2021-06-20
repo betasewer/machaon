@@ -445,7 +445,10 @@ class tkLauncher(Launcher):
         @bind_event(self.commandline, self.log)
         def on_FocusOut(e):
             e.widget.configure(background=self.focusbg[1])
-            
+    
+    def init_startup_message(self):
+        self.rootframe.after(100, self.app.do_startup_message)
+
     #
     # ログの操作
     #

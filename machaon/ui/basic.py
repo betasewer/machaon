@@ -34,6 +34,9 @@ class Launcher():
     
     def init_screen(self):
         pass
+
+    def init_startup_message(self):
+        raise NotImplementedError()
     
     def prettyformat(self, value):
         pp = pprint.PrettyPrinter(width=type(self).wrap_width)

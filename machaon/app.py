@@ -33,6 +33,7 @@ class AppRoot:
         self.typemodule = None
         self.objcol = ObjectCollection()
         self._extapps = None # 外部アプリコンフィグファイル
+        self._startupmsgs = []
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
         if isinstance(ui, str):
@@ -63,6 +64,8 @@ class AppRoot:
         
         chamber = self.processhive.addnew(self.ui.get_input_prompt())
         self.ui.activate_new_chamber(chamber)
+        
+        self.ui.init_startup_message()
     
     def get_ui(self):
         return self.ui
@@ -227,6 +230,17 @@ class AppRoot:
         
         if not mark:
             raise ValueError("認証情報はどのパッケージにも設定されませんでした")
+    
+    #
+    # 開始直後に実行されるメッセージ
+    #
+    def add_startup_message(self, *lines):
+        self._startupmsgs.extend(lines)
+    
+    def do_startup_message(self):
+        for line in self._startupmsgs:
+            self.eval_object_message(line)
+        self._startupmsgs.clear()
 
     #
     # アプリの実行
