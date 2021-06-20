@@ -1048,6 +1048,12 @@ class MessageEngine():
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         return subcontext
     
+    def run(self, context, *, raiseerror=False) -> Object:
+        """ 現在のコンテキストでメッセージを実行 """
+        for _ in self.runner(context):
+            pass
+        return self.finish(context, raiseerror=raiseerror)
+    
     def run_function(self, subject, context, *, raiseerror=False) -> Object:
         """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
         subcontext = self.start_subcontext(subject, context)
