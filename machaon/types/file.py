@@ -1,12 +1,15 @@
-import os
 from machaon.types.shell import Path
 
 class BasicLoadFile():
     """
     開いた時に中身を取得できるファイル
+    load / save
     """
     def __init__(self, path=None, *, file=None):
         self._path = path or Path()
+        self._file = file
+    
+    def resetfile(self, file=None):
         self._file = file
 
     def load(self):
@@ -42,20 +45,24 @@ class BasicLoadFile():
             Any:
         """
         if type(self).__init__ is not BasicLoadFile.__init__:
-            raise ValueError("Need overwrite")
+            return self._with_path(path)
         return type(self)(path, file=self._file)
+    
+    def _with_path(self, *args, **kwargs):
+        raise NotImplementedError()
 
     def save(self, app):
         """ @task
         ファイルをセーブする。
         """
+        # パスを変えて何度か試行する
         savepath = self.pathstr
         for retry_level in range(1, 4):
             try:
                 self.savefile(savepath)
             except PermissionError:
                 savepath = self._path.with_basename_format("{}_{}", retry_level).get()
-            else:
+            else: # 正常終了
                 break
         else:
             app.post("error", '"{}"に保存できません。別のアプリで開かれています。'.format(savepath))
@@ -77,6 +84,7 @@ class BasicLoadFile():
 class BasicContextFile():
     """
     開いている間のみ中身にアクセスできるファイル
+    open / close
     """
     def __init__(self, path=None):
         self._path = path or Path()
