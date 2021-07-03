@@ -1,7 +1,7 @@
 import re
 import datetime
 
-from machaon.core.type import Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+from machaon.core.type import BadTypeDeclaration, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import full_qualified_name
 
@@ -22,7 +22,7 @@ class TypeType():
                 from machaon.core.importer import attribute_loader
                 d = TypeDefinition(attribute_loader(value))
                 if not d.load_declaration_docstring():
-                    raise ValueError("型定義ドキュメントの解析中にエラーが発生")
+                    raise BadTypeDeclaration()
                 return d.define(context.type_module) # 即座にロードする
             else:
                 return context.select_type(value)
@@ -231,6 +231,28 @@ class FunctionType():
             Object: 返り値
         """
         return f.run_function(subject, context)
+
+
+class ContextBoundFunction():
+    def __init__(self, context, f):
+        self.f = f
+        self.context = context
+        
+    def constructor(self, context, s):
+        """ @meta """
+        f = FunctionType().constructor(context, s)
+        return ContextBoundFunction(context, f)
+
+    def stringify(self, f):
+        """ @meta """
+        return FunctionType().stringify(self.f)
+    
+    def run_function(self, subject_value, subject_conversion, raiseerror=True):
+        # コード内で実行する
+        subject = self.context.new_object(subject_value, conversion=subject_conversion)
+        o = self.f.run_function(subject, self.context, raiseerror=raiseerror)
+        return o.value
+
     
 
 # ----------------------------------------------------------
@@ -639,6 +661,12 @@ typedef.Function( # Message
     """,
     value_type="machaon.core.message.MessageEngine",
     describer="machaon.types.fundamental.FunctionType",
+)
+typedef.ContextBoundFunction(
+    """
+    1引数をとるメッセージ。呼び出しコンテキストが紐づけられている。
+    """,
+    value_type="machaon.types.fundamental.ContextBoundFunction"
 )
 typedef.Str(
     """
