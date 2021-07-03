@@ -356,17 +356,14 @@ class Method():
             function(Callable): *関数の実態。引数デフォルト値を得る
         """
         # 1行目はメソッド宣言
-        if self.flags & METHOD_DECL_LOADED == 0:
-            decl = parse_doc_declaration(doc, ("method", "task"))
-            if decl is None:
-                raise BadMethodDeclaration("宣言の構文に誤りがあります")            
+        decl = parse_doc_declaration(doc, ("method", "task"))
+        if decl is None:
+            raise BadMethodDeclaration("宣言の構文に誤りがあります")   
+        if self.flags & METHOD_DECL_LOADED == 0:         
             self.load_declaration_properties(decl.props)
-            restdoc = decl.rest
-        else:
-            _, _, restdoc = doc.partition("\n")
-
-        # 残りの定義部
-        sections = DocStringParser(restdoc, (
+        
+        # 定義部
+        sections = decl.create_parser((
             "Params Parameters Arguments Args",
             "Returns", 
         ))

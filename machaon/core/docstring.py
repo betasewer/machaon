@@ -10,32 +10,25 @@ class DocStringParseError(Exception):
 #
 #
 class DocStringParser():
-    def __init__(self, doc, section_names):
+    def __init__(self, doc, section_names, indented_with_head=True):
         lines = doc.splitlines()
         if not lines:
             raise DocStringParseError()
+        
+        indent = self.detect_indent(lines, indented_with_head)
 
-        # 無視するべき余分なインデントを計算（1行目は考慮しない）
-        indent = 0
-        for line in lines[1:]:
-            spaced = len(line) - len(line.lstrip())
-            if spaced == 0:
-                continue
-            if indent == 0:
-                indent = spaced
-            else:
-                indent = min(indent, spaced)
-
+        # キーのエイリアス辞書を作成
         keymap = {}
         for secnames in section_names:
             keys = secnames.split()
             for k in keys:
                 keymap[k] = keys[0]
         
+        # セクションの値を取り出す
         sections = defaultdict(list)
         curkey = "Document"
         for i, line in enumerate(lines):
-            if i == 0:
+            if i == 0 and indented_with_head:
                 line = line.strip() # 一行目は全インデントを削除
             else:
                 line = line[indent:]
@@ -72,6 +65,20 @@ class DocStringParser():
                 lls.append(l)
             self.sections[k] = lls
 
+    def detect_indent(self, lines, ignore_first_line):
+        """ 無視するべき余分なインデントを計算 """
+        if ignore_first_line:  # 1行目は考慮しない
+            lines = lines[1:]
+        
+        indent = None
+        for line in lines:
+            spaced = len(line) - len(line.lstrip())
+            if indent is None:
+                indent = spaced
+            else:
+                indent = min(indent, spaced)
+        return indent
+
     def get_value(self, key, default=None):
         """
         最後の値を取る
@@ -107,6 +114,9 @@ class DocStringDeclaration:
         self.aliases = aliases 
         self.props = props
         self.rest = rest
+    
+    def create_parser(self, section_names): 
+        return DocStringParser(self.rest, section_names, indented_with_head=False) # 宣言から切り離したのでインデントの考慮は必要ない
 
 
 def parse_doc_declaration(obj, decltypes):

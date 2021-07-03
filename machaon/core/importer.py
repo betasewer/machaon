@@ -2,7 +2,8 @@ import importlib
 import builtins
 import os
 import ast
-from typing import Any, Iterator, Optional
+
+from machaon.core.docstring import parse_doc_declaration
 
 
 def module_loader(expr, *, location=None):
@@ -33,6 +34,9 @@ class PyBasicModuleLoader:
     """
     def __init__(self):
         self._m = None
+        self._requires = []
+        self._pkg_submods = []
+        self._usingtypes = []
     
     @property
     def module(self):
@@ -70,15 +74,51 @@ class PyBasicModuleLoader:
         else:
             raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
     
-    def get_docstring(self):
-        """ ソースコードの構文木からモジュールのドキュメント文字列を取り出す 
-        Returns:
-            Optional[str]:
+    def load_module_declaration(self):
+        """ ソースコードの構文木からモジュールのドキュメント文字列を取り出し、解析する 
         """
         source = self.load_source()
         disp = str(self)
         tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
-        return ast.get_docstring(tree)
+        doc = ast.get_docstring(tree)
+        if not doc:
+            return
+
+        decl = parse_doc_declaration(doc, ("module",))
+        if decl is None:
+            return
+        
+        pser = decl.create_parser((
+            "Extra-Requirements Extra-Req",
+            "Submodules",
+            "Using",
+        ))
+        # 追加の依存するmachaonパッケージ名
+        self._requires = pser.get_lines("Extra-Requirements")
+        
+        # パッケージで、型定義が含まれるモジュールを明示する
+        self._pkg_submods = []
+        for line in pser.get_lines("Submodules"):
+            m = module_loader(line)
+            self._pkg_submods.append(m)
+
+        # 参照する外部のmachaon型
+        self._usingtypes = []
+        for line in pser.get_lines("Using"):
+            typename, sep, modname = line.partition(":")
+            if not sep:
+                raise ValueError("Invalid module declaration: Using: [typename]:[modulename]")
+            from machaon.core.type import TypeDefinition, BadTypeDeclaration
+            d = TypeDefinition(value_type=modname.strip(), typename=typename.strip())
+            if not d.load_declaration_docstring():
+                raise BadTypeDeclaration()
+            self._usingtypes.append(d)
+    
+    def get_extra_requirements(self):
+        return self._requires
+
+    def get_package_submodules(self):
+        return self._pkg_submods
     
     def scan_type_definitions(self):
         """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す
@@ -113,6 +153,11 @@ class PyBasicModuleLoader:
                 continue
 
             yield d
+
+        # 外部型
+        for d in self._usingtypes:
+            yield d
+    
 
 
 

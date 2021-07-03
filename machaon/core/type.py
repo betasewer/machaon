@@ -389,9 +389,7 @@ class Type():
 
         # doc
         if not self.doc:
-            if hasattr(describer, "__doc__"):
-                doc = describer.__doc__
-                self.doc = doc.strip() if doc else ""
+            self.doc = "<no document>"
         
         # フラグの整合性をチェックする
         if self.flags & TYPE_TYPETRAIT_DESCRIBER:
@@ -593,7 +591,7 @@ class TypeDefinition():
         if "trait" in decl.props:
             self.bits |= TYPE_TYPETRAIT_DESCRIBER
 
-        sections = DocStringParser(decl.rest, ("ValueType", "MemberAlias",))
+        sections = decl.create_parser(("ValueType", "MemberAlias",))
     
         document = ""
         document += sections.get_string("Document")

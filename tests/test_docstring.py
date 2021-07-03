@@ -22,17 +22,19 @@ def test_methoddoc():
         return a + b
     
     p = DocStringParser(plus.__doc__, ("Params", "Returns"))
+    assert p.detect_indent(plus.__doc__.splitlines(), ignore_first_line=True) == 8
     assert p.get_string("Document") == "整数の加算を行う。"
     assert p.get_lines("Params") == ["    a (int): Number A", "    b (int): Number B"]
     assert p.get_lines("Returns") == ["    int: result."]
 
 def test_moduledoc():
-    class Module:
-        """ 
-        @Extra-Requirements:
-            module-name
-        """
+    module_doc = """@module
+Using:
+    Typename1: module-name
+    Typename2: module-name
+"""
     
-    p = DocStringParser(Module.__doc__, ("@Extra-Requirements", ))
-    assert p.get_string("@Extra-Requirements") == "    module-name"
+    p = DocStringParser(module_doc, ("Using", ))
+    assert p.detect_indent(module_doc, True) == 0
+    assert p.get_string("Using") == "    Typename1: module-name\n    Typename2: module-name"
 
