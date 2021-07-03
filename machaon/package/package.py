@@ -159,32 +159,19 @@ class Package():
         # モジュールのdocstringを読みに行く
         initial_module = module_loader(self.entrypoint)
         try:
-            moduledoc = initial_module.get_docstring()
+            initial_module.load_module_declaration()
         except Exception as e:
             raise PackageLoadError(type(e).__name__, e)
         
         # docstringを解析する
-        modulelist: List[str] = []
-        if moduledoc:
-            pser = DocStringParser(moduledoc, (
-                "@Extra-Requirements @Extra-Req",
-                "@Modules",
-            ))
-            # 追加のmachaonパッケージ名
-            reqs = pser.get_lines("@Extra-Requirements")
-            self._extra_reqs = reqs
-            # 型定義が含まれるモジュールを明示する
-            mods = pser.get_lines("@Modules")
-            modulelist = mods
+        self._extra_reqs = initial_module.get_extra_requirements()
+        modules: List[PyBasicModuleLoader] = []
+        modules.extend(initial_module.get_package_submodules())
 
         # サブモジュールのロード
         if self._type == PACKAGE_TYPE_MODULES:
-            if modulelist:
-                # 指定されたモジュールのみ
-                modules = [module_loader(x) for x in modulelist]
-            else:
+            if not modules:
                 # 全てのサブモジュールを走査する
-                modules = []
                 basepkg = initial_module.module_name
                 for pkgpath in initial_module.load_package_directories(): # 開始モジュールのディレクトリから下降する
                     # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
@@ -221,6 +208,7 @@ class Package():
         typecount = 0
         for modloader in modules:
             try:
+                modloader.load_module_declaration()
                 for typedef in modloader.scan_type_definitions():
                     typedef.scope = self.scope
                     yield typedef

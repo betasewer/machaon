@@ -60,6 +60,9 @@ class ObjectTuple():
     def __iter__(self):
         for o in self.objects:
             yield o.value
+        
+    def __len__(self):
+        return len(self.objects)
 
     #
     # メンバ値へのアクセス

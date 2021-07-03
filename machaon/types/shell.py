@@ -35,6 +35,10 @@ class Path():
     def get(self):
         return self._path
     
+    def set(self, p):
+        self._path = p
+        return self
+    
     @property
     def normpath(self):
         return os.path.normpath(self._path)
@@ -332,9 +336,9 @@ class Path():
         """ @method
         パスが存在しない場合、ディレクトリとして作成する。途中のパスも作成する。
         """
-        if self.exists():
-            raise ValueError("パスは既に存在しています")
-        os.makedirs(self.normpath)
+        if self.isfile():
+            raise ValueError("パスは既にファイルとして存在しています")
+        os.makedirs(self.normpath, exist_ok=True)
     
     def move_to(self, d):
         """ @method
@@ -615,7 +619,7 @@ class TextPath:
     def stringify(self):
         """ @meta """
         parts = []
-        parts.append('"{}"')
+        parts.append('"{}"'.format(self._path))
         if self._line is not None:
             parts.append("line {}".format(self._line))
         if self._column is not None:

@@ -387,7 +387,7 @@ class InvocationContext:
         return None
 
     def get_last_exception(self) -> Optional[Exception]:
-        """ @method alias-name [last-exception]
+        """ @method alias-name [error]
         直前の呼び出しで発生した例外を返す。
         Returns:
             Error:
@@ -502,10 +502,10 @@ class InvocationContext:
         return vals
     
     def get_errors(self, _app):
-        """ @task alias-name [all-errors]
+        """ @task alias-name [all-error]
         サブコンテキストも含めたすべてのエラーを表示する。
         Returns:
-            Sheet[ObjectCollection]: (level, message-expression, error)
+            Sheet[ObjectCollection]: (context-id, message-expression, error)
         """
         errors = []
 
@@ -517,7 +517,7 @@ class InvocationContext:
             err = cxt.get_last_exception()
             if err:
                 errors.append({
-                    "level" : l,
+                    "context-id" : l,
                     "message-expression" : cxt.get_message(),
                     "error" : err,
                     "#delegate" : cxt
@@ -534,7 +534,7 @@ class InvocationContext:
         return errors
 
     def get_subcontext(self, index):
-        """ @method alias-name [sub-context]
+        """ @method alias-name [sub-context sub]
         呼び出しの中でネストしたコンテキストを取得する。
         Params:
             index(str): ネスト位置を示すインデックス。(例:0-4-1)
@@ -558,7 +558,7 @@ class InvocationContext:
         return subcxt
     
     def get_subcontext_list(self):
-        """ @method alias-name [all-sub-context]
+        """ @method alias-name [all-sub-context all-sub]
         サブコンテキストの一覧。
         Returns:
             Sheet[Context]: (is-failed, message, last-result)
@@ -597,6 +597,15 @@ class InvocationContext:
             if cxt is None:
                 raise ValueError("プロセスにコンテキストが紐づいていません")
             return cxt
+        elif isinstance(value, str):
+            procindex, sep, sublevel = value.partition("-")
+            if not sep:
+                raise ValueError("[プロセスID]-[サブコンテキスト]の形式で指定してください")
+            cxt = InvocationContext.constructor(self, context, int(procindex))
+            if sublevel:
+                return cxt.get_subcontext(sublevel)
+            else:
+                return cxt
         else:
             raise TypeError(value)
 
