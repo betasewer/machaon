@@ -96,7 +96,7 @@ class BasicContextFile():
         if self._file is not None:
             raise ValueError("File has already been opened")
         self._file = self.openfile(mode)
-        return self._file
+        return self
     
     def openfile(self, mode):
         raise NotImplementedError()
@@ -141,6 +141,10 @@ class BasicContextFile():
         with self.open(mode):
             subject = context.new_object(self, type=type(self))
             block.run_as_function(subject, context)
+        
+    def loader(self):
+        """ LoadFileに変換する """
+        return ContextFileLoader(self)
     
     def constructor(self, context, v):        
         """ @meta """
@@ -149,6 +153,25 @@ class BasicContextFile():
     def stringify(self):
         """ @meta """
         return self.pathstr
+
+
+class ContextFileLoader(BasicLoadFile):
+    def __init__(self, initialfile, *, content=None):
+        super().__init__(path=initialfile.path(), file=content)
+        self._initialfile = initialfile
+
+    def savefile(self, path):
+        if self._file is None:
+            return
+        self._initialfile._path.set(path)
+        with self._initialfile.open("w"):
+            self._initialfile.file.write(self._file)
+    
+    def loadfile(self):
+        with self._initialfile.open("r"):
+            content = self._initialfile.file.read()
+        return content
+
 
 
 class TextFile(BasicContextFile):
