@@ -609,18 +609,28 @@ class InvocationContext:
         else:
             raise TypeError(value)
 
+_instant_context_types = None
 
 def instant_context(subject=None):
     """ 即席実行用のコンテキスト """
-    t = TypeModule()
-    t.add_fundamental_types()
+    global _instant_context_types
+    if _instant_context_types is None:
+        t = TypeModule()
+        t.add_fundamental_types()
+
+        from machaon.package.package import create_package
+        pkg = create_package("machaon.shell", "module:machaon.types.shell")
+        for x in pkg.load_type_definitions():
+            t.define(x)
+        
+        _instant_context_types = t
 
     from machaon.process import TempSpirit
     spi = TempSpirit()
     
     return InvocationContext(
         input_objects=ObjectCollection(),
-        type_module=t,
+        type_module=_instant_context_types,
         subject=subject,
         spirit=spi
     )
