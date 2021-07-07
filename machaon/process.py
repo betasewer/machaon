@@ -1136,3 +1136,12 @@ def get_location_from_traceback(exception, level):
     lineno = tb.tb_lineno
 
     return filename, lineno
+
+def print_exception_verbose(exception, linewidth=0xFFFFFF):
+    # デバッグ用
+    details = traceback.format_exception(type(exception), exception, exception.__traceback__)
+    print(details[-1] if details else "")
+    
+    print("スタックトレース：")
+    disp = verbose_display_traceback(exception, linewidth)
+    print(disp)
