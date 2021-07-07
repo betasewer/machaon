@@ -252,7 +252,14 @@ class ContextBoundFunction():
         subject = self.context.new_object(subject_value, conversion=subject_conversion)
         o = self.f.run_function(subject, self.context, raiseerror=raiseerror)
         return o.value
-
+    
+    @classmethod
+    def instant(cls, expression):
+        # 文字列を受け取り、即席のコンテキストでインスタンスを作る
+        from machaon.core.invocation import instant_context
+        cxt = instant_context()
+        return cls.constructor(None, cxt, expression)
+        
     
 
 # ----------------------------------------------------------
