@@ -4,7 +4,7 @@ from machaon.types.fundamental import fundamental_type
 from machaon.core.invocation import instant_context
 
 class SomeValue:
-    """
+    """ @type
     適当な値オブジェクト
     """
     def __init__(self, x, y):
@@ -44,7 +44,7 @@ def test_valuetype_define():
     t = fundamental_type.define(SomeValue)
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
-    assert t.doc == "適当な値オブジェクト"
+    assert t.doc == "<no document>"
     assert not t.is_methods_type_bound()
 
 def test_method_docstring():

@@ -24,8 +24,12 @@ def launch():
         "protenor",
         "package:protenor",
     )
-    root.add_dependency(
+    root.add_package(
         "docxx",
+        "module:docxx.ma"
+    )
+    root.add_dependency(
+        "_docxx",
         "github:betasewer/python-docx-xtended:docxx"
     )
 

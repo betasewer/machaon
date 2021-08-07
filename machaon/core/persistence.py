@@ -68,7 +68,7 @@ class StoredMessage():
         """
         f = TextFile(Path(self.path))
         return f.text()
-
+        
     def do(self, context, app):
         """ @task context
         メッセージを実行し、返り値を返す。
@@ -88,6 +88,13 @@ class StoredMessage():
         context.push_object(self.name, o)
         context.spirit.post("message", "'{}'からロード => @{}".format(self.path, self.name))
         return o
+
+    def edit(self):
+        """ @method
+        エディタで開く。
+        """
+        from machaon.types.shellplatform import shellpath
+        return shellpath().start_file(self.path)
 
     def constructor(self, context, value):
         """ @meta """

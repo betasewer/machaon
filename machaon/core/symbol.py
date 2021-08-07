@@ -59,9 +59,12 @@ def normalize_method_target(name):
     """ メソッド名からロードする実際の関数名に戻す """
     return name.replace("-","_")
 
-# メソッド名の間違い
+# 存在しないメソッド名へのエラー
 class BadMethodName(Exception):
-    pass
+    def __str__(self):
+        attrname = self.args[0]
+        typename = self.args[1]
+        return "メソッド {}::{} は存在しません".format(typename, attrname)
 
 #
 # オブジェクト名

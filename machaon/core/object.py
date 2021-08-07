@@ -118,6 +118,18 @@ class ObjectCollection():
     def __init__(self):
         self._items: Dict[int, ObjectCollectionItem] = {}
         self._namemap: DefaultDict[str, List[int]] = defaultdict(list)
+    
+    def __contains__(self, key):
+        return key in self._namemap
+    
+    def __len__(self):
+        return len(self._items)
+
+    def __getitem__(self, key):
+        item = self.get(key)
+        if item is not None:
+            return item.value
+        return None
 
     # コンストラクタを実行しつつオブジェクトを新規作成
     def new(self, name: str, type: Type, *args, **kwargs) -> ObjectCollectionItem:
@@ -194,6 +206,19 @@ class ObjectCollection():
     #
     #
     #
+    def asdict(self, context):
+        """ @method context alias-name [=dict]
+        Pythonの辞書に変換する。
+        Returns:
+            Any:
+        """
+        d = {}
+        for name, ids in self._namemap.items():
+            id = ids[-1]
+            item = self._items[id]
+            d[item.name] = item.value 
+        return context.get_type("Any").new_object(d)
+
     def constructor(self, context, value):
         """ @meta """
         col = ObjectCollection()

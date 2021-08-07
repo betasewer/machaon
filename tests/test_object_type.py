@@ -5,7 +5,7 @@ from machaon.types.fundamental import fundamental_type
 def run(fn): fn()
 
 class SomeValue:
-    """
+    """ @type alias-name [SomeAlias]
     適当な値オブジェクト
     """
     def __init__(self, x, y):
@@ -25,16 +25,17 @@ def test_valuetype_define():
     t = fundamental_type.define(SomeValue)
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
-    assert t.doc == "適当な値オブジェクト"
+    assert t.doc == "<no document>"
     assert t.is_methods_instance_bound()
 
 # TypeDefinitionで登録
 def test_valuetype_td_define():
     td = TypeDefinition(SomeValue, "SomeValue2")
+    assert td.load_declaration_docstring()
     t = td.define(fundamental_type)
-    assert t.typename == "SomeValue2"
+    assert t.typename == "SomeAlias" # 宣言が反映される
     assert t.value_type is SomeValue
-    assert t.doc == "適当な値オブジェクト"
+    assert t.doc == "適当な値オブジェクト" # 宣言が反映される
     assert t.is_methods_instance_bound()
 
 # 文字列で登録

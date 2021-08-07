@@ -18,9 +18,9 @@ def test_construct(tmp_path):
     f = instant_return_test(context, p, "TextFile").value
     f.set_encoding("utf-8")
     assert f.encoding() == "utf-8"
-    with f.open("w") as fi:
-        fi.write("HELLO\n")
-        fi.write("WORLD")
+    with f.open("w"):
+        f.stream.write("HELLO\n")
+        f.stream.write("WORLD")
     assert f.text() == "HELLO\nWORLD"
 
 
