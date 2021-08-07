@@ -18,13 +18,19 @@ from machaon.core.symbol import (
 class BadInstanceMethodInvocation(Exception):
     def __init__(self, name):
         self.name = name
+    
+    def __str__(self):
+        return "インスタンスにメソッド'{}'が存在しません".format(self.name)
+
 
 class BadFunctionInvocation(Exception):
     def __init__(self, name):
         self.name = name
 
+
 class BadObjectMemberInvocation(Exception):
     pass
+
 
 class UnresolvedObjectMemberInvocation(Exception):
     pass
@@ -333,7 +339,8 @@ class InvocationContext:
             if t is None:
                 t = self.type_module.define(type) # 無ければ定義して返す 
             if value is None:
-                return t.get_value_type()() # デフォルトコンストラクタ
+                defvalue = t.get_value_type()() # デフォルトコンストラクタ
+                return t.new_object(defvalue)
             else:
                 convvalue = t.construct(self, value)
                 return t.new_object(convvalue)
@@ -722,6 +729,7 @@ class BasicInvocation():
     
     def get_parameter_spec(self, index):
         return None # 不明
+    
 
 #
 # 型に定義されたメソッドの呼び出し 
@@ -732,6 +740,9 @@ class TypeMethodInvocation(BasicInvocation):
         self.type = type
         self.method = method
     
+    def get_method(self):
+        return self.method
+        
     def get_method_name(self):
         return self.method.get_name()
 
@@ -804,6 +815,7 @@ class TypeMethodInvocation(BasicInvocation):
         else:
             p = self.method.get_param(index)
         return p
+    
 
 #
 # 名前だけで定義のわからないメソッドを呼び出す

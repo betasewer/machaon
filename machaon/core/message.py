@@ -198,6 +198,29 @@ class Message:
             put("<引数欠落（個数不明）>")
 
         return "({})".format(" ".join(exprs))
+    
+    def get_method_syntax(self, context):
+        if self.reciever is None:
+            raise ValueError("レシーバが指定されていません")
+        if self.selector is None:
+            raise ValueError("セレクタが指定されていません")
+        
+        if isinstance(self.selector, TypeMethodInvocation):
+            sign = self.selector.get_method().get_signature()
+            return "{}.{} = {}".format(self.reciever.get_typename(), self.selector.get_method_name(), sign)
+
+        args = [self.reciever]
+        inventry = self.selector.prepare_invoke(context, *args)
+        
+        from inspect import Signature
+        try:
+            sig = Signature(inventry.action)
+        except:
+            return "<シンタックスを得られません>"
+        
+        from machaon.process import display_parameters
+        ps = display_parameters(sig)
+        return "{}{}".format(self.selector.get_method_name(), ps)
 
     # コピーを返す
     def snapshot(self):
@@ -933,7 +956,8 @@ class MessageEngine():
                 if not msg.is_selector_specified():
                     raise BadExpressionError("セレクタがありません：{}".format(msg.sexpr()))
                 if not msg.is_min_arg_specified():
-                    raise BadExpressionError("引数が足りません：{}".format(msg.sexpr()))
+                    spec = msg.get_next_parameter_spec()
+                    raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), msg.get_method_syntax(context)))
                 msg.end_keyword_args()
                 self._curblockstack.pop()
 
@@ -944,7 +968,8 @@ class MessageEngine():
                 if not msg.is_selector_specified():
                     raise BadExpressionError("セレクタがありません：{}".format(msg.sexpr()))
                 if not msg.is_min_arg_specified():
-                    raise BadExpressionError("引数が足りません：{}".format(msg.sexpr()))
+                    spec = msg.get_next_parameter_spec()
+                    raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), msg.get_method_syntax(context)))
                 msg.end_keyword_args()
             self._curblockstack.clear()
         
