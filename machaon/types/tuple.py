@@ -283,6 +283,18 @@ class ObjectTuple():
     # 内部使用
     def values(self):
         return [x.value for x in self.objects]
+    
+    def sheet(self, context, type):
+        """ @method context
+        同一の型に変換した後、Sheetにして返す
+        Params:
+            type(Type): 変換する型名
+        Returns:
+            Any:
+        """
+        from machaon.types.sheet import Sheet
+        tpl = self.convertas(context, type)
+        return Sheet(tpl.objects, type)
 
     #
     # オブジェクト共通関数

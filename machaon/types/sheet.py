@@ -220,6 +220,8 @@ class Sheet():
         if not uninitialized:
             if not context or not column_names:
                 self.generate_rows_identical()
+            elif not context:
+                raise ValueError("Context is needed at Sheet constructor with columns")
             else:
                 new_columns = make_data_columns(self.itemtype, *column_names)
                 self.generate_rows(context, new_columns)
@@ -815,7 +817,12 @@ class Sheet():
     # オブジェクト共通関数
     #
     def constructor(self, context, value, itemtypename, *columnnames):
-        """ @meta extra-args """
+        """ @meta extra-args 
+        Params:
+            value(Any): イテラブル型・
+            itemtypename(Str): 型名
+            *columnnames(Str): カラム名のリスト
+        """
         if not isinstance(value, list):
             value = list(value)
 
