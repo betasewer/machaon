@@ -70,7 +70,7 @@ class PyBasicModuleLoader:
             for path in mod.__path__:
                 yield path
         elif getattr(mod, "__file__", None) is not None:
-            yield [os.path.dirname(mod.__file__)]
+            yield os.path.dirname(mod.__file__)
         else:
             raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
     

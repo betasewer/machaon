@@ -52,8 +52,9 @@ class UnsupportedMethod(Exception):
     pass
 
 #
-TYPE_ANYTYPE = 0x1
-TYPE_OBJCOLTYPE = 0x2
+TYPE_ANYTYPE      = 0x01
+TYPE_OBJCOLTYPE   = 0x02
+TYPE_NONETYPE     = 0x04
 TYPE_TYPETRAIT_DESCRIBER = 0x100
 TYPE_VALUETYPE_DESCRIBER = 0x200
 TYPE_USE_INSTANCE_METHOD = 0x400
@@ -90,6 +91,9 @@ class Type():
     
     def is_any(self):
         return self.flags & TYPE_ANYTYPE > 0
+    
+    def is_none(self):
+        return self.flags & TYPE_NONETYPE > 0
     
     def is_object_collection(self):
         return self.flags & TYPE_OBJCOLTYPE > 0
@@ -268,7 +272,7 @@ class Type():
     def add_method(self, method):
         name = method.name
         if name in self._methods:
-            raise BadMethodName("{}: メソッド名が重複しています".format(name))
+            raise BadMethodDeclaration("{}: メソッド名が重複しています".format(name))
         self._methods[name] = method
     
     # メソッドの実装を解決する
@@ -276,7 +280,7 @@ class Type():
         fn = getattr(self._describer, attrname, None)
         if fn is None:
             if not fallback:
-                raise BadMethodDelegation(attrname)
+                raise BadMethodName(attrname, self.typename)
             return None
         return fn
     
@@ -530,6 +534,7 @@ class TypeDefinition():
         return self.scope == scope
     
     def define(self, typemodule):
+        """ 実行時に型を読み込み定義する """
         if self._t is not None:
             return self._t
         
@@ -741,8 +746,17 @@ class TypeModule():
 
         for _tn, ts in self._typelib.items(): # 型を比較する
             for t in ts:
-                if t.get_value_type() is value_type:
-                    return self._load_type(t)
+                vt = t.get_value_type()
+                if vt is not None:
+                    if vt is value_type:
+                        return self._load_type(t)
+                else:
+                    # value_typeの指定がない==describerと同一, であればこれで検出できる
+                    try:
+                        if t.get_describer_qualname() == full_qualified_name(value_type):
+                            return self._load_type(t)
+                    except:
+                        continue # モジュールの読み込みエラーが起きても続行
         
         # 親モジュールを探索
         for ancmodule in self._ancestors:
@@ -818,13 +832,19 @@ class TypeModule():
         def __init__(self, parent):
             self._parent = parent
         
-        def __getattr__(self, typename):
+        def register(self, typename):
             if not is_valid_typename(typename):
                 raise BadTypename(typename)
             def _define(doc, *, describer=None, value_type=None, scope=None, bits=0):
                 d = TypeDefinition(describer, typename, value_type, doc, scope, bits)
                 self._parent.define(d)
             return _define
+        
+        def __getattr__(self, typename):
+            return self.register(typename)
+        
+        def __getitem__(self, typename):
+            return self.register(typename)
         
     # 遅延登録
     def definitions(self):

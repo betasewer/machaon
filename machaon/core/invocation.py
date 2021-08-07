@@ -28,9 +28,6 @@ class BadObjectMemberInvocation(Exception):
 
 class UnresolvedObjectMemberInvocation(Exception):
     pass
-    
-class MessageNoReturn(Exception):
-    pass
 
 
 INVOCATION_RETURN_RECIEVER = "<reciever>"
@@ -143,7 +140,7 @@ class InvocationEntry():
             if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
                 return _default_result_object(context)
             else:
-                return _new_process_error_object(context, MessageNoReturn(), objectType)
+                return objectType(context.get_type("None"), None) # そのままNoneを返す
         
         # NEGATEモディファイアを適用            
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
@@ -351,9 +348,9 @@ class InvocationContext:
             convvalue = t.construct(self, value, *typeparams)
             return t.new_object(convvalue)
         else:
-            valtype = None
-            if value is not None:
-                valtype = self.deduce_type(value)
+            if value is None:
+                return self.get_type("None").new_object(value)
+            valtype = self.deduce_type(value)
             if valtype:
                 convvalue = valtype.construct(self, value)
                 return valtype.new_object(convvalue)

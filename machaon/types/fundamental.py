@@ -1,7 +1,7 @@
 import re
 import datetime
 
-from machaon.core.type import BadTypeDeclaration, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+from machaon.core.type import BadTypeDeclaration, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import full_qualified_name
 
@@ -198,6 +198,16 @@ class AnyType():
         else:
             return "{}({})".format(v, full_qualified_name(type(v)))
 
+class NoneType():
+    def constructor(self, _context, _s):
+        """ @meta """
+        return None
+
+    def stringify(self, f):
+        """ @meta """
+        return "<None>"
+
+
 class FunctionType():
     def constructor(self, _context, s):
         """ @meta """
@@ -230,7 +240,7 @@ class FunctionType():
         Returns:
             Object: 返り値
         """
-        return f.run_function(subject, context)
+        return f.run_function(subject, context, raiseerror=False)
 
 
 class ContextBoundFunction():
@@ -247,9 +257,9 @@ class ContextBoundFunction():
         """ @meta """
         return FunctionType().stringify(self.f)
     
-    def run_function(self, subject_value, subject_conversion, raiseerror=True):
+    def run_function(self, value, *, conversion=None, raiseerror=True):
         # コード内で実行する
-        subject = self.context.new_object(subject_value, conversion=subject_conversion)
+        subject = self.context.new_object(value, conversion=conversion)
         o = self.f.run_function(subject, self.context, raiseerror=raiseerror)
         return o.value
     
@@ -360,7 +370,7 @@ class StrType():
             Object: 返り値
         """
         from machaon.core.message import run_function
-        return run_function(s, subject, context)
+        return run_function(s, subject, context, raiseerror=False)
     
     def st_do(self, s, context, app):
         """ @task context
@@ -442,12 +452,11 @@ class BoolType():
         Returns:
             Object: 返り値
         """
-        from machaon.core.message import run_function
         if b:
             body = if_
         else:
             body = else_
-        return run_function(body, None, context)
+        return body.run(context) # コンテキストを引き継ぐ
 
 #
 #
@@ -659,7 +668,7 @@ typedef.Any(
     """
     あらゆるオブジェクトを受け入れる型。
     """,
-describer="machaon.types.fundamental.AnyType",
+    describer="machaon.types.fundamental.AnyType",
     bits=TYPE_ANYTYPE|TYPE_USE_INSTANCE_METHOD,
 )
 typedef.Function( # Message
@@ -674,6 +683,14 @@ typedef.ContextBoundFunction(
     1引数をとるメッセージ。呼び出しコンテキストが紐づけられている。
     """,
     value_type="machaon.types.fundamental.ContextBoundFunction"
+)
+typedef["None"](
+    """
+    None。
+    """,
+    value_type=type(None), 
+    describer="machaon.types.fundamental.NoneType",
+    bits=TYPE_NONETYPE,
 )
 typedef.Str(
     """

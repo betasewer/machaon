@@ -267,8 +267,11 @@ def select_reciever(context, expression) -> Object:
     # 型名の可能性
     if expression and expression[0].isupper():
         tt = select_type(context, expression)
-        if tt and not tt.is_any():
-            return context.get_type("Type").new_object(tt)
+        if tt:
+            if tt.is_none():
+                return context.get_type("None").new_object(None) # Noneの型はレシーバの文脈では取得できない
+            if not tt.is_any():
+                return context.get_type("Type").new_object(tt)
     
     # リテラルだった
     return select_literal(context, expression)
@@ -955,7 +958,6 @@ class MessageEngine():
             if not msg.is_specified(): # レシーバ、引数が指定されていない
                 break
             if self._curblockstack and self._curblockstack[-1] > index: # ブロック外の評価を遅延する
-                print("ブロック外の評価を遅延します")
                 break
 
             # メッセージが完成したので評価する
@@ -1055,8 +1057,13 @@ class MessageEngine():
         return self.finish(context, raiseerror=raiseerror)
     
     def run_function(self, subject, context, *, raiseerror=False) -> Object:
-        """ 主題オブジェクトを更新した派生コンテキストでメッセージを実行 """
-        subcontext = self.start_subcontext(subject, context)
+        """ メッセージを実行 """
+        if subject is not None:
+            # 主題オブジェクトを更新した派生コンテキスト
+            subcontext = self.start_subcontext(subject, context)
+        else:
+            # コンテキストを引き継ぐ
+            subcontext = context 
         for _ in self.runner(subcontext):
             pass
         return self.finish(subcontext, raiseerror=raiseerror)
@@ -1147,6 +1154,8 @@ def run_function(expression: str, subject, context, *, raiseerror=False) -> Obje
     Returns:
         Object: 実行の戻り値
     """
+    if not isinstance(expression, str):
+        raise TypeError("expression must be str")
     f = MessageEngine(expression)
     return f.run_function(subject, context, raiseerror=raiseerror)
     

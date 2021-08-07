@@ -9,6 +9,13 @@ import unicodedata
 #
 def reencode(s, encoding, errors="replace"):
     return s.encode(encoding,errors).decode(encoding)
+
+def xprint(*args, **kwargs):
+    from machaon.platforms import current
+    s = " ".join([str(x) for x in args])
+    s = reencode(s, current.default_encoding)
+    print(s, **kwargs)
+    
     
 #
 #
