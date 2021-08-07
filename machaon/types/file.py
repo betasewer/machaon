@@ -81,31 +81,31 @@ class BasicLoadFile():
         return self.pathstr
 
 
-class BasicContextFile():
+class BasicContextFile(BasicLoadFile):
     """
     開いている間のみ中身にアクセスできるファイル
     open / close
     """
     def __init__(self, path=None):
-        self._path = path or Path()
-        self._file = None
+        super().__init__(path)
+        self._stream = None
     
     def open(self, mode):
         if mode not in ("r", "w"):
             raise ValueError("mode must be 'r' or 'w'")
-        if self._file is not None:
+        if self._stream is not None:
             raise ValueError("File has already been opened")
-        self._file = self.openfile(mode)
+        self._stream = self.openfile(mode)
         return self
     
     def openfile(self, mode):
         raise NotImplementedError()
 
     def close(self):
-        if self._file is None:
+        if self._stream is None:
             raise ValueError("File has not been opened")
-        self._file.close()
-        self._file = None
+        self._stream.close()
+        self._stream = None
     
     def __enter__(self):
         return self
@@ -113,24 +113,34 @@ class BasicContextFile():
     def __exit__(self, et, ev, tb):
         self.close()
     
-    def path(self):
-        """ @method
-        パスを得る。
-        Returns:
-            Path:
-        """
-        return self._path
-    
-    @property
-    def pathstr(self):
-        return self._path.get()
-    
-    @property
-    def file(self):
+    #
+    # LoadFileとして
+    #
+    def savefile(self, path):
         if self._file is None:
-            raise ValueError("File has not been opened")
-        return self._file
+            return
+        self._path.set(path)
+        with self.open("w"):
+            return self._stream.write(self._file)
     
+    def loadfile(self, size=None):
+        with self.open("r"):
+            return self._stream.read(size)
+    
+    @property
+    def stream(self):
+        if self._stream is None:
+            raise ValueError("File has not been opened")
+        return self._stream
+    
+    def read_stream(self):
+        """ ファイルを開いて読み込みストリームを返す。 """
+        return self.open("r")
+
+    def write_stream(self):
+        """ ファイルを開いて書き込みストリームを返す。 """
+        return self.open("w")
+
     def open_do(self, app, context, mode, block):
         """ @task context
         ファイルを開いて操作を行い、閉じる。
@@ -141,37 +151,6 @@ class BasicContextFile():
         with self.open(mode):
             subject = context.new_object(self, type=type(self))
             block.run_as_function(subject, context)
-        
-    def loader(self):
-        """ LoadFileに変換する """
-        return ContextFileLoader(self)
-    
-    def constructor(self, context, v):        
-        """ @meta """
-        return self.get_value_type()(context.new_object(v, type=Path).value)
-
-    def stringify(self):
-        """ @meta """
-        return self.pathstr
-
-
-class ContextFileLoader(BasicLoadFile):
-    def __init__(self, initialfile, *, content=None):
-        super().__init__(path=initialfile.path(), file=content)
-        self._initialfile = initialfile
-
-    def savefile(self, path):
-        if self._file is None:
-            return
-        self._initialfile._path.set(path)
-        with self._initialfile.open("w"):
-            self._initialfile.file.write(self._file)
-    
-    def loadfile(self):
-        with self._initialfile.open("r"):
-            content = self._initialfile.file.read()
-        return content
-
 
 
 class TextFile(BasicContextFile):
@@ -222,16 +201,8 @@ class TextFile(BasicContextFile):
         Returns:
             Str:
         """
-        with self.openfile("r") as fi:
-            return fi.read(size)
+        return self.loadfile(size)
 
-    def read_stream(self):
-        """ ファイルを開いて読み込みストリームを返す。 """
-        return self.open("r")
-
-    def write_stream(self):
-        """ ファイルを開いて書き込みストリームを返す。 """
-        return self.open("w")
 
 
 #
