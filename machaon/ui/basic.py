@@ -23,6 +23,7 @@ class Launcher():
         self.screen_geo = geometry or (900,400)
         self.theme = None
         self.history = InputHistory()
+        self.screens = {} 
         
     def init_with_app(self, app):
         self.app = app
@@ -47,6 +48,7 @@ class Launcher():
     #
     def message_handler(self, msg, *, nested=False):
         """ メッセージを処理する """
+        process = None
         try:
             if msg.is_embeded():
                 for msg in msg.expand():
@@ -66,8 +68,8 @@ class Launcher():
                     self.on_end_process(process)
                 elif code == "error":
                     error = msg.argument("error") # error はProcessError型のオブジェクト
-                    expr = " -> {} [{}<{}>]".format(error.summary(), error.get_typename(), error.value.get_error_typename())
-                    self.insert_screen_message("message", expr)
+                    expr = " -> {}".format(error.summary())
+                    self.insert_screen_text("error", expr)
                     self.on_error_process(process, error)
                     self.on_end_process(process)
                 elif code == "success":
@@ -79,16 +81,16 @@ class Launcher():
                             self.message_handler(m)
                         else:
                             expr = " -> {} [{}]".format(obj.summary(), obj.get_typename())
-                            self.insert_screen_message("message", expr)
+                            self.insert_screen_text("message", expr)
                     self.on_success_process(process)
                     self.on_end_process(process)
                 else:
-                    self.insert_screen_message(msg.tag, msg.text, **msg.args)
+                    self.insert_screen_text(msg.tag, msg.text, **msg.args)
             
             elif tag == "delete-message":
                 cnt = msg.argument("count")
                 lno = msg.argument("line")
-                self.delete_screen_message(lno, cnt)
+                self.delete_screen_text(lno, cnt)
 
             elif tag == "object-pretty-view":
                 obj = msg.argument("object")
@@ -119,21 +121,22 @@ class Launcher():
                     msg.text = composit_text(msg.get_text(), type(self).wrap_width)
 
                 # ログウィンドウにメッセージを出力
-                self.insert_screen_message(msg.tag, msg.text, **msg.args)
+                self.insert_screen_text(msg.tag, msg.text, **msg.args)
         
         except Exception as e:
             # メッセージ処理中にエラーが起きた
             # エラー内容をメッセージで詳細表示する
             if nested:
                 raise e # エラーの詳細表示中にさらにエラーが起きた
-            context = process.get_last_invocation_context()
-            error = ProcessError(context, e)
-            error.pprint(context.spirit)
-            # ただちにメッセージを取得し処理する
-            for msg in process.handle_post_message():
-                self.message_handler(msg, nested=True)
-            # オブジェクトを追加
-            context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
+            if process:
+                context = process.get_last_invocation_context()
+                error = ProcessError(context, e)
+                error.pprint(context.spirit)
+                # ただちにメッセージを取得し処理する
+                for msg in process.handle_post_message():
+                    self.message_handler(msg, nested=True)
+                # オブジェクトを追加
+                context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
     
     
     # プロセスから送られたメッセージをひとつひとつ処理する
@@ -144,13 +147,16 @@ class Launcher():
     #
     # メッセージウィンドウの操作
     #
-    def insert_screen_message(self, tag, value, **args):
+    def insert_screen_text(self, tag, value, **args):
         raise NotImplementedError()
 
-    def delete_screen_message(self, lineno, count):
+    def delete_screen_text(self, lineno, count):
         raise NotImplementedError()
 
-    def replace_screen_message(self, msgs):
+    def replace_screen_text(self, text):
+        raise NotImplementedError()
+    
+    def save_screen_text(self):
         raise NotImplementedError()
 
     #
@@ -233,7 +239,7 @@ class Launcher():
     def replace_input_text(self, text): 
         """ 入力文字列を代入する """
         pass
-        
+
     def get_input_text(self, pop=False):
         """ 入力文字列を取り出す """
         return ""
@@ -245,9 +251,19 @@ class Launcher():
     #
     # チャンバーの操作
     #
-    def activate_new_chamber(self, newchm: ProcessChamber):
-        """ チャンバーの新規作成時に呼ばれる """
-        self.update_active_chamber(newchm, updatemenu=False)
+    def activate_new_chamber(self, process=None):
+        """ チャンバーを新規作成して追加する """
+        lastchm = self.app.get_active_chamber()
+        newchm = self.app.addnew_chamber(self.get_input_prompt())
+        if lastchm:
+            self.flip_chamber_content(newchm, lastchm)
+        
+        self.watch_chamber_message() # preludeのメッセージを書き出す
+
+        if process:
+            newchm.add(process)
+            self.watch_chamber_message() # processのメッセージを書き出す
+        
         self.add_chamber_menu(newchm)
 
         # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
@@ -258,15 +274,26 @@ class Launcher():
 
     def shift_active_chamber(self, delta):
         """ 隣接したチャンバーをアクティブにする """
+        lastchm = self.app.get_active_chamber()
         chm = self.app.shift_active_chamber(delta)
         if chm is None:
             return
-        self.update_active_chamber(chm)
+        self.flip_chamber(chm, lastchm)
+    
+    def flip_chamber_content(self, chamber, prevchamber):
+        if prevchamber:
+            self.screens[prevchamber.get_index()] = self.save_screen_text() # 現在のチャンバーの内容物を保存する
+        if chamber.get_index() in self.screens:
+            self.replace_screen_text(self.screens[chamber.get_index()]) # 新たなチャンバーの内容物に置き換える
+        else:
+            self.replace_screen_text(None)
+    
+    def flip_chamber(self, chamber, prevchamber):
+        self.flip_chamber_content(chamber, prevchamber)
+        self.update_active_chamber(chamber)
 
     def update_active_chamber(self, chamber, updatemenu=True):
-        """ アクティブなチャンバーを移す """
-        msgs = chamber.get_process_messages()
-        self.replace_screen_message(msgs) # メッセージが膨大な場合、ここで時間がかかることも。別スレッドにするか？
+        """ チャンバーをアクティブにして画面に移す """
         self.watch_chamber_message()
         if updatemenu:
             self.update_chamber_menu(active=chamber)
@@ -287,7 +314,7 @@ class Launcher():
             
             # 隣のチャンバーに移る
             nchm = self.app.get_active_chamber() # 新たなチャンバー
-            self.update_active_chamber(nchm)
+            self.flip_chamber(nchm, None)
 
         # 停止処理
         if not chm.is_finished():
@@ -377,18 +404,18 @@ class Launcher():
     #    
     def on_exec_process(self, process, exectime):
         """ プロセス実行開始時 """
-        self.insert_screen_message("message-em", "[{:04}] ".format(process.get_index()), nobreak=True)
+        self.insert_screen_text("message-em", "[{:04}] ".format(process.get_index()), nobreak=True)
         timestamp = exectime.strftime("%Y-%m-%d|%H:%M.%S")
-        self.insert_screen_message("message", "[{}] ".format(timestamp), nobreak=True)
-        self.insert_screen_message("input", process.message.source)
+        self.insert_screen_text("message", "[{}] ".format(timestamp), nobreak=True)
+        self.insert_screen_text("input", process.message.source)
     
     def on_interrupt_process(self, process):
         """ プロセス中断時 """
-        self.insert_screen_message("message-em", "中断しました。")
+        self.insert_screen_text("message-em", "中断しました。")
     
     def on_error_process(self, process, excep):
         """ プロセスの異常終了時 """
-        #self.insert_screen_message("error", "実行中にエラーが発生し、失敗しました。")
+        #self.insert_screen_text("error", "実行中にエラーが発生し、失敗しました。")
 
     def on_success_process(self, process):
         """ プロセスの正常終了時 """
@@ -396,8 +423,8 @@ class Launcher():
     
     def on_end_process(self, process):
         """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
-        self.insert_screen_message("message", "") # 改行を1つ入れる
-        self.insert_screen_message("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
+        self.insert_screen_text("message", "") # 改行を1つ入れる
+        self.insert_screen_text("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
     
     #def on_bad_command(self, spirit, process, excep):
     #    """ 不明なコマンド """

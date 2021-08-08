@@ -62,8 +62,7 @@ class AppRoot:
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
         
-        chamber = self.processhive.addnew(self.ui.get_input_prompt())
-        self.ui.activate_new_chamber(chamber)
+        self.ui.activate_new_chamber()
         
         self.ui.init_startup_message()
     
@@ -279,11 +278,12 @@ class AppRoot:
             self.exit()
             return
         
+        atnewchm = False
+
         head, *_tails = message.split(maxsplit=1)
         if head == "+":
             # 新規チャンバーを追加してアクティブにする
-            chamber = self.processhive.addnew(self.ui.get_input_prompt())
-            self.ui.activate_new_chamber(chamber)
+            atnewchm = True
             message = message[1:].lstrip()
         
         if not message:
@@ -292,10 +292,13 @@ class AppRoot:
         # 実行
         process = self.processhive.new_process(message)
         process.start_process(self) # メッセージを実行する
-        chamber = self.processhive.append_to_active(process)
 
         # 表示を更新する
-        self.ui.update_active_chamber(chamber, updatemenu=False)
+        if atnewchm:
+            self.ui.activate_new_chamber(process)
+        else:
+            chamber = self.processhive.append_to_active(process)
+            self.ui.update_active_chamber(chamber, updatemenu=False)
         
     # プロセスをスレッドで実行しアクティブにする
     def new_desktop(self, name: str):
@@ -362,6 +365,9 @@ class AppRoot:
     
     def remove_chamber(self, index=None):
         self.processhive.remove(index)
+    
+    def addnew_chamber(self, initial_prompt=None):
+        return self.processhive.addnew(initial_prompt)
     
     #
     def find_process(self, index):

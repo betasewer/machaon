@@ -452,7 +452,7 @@ class tkLauncher(Launcher):
     #
     # ログの操作
     #
-    def insert_screen_message(self, tag, text, **args):
+    def insert_screen_text(self, tag, text, **args):
         """ メッセージをログ欄に追加する """
         if tag == "hyperlink":
             link = args.get("link", text)
@@ -474,7 +474,7 @@ class tkLauncher(Launcher):
         if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
     
-    def delete_screen_message(self, lineno=None, count=None):
+    def delete_screen_text(self, lineno=None, count=None):
         """ ログ欄からメッセージ行を削除する"""
         if lineno is None:
             lineno = -1
@@ -495,19 +495,42 @@ class tkLauncher(Launcher):
         if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
 
-    def replace_screen_message(self, msgs):
-        """ ログ欄をクリアし別のメッセージで置き換える """
-        self.log.configure(state='normal')        
+    def replace_screen_text(self, text):
+        """ ログ欄をクリアし別のメッセージで置き換える 
+        Params:
+            text (TextDump):
+        """
+        self.log.configure(state='normal')
         self.log.delete(1.0, tk.END)
-        for msg in msgs:
-            self.message_handler(msg)
+
+        if text:
+            tags = set()
+            for key, value, index in text.items():
+                if key == "tagon":
+                    tags.add(value)
+                elif key == "tagoff":
+                    tags.remove(value)
+                elif key == "text":
+                    self.log.insert("end", value, tuple(tags))
+                elif key == "window":
+                    self.log.window_create(tk.END, window=value)
+                elif key == "mark":
+                    self.log.mark_set(value, index)
+                elif key == "image":
+                    print("unsupported text element '{}': {}".format(key, value))
+                
         self.log.configure(state='disabled')
 
         if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0) # ログ下端へスクロール
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
-        
+    
+    def save_screen_text(self):
+        """ エディタの内容物をダンプする """
+        dumps = self.log.dump(1.0, tk.END)
+        return TextDump(dumps)
+
     def insert_screen_object_summary(self, msg):
         obj = msg.argument("object")
         deskname = msg.argument("deskname")
@@ -756,19 +779,19 @@ class tkLauncher(Launcher):
     #
     def insert_screen_appendix(self, valuelines, title=""):
         if title:
-            self.insert_screen_message("message", ">>> {}".format(title))
+            self.insert_screen_text("message", ">>> {}".format(title))
 
         if isinstance(valuelines, str):
-            self.insert_screen_message("message", valuelines)
+            self.insert_screen_text("message", valuelines)
         else:
             # シーケンスが渡されたなら、簡単な表形式にする
             maxspacing = max(*[len(x[0]) for x in valuelines], 0, 0)
             for value, desc in valuelines:
                 spacing = " " * (maxspacing - len(value) + 2)
                 for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message-em").expand():
-                    self.insert_screen_message("message", msg)
+                    self.insert_screen_text("message", msg)
 
-        self.insert_screen_message("message", "")
+        self.insert_screen_text("message", "")
         self.log.yview_moveto(1.0)
 
     #
@@ -863,8 +886,9 @@ class tkLauncher(Launcher):
                 chmindex = int(idx)
 
         if chmindex is not None and not self.app.is_active_chamber(chmindex):
+            lastchm = self.app.get_active_chamber()
             chm = self.app.select_chamber(chmindex, activate=True)
-            self.update_active_chamber(chm)
+            self.flip_chamber(chm, lastchm)
 
     #
     # 入力欄
@@ -1236,3 +1260,14 @@ def screen_select_object(ui, wnd, charindex, objtag, sel):
         wnd.delete(str(btnchar), str(btnchar.shifted(char=1)))
         wnd.insert(str(btnchar), "O", btntags)
 
+#
+#
+#
+class TextDump():
+    def __init__(self, d):
+        self.dump = d
+    
+    def items(self):
+        return self.dump
+    
+    

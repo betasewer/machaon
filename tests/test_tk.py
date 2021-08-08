@@ -26,15 +26,15 @@ def test_message_window(approot):
     wnd = approot.get_ui()
 
     assert ">>> \n" == gettext(wnd.log)
-    wnd.insert_screen_message("message", "test-message")
+    wnd.insert_screen_text("message", "test-message")
     assert ">>> test-message\n\n" == gettext(wnd.log)
     assert ">>> test-message" == getlastline(wnd.log)
 
-    wnd.insert_screen_message("error", "test-error-message")
+    wnd.insert_screen_text("error", "test-error-message")
     assert "test-error-message" == getlastline(wnd.log)
     assert ("error",) == getlasttag(wnd.log)
 
-    wnd.insert_screen_message("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message-em")
+    wnd.insert_screen_text("hyperlink", "test-hyperlink", link="www.hellowork.go.jp", linktag="message-em")
     assert "test-hyperlink" == getlastline(wnd.log)
     assert set(("message-em","clickable","hlink-1")) == set(getlasttag(wnd.log))
 

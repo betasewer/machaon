@@ -16,11 +16,12 @@ from machaon.core.symbol import (
 # 
 #
 class BadInstanceMethodInvocation(Exception):
-    def __init__(self, name):
+    def __init__(self, valuetype, name):
+        self.valuetype = valuetype
         self.name = name
     
     def __str__(self):
-        return "インスタンスにメソッド'{}'が存在しません".format(self.name)
+        return "'{}'のインスタンスにメソッド'{}'は存在しません".format(full_qualified_name(self.valuetype), self.name)
 
 
 class BadFunctionInvocation(Exception):
@@ -838,7 +839,7 @@ class InstanceMethodInvocation(BasicInvocation):
         """ インスタンス型から推定してMethodオブジェクトを作成する """
         fn = getattr(value_type, self.attrname, None)
         if fn is None:
-            raise BadInstanceMethodInvocation(self.attrname)
+            raise BadInstanceMethodInvocation(value_type, self.attrname)
         
         if getattr(fn,"__self__",None) is not None:
             # クラスメソッドを排除する
@@ -863,7 +864,7 @@ class InstanceMethodInvocation(BasicInvocation):
     def resolve_instance_method(self, instance):
         method = getattr(instance, self.attrname, None)
         if method is None:
-            raise BadInstanceMethodInvocation(self.attrname)
+            raise BadInstanceMethodInvocation(type(instance), self.attrname)
 
         if not callable(method):
             # 引数なしの関数に変換する
