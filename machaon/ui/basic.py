@@ -36,7 +36,7 @@ class Launcher():
     def init_screen(self):
         pass
 
-    def init_startup_message(self):
+    def install_startup_message(self):
         raise NotImplementedError()
     
     def prettyformat(self, value):
@@ -114,6 +114,10 @@ class Launcher():
 
             elif tag == "canvas":
                 self.insert_screen_canvas(msg)
+            
+            elif tag == "run-process":
+                message = msg.argument("message")
+                self.app.eval_object_message(message) # メッセージを実行する
 
             else:
                 # 適宜改行を入れる
@@ -137,6 +141,10 @@ class Launcher():
                     self.message_handler(msg, nested=True)
                 # オブジェクトを追加
                 context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
+            else:
+                from machaon.process import verbose_display_traceback
+                self.insert_screen_text("error", "プロセスの外でエラーが発生：{}[{}]".format(e, type(e).__name__))
+                self.insert_screen_text("message", verbose_display_traceback(e, 0x7FFFFF))
     
     
     # プロセスから送られたメッセージをひとつひとつ処理する
@@ -162,11 +170,10 @@ class Launcher():
     #
     # プロセスの情報を更新するために監視
     #
-    def watch_chamber_message(self):        
+    def watch_chamber_message(self, chamber):        
         """ チャンバーの発するメッセージを読みに行く """
-        procchamber = self.app.get_active_chamber()
-        running = not procchamber.is_finished()
-        self.handle_chamber_message(procchamber)
+        running = not chamber.is_finished()
+        self.handle_chamber_message(chamber)
         return running
 
     def watch_chamber_state(self, prevstates):
@@ -258,11 +265,11 @@ class Launcher():
         if lastchm:
             self.flip_chamber_content(newchm, lastchm)
         
-        self.watch_chamber_message() # preludeのメッセージを書き出す
+        self.watch_chamber_message(newchm) # preludeのメッセージを書き出す
 
         if process:
             newchm.add(process)
-            self.watch_chamber_message() # processのメッセージを書き出す
+            self.watch_chamber_message(newchm) # processのメッセージを書き出す
         
         self.add_chamber_menu(newchm)
 
@@ -290,11 +297,11 @@ class Launcher():
     
     def flip_chamber(self, chamber, prevchamber):
         self.flip_chamber_content(chamber, prevchamber)
-        self.update_active_chamber(chamber)
+        self.update_chamber(chamber)
 
-    def update_active_chamber(self, chamber, updatemenu=True):
+    def update_chamber(self, chamber, updatemenu=True):
         """ チャンバーをアクティブにして画面に移す """
-        self.watch_chamber_message()
+        self.watch_chamber_message(chamber)
         if updatemenu:
             self.update_chamber_menu(active=chamber)
 

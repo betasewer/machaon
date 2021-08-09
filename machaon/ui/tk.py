@@ -446,8 +446,8 @@ class tkLauncher(Launcher):
         def on_FocusOut(e):
             e.widget.configure(background=self.focusbg[1])
     
-    def init_startup_message(self):
-        self.rootframe.after(100, self.app.do_startup_message)
+    def install_startup_message(self, msgs):
+        self.rootframe.after(100, self.app.run_message_sequence, msgs)
 
     #
     # ログの操作
@@ -551,11 +551,11 @@ class tkLauncher(Launcher):
         """ プレーンテキストに変換 """
         return self.log.get(1.0, tk.END)
         
-    def watch_chamber_message(self):
+    def watch_chamber_message(self, chamber):
         """ アクティブなプロセスの発するメッセージを読みに行く """
-        running = super().watch_chamber_message()
+        running = super().watch_chamber_message(chamber)
         if running:
-            self.log.after(300, self.watch_chamber_message) # 300ms
+            self.log.after(300, self.watch_chamber_message, chamber) # 300ms
         return running
 
     def watch_chamber_state(self, states):

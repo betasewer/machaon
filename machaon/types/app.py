@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+from machaon.types.package import AppPackageType
+
 class RootObject:
     """
     アプリケーションを表すグローバルなオブジェクト。
@@ -12,6 +14,32 @@ class RootObject:
     #
     # メソッド
     #
+    def startup(self, spirit):
+        ''' @task
+        起動画面を表示し、パッケージをロードする。
+        '''
+        spirit.post('message', "Welcome to")
+        spirit.post('message-em', '''
+8b    d8    db     dP""b8 88  88    db     dP"Yb  88b 88 
+88b  d88   dPYb   dP   `" 88  88   dPYb   dP   Yb 88Yb88 
+88YbdP88  dP__Yb  Yb      888888  dP__Yb  Yb   dP 88 Y88 
+88 YY 88 dP""""Yb  YboodP 88  88 dP""""Yb  YbodP  88  Y8
+            [A SHELL-LIKE PYTHON LAUNCHER]                                  
+        '''[1:])
+
+        self.context.root._initialize()
+
+        spirit.post("message", "パッケージをロードします")
+        for pkg in self.context.root.enum_packages():
+            spirit.post("message", "{}".format(pkg.name), nobreak=True)
+            self.context.root.load_pkg(pkg)
+            spirit.post("message", " -> {}".format(AppPackageType.status(AppPackageType(), pkg, spirit)))
+        
+        spirit.post("message", "")
+        spirit.post("message", "ヘルプ")
+        spirit.post("message", "")
+
+
     def types(self, spirit):
         '''@task
         使用可能な型を列挙する。

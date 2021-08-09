@@ -12,7 +12,7 @@ from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, U
 
 #from machaon.action import ActionInvocation
 from machaon.core.object import Object, ObjectCollection
-from machaon.core.message import MessageEngine, InternalMessageError
+from machaon.core.message import MessageEngine, InternalMessageError, select_constant
 from machaon.core.invocation import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 from machaon.core.symbol import full_qualified_name
@@ -681,6 +681,9 @@ class ProcessChamber:
     def get_processes(self):
         return [self._processes[x] for x in sorted(self._processes.keys())]
     
+    def count_process(self):
+        return len(self._processes)
+    
     def handle_process_messages(self):
         if not self._processes:
             msgs = self.prelude_msgs
@@ -744,6 +747,43 @@ class ProcessChamber:
         # プロセスの削除
         for pi in [x for x,t in piset.items() if t]:
             del self._processes[pi]
+
+    def start_process_sequence(self, app, messages):
+        """
+        一連のプロセスを順に実行する。
+        """
+        def _thread(chamber):
+            iline = 0
+            while iline < len(messages):
+                c1 = chamber.count_process()
+                if iline <= c1 and chamber.is_finished():
+                    app.post_stray_message("run-process", message=messages[iline])
+                    iline += 1
+                else:
+                    time.sleep(0.1)
+                    continue
+        
+        thread = threading.Thread(name="ProcessSequenceLauncher", target=_thread, args=(self,), daemon=True)
+        thread.start()
+
+    
+#
+#
+#
+class StrayProcessChamber(ProcessChamber):
+    def __init__(self):
+        super().__init__(-1)
+        self.add(Process(0, ""))
+    
+    def is_failed(self):
+        return False
+    
+    def is_finished(self):
+        return False
+    
+    def is_interrupted(self):
+        return False
+
 
 
 
@@ -914,6 +954,9 @@ class ProcessHive:
     def interrupt_all(self):
         for cha in self.get_runnings():
             cha.interrupt()
+
+
+
 
 #
 #

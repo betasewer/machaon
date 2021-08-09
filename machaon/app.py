@@ -6,12 +6,13 @@ import os
 import sys
 import shutil
 import subprocess
+import time
 
 from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
-from machaon.process import ProcessInterrupted, Process, Spirit, ProcessHive, ProcessChamber
+from machaon.process import Spirit, ProcessHive, ProcessChamber, StrayProcessChamber
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
 from machaon.types.shellplatform import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
@@ -26,45 +27,46 @@ from machaon.types.shell import Path
 class AppRoot:
     def __init__(self):
         self.ui = None
-        self.processhive = None
+        self.processhive = ProcessHive()
         self.basicdir = "" # 設定ファイルなどを置くディレクトリ
         self.pkgmanager = None
         self.pkgs = []
-        self.typemodule = None
+        self.typemodule = TypeModule()
         self.objcol = ObjectCollection()
         self._extapps = None # 外部アプリコンフィグファイル
         self._startupmsgs = []
+        self._stray_process = StrayProcessChamber()
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
+        # UIの初期化処理
         if isinstance(ui, str):
             if ui == "tk":
                 from machaon.ui.tk import tkLauncher
                 ui = tkLauncher(**uiargs)
             else:
                 raise ValueError("不明なUIタイプです")
-
         self.ui = ui
 
         if basic_dir is None:
             basic_dir = os.path.join(shellpath().get_known_path("documents", approot=self), "machaon")
         self.basicdir = basic_dir
-
-        package_dir = self.get_package_dir()
-        self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
-        self.pkgmanager.add_to_import_path()
-        self.pkgs = []
-
-        self.typemodule = TypeModule()
-        self.typemodule.add_fundamental_types()
-        
-        self.processhive = ProcessHive()
         
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
         
         self.ui.activate_new_chamber()
-        
-        self.ui.init_startup_message()
+
+        self.typemodule.add_fundamental_types() # 初期化処理メッセージを解読するために必要
+
+        self._startupmsgs.insert(0, "@@startup") # 初期化処理を行うメッセージ
+    
+    def _initialize(self):
+        # コア言語初期化処理
+        package_dir = self.get_package_dir()
+        self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
+        self.pkgmanager.add_to_import_path()
+
+        # types.shell, types.fileなど
     
     def get_ui(self):
         return self.ui
@@ -133,9 +135,6 @@ class AppRoot:
             cred = create_credential(self, repository=src)
             src.add_credential(cred)
 
-        if not delayload:
-            self.load_pkg(newpkg)
-        
         return newpkg
     
     def add_dependency(self,
@@ -211,7 +210,7 @@ class AppRoot:
         if package.once_loaded():
             self.typemodule.remove_scope(package.scope)
         return True
-   
+
     def add_credential(self, cred):
         """ 
         ダウンロードの認証情報をパッケージに追加する。  
@@ -231,22 +230,27 @@ class AppRoot:
             raise ValueError("認証情報はどのパッケージにも設定されませんでした")
     
     #
-    # 開始直後に実行されるメッセージ
+    # 一連のメッセージを実行する
     #
-    def add_startup_message(self, *lines):
-        self._startupmsgs.extend(lines)
-    
-    def do_startup_message(self):
-        for line in self._startupmsgs:
-            self.eval_object_message(line)
-        self._startupmsgs.clear()
+    def run_message_sequence(self, lines):
+        active = self.get_active_chamber()
+        active.start_process_sequence(self, lines)
 
+    def add_startup_message(self, line):
+        """ 開始直後に自動で実行されるメッセージ """
+        self._startupmsgs.append(line)
+        
     #
     # アプリの実行
     #
     def run(self):
         if self.ui is None:
             raise ValueError("App UI must be initialized")
+            
+        self.watch_stray_message()
+        self.ui.install_startup_message(self._startupmsgs[:])
+        self._startupmsgs.clear()
+
         self.mainloop()
 
     def exit(self):
@@ -298,7 +302,7 @@ class AppRoot:
             self.ui.activate_new_chamber(process)
         else:
             chamber = self.processhive.append_to_active(process)
-            self.ui.update_active_chamber(chamber, updatemenu=False)
+            self.ui.update_chamber(chamber, updatemenu=False)
         
     # プロセスをスレッドで実行しアクティブにする
     def new_desktop(self, name: str):
@@ -388,7 +392,17 @@ class AppRoot:
     #
     def select_object_collection(self):
         return self.objcol
-
+        
+    #
+    # プロセスに属さないメッセージ
+    #
+    def post_stray_message(self, tag, value=None, **options):
+        spi = Spirit(self, self._stray_process.last_process)
+        spi.post(tag, value, **options)
+    
+    def watch_stray_message(self):
+        self.ui.watch_chamber_message(self._stray_process)
+        
     #
     # 外部アプリ
     #
