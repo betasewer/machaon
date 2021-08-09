@@ -7,7 +7,7 @@ from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Option
 
 from machaon.core.symbol import (
     BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, 
-    full_qualified_name, is_valid_typename,
+    full_qualified_name, is_valid_typename, summary_escape,
     SIGIL_SCOPE_RESOLUTION
 )
 from machaon.core.method import BadMethodDeclaration, Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
@@ -207,7 +207,7 @@ class Type():
             s = self.convert_to_string(value)
             if not isinstance(s, str):
                 s = repr(s) # オブジェクトに想定されない値が入っている
-            s = s.replace("\n", " ").strip()
+            s = summary_escape(s)
             if len(s) > 50:
                 return s[0:30] + "..." + s[-20:]
             else:
