@@ -993,23 +993,27 @@ class ObjectMemberInvocation(BasicInvocation):
             return
         
         if self.name == "#=":
+            # delegate先オブジェクトの型に明示的に変換してメンバを取得する
             self._resolved = ObjectMemberGetterInvocation(self.name, collection.get_delegation().get_typename(), self.modifier)
             return
 
         item = collection.get(self.name)
         if item is not None:
+            # メンバを取得する
             self._resolved = ObjectMemberGetterInvocation(self.name, item.object.get_typename(), self.modifier)
             return
 
         from machaon.core.message import select_method
         delg = collection.get_delegation()
         if delg is not None and not (self.modifier & INVOCATION_BASE_RECIEVER):
+            # delegate先オブジェクトのメンバを暗黙的に参照する
             self._resolved = select_method(self.name, delg.type, reciever=delg.value, modbits=self.modifier)
             self.modifier |= INVOCATION_DELEGATED_RECIEVER
         else:
+            # ジェネリックなメソッドを参照する
             self._resolved = select_method(self.name, modbits=self.modifier)
             if isinstance(self._resolved, InstanceMethodInvocation): # ObjectCollectionのインスタンスメソッドは使用しない
-                raise BadObjectMemberInvocation(self.name)
+                self._resolved = TypeConstructorInvocation("None", 0) # Noneを返し、エラーにはしない
         
         self.must_be_resolved()
 

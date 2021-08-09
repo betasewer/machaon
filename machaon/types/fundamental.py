@@ -200,7 +200,9 @@ class AnyType():
 
 class NoneType():
     def constructor(self, _context, _s):
-        """ @meta """
+        """ @meta 
+        いかなる引数もNoneに変換する
+        """
         return None
 
     def stringify(self, f):
