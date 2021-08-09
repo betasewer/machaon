@@ -25,29 +25,38 @@ class AppPackageType:
         loadstatus = self.loading_status(package)
         installstatus = spirit.root.query_package_status(package, isinstall=True)
 
-        if "none" == loadstatus:
-            if "none" == installstatus:
+        if "notfound" == loadstatus:
+            if "notfound" == installstatus:
                 return "未インストール"
             else:
-                return "モジュールが見つからない"
+                return "インストールされたモジュールが見つからない"
         if "delayed" == loadstatus:
-            if "none" == installstatus:
+            if "notfound" == installstatus:
                 return "アンインストール済"
             else:
                 return "読み込み待機中"
         if "failed" == loadstatus:
-            if "none" == installstatus:
+            if "notfound" == installstatus:
                 return "アンインストール済"
             else:
-                return "読み込みエラー"
-        if "ready" == loadstatus:
-            if "none" == installstatus:
+                return "全モジュールのロードに失敗"
+        if loadstatus.startswith("ready"):
+            if "notfound" == installstatus:
                 return "利用可能"
             else:
-                if all(package.check_required_modules_ready().values()):
+                errors = []
+                if package.is_load_failed():
+                    errcnt = len(package.get_load_errors())
+                    errors.append("{}件のモジュールのロードエラー".format(errcnt))
+                
+                errexmodules = sum([1 for b in package.check_required_modules_ready().values() if not b])
+                if errexmodules > 0:
+                    errors.append("{}件の追加依存パッケージのロードエラー".format(errexmodules))
+
+                if not errors:
                     return "準備完了"
                 else:
-                    return "未インストールの追加依存モジュールあり"
+                    return "利用可能 ({})".format("／".join(errors))
         
         return "unexpected status：{}{}".format(loadstatus, installstatus)
     
@@ -59,11 +68,16 @@ class AppPackageType:
         """
         loadstatus = "ready"
         if not package.is_ready():
-            loadstatus = "none"
+            loadstatus = "notfound"
         elif not package.once_loaded():
             loadstatus = "delayed"
         elif package.is_load_failed():
-            loadstatus = "failed"
+            count = package.get_module_count()
+            if count == 0:
+                loadstatus = "failed"
+            else:
+                errcnt = len(package.get_load_errors())
+                loadstatus = "ready ({} error)".format(errcnt)
         return loadstatus
     
     def update_status(self, package, spirit):
@@ -268,7 +282,7 @@ class AppPackageType:
         """ @task
         パッケージに定義された型を収集しログを表示する。登録はしない。
         Returns:
-            Sheet[ObjectCollection]: (typename, qualname)
+            Sheet[ObjectCollection]: (typename, qualname, error)
         """
         elems = []
         for mod in package.load_module_loaders():
@@ -276,16 +290,26 @@ class AppPackageType:
             app.post("message", "モジュール {}".format(modqualname))
 
             defs = []
-            for typedef in mod.scan_type_definitions():
-                typename = typedef.typename
-                qualname = typedef.get_describer_qualname()
-                defs.append({
-                    "typename" : typename,
-                    "qualname" : qualname
-                })
+            err = None
+            try:
+                for typedef in mod.scan_type_definitions():
+                    typename = typedef.typename
+                    qualname = typedef.get_describer_qualname()
+                    defs.append({
+                        "typename" : typename,
+                        "qualname" : qualname
+                    })
+            except Exception as e:
+                err = e
             
             if defs:
                 app.post("message", "　型定義を{}個発見".format(len(defs)))
+            if err:
+                app.post("error", "  ロードエラー:{}".format(err))
+                defs.append({
+                    "qualname" : modqualname,
+                    "error" : err
+                })
             
             elems.extend(defs)
         

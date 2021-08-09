@@ -74,13 +74,15 @@ class PyBasicModuleLoader:
         else:
             raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
     
-    def load_module_declaration(self):
+    def load_module_declaration(self, doc=None):
         """ ソースコードの構文木からモジュールのドキュメント文字列を取り出し、解析する 
         """
-        source = self.load_source()
-        disp = str(self)
-        tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
-        doc = ast.get_docstring(tree)
+        if doc is None:
+            source = self.load_source()
+            disp = str(self)
+            tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+            doc = ast.get_docstring(tree)
+        
         if not doc:
             return
 
@@ -128,6 +130,12 @@ class PyBasicModuleLoader:
         source = self.load_source()
         disp = str(self)
         tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+
+        # モジュールのドキュメント文字列に書かれた宣言をロードする
+        moduledoc = ast.get_docstring(tree)
+        self.load_module_declaration(moduledoc)
+
+        # モジュールに定義されたクラスのドキュメント文字列を全て読んでいく
         for node in ast.iter_child_nodes(tree):
             if not isinstance(node, ast.ClassDef):
                 continue
@@ -235,7 +243,8 @@ class AttributeLoader():
 
 def walk_modules(path, package_name=None):
     """
-    このパス以下にあるすべてのモジュールを列挙する。
+    このパス以下にあるインポート可能なすべてのモジュールを列挙する。
+    二重アンダースコア、ドットで始まる名前のファイルは除外する。
     """
     for dirpath, dirnames, filenames in os.walk(path, topdown=True):
         # キャッシュディレクトリを走査しない
@@ -243,7 +252,7 @@ def walk_modules(path, package_name=None):
         
         filenames = [x for x in filenames if x.endswith(".py")]
         for filename in filenames:
-            if filename in ("__init__.py", "__main__.py"):
+            if filename.startswith((".", "__")):
                 continue
             filepath = os.path.join(dirpath, filename)
             qual_name = module_name_from_path(filepath, path, package_name)

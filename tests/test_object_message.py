@@ -266,11 +266,12 @@ def test_message_failure():
     context = test_context()
     r = run_function("--[10 / 0] do non-existent-method", None, context)
     assert r.is_error() # bad method
-    assert r.value.get_error_typename() == "ZeroDivisionError" # doは中断される
+    assert r.value.get_error_typename() == "ZeroDivisionError" # do以降は中断される
 
     #
     # "--[10 / 0] don ifn --[] else --[]" 
     #
+
 
 #
 def test_message_reenter():

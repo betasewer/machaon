@@ -139,7 +139,7 @@ class Package():
         return True
     
     def check_required_modules_ready(self) -> Dict[str, bool]:
-        """ machaon """
+        """ 依存するmachaonパッケージのロード状況 """
         rets = {}
         for module_name in self._extra_reqs:
             spec = importlib.util.find_spec(module_name)
@@ -208,7 +208,6 @@ class Package():
         typecount = 0
         for modloader in modules:
             try:
-                modloader.load_module_declaration()
                 for typedef in modloader.scan_type_definitions():
                     typedef.scope = self.scope
                     yield typedef
@@ -221,29 +220,48 @@ class Package():
         if typecount == 0:
             self._loadfail(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
     
+    def get_module_count(self):
+        """ ロードされたモジュールの数を返す """
+        if not self.once_loaded():
+            raise ValueError("Not loaded yet")
+        return len(self._modules)
+
+    #
+    # ロード状態
+    #
     def reset_loading(self):
+        """ ロード状態を空にする """
         self._loaded.clear()
     
     def finish_loading(self):
+        """ ロード終了のフラグをたてる """
         self._loaded.append(PACKAGE_LOAD_END)
 
     def once_loaded(self):
+        """ ロードが行われたか """
         return len(self._loaded) > 0
     
     def _loadfail(self, e):
+        """ 内部で、ロードエラーを記録する 
+        Params:
+            e(Exception): 例外オブジェクト
+        """
         self._loaded.append(e)
     
     def is_load_failed(self):
+        """ ロードが失敗に終わったか """
         if not self._loaded:
-            return False
+            return False # 未ロード時はFalse
         return self._loaded[0] is not PACKAGE_LOAD_END
     
     def is_load_succeeded(self):
+        """ ロードが成功に終わったか """
         if not self._loaded:
-            return False
+            return False # 未ロード時はFalse
         return self._loaded[0] is PACKAGE_LOAD_END
 
     def get_load_errors(self) -> List[Exception]:
+        """ ロードエラーを全て返す """
         errs = []
         for x in self._loaded:
             if x is PACKAGE_LOAD_END:
@@ -252,10 +270,15 @@ class Package():
         return errs
     
     def get_last_load_error(self) -> Optional[Exception]:
+        """ 最後に起きたロードエラーを返す """
         errors = self.get_load_errors()
         return errors[-1] if errors else None
 
-    def unload(self, root):
+    #
+    #
+    #
+    def unload(self, typemodule):
+        """ パッケージの読み込んだ全ての型を削除する """
         if self._type == PACKAGE_TYPE_UNDEFINED:
             raise PackageLoadError("パッケージの定義がありません")
 
@@ -263,7 +286,7 @@ class Package():
             return
 
         if self._type == PACKAGE_TYPE_MODULES:
-            root.typemodule.remove_scope(self.scope)
+            typemodule.remove_scope(self.scope)
         
         self._loaded.clear()
 
@@ -554,9 +577,9 @@ class PackageManager():
             return "latest"
         installed_hash = self.get_installed_hash(pkg)
         if installed_hash is None:
-            return "none"
+            return "notfound"
         # hashを比較して変更を検知する
-        latest_hash = pkg.load_latest_hash()
+        latest_hash = pkg.load_latest_hash() # リモートリポジトリに最新のハッシュ値を問い合わせる
         if latest_hash is None:
             return "unknown"
         if installed_hash == latest_hash:
