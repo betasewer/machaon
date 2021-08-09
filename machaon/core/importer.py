@@ -96,7 +96,8 @@ class PyBasicModuleLoader:
             "Using",
         ))
         # 追加の依存するmachaonパッケージ名
-        self._requires = pser.get_lines("Extra-Requirements")
+        requires = [x.strip() for x in pser.get_string("Extra-Requirements").split(",")]
+        self._requires = requires
         
         # パッケージで、型定義が含まれるモジュールを明示する
         self._pkg_submods = []
