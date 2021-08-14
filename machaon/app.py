@@ -57,8 +57,6 @@ class AppRoot:
         self.ui.activate_new_chamber()
 
         self.typemodule.add_fundamental_types() # 初期化処理メッセージを解読するために必要
-
-        self._startupmsgs.insert(0, "@@startup") # 初期化処理を行うメッセージ
     
     def _initialize(self):
         # コア言語初期化処理
@@ -66,7 +64,11 @@ class AppRoot:
         self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
         self.pkgmanager.add_to_import_path()
 
-        # types.shell, types.fileなど
+        # machaon.types以下のモジュールをロード
+        for module in (
+            "shell", "file"
+        ):
+            self.add_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
     
     def get_ui(self):
         return self.ui
@@ -102,8 +104,9 @@ class AppRoot:
         name, 
         package=None,
         *,
-        module=None,
+        modules=None,
         locked=False,
+        private=False,
         delayload=False, 
         type=None,
         separate=True,
@@ -114,22 +117,26 @@ class AppRoot:
         Params:
             name(str): パッケージ名
             package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
-            module(str): トップモジュール名
-            locked(bool): Trueの場合、認証情報を同時にロードする
+            modules(str): ロードするモジュール名
+            private(bool): Trueの場合、認証情報を同時にロードする [locked]
             delayload(bool): 参照時にロードする
             type(int): モジュールの種類
             separate(bool): site-packageにインストールしない
             hashval(str): パッケージハッシュ値の指定
         """
-        newpkg = create_package(name, package, module, type=type, separate=separate, hashval=hashval)
+        newpkg = create_package(name, package, modules, type=type, separate=separate, hashval=hashval)
         for pkg in self.pkgs:
             if pkg.name == newpkg.name:
-                pkg.assign_definition(newpkg)
+                if newpkg.is_undefined():
+                    pkg.assign_definition(newpkg)
+                else:
+                    newpkg = pkg
                 break
         else:
             self.pkgs.append(newpkg)
         
-        if locked:
+        if locked: private = True
+        if private:
             src = newpkg.get_source()
             from machaon.package.auth import create_credential
             cred = create_credential(self, repository=src)
@@ -248,7 +255,10 @@ class AppRoot:
             raise ValueError("App UI must be initialized")
             
         self.watch_stray_message()
-        self.ui.install_startup_message(self._startupmsgs[:])
+        
+        # 自動実行メッセージの登録
+        startupmsgs = ["@@startup", *self._startupmsgs] # 初期化処理を行うメッセージを先頭に追加する
+        self.ui.install_startup_message(startupmsgs)
         self._startupmsgs.clear()
 
         self.mainloop()

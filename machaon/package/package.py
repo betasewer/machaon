@@ -68,8 +68,6 @@ class Package():
         self._extra_reqs: List[str] = [] # 追加の依存パッケージ名
     
     def assign_definition(self, pkg):
-        if not self.is_undefined():
-            raise ValueError("既に定義されているパッケージです")
         self.name = pkg.name
         self.source = pkg.source
         self.scope = pkg.scope
@@ -290,7 +288,7 @@ class Package():
         
         self._loaded.clear()
 
-def create_package(name, package, module=None, **kwargs):
+def create_package(name, package, modules=None, **kwargs):
     """
     文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
     """
