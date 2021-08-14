@@ -9,10 +9,6 @@ def launch():
     root.initialize(ui=ui)
     
     root.add_package(
-        "machaon.shell",
-        "module:machaon.types.shell",
-    )
-    root.add_package(
         "hello",
         "bitbucket:betasewer/test_module:hello"
     )
@@ -26,13 +22,13 @@ def launch():
     )
     root.add_package(
         "docxx",
-        "module:docxx.ma"
-    )
-    root.add_dependency(
-        "_docxx",
-        "github:betasewer/python-docx-xtended:docxx"
+        "github:betasewer/python-docx-xtended:docxx",
+        modules = [
+            "docxx.ma"
+        ]
     )
 
+    #root.add_startup_message("DocProcessor new default-setup process (desktop Path / 会社 / ドストエフスキー論集 ls # 貝 DocxFile)")
     root.run()
 
 launch()

@@ -745,8 +745,10 @@ class ProcessChamber:
         del self.handled_msgs[0:end]
         self.handled_msgs = reserved_msgs + self.handled_msgs
         # プロセスの削除
-        for pi in [x for x,t in piset.items() if t]:
+        pis = [x for x,t in piset.items() if t]
+        for pi in pis:
             del self._processes[pi]
+        return pis
 
     def start_process_sequence(self, app, messages):
         """

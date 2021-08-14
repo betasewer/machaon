@@ -166,7 +166,26 @@ class Launcher():
     
     def save_screen_text(self):
         raise NotImplementedError()
+    
+    def drop_screen_text(self, process_ids):
+        raise NotImplementedError()
 
+    def insert_screen_setview(self, rows, columns, dataid, context):
+        raise NotImplementedError()
+    
+    def insert_screen_appendix(self, values, title=""):
+        raise NotImplementedError()
+    
+    def insert_screen_object_summary(self, msg):
+        raise NotImplementedError()
+    
+    def insert_screen_canvas(self, canvas):
+        raise NotImplementedError()
+    
+    def get_screen_texts(self) -> str:
+        """ ログ保存用にテキストのみを取得する """
+        raise NotImplementedError()
+    
     #
     # プロセスの情報を更新するために監視
     #
@@ -188,25 +207,6 @@ class Launcher():
 
         return curstates
         
-    # 
-    def insert_screen_setview(self, rows, columns, dataid, context):
-        raise NotImplementedError()
-    
-    #
-    def insert_screen_appendix(self, values, title=""):
-        raise NotImplementedError()
-    
-    #
-    def insert_screen_object_summary(self, msg):
-        raise NotImplementedError()
-    
-    #
-    def insert_screen_canvas(self, canvas):
-        raise NotImplementedError()
-    
-    # ログ保存用にテキストのみを取得する
-    def get_screen_texts(self) -> str:
-        raise NotImplementedError()
 
     #
     # 入力欄の操作
@@ -411,7 +411,8 @@ class Launcher():
     #    
     def on_exec_process(self, process, exectime):
         """ プロセス実行開始時 """
-        self.insert_screen_text("message-em", "[{:04}] ".format(process.get_index()), nobreak=True)
+        id = process.get_index()
+        self.insert_screen_text("message-em", "[{:04}] ".format(id), nobreak=True, beg_of_process=id)
         timestamp = exectime.strftime("%Y-%m-%d|%H:%M.%S")
         self.insert_screen_text("message", "[{}] ".format(timestamp), nobreak=True)
         self.insert_screen_text("input", process.message.source)
@@ -430,7 +431,8 @@ class Launcher():
     
     def on_end_process(self, process):
         """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
-        self.insert_screen_text("message", "") # 改行を1つ入れる
+        procid = process.get_index()
+        self.insert_screen_text("message", "", end_of_process=procid) # プロセス識別用のタグをつけた改行を1つ入れる
         self.insert_screen_text("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
     
     #def on_bad_command(self, spirit, process, excep):

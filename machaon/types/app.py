@@ -99,10 +99,9 @@ class RootObject:
     def _clear_processes(self, app, pred):
         ''' プロセスの実行結果とプロセス自体を削除する。 '''
         chm = self.context.root.get_active_chamber()
-        chm.drop_processes(pred=pred)
-        msgs = chm.get_process_messages()
-        app.get_ui().replace_screen_text(msgs)
-    
+        pids = chm.drop_processes(pred=pred)
+        app.get_ui().drop_screen_text(pids)
+        
     def clear(self, app):
         ''' @method spirit [cla]
         現在のチャンバーの全ての実行結果を削除する。
@@ -148,7 +147,15 @@ class RootObject:
 
     def stringify(self):
         """ @meta """
-        return "<-_->"
+        return "<root>"
+    
+    def testobj(self):
+        """ @method 
+        様々なテストを実装するオブジェクトを返す。
+        Returns:
+            Any
+        """
+        return AppTestObject()
 
 #
 #

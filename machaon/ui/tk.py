@@ -461,16 +461,33 @@ class tkLauncher(Launcher):
             tags = self.new_hyper_tags(link, label, linktag)
         else:
             tags = (tag or "message",)
-        
+
         self.log.configure(state='normal')
+        
+        # プロセス区切りの挿入
+        if "beg_of_process" in args:
+            markname = "process{}beg".format(args["beg_of_process"])
+            # 末尾に追加するとgravityを無視して追尾してしまう？ので一行上におく
+            pos = TextIndex(self.log.index("end")).shift(line=-1)
+            self.log.mark_set(markname, pos.string())
+            self.log.mark_gravity(markname, "left")
         
         # メッセージの挿入
         self.log.insert("end", text, tags)
         if not args.get("nobreak", False):
             self.log.insert("end", "\n")
+        
+        # プロセス区切りの挿入
+        if "end_of_process" in args:
+            markname = "process{}end".format(args["end_of_process"])
+            # 末尾に追加するとgravityを無視して追尾してしまう？ので一行上の最後の文字におく
+            pos = TextIndex(self.log.index("end")).shift(line=-1).move(char="end")
+            self.log.mark_set(markname, pos.string())
+            self.log.mark_gravity(markname, "left")
 
         self.log.configure(state='disabled')
-
+        
+        # 下に自動でスクロール
         if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
     
@@ -530,6 +547,29 @@ class tkLauncher(Launcher):
         """ エディタの内容物をダンプする """
         dumps = self.log.dump(1.0, tk.END)
         return TextDump(dumps)
+
+    def drop_screen_text(self, process_ids):
+        """ 指定のプロセスに関連するテキストの区画を削除する """
+        allmarks = set(self.log.mark_names())
+        usedmarks = []
+        
+        self.log.configure(state='normal')
+        
+        for pid in process_ids:
+            head = "process{}beg".format(pid)
+            if head not in allmarks:
+                continue
+            usedmarks.append(head)
+
+            last = "process{}end".format(pid)
+            if last not in allmarks:
+                continue
+            usedmarks.append(last)
+            
+            self.log.delete(head, last)
+        
+        self.log.configure(state='disabled')
+        self.log.mark_unset(*usedmarks)
 
     def insert_screen_object_summary(self, msg):
         obj = msg.argument("object")
