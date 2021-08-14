@@ -65,9 +65,6 @@ operators = {
     "<<" : "lshift",
     "in" : "is-in",
     "#" : "at",
-    "greater?" : "get-greater",
-    "less?" : "get-less",
-    "truth?" : "get-truth",
     "=" : "identical",
     "?" : "pretty",
     "as" : "convertas",
@@ -452,45 +449,38 @@ class GenericMethods:
         """
         return len(left)
 
-    def get_greater(self, left, right):
-        """ @method reciever-param 
-        大きい方を取る。
+    def ift(self, left, context, right):
+        """ @method reciever-param context 
+        leftが真であればrightというメソッドを実行する。
         Arguments:
-            left(Any): 
-            right(Any): 
+            left(Object): 
+            right(Str): メソッド表現
         Returns:
             Any:
         """
-        if left < right:
-            return right
-        return left
+        if left.test_truth():
+            from machaon.types.fundamental import FunctionType
+            fn = FunctionType.constructor(FunctionType(), context, "@ " + right)
+            return fn.run_function(left, context, raiseerror=True)
+        else:
+            return None
 
-    def get_less(self, left, right):
-        """ @method reciever-param
-        小さい方を取る。
+    def iff(self, left, context, right):
+        """ @method reciever-param context 
+        leftが偽であればrightというメソッドを実行する。
         Arguments:
-            left(Any): 
-            right(Any): 
+            left(Object): 
+            right(Str): メソッド表現
         Returns:
             Any:
         """
-        if left > right:
-            return right
-        return left
-    
-    def get_truth(self, left, right):
-        """ @method reciever-param 
-        真と評価される方を取る。
-        Arguments:
-            left(Any): 
-            right(Any): 
-        Returns:
-            Any:
-        """
-        if left:
-            return left
-        return right
-
+        if not left.test_truth():
+            from machaon.types.fundamental import FunctionType
+            fn = FunctionType.constructor(FunctionType(), context, "@ " + right)
+            return fn.run_function(left, context, raiseerror=True)
+        else:
+            return None
+        
     # オブジェクト
     def identical(self, obj):
         """ @method reciever-param
