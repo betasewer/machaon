@@ -793,8 +793,8 @@ class MessageEngine():
             if typename == "Type":
                 tokenbits |= TERM_OBJ_TYPE
             elif typename == "Tuple":
-                tokenbits |= TERM_OBJ_TUPLE                
-            elif spec.is_any():                
+                tokenbits |= TERM_OBJ_TUPLE
+            elif spec.is_type_unspecified():
                 if isstringtoken:
                     tokenbits |= TERM_OBJ_STRING
                 else:
@@ -852,9 +852,7 @@ class MessageEngine():
         elif objcode == TERM_OBJ_SPECIFIED_TYPE:
             val = values[0]
             spec = values[1]
-            paramtype = context.get_type(spec.get_typename())
-            convval = paramtype.construct(context, val, *spec.get_typeparams())
-            obj = paramtype.new_object(convval)
+            obj = spec.convert_object(context, val)
 
         elif objcode == TERM_OBJ_TUPLE:
             elems = values[0].split() # 文字列を空白で区切る

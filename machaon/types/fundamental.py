@@ -229,7 +229,7 @@ class FunctionType():
         Params:
             subject(Object): *引数
         Returns:
-            Object: 返り値
+            Any: 返り値
         """
         r = f.run_function(subject, context, raiseerror=True)
         return r
@@ -240,7 +240,7 @@ class FunctionType():
         Params:
             subject(Object): *引数
         Returns:
-            Object: 返り値
+            Any: 返り値
         """
         return f.run_function(subject, context, raiseerror=False)
 

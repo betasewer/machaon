@@ -491,6 +491,8 @@ class TypeDefinition():
             # 型名のみが指定されているなら、クラス実装もそこにあるとみなす
             self.describer = self.value_type
         self.doc = doc
+        if self.doc:
+            self.doc = self.doc.strip()
         self.scope = scope
         self.bits = bits
         self._decl = None

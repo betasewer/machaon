@@ -648,8 +648,8 @@ class MethodParameter():
     def get_doc(self):
         return self.doc
     
-    def is_any(self):
-        return self.typename == "Any"
+    def is_type_unspecified(self):
+        return self.typename == "Any" or self.typename == "Object"
         
     def is_string(self):
         return self.typename == "Str"
@@ -671,6 +671,12 @@ class MethodParameter():
     
     def get_typeparams(self):
         return self.typeparams or []
+    
+    def convert_object(self, context, value, type=None):
+        if type is None:
+            type = context.get_type(self.get_typename())
+        convval = type.construct(context, value, *self.get_typeparams())
+        return type.new_object(convval)
 
 #
 #
@@ -694,11 +700,17 @@ class MethodResult:
     def get_doc(self):
         return self.doc
     
-    def is_any(self):
+    def is_type_unspecified(self):
         return self.typename is None
     
     def is_return_self(self):
         return self.typeparams and self.typeparams[0] is RETURN_SELF
+
+    def convert_object(self, context, value, type=None):
+        if type is None:
+            type = context.get_type(self.typename)
+        v = type.construct(context, value, *self.get_typeparams())
+        return type.new_object(v)
 
 #
 #

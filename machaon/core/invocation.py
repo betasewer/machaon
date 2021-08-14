@@ -154,7 +154,7 @@ class InvocationEntry():
             retval = not retval
         
         # 型指定から型を決定する
-        if retspec and not retspec.is_any():
+        if retspec and not retspec.is_type_unspecified():
             typename = retspec.get_typename()
             rettype = context.select_type(typename)
             if rettype is None:
@@ -174,8 +174,7 @@ class InvocationEntry():
             if isinstance(retspec, Type):
                 retval = rettype.construct(context, retval)
             elif isinstance(retspec, MethodResult):
-                typeparams = retspec.get_typeparams() if retspec else tuple()
-                retval = rettype.construct(context, retval, *typeparams)
+                retval = retspec.convert_object(context, retval, rettype).value
             else:
                 err = ValueError("返り値が型に適合しません '{}' -> '{}'".format(type(retval).__name__, rettype.typename))
                 return _new_process_error_object(context, err, objectType)
