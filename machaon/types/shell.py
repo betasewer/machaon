@@ -82,8 +82,8 @@ class Path():
         """
         return os.path.basename(self._path)
     
-    def stemname(self):
-        """ @method
+    def basename(self):
+        """ @method [stemname]
         拡張子なしのファイル名
         Returns:
             Str:
@@ -255,6 +255,15 @@ class Path():
         if not extension.startswith("."):
             extension = "." + extension
         return Path(up + extension)
+    
+    def without_ext(self):
+        """ @method
+        拡張子を取り除いたフルパス。
+        Returns:
+            Path:
+        """
+        up, _ext = os.path.splitext(self._path)
+        return Path(up)
     
     def with_basename_format(self, format, *args):
         """ 書式に基づいて名前のみ変更する。（内部利用）"""
