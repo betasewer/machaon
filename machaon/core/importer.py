@@ -1,4 +1,5 @@
 import importlib
+import importlib.util
 import builtins
 import os
 import ast
@@ -6,10 +7,14 @@ import ast
 from machaon.core.docstring import parse_doc_declaration
 
 
-def module_loader(expr, *, location=None):
+def module_loader(expr=None, *, location=None):
     if location:
+        if expr is None:
+            expr = location
         return PyModuleFileLoader(expr, location)
     else:
+        if expr is None:
+            raise TypeError("expr")
         return PyModuleLoader(expr)
 
 def attribute_loader(expr, *, attr=None, location=None):
@@ -27,6 +32,9 @@ def attribute_loader(expr, *, attr=None, location=None):
         modloader = module_loader(mod, location=location)
     return AttributeLoader(modloader, member)
 
+def module_loader_from_file(path, namebasepath):
+    name = module_name_from_path(path, namebasepath)
+    return PyModuleFileLoader(name, path)
 
 class PyBasicModuleLoader:
     """

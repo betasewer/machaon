@@ -1,6 +1,8 @@
 from typing import Type
-from machaon.package.package import PackageManager
 from types import ModuleType
+import os
+
+from machaon.package.package import PackageManager
 
 class AppPackageType:
     """
@@ -337,8 +339,12 @@ class Module():
     def constructor(self, context, value):
         """ @meta """
         if isinstance(value, str):
-            from machaon.core.importer import module_loader
-            loader = module_loader(value)
+            if os.path.isfile(value):
+                from machaon.core.importer import module_loader
+                loader = module_loader(location=value)
+            else:
+                from machaon.core.importer import module_loader
+                loader = module_loader(value)
             return Module(loader.load_module())
         elif isinstance(value, ModuleType):
             return Module(value)
@@ -379,4 +385,6 @@ class Module():
             Any:
         """
         return self._m
-    
+
+
+
