@@ -202,6 +202,21 @@ def known_paths(approot):
         if not k in common_names:
             yield k, v
 
+def start_command_powershell(path, operation=None):
+    ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    if not os.path.isfile(ps):
+        return None
+    cmds = []
+    cmds.append(ps)
+    cmds.append("-NonInteractive")
+    cmds.append("-NoLogo")
+    if operation:
+        starter = """ -Command "Start-Process '{}' -Verb {}" """.format(path, operation)
+    else:
+        starter = """ -Command "Start-Process '{}'" """.format(path)
+    cmds.append(starter)
+    return cmds
+
 def start_file(path, operation=None):
     """
     デフォルトの方法でパスを開く。

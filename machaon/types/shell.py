@@ -1,4 +1,3 @@
-from genericpath import exists
 import os
 import shutil
 import stat
@@ -408,41 +407,17 @@ class Path():
     #
     #
     #
-    def run(self, app, params=None):
+    def run_command(self, app, *params):
         """ @task
-        ファイルを実行し、終わるまで待つ。
+        ファイルを実行し、終わるまで待つ。入出力をキャプチャする。
         Params:
-            params(Tuple): *コマンド引数文字列のタプル
+            *params(Any): コマンド引数
         """
         if self.isdir():
             raise ValueError("ディレクトリは実行できません")
+        pa = [self.normpath, *params]
+        run_command_capturing(app, pa)
 
-        pa = []
-        pa.append(self.normpath)
-        pa.extend(params or [])
-
-        proc = popen_capture(pa)
-        for msg in proc:
-            if msg.is_waiting_input():
-                if not app.interruption_point(noexception=True):
-                    msg.send_kill(proc)
-                    app.post("warn", "実行中のプロセスを強制終了しました")
-                    app.raise_interruption()
-                continue
-                #inp = spi.get_input()
-                #if inp == 'q':
-                #    msg.end_input(proc)
-                #elif inp:
-                #    msg.send_input(proc, inp)
-                #else:
-                #    msg.skip_input(proc)
-            
-            if msg.is_output():
-                app.post("message", msg.text)
-            
-            if msg.is_finished():
-                app.post("message-em", "プロセスはコード={}で終了しました".format(msg.returncode))
-    
     def start(self, operation=None):
         """ @method [open]
         ファイル・フォルダをデフォルトの方法で開く。
@@ -629,6 +604,38 @@ class TextPath:
 #
 #
 #
+def run_command_capturing(app, params):
+    """ 
+    プロセスを実行しつつ出力をキャプチャする 
+    Params:
+        app(Spirit):
+        params(Sequence[str]): 引数リスト
+    TODO:
+        入力に未対応
+    """
+    proc = popen_capture(params)
+    for msg in proc:
+        if msg.is_waiting_input():
+            if not app.interruption_point(noexception=True):
+                msg.send_kill(proc)
+                app.post("warn", "実行中のプロセスを強制終了しました")
+                app.raise_interruption()
+            continue
+            #inp = spi.get_input()
+            #if inp == 'q':
+            #    msg.end_input(proc)
+            #elif inp:
+            #    msg.send_input(proc, inp)
+            #else:
+            #    msg.skip_input(proc)
+        
+        if msg.is_output():
+            app.post("message", msg.text)
+        
+        if msg.is_finished():
+            app.post("message-em", "プロセスはコード={}で終了しました".format(msg.returncode))
+
+
 def unzip(app, path, out=None, win=False):
     path = app.abspath(path)
 

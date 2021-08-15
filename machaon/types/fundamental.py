@@ -349,11 +349,11 @@ class StrType():
         return s.split(sep, maxsplit=maxsplit)
     
     # 
-    # 制御構文
+    # コード実行
     #
     def do(self, s, context, _app, subject=None):
         """ @task context
-        文字列をメッセージとして評価する。
+        文字列をメッセージとして評価する。例外を発生させる。
         Params:
             subject(Object): *引数
         Returns:
@@ -362,17 +362,6 @@ class StrType():
         from machaon.core.message import run_function
         r = run_function(s, subject, context, raiseerror=True)
         return r
-    
-    def eval(self, s, context, _app, subject=None):
-        """ @task context
-        文字列をメッセージとして評価する。発生したエラーは返り値で返す。
-        Params:
-            subject(Object): *引数
-        Returns:
-            Object: 返り値
-        """
-        from machaon.core.message import run_function
-        return run_function(s, subject, context, raiseerror=False)
     
     def st_do(self, s, context, app):
         """ @task context
@@ -386,7 +375,7 @@ class StrType():
 
     def pyvalue(self, symbol, _app):
         """ @task
-        外部モジュールの変数あるいは引数無し関数呼び出しとして評価する。
+        Pythonモジュールの変数名、あるいは引数無しの関数名として評価し、実行して返す。
         Returns:
             Any:
         """
@@ -397,6 +386,19 @@ class StrType():
             return imported # 変数
         else:
             return imported() # 関数実行
+    
+    def run_command(self, string, app, *params):
+        """ @task
+        コマンドを実行し、終わるまで待つ。入出力をキャプチャする。
+        Params:
+            *params(Any): コマンド引数
+        """
+        if not string:
+            return
+        from machaon.types.shell import run_command_capturing
+        pa = [string, *params]
+        run_command_capturing(app, pa)
+
 
 class BoolType():
     def constructor(self, _context, s):
