@@ -363,8 +363,8 @@ class StrType():
         r = run_function(s, subject, context, raiseerror=True)
         return r
     
-    def st_do(self, s, context, app):
-        """ @task context
+    def store_do(self, s, context, app):
+        """ @task context [st-do stdo]
         文字列をストアドメッセージの名前として評価し、実行して返す。
         Returns:
             Object: 返り値
@@ -373,19 +373,31 @@ class StrType():
         ret = o.value.do(context, app)
         return ret
 
-    def pyvalue(self, symbol, _app):
-        """ @task
-        Pythonモジュールの変数名、あるいは引数無しの関数名として評価し、実行して返す。
+    def python_do(self, expr, _app):
+        """ @task [pydo]
+        Pythonの式として評価し、実行して返す。
+        式の前に{name1 name2...}と書いてモジュールをインポートできる。
         Returns:
             Any:
         """
-        from machaon.core.importer import attribute_loader
-        loader = attribute_loader(symbol)
-        imported = loader(fallback=False)
-        if not callable(imported):
-            return imported # 変数
+        expr = expr.strip()
+        if expr.startswith("{"):
+            from machaon.core.importer import module_loader
+            rparen = expr.find("}")
+            if rparen == -1:
+                raise ValueError("モジュール指定の括弧が閉じていません")
+            imports = expr[1:rparen].split()
+            body = expr[rparen+1:]
         else:
-            return imported() # 関数実行
+            imports = []
+            body = expr
+
+        glob = {}
+        for impname in imports:
+            loader = module_loader(impname)
+            glob[impname] = loader.load_module()
+        
+        return eval(body, glob, {})
     
     def run_command(self, string, app, *params):
         """ @task

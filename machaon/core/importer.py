@@ -247,7 +247,12 @@ class AttributeLoader():
         if self.module:
             return self.module.load_attr(self.attr_name, fallback=fallback)
         else:
-            return getattr(builtins, self.attr_name, None)
+            if not hasattr(builtins, self.attr_name):
+                if not fallback:
+                    raise ValueError("ビルトインモジュールに'{}'というメンバは存在しません".format(self.attr_name))
+                else:
+                    return None
+            return getattr(builtins, self.attr_name)
 
 
 def walk_modules(path, package_name=None):
