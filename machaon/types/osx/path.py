@@ -66,7 +66,8 @@ def has_hidden_attribute(path):
     if Foundation is None:
         return False
     url = Foundation.NSURL.fileURLWithPath_(path)
-    return url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)[0]
+    result = url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)
+    return result[1]
     
 def which_path(name):
     """

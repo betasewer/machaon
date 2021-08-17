@@ -14,3 +14,4 @@ packages.ini
 *.html
 __a_*
 frontend-profile
+.*.*
