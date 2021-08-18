@@ -194,10 +194,7 @@ class Type():
         fn = self._metamethods.get("stringify")
         if fn is None:
             # デフォルト動作
-            if type(value).__str__ is object.__str__:
-                return "<Object {:0X}({})>".format(id(value), type(value).__name__)
-            else:
-                return str(value)
+            return str(value)
 
         return self.invoke_meta_method(fn, value)
 

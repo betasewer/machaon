@@ -70,14 +70,14 @@ def test_objectref():
     assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"
 
     # delegation
-    col.set_delegation(Object(StrType, "math.pi"))
+    col.set_delegation(Object(StrType, "{math}math.pi"))
     
     inv = ObjectMemberInvocation("gorilla")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ゴリラ"
 
     # unary type method
     import math
-    inv = ObjectMemberInvocation("pyvalue")
+    inv = ObjectMemberInvocation("pydo")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() == math.pi
     assert isinstance(inv._resolved, TypeMethodInvocation)
     assert inv.get_min_arity() == 0
@@ -92,12 +92,12 @@ def test_objectref():
     
     # unary generic method
     inv = ObjectMemberInvocation("length")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction() == len("math.pi")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction() == len("{math}math.pi")
     assert isinstance(inv._resolved, TypeMethodInvocation)
 
     # binary type method
     inv = ObjectMemberInvocation("reg-match")
-    assert inv.prepare_invoke(cxt, arg, StrType.new_object("[A-z]+"))._invokeaction() is True
+    assert inv.prepare_invoke(cxt, arg, StrType.new_object("[A-z{}]+"))._invokeaction() is True
     assert isinstance(inv._resolved, TypeMethodInvocation)
     assert inv.get_min_arity() == 1
     assert inv.get_max_arity() == 1
