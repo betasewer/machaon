@@ -1,11 +1,12 @@
 import pytest
 import operator
+
 from machaon.core.type import TypeModule
 from machaon.core.object import ObjectCollection, Object
 from machaon.core.invocation import InvocationContext, instant_context
-from machaon.core.message import MessageEngine
 from machaon.core.sort import ValueWrapper
-from machaon.types.sheet import Sheet, make_data_columns, DataMemberColumn, DataItemItselfColumn
+from machaon.core.message import parse_function
+from machaon.types.sheet import Sheet, DataItemItselfColumn
 
 class Employee():
     """
@@ -35,6 +36,10 @@ class Employee():
         """
         return self._postcode
 
+def employees_sheet(objectdesk, args, columns):
+    datas = [Employee(*a) for a in args]
+    view = Sheet.constructor(Sheet, objectdesk, datas, "Employee", *columns)
+    return view
 
 @pytest.fixture
 def objectdesk():
@@ -48,46 +53,44 @@ def objectdesk():
 def values(objects):
     return [x.value for x in objects]
 
+# =================================================
 #
+# カラム
 #
+# =================================================
 #
 def test_column(objectdesk):
-    employee = objectdesk.get_type("Employee")
-    view = Sheet([
-            Employee(x,y) for (x,y) in [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")]
-        ], 
-        employee,
-        objectdesk,
-        ["name", "postcode"]
-    )
+    view = employees_sheet(objectdesk, [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")], ["name", "postcode"])
 
-    assert view.get_item_type() is employee
-
-    view.add_column("tall")
-    assert view.get_current_column_names() == ["name", "postcode", "tall"]
+    assert view.get_item_type_conversion() == "Employee"
 
     namecol = view.get_current_columns()[0]
     assert namecol.get_name() == "name"
-    assert namecol.get_type() is objectdesk.get_type("Str")
+    assert namecol.get_type_conversion() is None # 型指定は無し
+
+    view.add_column("Int = tall")
+    assert view.get_current_column_names() == ["name", "postcode", "tall"]
+
+    tallcol = view.get_current_columns()[2]
+    assert tallcol.get_name() == "tall"
+    assert tallcol.get_type_conversion() == "Int"
 
     # カラムの値を得る 
-    subject = Object(employee, view.items[0])
-    namecol.eval(subject, objectdesk).value == "ken"
+    subject = view.items[0]
+    assert namecol.eval(subject, objectdesk).value == "ken"
 
-    subject = Object(employee, view.items[2])
+    subject = view.items[0]
+    assert tallcol.eval(subject, objectdesk).value == 3
+
+    subject = view.items[2]
     assert namecol.eval(subject, objectdesk).value == "shin"
 
-    subject = Object(employee, view.items[1])
+    subject = view.items[1]
     assert namecol.eval(subject, objectdesk).value == "ren"
 
-#
-#
-#
-def test_create_no_mod(objectdesk):
-    datas = [Employee(x) for x in ("ken", "yuuji", "kokons")]
-    employee = objectdesk.get_type("Employee")
 
-    view = Sheet(datas, employee, objectdesk, ["name"])
+def test_create_no_mod(objectdesk):
+    view = employees_sheet(objectdesk, (("ken",), ("yuuji",), ("kokons",)), ("name",))
     
     assert view.count() == 3
     assert len(view.get_current_columns()) == 1
@@ -99,36 +102,59 @@ def test_create_no_mod(objectdesk):
     assert values(view.row_values(0)) == ["ken"]
     assert values(view.row_values(view.selection_index())) == ["yuuji"]
 
-#
-#
-#
+
 def test_expand_view(objectdesk):
-    items = [Employee(x, y) for (x,y) in (("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333"))]
-    employee = objectdesk.get_type("Employee")
+    view = employees_sheet(objectdesk, [("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333")], ["name", "postcode"])
 
-    view = Sheet(items, employee, objectdesk, ["name", "postcode"])
-    view.view_append(objectdesk, ["tall"])
-
+    view.view_union(objectdesk, ["tall", "name"])
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
     assert view.count() == 3
     assert values(view.row_values(0)) == ["ken", "111-1111", 3]
 
+    view.view_add(objectdesk, "@ tall * 100")
+    assert view.get_current_column_names() == ["name", "postcode", "tall", '"@ tall * 100"']
+    assert view.count() == 3
+    assert values(view.row_values(0)) == ["ken", "111-1111", 3, 300]
+
+    employee = objectdesk.get_type("Employee")
+    view.append_items_and_generate_rows(objectdesk, [employee.new_object(Employee("irina", "444-4444"))])
+    assert view.get_current_column_names() == ["name", "postcode", "tall", '"@ tall * 100"']
+    assert view.count() == 4
+    assert values(view.row_values(3)) == ["irina", "444-4444", 5, 500]
 
 
-@pytest.mark.skip()
-def test_create_filtered(objectdesk):
-    datas = [Employee(x) for x in ("ken", "ishulalmandij", "yuuji")]
+def test_algorithm(objectdesk):
+    view = employees_sheet(objectdesk, [
+        ("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333"), ("unknown", None)
+    ], ["name", "postcode"])
     employee = objectdesk.get_type("Employee")
 
-    f = Function("(ke in @name) || (@tall == 5)")
-    bits = [f.run(Object(objectdesk.get_type(Employee), x), objectdesk) for x in datas]
-    assert bits == [True, False, True]
+    # foreach
+    f = parse_function("@ tall * 1000")
+    view.foreach(objectdesk, None, f)
+
+    # filter
+    f = parse_function("(@ name contains ke) || (@ tall == 6)")
+    view.filter(objectdesk, None, f)
+    assert view.count() == 2
+    assert values(view.row_values(0)) == ["ken","111-1111"]
+    assert values(view.row_values(1)) == ["kokons","333-3333"]
+
+    # collect
+    viewhe = heterovalues()
+    f = parse_function("(@ upper)")
+    vals = viewhe.collect(objectdesk, None, f)
+    assert len(vals) == 2
+    assert values(vals) == [ "STRING1", "STRING-STRANG2" ]
     
+    # sort
+    """
+    f = parse_function("@ name")
     # TODO: get_lambda_argument_namesの実装
     view = Sheet(datas, employee).view(objectdesk, "table", predicate=f)
     assert view.count() == 2
     assert view.rows_to_string_table(objectdesk) == ([(0, ["ken","3"]), (2, ["yuuji","5"])], [5, 1])
-
+    """
 
 @pytest.mark.skip()
 def test_filtered_manytimes(objectdesk):
@@ -250,35 +276,80 @@ class Room:
 def hotelrooms(name):
     h = Hotel(name)
     cxt = instant_context()
-    o = Sheet(h.rooms(), cxt.define_type(Room))
+    o = Sheet.constructor(Sheet, cxt, h.rooms(), cxt.define_type(Room))
     return o, cxt
 
+def heterovalues():
+    values = [
+        "string1",
+        "string-strang2",
+        31,
+        123.4,
+    ]
+    cxt = instant_context()
+    v = Sheet.constructor(Sheet, cxt, values)
+    return v
+
+#
 #
 def test_construct():
     rooms, _cxt = hotelrooms("Okehazama")
     assert rooms.get_current_columns()
     assert isinstance(rooms.get_current_columns()[0], DataItemItselfColumn)
-    assert rooms.get_current_column_names() == ["="]
+    assert rooms.get_current_column_names() == ["@"]
 
-#
-def test_append():
+def test_apis():
     rooms, cxt = hotelrooms("Okehazama")
-    assert [x.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203"]
+    assert [x.value.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203"]
     rooms.append(cxt, Room("501", "Suite", "Bed"))
-    assert [x.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203", "501"]
+    assert [x.value.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203", "501"]
 
-    #
+    # append
     rooms.view(cxt, ["name", "type"])
     rooms.append(cxt, Room("502", "Single", "Bed"))
     rooms.append(cxt, Room("503", "Single", "Bed"))
     assert [x[0].value for _, x in rooms.current_rows()] == ["101", "102", "103", "201", "202", "203", "501", "502", "503"]
 
-#
-def test_conversion_construct():
+    # pick
+    room = rooms.pick_in_first_column(cxt, None, "202")
+    assert room.value.name() == "202" # 完全一致
+    room = rooms.pick_in_first_column(cxt, None, "10")
+    assert room.value.name() == "101" # 前方一致
+    room = rooms.pick_in_first_column(cxt, None, "03")
+    assert room.value.name() == "103" # 後方一致
+
+def test_list_conversion_construct():
     cxt = instant_context()
-    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str]: (length, =)")
+    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str]: (length, @)")
     sh = r.value
     assert values(sh.row_values(0)) == [2, "A1"]
     assert values(sh.row_values(1)) == [3, "B2B"]
     assert values(sh.row_values(2)) == [4, "C3C3"]
+
+def test_string_tables():
+    rooms, cxt = hotelrooms("Okehazama")
+    rooms.append(cxt, Room("haunted", None, None))
+    
+    rooms.view(cxt, ["name", "type", "style"])
+    table = rooms.rows_to_string_table(cxt)
+    assert table == [
+        (0, ["101", "Twin", "Bed"]),
+        (1, ["102", "Twin", "Bed"]),
+        (2, ["103", "Single", "Futon"]),
+        (3, ["201", "Double", "Bed"]),
+        (4, ["202", "Double", "Bed"]),
+        (5, ["203", "Twin", "Futon"]),
+        (6, ["haunted", "-", "-"]) # Noneは-に変換する
+    ]
+
+    # hetero container
+    view = heterovalues()
+    view.view(cxt, ["@", "@ * 2"])
+    table = view.rows_to_string_table(cxt)
+    assert table == [
+        (0, ["string1", "string1string1"]),
+        (1, ["string-strang2", "string-strang2string-strang2"]),
+        (2, ["31", "62"]),
+        (3, ["123.4", "246.8"])
+    ]
 

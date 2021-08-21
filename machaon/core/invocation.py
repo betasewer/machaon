@@ -331,7 +331,7 @@ class InvocationContext:
         Params:
             value(Any): 値; Noneの場合、デフォルトコンストラクタを呼び出す
         KeywordParams:
-            type(Any): 型を示す値
+            type(Any): 型を示す値（型名、型クラス、型インスタンス）
             conversion(str): 値の変換方法を示す文字列
         """
         if type:
@@ -355,6 +355,8 @@ class InvocationContext:
             convvalue = t.construct(self, value, *typeparams)
             return t.new_object(convvalue)
         else:
+            if isinstance(value, Object):
+                return value
             if value is None:
                 return self.get_type("None").new_object(value)
             valtype = self.deduce_type(value)

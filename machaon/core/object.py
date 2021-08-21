@@ -22,6 +22,8 @@ class Object():
         self.type: Type = type
         if not isinstance(self.type, Type):
             raise TypeError("'type' must be Type instance")
+        if isinstance(self.value, Object):
+            raise ValueError("An attempt to assign Object to another Object")
 
     def __repr__(self):
         return "<Object {1} [{0}]>".format(self.type.typename, repr(self.value))
@@ -68,6 +70,11 @@ class Object():
         from machaon.process import ProcessError
         return isinstance(self.value, ProcessError)
     
+    def is_truth(self):
+        if self.is_error():
+            return False
+        return bool(self.value)
+
     def test_truth(self):
         if self.is_error():
             raise self.value.error

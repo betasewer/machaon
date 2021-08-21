@@ -643,10 +643,6 @@ class MessageEngine():
         else:
             yield buffer.token(TOKEN_ALL_BLOCK_END)
     
-    def get_last_done_expression(self):
-        """ 読み取りの終わったメッセージの部分 """
-        return self._lastdone.strip()
-    
     # 現在評価している途中のメッセージ
     def current_reading_message(self):
         if self._curblockstack: 
@@ -1003,8 +999,12 @@ class MessageEngine():
         else:
             yield from self._tokens
 
-    # メッセージを実行するジェネレータ。実行前にメッセージを返す
-    def runner(self, context) -> Generator[Message, None, None]:        
+    def runner(self, context):
+        """
+        メッセージを実行するジェネレータ。
+        Yields:
+            Message: 実行直前のメッセージ
+        """   
         # コードから構文を組み立てつつ随時実行
         if not self._codes:
             def build_run_codes():
@@ -1032,7 +1032,6 @@ class MessageEngine():
 
                 for msg in self.reduce_step(code, values, context):
                     yield msg
-                    self._lastdone = ""
 
                     result = msg.eval(context)
 
@@ -1040,6 +1039,8 @@ class MessageEngine():
                     context.push_local_object(result)
                     if context.is_failed(): # エラーが発生したら実行を中断する
                         return
+                        
+                    self._lastdone = ""
 
             except Exception as e:
                 # メッセージ実行以外の場所でエラーが起きた
@@ -1053,6 +1054,9 @@ class MessageEngine():
         context.add_log(LOG_MESSAGE_END)
 
         self._codes = codes # type: ignore
+    
+    def get_last_done_expression(self):
+        return self._lastdone.strip()
     
     def finish(self, context, *, raiseerror=False) -> Object:
         """ 結果を取得し、スタックをクリアする """
@@ -1094,8 +1098,15 @@ class MessageEngine():
     def run_function_step(self, subject, context, *, raiseerror=False):
         """ 実行するたびにメッセージを返す """
         subcontext = self.start_subcontext(subject, context)
-        for msg in self.runner(subcontext):
-            yield msg   # Messageを返す
+        for step in self.runner(subcontext):
+            expr = self.get_last_done_expression()
+            if expr:
+                yield expr  # Strを返す
+            yield step   # Messageを返す
+        
+        expr = self.get_last_done_expression()
+        if expr:
+            yield expr  # Strを返す：正常実行時は文字列は残っていないはずだが
         yield self.finish(subcontext, raiseerror=raiseerror) # Objectを返す
 
 #
@@ -1142,31 +1153,62 @@ def _view_bitflag(prefix, code):
         n.append("0x{0X}".format(c))
     return "+".join(n)
 
+#
+#
+#
+#
+class MessageExpression():
+    def __init__(self, expression, typeconv):
+        self.f = MessageEngine(expression)
+        self.typeconv = typeconv
+    
+    def get_expression(self) -> str:
+        return self.f.get_expression()
+    
+    def get_type_conversion(self):
+        return self.typeconv
+    
+    def run_function(self, *args, **kwargs):
+        return self.f.run_function(*args, **kwargs)
+    
+    def run_function_step(self, *args, **kwargs):
+        return self.f.run_function_step(*args, **kwargs)
+
 
 #
 # 主題オブジェクトのメンバ（引数0のメソッド）を取得する
 # Functionの機能制限版だが、キャッシュを利用する
 #
-class MemberGetter():
-    def __init__(self, name, method):
+class MemberGetExpression():
+    def __init__(self, name, typeconv):
         self.name = name
-        self.method = method
+        self.typeconv = typeconv
         
     def get_expression(self) -> str:
         return self.name
+    
+    def get_type_conversion(self):
+        return self.typeconv
     
     def run_function(self, subject, context):
         """ その場でメッセージを構築し実行 """
         subcontext = context.inherit(subject)
         
-        message = Message(subject, self.method)
+        inv = select_method(self.name, subject.type, reciever=subject.value)
+        message = Message(subject, inv)
         subcontext.add_log(LOG_MESSAGE_BEGIN, message)
         
         result = message.eval(subcontext)
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         
         return result
-    
+
+    def run_function_step(self, *args, **kwargs):
+        raise NotImplementedError()
+
+#
+# api
+#
 def run_function(expression: str, subject, context, *, raiseerror=False) -> Object:
     """
     文字列をメッセージとして実行する。
@@ -1183,14 +1225,57 @@ def run_function(expression: str, subject, context, *, raiseerror=False) -> Obje
     return f.run_function(subject, context, raiseerror=raiseerror)
     
 def run_function_print_step(expression: str, subject, context, *, raiseerror=False):
+    """
+    経過を表示しつつメッセージを実行する。
+    """
     f = MessageEngine(expression)
     app = context.spirit
     for msg in f.run_function_step(subject, context, raiseerror=raiseerror):
         if isinstance(msg, Object):
             return msg
-        else:
-            expr = f.get_last_done_expression()
-            if expr:
-                app.post("message", expr + " ")
-
+        elif isinstance(msg, str):
+            app.post("message", msg + " ")
+        
     return None
+
+
+SIGIL_TYPE_INDICATOR = "="
+
+def parse_function(expression):
+    """
+    メッセージ式から関数オブジェクトを作成する。
+    Params:
+        expression(str):
+    """
+    # 式の型指定子と式本体に分ける
+    typeconv, sep, body = expression.partition(SIGIL_TYPE_INDICATOR)
+    if sep:
+        if typeconv:
+            last = typeconv[-1]
+            if not last.isspace() and not last.isalnum(): # 演算子の一部を誤検出した
+                body = expression
+                typeconv = None
+                sep = None
+        if body:
+            head = body[0]
+            if not head.isspace() and not head.isalnum(): # 演算子の一部を誤検出した
+                body = expression
+                typeconv = None
+                sep = None
+    else:
+        body = expression
+        typeconv = None
+    
+    body = body.strip()
+    if typeconv:
+        typeconv = typeconv.strip()
+    
+    parts = body.split()
+    if len(parts) > 1:
+        return MessageExpression(body, typeconv)
+    
+    elif len(parts) == 1:
+        return MemberGetExpression(body, typeconv)
+    
+    else:
+        raise ValueError("Invalid expression")

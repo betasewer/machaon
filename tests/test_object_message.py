@@ -4,7 +4,7 @@ import re
 
 from machaon.core.type import Type
 from machaon.core.object import Object
-from machaon.core.message import MessageEngine, MessageTokenBuffer, run_function, MessageEngine
+from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, parse_function, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_type
 from machaon.process import TempSpirit
 
@@ -323,4 +323,21 @@ def test_message_discard():
     r = run_function("100 * (1 + 2 + 3 . 8 =)", None, context)
     assert r.value == 100 * 8
 
+#
+def test_message_type_indicator():
+    context = test_context()
 
+    r = parse_function("Int = 1 + 2")
+    assert isinstance(r, MessageExpression)
+    assert r.get_type_conversion() == "Int"
+    assert r.get_expression() == "1 + 2"
+    assert r.run_function(None, context).value == 3
+    
+    r = parse_function("Str = name")
+    assert isinstance(r, MemberGetExpression)
+    assert r.get_type_conversion() == "Str"
+    assert r.get_expression() == "name"
+
+    obj = context.new_object({"name" : "waon"})
+    assert r.run_function(obj, context).value == "waon"
+    
