@@ -173,6 +173,8 @@ class tkLauncher(Launcher):
         self.focusbg = (None, None)
         self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
+        #
+        self._destroyed = True
 
     def open_pathdialog(self, dialogtype, 
         initialdir=None, 
@@ -619,6 +621,8 @@ class tkLauncher(Launcher):
     #
     def on_commandline_return(self):
         self.execute_input_text()
+        if self._destroyed:
+            return
         self.commandline.mark_set("INSERT", 0.0)
 
     def on_commandline_up(self):
@@ -954,9 +958,10 @@ class tkLauncher(Launcher):
     #
     def run_mainloop(self):
         self.root.mainloop()
-    
+
     def destroy(self):
         self.root.destroy()
+        self._destroyed = True
     
     #
     # テーマ
