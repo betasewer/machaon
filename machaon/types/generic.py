@@ -488,7 +488,7 @@ class GenericMethods:
         Arguments:
             obj(Object): 対象
         Returns:
-            Object: 対象オブジェクト
+            Any: 対象オブジェクト
         """
         return obj
     
@@ -498,7 +498,7 @@ class GenericMethods:
         Arguments:
             obj(Object): 対象
         Returns:
-            Object: 
+            Any: 
         """
         if obj.is_pretty():
             return obj
@@ -530,7 +530,7 @@ class GenericMethods:
             obj(Object): オブジェクト
             type(Type): 型
         Returns:
-            Object: 変換されたオブジェクト
+            Any: 変換されたオブジェクト
         """
         v = type.construct(context, obj.value)
         return type.new_object(v)
@@ -542,7 +542,7 @@ class GenericMethods:
             left(Object): オブジェクト
             right(str): 名前
         Returns:
-            Object: 左辺オブジェクト
+            Any: 左辺オブジェクト
         """
         context.bind_object(right, left)
         return left
