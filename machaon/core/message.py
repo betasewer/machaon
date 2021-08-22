@@ -1,7 +1,6 @@
 import ast
 import sys
 from itertools import zip_longest
-from typing import Dict, Any, List, Sequence, Optional, Generator, Tuple, Union
 
 from machaon.core.symbol import (
     PythonBuiltinTypenames, normalize_method_name, BadTypename,
@@ -14,9 +13,8 @@ from machaon.core.symbol import (
     SIGIL_DISCARD_MESSAGE,
     QUOTE_ENDPARENS
 )
-from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
-from machaon.core.method import Method, MethodParameter
+from machaon.core.method import MethodParameter
 from machaon.core.invocation import (
     BasicInvocation,
     TypeMethodInvocation,
@@ -86,9 +84,6 @@ class Message:
     def start_keyword_args(self):
         self._argwaiting = True
     
-    def end_keyword_args(self):
-        self._argwaiting = False
-    
     def is_reciever_specified(self):
         return self.reciever is not None
     
@@ -133,34 +128,69 @@ class Message:
         else:
             return MethodParameter("param{}".format(index), "Any", "")
     
-    #
-    def eval(self, context) -> Object:
+    def reset_ref(self):
+        for elem in (self.reciever, self.selector, *self.args):
+            if isinstance(elem, BasicRef):
+                elem.reset()
+
+    def conclude(self, context):
+        """ メッセージを完成させる """
+        if not self.is_reciever_specified():
+            # レシーバが無い場合はエラー
+            raise BadExpressionError("レシーバがありません：{}".format(self.sexpr()))
+        if not self.is_selector_specified():
+            # セレクタが無い場合はレシーバを返すセレクタを補う
+            self.selector = select_method("=")
+        if not self.is_min_arg_specified():
+            if len(self.args) > 0:   
+                # 引数がゼロ以上あり足りない場合はエラー         
+                spec = self.get_next_parameter_spec()
+                raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), self.get_method_syntax(context)))
+            else:
+                # ゼロの場合はセレクタを返す
+                self.reciever = self.selector
+                self.selector = select_method("=")
+
+        self._argwaiting = False
+    
+    def eval(self, evalcontext):
+        """ 
+        完成したメッセージを実行する。
+        Params:
+            evalcontext(EvalContext):
+        Returns:
+            Object: 返り値
+        """
         if self.reciever is None or self.selector is None:
             raise BadMessageError("レシーバとセレクタがありません")
 
         args = []
 
         # コンテキスト引数を取り出す。スタックにあるかもしれないので、逆順に
-        revargs = [*reversed(self.args), self.reciever]
-        for argobj in revargs:
-            if isinstance(argobj, ResultStackTopRef):
-                args.append(argobj.pick_object(context))
+        for argobj in [*reversed(self.args), self.reciever]:
+            if isinstance(argobj, BasicRef):
+                args.append(argobj.pick_object(evalcontext))
             else:
                 args.append(argobj)
         args.reverse() # 元の順番に戻す
 
         # 実行する
+        context = evalcontext.context
         invocation = self.selector.prepare_invoke(context, *args)
         invocation.set_message(self)
         context.begin_invocation(invocation)
+
         retobj = invocation.invoke(context)
+        
         context.finish_invocation(invocation)
 
         if retobj is None:
             raise BadMessageError("No return value exists on the context stack")
     
         if retobj.value is INVOCATION_RETURN_RECIEVER:
-            return self.reciever
+            if not args:
+                raise ValueError("No reciever value")
+            return args[0] # recieverの値
         else:
             return retobj
 
@@ -174,8 +204,8 @@ class Message:
         def put(item):
             if isinstance(item, Object):
                 exprs.append("<{} {}>".format(item.get_typename(), item.value_dstr()))
-            elif isinstance(item, ResultStackTopRef):
-                exprs.append("<#ResultStackTopRef>")
+            elif isinstance(item, ResultStackRef):
+                exprs.append("<#StackRef: {}>".format(item.get_lastvalue()))
             else:
                 exprs.append(str(item))
 
@@ -226,78 +256,155 @@ class Message:
     def snapshot(self):
         return Message(self.reciever, self.selector, self.args[:])
 
+#
+#
+#
+class EvalContext:
+    def __init__(self, context):
+        self.context = context
+        self.locals = LocalStack()
 
-# スタックにおかれた計算結果を取り出す
-class ResultStackTopRef:
+class LocalStack:
+    """ 計算結果のスタック """
     def __init__(self):
-        self._lastvalue = None
+        self.local_objects = [] 
+
+    def push_local_object(self, obj):
+        """
+        Params:
+            obj(Object):
+        """
+        self.local_objects.append(obj)
     
-    def pick_object(self, context):
-        if self._lastvalue is None:
-            value = context.top_local_object()
-            if value is None:
-                raise BadExpressionError("ローカルスタックを参照しましたが、値がありません")
-            self._lastvalue = value
-            context.pop_local_object()
-        return self._lastvalue
+    def top_local_object(self):
+        """
+        Returns:
+            Optional[Object]:
+        """
+        if not self.local_objects:
+            return None
+        return self.local_objects[-1]
+
+    def pop_local_object(self):
+        if not self.local_objects:
+            return
+        self.local_objects.pop()
+
+    def clear_local_objects(self):
+        """
+        Returns:
+            List[Object]:
+        """
+        objs = self.local_objects
+        self.local_objects = []
+        return objs
 
 # --------------------------------------------------------------------
 #
 # メッセージの構成要素
 #
 # --------------------------------------------------------------------
-# 外部オブジェクト参照
-def select_object(context, *, name=None, typename=None) -> Object:
-    if name == "app":
-        return Object(context.get_type("ThisContext"), context)
-    elif typename:
-        obj = context.get_object_by_type(typename)
-        if obj is None:
-            raise BadExpressionError("オブジェクト（型='{}'）は存在しません".format(typename))
-    else:
-        obj = context.get_object(name)
-        if obj is None:
-            raise BadExpressionError("オブジェクト'{}'は存在しません".format(name))
-    return obj
+#
+# オブジェクトへの参照
+#
+class BasicRef:
+    def __init__(self, lastvalue=None):
+        self._lastvalue = lastvalue
 
-# 型
-def select_type(context, typeexpr) -> Optional[Type]:
-    return context.select_type(typeexpr)
+    def pick_object(self, evalcontext):
+        if self._lastvalue is None:
+            self._lastvalue = self.do_pick(evalcontext)
+        return self._lastvalue
+    
+    def do_pick(self, evalcontext):
+        raise NotImplementedError()
+    
+    def get_lastvalue(self):
+        return self._lastvalue
+    
+    def reset(self):
+        self._lastvalue = None
 
+class ResultStackRef(BasicRef):
+    """ スタックにおかれた計算結果への参照 """
+    def do_pick(self, evalcontext):
+        value = evalcontext.locals.top_local_object()
+        if value is None:
+            raise BadExpressionError("ローカルスタックを参照しましたが、値がありません")
+        evalcontext.locals.pop_local_object()
+        return value
+    
+class SubjectRef(BasicRef):
+    """ 引数オブジェクトへの参照 """
+    def do_pick(self, evalcontext):
+        subject = evalcontext.context.subject_object
+        if subject is None:
+            raise BadExpressionError("無名関数の引数を参照しましたが、与えられていません")
+        return subject
+
+class ObjectRef(BasicRef):
+    """ 任意のオブジェクトへの参照 """
+    def __init__(self, ident, lastvalue=None):
+        super().__init__(lastvalue)
+        self._ident = ident
+    
+    def do_pick(self, evalcontext):
+        obj = evalcontext.context.get_object(self._ident)
+        if obj is None:
+            raise BadExpressionError("オブジェクト'{}'は存在しません".format(self._ident))
+        return obj
+
+#
 # リテラル
-def select_literal(context, literal) -> Object:
+#
+def select_type(context, typeexpr):
+    """ 型 
+    Params:
+        typeexpr(str):
+    Returns:
+        Optional[Object]:
+    """
+    tt = context.select_type(typeexpr)
+    if tt is None:
+        return None
+    return context.get_type("Type").new_object(tt)
+
+def select_literal(context, literal):
+    """ 基本型の値 
+    Params:
+        literal(str):
+    Returns:
+        Object:
+    """
     try:
         value = ast.literal_eval(literal)
     except Exception:
         value = literal
     return value_to_obj(context, value)
 
+def select_reciever(context, expression):
+    """ 型もしくは基本型の値 
+    Params:
+        expression(str):
+    Returns:
+        Object:
+    """
+    # 型名の可能性
+    if expression and expression[0].isupper():
+        ot = select_type(context, expression)
+        if ot:
+            if ot.value.is_none():
+                return context.get_type("None").new_object(None) # Noneの型はレシーバの文脈ではNoneの値にする
+            return ot
+
+    # リテラルだった
+    return select_literal(context, expression)
+
 def value_to_obj(context, value):
     typename = type(value).__name__
     if typename not in PythonBuiltinTypenames.literals:
         raise BadExpressionError("Unsupported literal type: {}".format(typename))
     return Object(context.get_type(typename), value)
-
-# 無名関数の引数オブジェクト
-def select_lambda_subject(context):
-    subject = context.subject_object
-    if subject is None:
-        raise BadExpressionError("無名関数の引数を参照しましたが、与えられていません")
-    return subject
-
-# 型名かリテラルか
-def select_reciever(context, expression) -> Object:
-    # 型名の可能性
-    if expression and expression[0].isupper():
-        tt = select_type(context, expression)
-        if tt:
-            if tt.is_none():
-                return context.get_type("None").new_object(None) # Noneの型はレシーバの文脈では取得できない
-            if not tt.is_any():
-                return context.get_type("Type").new_object(tt)
-    
-    # リテラルだった
-    return select_literal(context, expression)
 
 #
 _sel_modifiers = (
@@ -370,9 +477,17 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     return InstanceMethodInvocation(name, modbits)
 
 #
-# 型で利用可能なセレクタを列挙する
+# 
 #
-def enum_selectable_method(typetraits, instance=None) -> Generator[Method, None, None]:
+def enum_selectable_method(typetraits, instance=None):
+    """
+    型で利用可能なセレクタを列挙する
+    Params:
+        typetraits(Type): 型オブジェクト
+        *instance(Any): インスタンス
+    Yields:
+        Method:
+    """
     # 型メソッドの列挙
     for meth in typetraits.enum_methods():
         tinv = TypeMethodInvocation(typetraits, meth)
@@ -383,18 +498,16 @@ def enum_selectable_method(typetraits, instance=None) -> Generator[Method, None,
     
     # インスタンスメソッド
     if instance is not None:
-        names = dir(instance)
+        target = instance
         def query_method(inv):
             return inv.query_method_from_instance(instance)
     else:
         valtype = typetraits.get_value_type()
-        names = dir(valtype)
+        target = valtype
         def query_method(inv):
             return inv.query_method_from_value_type(valtype)
     
-    for name in names:
-        if name.startswith("_"):
-            continue
+    for name in enum_selectable_attributes(target):
         if typetraits.select_method(name) is not None:
             # TypeMethodと被りがある場合はスキップ
             continue
@@ -403,18 +516,12 @@ def enum_selectable_method(typetraits, instance=None) -> Generator[Method, None,
             continue
         yield meth
 
-#
-def select_constant(context, expr) -> Object:
-    from machaon.core.importer import attribute_loader
-    loader = attribute_loader(expr)
-    if not loader:
-        raise BadExpressionError("bad import expression")
-    attr = loader()
-    if(callable(attr)):
-        value = attr()
-    else:
-        value = attr
-    return value_to_obj(context, value)
+def enum_selectable_attributes(instance):
+    for name in dir(instance):
+        if name.startswith("_"):
+            continue
+        yield name
+
 
 
 # --------------------------------------------------------------------
@@ -453,14 +560,12 @@ TERM_NEW_BLOCK_SELECTOR = 10
 #  - 生成される値の種類
 TERM_OBJ_MASK = 0xFF00
 TERM_OBJ_REF_NAME = 0x0100
-TERM_OBJ_REF_TYPENAME = 0x0200
 TERM_OBJ_STRING = 0x0300
 TERM_OBJ_RECIEVER = 0x0400
 TERM_OBJ_SELECTOR = 0x0500
 TERM_OBJ_LAMBDA_ARG = 0x0600
 TERM_OBJ_LAMBDA_ARG_MEMBER = 0x0700
 TERM_OBJ_LITERAL = 0x0800
-TERM_OBJ_CONSTANT = 0x0900
 TERM_OBJ_NOTHING = 0x0A00
 TERM_OBJ_TYPE = 0x0B00
 TERM_OBJ_SPECIFIED_TYPE = 0x0C00
@@ -479,7 +584,7 @@ TERM_DISCARD_LAST_BLOCK_MESSAGE = 0x100000
 #
 class MessageTokenBuffer():
     def __init__(self):
-        self.buffer = [] # type: List[str]
+        self.buffer = [] # type: list[str]
         self.firstterm = True
         self.quote_char_waiting = False
         self.quote_beg = None
@@ -547,20 +652,20 @@ class MessageTokenBuffer():
 #
 #
 class MessageEngine():
-    def __init__(self, expression=""):
+    def __init__(self, expression="", messages=None):
         self.source = expression
         self.buffer = None
-        self._tokens = []    # type: List[Tuple[str, int]]
-        self._readings = []  # type: List[Message]
-        self._codes = []     # type: List[Tuple[int, Tuple[Any,...]]]
-        self._curblockstack = [] # type: List[int]
+        self._tokens = []    # type: list[tuple[str, int]]
+        self._readings = []  # type: list[Message]
+        self._curblockstack = [] # type: list[int]
+        self._msgs = messages or []
         self._lastdone = ""  # 最後に完成したメッセージの文字列
         
     def get_expression(self) -> str:
         """ コード文字列を返す """
         return self.source
 
-    def read_token(self, source) -> Generator[Tuple[str, int], None, None]:
+    def read_token(self, source):
         """ 
         入力文字列をトークンへと変換する 
         Params:
@@ -655,8 +760,17 @@ class MessageEngine():
                 return None
             return self._readings[-1]
 
-    # 構文を組み立てる
-    def build_message(self, reading, token: str, tokentype: int) -> Tuple: # (int, Any...)
+    # 
+    def build_message(self, reading, token: str, tokentype: int):
+        """
+        構文を組み立てる
+        Params:
+            reading(Optional[Message]): 読んでいる途中のメッセージオブジェクト
+            token(str): 文字列
+            tokentype(int): 文字列の意味(TOKEN_XXX)
+        Returns:
+            tuple[int, Any...]: 還元された命令コードと任意個の引数
+        """
         tokenbits = 0
 
         #
@@ -754,10 +868,6 @@ class MessageEngine():
 
                 return new_block_bits(memberid)
                 
-            elif objid[0].isupper(): 
-                # 大文字なら型とみなす
-                tokenbits |= TERM_OBJ_REF_TYPENAME
-            
             elif objid.isdigit():
                 # 数値名称のオブジェクト
                 objid = str(int(objid)) # 数値表現を正規化
@@ -821,29 +931,34 @@ class MessageEngine():
         
         raise BadExpressionError("Could not parse")
 
-    # 構文木を組みたてつつ、完成したところからどんどん実行
-    def reduce_step(self, code, values, context) -> Generator[Message, None, None]:
+    def reduce_step(self, code, values, evalcontext):
+        """
+        構文木を組みたてつつ、完成したところからどんどん実行
+        Params:
+            code(int): 命令コード
+            values(Tuple[Any...]): 命令の任意個の引数
+            evalcontext(EvalContext):
+        Yields:
+            Message:
+        """
         astcode = code & TERM_AST_MASK
         astinstr = code & TERM_INSTR_MASK
         objcode = code & TERM_OBJ_MASK
 
         # 文字列や値をオブジェクトに変換
-        objs: Tuple[Any,...] = () #
+        objs = () 
+        context = evalcontext.context
 
         obj = None
         if objcode == TERM_OBJ_REF_NAME:
-            obj = select_object(context, name=values[0])
-
-        elif objcode == TERM_OBJ_REF_TYPENAME:
-            obj = select_object(context, typename=values[0])
+            obj = ObjectRef(values[0])
 
         elif objcode == TERM_OBJ_STRING:
             obj = context.new_object(values[0], type="Str")
 
         elif objcode == TERM_OBJ_TYPE:
             typeexpr = values[0]
-            tt = select_type(context, typeexpr)
-            obj = context.get_type("Type").new_object(tt)
+            obj = select_type(context, typeexpr)
 
         elif objcode == TERM_OBJ_SPECIFIED_TYPE:
             val = values[0]
@@ -871,11 +986,12 @@ class MessageEngine():
                 obj = selector
 
         elif objcode == TERM_OBJ_LAMBDA_ARG:
-            obj = select_lambda_subject(context)
+            obj = SubjectRef()
 
         elif objcode == TERM_OBJ_LAMBDA_ARG_MEMBER:
-            reciever = select_lambda_subject(context)
-            selector = select_method(values[0], reciever.type, reciever=reciever.value)
+            reciever = SubjectRef()
+            value = reciever.pick_object(evalcontext)
+            selector = select_method(values[0], value.type, reciever=value.value)
             objs = (reciever, selector)
 
         elif objcode == TERM_OBJ_REF_ROOT_MEMBER:
@@ -883,9 +999,6 @@ class MessageEngine():
             reciever = rt.new_object(rt.value_type(context))
             selector = select_method(values[0], reciever.type, reciever=reciever.value)
             objs = (reciever, selector)
-
-        elif objcode == TERM_OBJ_CONSTANT:
-            obj = select_constant(context, values[0])
 
         elif objcode == TERM_OBJ_NOTHING:
             pass
@@ -901,8 +1014,8 @@ class MessageEngine():
 
         elif astcode == TERM_LAST_BLOCK_SELECTOR:
             reciever = self._readings[-1].reciever
-            if isinstance(reciever, ResultStackTopRef):
-                reciever = reciever.pick_object(context)
+            if isinstance(reciever, BasicRef):
+                reciever = reciever.pick_object(evalcontext)
             selector = select_method(objs[0], reciever.type, reciever=reciever.value)
             self._readings[-1].set_selector(selector)
 
@@ -910,12 +1023,12 @@ class MessageEngine():
             self._readings[-1].add_arg(objs[0])
 
         elif astcode == TERM_NEW_BLOCK_AS_LAST_RECIEVER:
-            self._readings[-1].set_reciever(ResultStackTopRef())
+            self._readings[-1].set_reciever(ResultStackRef())
             new_msg = Message(*objs)
             self._readings.append(new_msg)
 
         elif astcode == TERM_NEW_BLOCK_AS_LAST_ARG:
-            self._readings[-1].add_arg(ResultStackTopRef())
+            self._readings[-1].add_arg(ResultStackRef())
             new_msg = Message(*objs)
             self._readings.append(new_msg)
 
@@ -928,9 +1041,9 @@ class MessageEngine():
             self._readings.append(new_msg)
 
         elif astcode == TERM_NEW_BLOCK_SELECTOR:
-            resultref = ResultStackTopRef()
-            reciever = resultref.pick_object(context) # ローカルオブジェクトを一つ消費
-            selector = select_method(objs[0], reciever.type, reciever=reciever.value)
+            reciever = ResultStackRef()
+            value = reciever.pick_object(evalcontext) # ローカルオブジェクトを一つ消費
+            selector = select_method(objs[0], value.type, reciever=value.value)
             new_msg = Message(reciever, selector)
             self._readings.append(new_msg)
         
@@ -945,26 +1058,12 @@ class MessageEngine():
         if astinstr & TERM_END_LAST_BLOCK:
             if self._readings:
                 msg = self._readings[-1]
-                if not msg.is_reciever_specified():
-                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexpr()))
-                if not msg.is_selector_specified():
-                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexpr()))
-                if not msg.is_min_arg_specified():
-                    spec = msg.get_next_parameter_spec()
-                    raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), msg.get_method_syntax(context)))
-                msg.end_keyword_args()
+                msg.conclude(context)
                 self._curblockstack.pop()
 
         if astinstr & TERM_END_ALL_BLOCK:
             for msg in self._readings:
-                if not msg.is_reciever_specified():
-                    raise BadExpressionError("レシーバがありません：{}".format(msg.sexpr()))
-                if not msg.is_selector_specified():
-                    raise BadExpressionError("セレクタがありません：{}".format(msg.sexpr()))
-                if not msg.is_min_arg_specified():
-                    spec = msg.get_next_parameter_spec()
-                    raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), msg.get_method_syntax(context)))
-                msg.end_keyword_args()
+                msg.conclude(context)
             self._curblockstack.clear()
         
         if astinstr & TERM_DISCARD_LAST_BLOCK_MESSAGE:
@@ -988,79 +1087,69 @@ class MessageEngine():
         if completed>0:
             del self._readings[-completed:]
 
-    # トークン解析のキャッシュを参照する
-    def tokenize(self, source) -> Generator[Tuple[str, int], None, None]:
-        tokens = []
-        if not self._tokens:
-            for token, tokentype in self.read_token(source):
-                tokens.append((token, tokentype))
-                yield token, tokentype
-            self._tokens = tokens
-        else:
-            yield from self._tokens
+    def produce_message_1st(self, evalcontext):
+        """ コードから構文を組み立てつつ随時実行 """
+        self._msgs = []
+        for token, tokentype in self.read_token(self.source):
+            reading = self.current_reading_message()
+            code, *values = self.build_message(reading, token, tokentype)
+            if code is None:
+                break
 
-    def runner(self, context):
+            evalcontext.context.add_log(LOG_MESSAGE_CODE, ConstantLog(code), *values)
+
+            for msg in self.reduce_step(code, values, evalcontext):
+                yield msg
+                self._msgs.append(msg)
+                self._lastdone = ""
+    
+    def produce_message_cached(self, _evalcontext):
+        """ キャッシュされたメッセージをクリアして返す """
+        for msg in self._msgs:
+            msg.reset_ref()
+            yield msg
+
+    def runner(self, context, cache=False):
         """
-        メッセージを実行するジェネレータ。
+        メッセージをコンパイルしつつ実行するジェネレータ。
         Yields:
             Message: 実行直前のメッセージ
-        """   
-        # コードから構文を組み立てつつ随時実行
-        if not self._codes:
-            def build_run_codes():
-                for token, tokentype in self.tokenize(self.source):
-                    reading = self.current_reading_message()
-                    code, *values = self.build_message(reading, token, tokentype)
-                    yield (code, values)
+        """                    
+        if cache and self._msgs:
+            produce_message = self.produce_message_cached
         else:
-            # キャッシュを利用する
-            def build_run_codes():
-                for code, values in self._codes:
-                    yield (code, values)
-                    
+            produce_message = self.produce_message_1st
+
         context.add_log(LOG_MESSAGE_BEGIN, self)
 
-        coderuniter = build_run_codes()
-        codes = []
-        while True:
-            try:
-                code, values = next(coderuniter, (None, None))
-                if code is None:
-                    break
+        evalcxt = EvalContext(context)
+        self._lastevalcxt = evalcxt
+        try:
+            for msg in produce_message(evalcxt):
+                yield msg
 
-                context.add_log(LOG_MESSAGE_CODE, ConstantLog(code), *values)
+                result = msg.eval(evalcxt)
 
-                for msg in self.reduce_step(code, values, context):
-                    yield msg
+                # 返り値をスタックに乗せる
+                evalcxt.locals.push_local_object(result)
+                if context.is_failed(): # エラーが発生したら実行を中断する
+                    return
 
-                    result = msg.eval(context)
-
-                    # 返り値をスタックに乗せる
-                    context.push_local_object(result)
-                    if context.is_failed(): # エラーが発生したら実行を中断する
-                        return
-                        
-                    self._lastdone = ""
-
-            except Exception as e:
-                # メッセージ実行以外の場所でエラーが起きた
-                err = InternalMessageError(e,self) # コード情報を付加し、トレース情報を引き継ぐ
-                context.push_local_object(context.new_invocation_error_object(err)) # スタックに乗せる
-                context.push_extra_exception(err)
-                return
-
-            codes.append((code, values))
+        except Exception as e:
+            # メッセージ実行以外の場所でエラーが起きた
+            err = InternalMessageError(e,self) # コード情報を付加し、トレース情報を引き継ぐ
+            evalcxt.locals.push_local_object(context.new_invocation_error_object(err)) # スタックに乗せる
+            context.push_extra_exception(err)
+            return
 
         context.add_log(LOG_MESSAGE_END)
-
-        self._codes = codes # type: ignore
     
     def get_last_done_expression(self):
         return self._lastdone.strip()
     
-    def finish(self, context, *, raiseerror=False) -> Object:
+    def finish(self, locals, *, raiseerror=False) -> Object:
         """ 結果を取得し、スタックをクリアする """
-        returns = context.clear_local_objects() # 返り値はローカルスタックに置かれている
+        returns = self._lastevalcxt.locals.clear_local_objects() # 返り値はローカルスタックに置かれている
         if not returns:
             raise BadExpressionError("At least 1 result must be returned, but none on stack")
         ret = returns[-1]
@@ -1077,13 +1166,16 @@ class MessageEngine():
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         return subcontext
     
-    def run(self, context, *, raiseerror=False) -> Object:
+    #
+    #
+    #
+    def run(self, context, *, raiseerror=False, runner=False) -> Object:
         """ 現在のコンテキストでメッセージを実行 """
-        for _ in self.runner(context):
+        for _ in self.runner(context, runner):
             pass
         return self.finish(context, raiseerror=raiseerror)
     
-    def run_function(self, subject, context, *, raiseerror=False) -> Object:
+    def run_function(self, subject, context, *, raiseerror=False, runner=False) -> Object:
         """ メッセージを実行 """
         if subject is not None:
             # 主題オブジェクトを更新した派生コンテキスト
@@ -1091,14 +1183,14 @@ class MessageEngine():
         else:
             # コンテキストを引き継ぐ
             subcontext = context 
-        for _ in self.runner(subcontext):
+        for _ in self.runner(subcontext, runner):
             pass
         return self.finish(subcontext, raiseerror=raiseerror)
 
-    def run_function_step(self, subject, context, *, raiseerror=False):
+    def run_function_step(self, subject, context, *, raiseerror=False, runner=False):
         """ 実行するたびにメッセージを返す """
         subcontext = self.start_subcontext(subject, context)
-        for step in self.runner(subcontext):
+        for step in self.runner(subcontext, runner):
             expr = self.get_last_done_expression()
             if expr:
                 yield expr  # Strを返す
@@ -1158,9 +1250,10 @@ def _view_bitflag(prefix, code):
 #
 #
 class MessageExpression():
-    def __init__(self, expression, typeconv):
+    def __init__(self, expression, typeconv, compile=True):
         self.f = MessageEngine(expression)
         self.typeconv = typeconv
+        self.compile = compile
     
     def get_expression(self) -> str:
         return self.f.get_expression()
@@ -1168,11 +1261,11 @@ class MessageExpression():
     def get_type_conversion(self):
         return self.typeconv
     
-    def run_function(self, *args, **kwargs):
-        return self.f.run_function(*args, **kwargs)
+    def run_function(self, subject, context, **kwargs):
+        return self.f.run_function(subject, context, runner=self.compile, **kwargs)
     
-    def run_function_step(self, *args, **kwargs):
-        return self.f.run_function_step(*args, **kwargs)
+    def run_function_step(self, subject, context, **kwargs):
+        return self.f.run_function_step(subject, context, runner=self.compile, **kwargs)
 
 
 #
@@ -1198,7 +1291,8 @@ class MemberGetExpression():
         message = Message(subject, inv)
         subcontext.add_log(LOG_MESSAGE_BEGIN, message)
         
-        result = message.eval(subcontext)
+        evalcontext = EvalContext(subcontext)
+        result = message.eval(evalcontext)
         context.add_log(LOG_RUN_FUNCTION, subcontext)
         
         return result

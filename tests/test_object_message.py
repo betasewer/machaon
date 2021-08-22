@@ -292,6 +292,21 @@ def test_message_reenter():
     assert r.value == 105
 
 
+def test_constructed_reenter():
+    context = test_context()
+    func = MessageEngine("210 / @ * 100")
+
+    # 1st
+    r = func.run_function(context.new_object(7), context, runner=True)
+    assert r.value == 3000
+    # 2nd (constructed)
+    r = func.run_function(context.new_object(5), context, runner=True)
+    assert r.value == 4200
+    # 3rd (constructed)
+    r = func.run_function(context.new_object(2), context, runner=True)
+    assert r.value == 10500
+
+
 #
 def test_message_block():
     context = test_context()

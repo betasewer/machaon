@@ -216,7 +216,6 @@ class InvocationContext:
         self.type_module: TypeModule = type_module
         self.input_objects: ObjectCollection = input_objects  # 外部のオブジェクト参照
         self.subject_object: Union[None, Object, Dict[str, Object]] = subject       # 無名関数の引数とするオブジェクト
-        self.local_objects: List[Object] = []                                       # メソッドの返り値を置いておく
         self.spirit = spirit
         self.invocations: List[InvocationEntry] = []
         self._last_exception = None
@@ -237,25 +236,6 @@ class InvocationContext:
             spirit=self.spirit,
             subject=subject
         )
-
-    # 
-    def push_local_object(self, obj: Object):
-        self.local_objects.append(obj)
-    
-    def top_local_object(self) -> Optional[Object]:
-        if not self.local_objects:
-            return None
-        return self.local_objects[-1]
-
-    def pop_local_object(self):
-        if not self.local_objects:
-            return
-        self.local_objects.pop()
-
-    def clear_local_objects(self) -> List[Object]:
-        objs = self.local_objects
-        self.local_objects = []
-        return objs
 
     #
     def get_object(self, name) -> Optional[Object]:
@@ -665,7 +645,6 @@ class BasicInvocation():
 
     def __init__(self, modifier):
         self.modifier = modifier
-        self.result_typehint = None
     
     def display(self):
         raise NotImplementedError()
@@ -695,12 +674,6 @@ class BasicInvocation():
         if not m and straight:
             m.append("straight")
         return " ".join(m)
-    
-    def set_result_typehint(self, typename: str):
-        self.result_typehint = typename
-        
-    def get_result_typehint(self):
-        return self.result_typehint
     
     def resolve_object_value(self, obj, spec=None):
         if spec and spec.is_object():

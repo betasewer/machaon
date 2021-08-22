@@ -12,7 +12,7 @@ from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, U
 
 #from machaon.action import ActionInvocation
 from machaon.core.object import Object, ObjectCollection
-from machaon.core.message import MessageEngine, InternalMessageError, select_constant
+from machaon.core.message import MessageEngine, InternalMessageError
 from machaon.core.invocation import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
 from machaon.core.symbol import full_qualified_name
