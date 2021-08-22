@@ -537,7 +537,7 @@ class InvocationContext:
         for i, idx in enumerate(indices):
             submessages = [x for x in logs if x[0] == LOG_RUN_FUNCTION]
             if idx<0 or idx>= len(submessages):
-                raise IndexError()
+                raise IndexError("'{}'に対応する子コンテキストはありません".format(index))
             subcxt = submessages[idx][1]
             # 次のレベルへ
             logs = subcxt._log 
@@ -578,10 +578,10 @@ class InvocationContext:
         if isinstance(value, int):
             proc = context.root.find_process(value)
             if proc is None:
-                raise ValueError("プロセスが存在しません")
+                raise ValueError("プロセス'{}'は存在しません".format(value))
             cxt = proc.get_last_invocation_context()
             if cxt is None:
-                raise ValueError("プロセスにコンテキストが紐づいていません")
+                raise ValueError("プロセス'{}'にコンテキストが紐づいていません".format(value))
             return cxt
         elif isinstance(value, str):
             procindex, sep, sublevel = value.partition("-")
