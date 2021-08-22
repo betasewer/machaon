@@ -277,7 +277,7 @@ class Method():
             raise UnloadedMethod(self.name)
         cnt = 0
         for p in self.params:
-            if not p.is_required():
+            if not p.is_required() or p.is_variable():
                 break
             cnt += 1
         if self.flags & METHOD_HAS_RECIEVER_PARAM:
@@ -539,14 +539,13 @@ class Method():
             ps = ""
             if p.is_required():
                 ps = p.name
-            elif p.is_variable():
-                ps = "*" + p.name
-            elif not p.is_required():
+            else:
                 if fully:
                     ps = "?{}={}".format(p.name, repr(p.default))
                 else:
                     ps = "?{}".format(p.name)
-
+            if p.is_variable():
+                ps = "*" + p.name
             params.append(ps)
 
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:

@@ -4,6 +4,7 @@ import datetime
 from machaon.core.type import BadTypeDeclaration, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import full_qualified_name
+from machaon.core.message import enum_selectable_attributes
 
 
 # ----------------------------------------------------------
@@ -157,11 +158,15 @@ class AnyType():
         Returns:
             Sheet[ObjectCollection]: (name, type, value)
         """
-        return [{
-            "name" : k,
-            "type" : full_qualified_name(type(v)),
-            "value" : str(v),
-        } for (k,v) in vars(v).items()]
+        items = []
+        for name in enum_selectable_attributes(v):
+            value = getattr(v, name, None)
+            items.append({
+                "name" : name,
+                "type" : full_qualified_name(type(value)),
+                "value" : str(value),
+            })
+        return items
     
     def pick(self, v, name):
         """ @method alias-name [#]
