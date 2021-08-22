@@ -30,18 +30,13 @@ SIGIL_ITEM_ITSELF = "@"
 #
 #
 class BasicDataColumn():
-    def __init__(self, typeconv=None):
-        self._conv = typeconv
-    
     def get_type_conversion(self):
-        return self._conv
-    
-    def set_type_conversion(self, conversion):
-        self._conv = conversion
+        raise NotImplementedError()
     
     def convert(self, context, object):
-        if self._conv:
-            return context.new_object(object.value, conversion=self._conv)
+        conv = self.get_type_conversion()
+        if conv:
+            return context.new_object(object.value, conversion=conv)
         else:
             return object
 
@@ -62,8 +57,7 @@ class DataMessageColumn(BasicDataColumn):
     """
     メッセージの返す値
     """
-    def __init__(self, message, conversion=None, *, name=None):
-        super().__init__(conversion)
+    def __init__(self, message, *, name=None):
         self._fn = message
         self._name = name
     
@@ -87,9 +81,12 @@ class DataItemItselfColumn(BasicDataColumn):
     """
     アイテムそのものを返す
     """
-    def __init__(self,conversion=None):
-        super().__init__(conversion)
+    def __init__(self, conversion=None):
+        self._conv = conversion
 
+    def get_type_conversion(self):
+        return self._conv
+    
     def get_name(self):
         return "@"
     

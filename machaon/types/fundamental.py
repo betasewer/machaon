@@ -218,8 +218,10 @@ class NoneType():
 class FunctionType():
     def constructor(self, _context, s):
         """ @meta """
-        from machaon.core.message import MessageEngine
-        return MessageEngine(s)
+        from machaon.core.message import parse_function
+        f = parse_function(s)
+        f.takelog(False)
+        return f
 
     def stringify(self, f):
         """ @meta """
@@ -238,16 +240,12 @@ class FunctionType():
         """
         r = f.run_function(subject, context, raiseerror=True)
         return r
-
-    def eval(self, f, context, _app, subject=None):
-        """ @task context
-        関数を実行する。発生したエラーは返り値で返す。
-        Params:
-            subject(Object): *引数
-        Returns:
-            Any: 返り値
+    
+    def takelog(self, f):
+        """ @method
+        ログをとるフラグをオンにする。
         """
-        return f.run_function(subject, context, raiseerror=False)
+        f.takelog()
 
 
 class ContextBoundFunction():
@@ -696,7 +694,7 @@ typedef.Function( # Message
     """
     1引数をとるメッセージ。
     """,
-    value_type="machaon.core.message.MessageEngine",
+    value_type="machaon.core.message.MessageExpression",
     describer="machaon.types.fundamental.FunctionType",
 )
 typedef.ContextBoundFunction(

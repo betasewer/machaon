@@ -204,8 +204,8 @@ class Message:
         def put(item):
             if isinstance(item, Object):
                 exprs.append("<{} {}>".format(item.get_typename(), item.value_dstr()))
-            elif isinstance(item, ResultStackRef):
-                exprs.append("<#StackRef: {}>".format(item.get_lastvalue()))
+            elif isinstance(item, BasicRef):
+                exprs.append("<#Ref: {}>".format(item.get_lastvalue()))
             else:
                 exprs.append(str(item))
 
@@ -648,6 +648,13 @@ class MessageTokenBuffer():
         self.quote_end = None
         return True
 
+# ログ関数
+def _context_dolog(context, *args, **kwargs):
+    context.add_log(*args, **kwargs)
+
+def _context_nolog(*a, **kw):
+    pass
+
 #
 #
 #
@@ -660,10 +667,18 @@ class MessageEngine():
         self._curblockstack = [] # type: list[int]
         self._msgs = messages or []
         self._lastdone = ""  # 最後に完成したメッセージの文字列
+        self._lastevalcxt = None
+        self._log = _context_dolog
         
     def get_expression(self) -> str:
         """ コード文字列を返す """
         return self.source
+    
+    def takelog(self, on=True):
+        if on:
+            self._log = _context_dolog
+        else:
+            self._log = _context_nolog
 
     def read_token(self, source):
         """ 
@@ -1096,7 +1111,7 @@ class MessageEngine():
             if code is None:
                 break
 
-            evalcontext.context.add_log(LOG_MESSAGE_CODE, ConstantLog(code), *values)
+            self._log(evalcontext.context, LOG_MESSAGE_CODE, ConstantLog(code), *values)
 
             for msg in self.reduce_step(code, values, evalcontext):
                 yield msg
@@ -1120,7 +1135,7 @@ class MessageEngine():
         else:
             produce_message = self.produce_message_1st
 
-        context.add_log(LOG_MESSAGE_BEGIN, self)
+        self._log(context, LOG_MESSAGE_BEGIN, self)
 
         evalcxt = EvalContext(context)
         self._lastevalcxt = evalcxt
@@ -1142,7 +1157,7 @@ class MessageEngine():
             context.push_extra_exception(err)
             return
 
-        context.add_log(LOG_MESSAGE_END)
+        self._log(context, LOG_MESSAGE_END)
     
     def get_last_done_expression(self):
         return self._lastdone.strip()
@@ -1163,7 +1178,7 @@ class MessageEngine():
     def start_subcontext(self, subject, context):
         """ 入れ子のコンテキストを開始する """
         subcontext = context.inherit(subject) # コンテキストが入れ子になる
-        context.add_log(LOG_RUN_FUNCTION, subcontext)
+        self._log(context, LOG_RUN_FUNCTION, subcontext)
         return subcontext
     
     #
@@ -1200,6 +1215,7 @@ class MessageEngine():
         if expr:
             yield expr  # Strを返す：正常実行時は文字列は残っていないはずだが
         yield self.finish(subcontext, raiseerror=raiseerror) # Objectを返す
+    
 
 #
 # ログ表示用に定数名を出力する
@@ -1258,6 +1274,9 @@ class MessageExpression():
     def get_expression(self) -> str:
         return self.f.get_expression()
     
+    def takelog(self, on=True):
+        self.f.takelog(on)
+
     def get_type_conversion(self):
         return self.typeconv
     
@@ -1276,9 +1295,17 @@ class MemberGetExpression():
     def __init__(self, name, typeconv):
         self.name = name
         self.typeconv = typeconv
+        self._log = None
+        self.takelog(True)
         
     def get_expression(self) -> str:
         return self.name
+    
+    def takelog(self, on=True):
+        if on:
+            self._log = _context_dolog
+        else:
+            self._log = _context_nolog
     
     def get_type_conversion(self):
         return self.typeconv
@@ -1289,11 +1316,11 @@ class MemberGetExpression():
         
         inv = select_method(self.name, subject.type, reciever=subject.value)
         message = Message(subject, inv)
-        subcontext.add_log(LOG_MESSAGE_BEGIN, message)
+        self._log(subcontext, LOG_MESSAGE_BEGIN, message)
         
         evalcontext = EvalContext(subcontext)
         result = message.eval(evalcontext)
-        context.add_log(LOG_RUN_FUNCTION, subcontext)
+        self._log(context, LOG_RUN_FUNCTION, subcontext)
         
         return result
 
