@@ -28,9 +28,9 @@ def test_newobject_conversion():
     assert t.get_typename() == "Tuple"
     assert t.value.count() == 3
     
-    t = context.new_object(["A","BB","CCC"], conversion="Sheet[str]: (=, length)")
+    t = context.new_object(["A","BB","CCC"], conversion="Sheet[str]: (@, length)")
     assert t.get_typename() == "Sheet"
     assert t.value.count() == 3
-    assert [x.value for x in t.value.column_values(context, "=")] == ["A","BB","CCC"]
+    assert [x.value for x in t.value.column_values(context, "@")] == ["A","BB","CCC"]
     assert [x.value for x in t.value.column_values(context, "length")] == [1,2,3]
 
