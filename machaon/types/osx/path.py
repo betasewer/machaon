@@ -61,10 +61,11 @@ def has_hidden_attribute(path):
     """
     隠し属性がついているファイルか。
     """
-    import importlib
-    Foundation = importlib.import_module('Foundation')    
-    if Foundation is None:
+    import importlib.util
+    spec = importlib.util.find_spec("Foundation")
+    if spec is None:
         return False
+    Foundation = importlib.util.module_from_spec(spec)
     url = Foundation.NSURL.fileURLWithPath_(path)
     result = url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)
     return result[1]
