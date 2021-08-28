@@ -86,6 +86,6 @@ def test_function():
     fntype = fundamental_type.get("Function")
     fnpower = fntype.construct(None, "@ * @")
     assert fnpower
-    from machaon.core.message import MessageEngine
-    assert isinstance(fnpower, MessageEngine)
+    from machaon.core.message import MessageExpression
+    assert isinstance(fnpower, MessageExpression)
 

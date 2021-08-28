@@ -18,6 +18,7 @@ METHOD_SPIRIT_BOUND = 0x0002
 METHOD_TASK = 0x0004 | METHOD_SPIRIT_BOUND
 METHOD_TYPE_BOUND = 0x0010
 METHOD_CONSUME_TRAILING_PARAMS = 0x0020
+METHOD_EXTERNAL_TARGET = 0x0040
 
 METHOD_LOADED = 0x0100
 METHOD_DECL_LOADED = 0x0200
@@ -65,17 +66,17 @@ class Method():
     """
     メソッド定義。
     """
-    def __init__(self, name = None, target = None, doc = "", flags = 0):
+    def __init__(self, name = None, target = None, doc = "", flags = 0, mixin = None):
         self.name: str = name
         self.doc: str = doc
 
         self.target: str = target
-        self._action = None
-        
+        self.mixin: int = mixin
         self.flags = flags
 
-        self.params: List[MethodParameter] = []
-        self.result: Optional[MethodResult] = None
+        self._action = None
+        self.params = []    # List[MethodParameter]
+        self.result = None  # Optional[MethodResult]
 
     def check_valid(self):
         if self.name is None:
@@ -158,7 +159,35 @@ class Method():
     def has_reciever_param(self):
         """ レシーバオブジェクトの引数情報があるか """
         return (self.flags & METHOD_HAS_RECIEVER_PARAM) > 0
-
+    
+    def get_describer(self, this_type):
+        """ @method
+        定義クラスを得る。
+        Params:
+            this_type(Type):
+        Returns:
+            Any:
+        """
+        return this_type.get_describer(self.mixin)
+        
+    def get_describer_qualname(self, this_type):
+        """ @method
+        定義クラスを得る。
+        Params:
+            this_type(Type):
+        Returns:
+            Str:
+        """
+        return this_type.get_describer_qualname(self.mixin)
+    
+    def make_type_instance(self, this_type):
+        """ 型を拘束する場合の実行時のインスタンスを得る """
+        describer = self.get_describer(this_type)
+        if isinstance(describer, type):
+            return describer()
+        else:
+            return describer
+    
     # 仮引数を追加
     def add_parameter(self,
         name,
@@ -300,18 +329,18 @@ class Method():
         source = None
         while True:
             callobj = None
-            if self.target.startswith("."):
+            if self.flags & METHOD_EXTERNAL_TARGET:
                 # 外部モジュールから定義をロードする
                 loader = attribute_loader(self.target)
                 callobj = loader() # モジュールやメンバが見つからなければ例外が投げられる
                 source = self.target
             else:
                 # クラスに定義されたメソッドが実装となる
-                typefn = this_type.delegate_method(self.target)
+                typefn = this_type.delegate_method(self.target, self.mixin)
                 if typefn is not None:
                     callobj = typefn
                     source = "{}:{}".format(this_type.get_scoped_typename(), self.name)
-                    if this_type.is_methods_type_bound():
+                    if this_type.is_methods_type_bound() or self.is_mixin():
                         self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
             
             # アクションオブジェクトの初期化処理
@@ -347,6 +376,9 @@ class Method():
     def is_loaded(self):
         """ ロードされているか。 """
         return self._action is not None
+    
+    def is_mixin(self):
+        return self.mixin is not None
 
     def parse_syntax_from_docstring(self, doc: str, function: Callable = None):
         """ 
@@ -746,14 +778,20 @@ class MetaMethod():
         return (self.flags & METHOD_SPIRIT_BOUND) > 0
 
 
-def make_method_prototype(attr, attrname) -> Tuple[Optional[Method], List[str]]:
-    """ ドキュメントを解析して空のメソッドオブジェクトを構築 """ 
+def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
+    """ 
+    ドキュメントを解析して空のメソッドオブジェクトを構築 
+    Params:
+        attr(Any): ドキュメントの付された関数オブジェクト
+        attrname(str): 属性名
+        *mixinkey(str): mixinクラスへの参照名
+    """ 
     decl = parse_doc_declaration(attr, ("method", "task"))
     if decl is None:
         return None, []
 
     mname = decl.name or attrname
-    method = Method(name=normalize_method_name(mname), target=attrname)
+    method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey)
     method.load_declaration_properties(decl.props)
     return method, decl.aliases
 

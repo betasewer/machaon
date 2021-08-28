@@ -746,7 +746,7 @@ class TypeMethodInvocation(BasicInvocation):
         args = []
         if self.method.is_type_bound():
             # 型オブジェクトを渡す
-            args.append(self.type.get_describer_instance())
+            args.append(self.method.make_type_instance(self.type))
 
         # インスタンスを渡す
         selfvalue = self.resolve_object_value(selfobj, self.get_parameter_spec(-1))

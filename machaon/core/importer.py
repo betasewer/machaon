@@ -60,8 +60,8 @@ class PyBasicModuleLoader:
     
     def load_source(self):
         p = self.load_filepath()
-        if not os.path.isfile(p):
-            raise ValueError("ファイルではないのでソースコードを取得できません")
+        if p is None:
+            return None
         with open(p, "r", encoding="utf-8") as fi:
             return fi.read()
     
@@ -87,6 +87,8 @@ class PyBasicModuleLoader:
         """
         if doc is None:
             source = self.load_source()
+            if source is None:
+                return
             disp = str(self)
             tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
             doc = ast.get_docstring(tree)
@@ -199,14 +201,9 @@ class PyModuleLoader(PyBasicModuleLoader):
         spec = importlib.util.find_spec(self.module_name)
         if spec is None:
             raise ValueError("モジュールが見つかりません")
-        if not spec.has_location:
-            raise ValueError("モジュールの場所が参照不能です")
+        if spec.has_location is None:
+            return None
         return spec.origin
-    
-    def load_source(self):
-        p = self.load_filepath()
-        with open(p, "r", encoding="utf-8") as fi:
-            return fi.read()
     
     def __str__(self) -> str:
         return self.module_name

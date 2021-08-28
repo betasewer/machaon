@@ -55,11 +55,12 @@ class UnsupportedMethod(Exception):
 TYPE_ANYTYPE      = 0x01
 TYPE_OBJCOLTYPE   = 0x02
 TYPE_NONETYPE     = 0x04
-TYPE_TYPETRAIT_DESCRIBER = 0x100
-TYPE_VALUETYPE_DESCRIBER = 0x200
-TYPE_USE_INSTANCE_METHOD = 0x400
-TYPE_LOADED = 0x1000
-TYPE_DELAY_LOAD_METHODS = 0x2000
+TYPE_TYPETRAIT_DESCRIBER    = 0x0100
+TYPE_VALUETYPE_DESCRIBER    = 0x0200
+TYPE_USE_INSTANCE_METHOD    = 0x0400
+TYPE_MIXIN                  = 0x0800
+TYPE_LOADED                 = 0x1000
+TYPE_DELAY_LOAD_METHODS     = 0x2000
 
 #
 #
@@ -75,6 +76,7 @@ class Type():
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
         self._metamethods: Dict[str, MetaMethod] = {}
+        self._mixin = []
     
     @property
     def fulltypename(self):
@@ -110,20 +112,18 @@ class Type():
         else:
             return self.typename
     
-    def get_describer(self):
-        return self._describer
-    
-    def get_describer_qualname(self):
-        if isinstance(self._describer, type):
-            return full_qualified_name(self._describer)
-        else:
-            return str(self._describer)
-
-    def get_describer_instance(self):
-        if isinstance(self._describer, type):
-            return self._describer()
+    def get_describer(self, mixin=None):
+        if mixin is not None:
+            return self._mixin[mixin]
         else:
             return self._describer
+    
+    def get_describer_qualname(self, mixin=None):
+        describer = self.get_describer(mixin)
+        if isinstance(describer, type):
+            return full_qualified_name(describer)
+        else:
+            return str(describer)
 
     def copy(self):
         t = Type()
@@ -273,8 +273,12 @@ class Type():
         self._methods[name] = method
     
     # メソッドの実装を解決する
-    def delegate_method(self, attrname, *, fallback=True):
-        fn = getattr(self._describer, attrname, None)
+    def delegate_method(self, attrname, mixin_index=None, *, fallback=True):
+        if mixin_index is not None:
+            describer = self._mixin[mixin_index]
+        else:
+            describer = self._describer
+        fn = getattr(describer, attrname, None)
         if fn is None:
             if not fallback:
                 raise BadMethodName(attrname, self.typename)
@@ -415,15 +419,31 @@ class Type():
         self.flags |= TYPE_LOADED
 
         return self
+    
+    def mixin_load(self, describer):
+        # mixinクラスを追加する
+        self._mixin.append(describer)
+        index = len(self._mixin)-1
 
-    def load_methods_from_attributes(self, describer):
+        # メソッド属性を列挙する
+        if isinstance(describer, dict):
+            self.load_methods_from_dict(describer, mixinkey=index)
+        else:
+            self.load_methods_from_attributes(describer, mixinkey=index)
+        
+        if hasattr(describer, "describe_object"):
+            # 追加の記述メソッドを呼び出す
+            describer.describe_object(self) # type: ignore
+        
+
+    def load_methods_from_attributes(self, describer, mixinkey=None):
         # クラス属性による記述
         for attrname in dir(describer):
             if attrname.startswith("__"):
                 continue
 
             attr = getattr(describer, attrname)
-            method, aliasnames = make_method_prototype(attr, attrname)
+            method, aliasnames = make_method_prototype(attr, attrname, mixinkey)
             if method is None:
                 continue
 
@@ -444,7 +464,7 @@ class Type():
             meth = meth.new(decl.props)
             self._metamethods[name] = meth
         
-    def load_methods_from_dict(self, describer):
+    def load_methods_from_dict(self, describer, mixinkey=None):
         # 辞書オブジェクトによる記述
         for key, value in describer.items():
             if key == "Typename":
@@ -494,6 +514,7 @@ class TypeDefinition():
         self.bits = bits
         self._decl = None
         self._t = None
+        self.mixin_target = None
     
     def get_scoped_typename(self):
         if self.scope:
@@ -554,6 +575,18 @@ class TypeDefinition():
             delayedload=True
         )
         return self._t
+    
+    def mixin(self, typemodule):
+        """ 既存の型に定義を追加する """
+        target = typemodule.find(self.mixin_target)
+        if target is None:
+            raise ValueError("Mixin対象の型'{}'がモジュールに見つかりません".format(self.mixin_target))
+
+        describer = self.get_describer()
+        target.mixin_load(describer)
+    
+    def is_mixin_type(self):
+        return self.mixin_target is not None
 
     def load_declaration_docstring(self, doc=None):
         """
@@ -571,6 +604,16 @@ class TypeDefinition():
         
         if decl.name:
             self.typename = decl.name
+            
+        # Mixin宣言はあらかじめ読み込む
+        if "mixin" in decl.props:
+            self.bits | TYPE_MIXIN
+            parser = decl.create_parser(("MixinType",))
+            mixin = parser.get_value("MixinType")
+            if mixin is None:
+                raise ValueError("mixin対象をMixinTypeで指定してください")
+            self.mixin_target = mixin
+
         self._decl = decl
         return True
     
@@ -595,8 +638,8 @@ class TypeDefinition():
         if "trait" in decl.props:
             self.bits |= TYPE_TYPETRAIT_DESCRIBER
 
-        sections = decl.create_parser(("ValueType", "MemberAlias",))
-    
+        sections = decl.create_parser(("ValueType", "MemberAlias"))
+
         document = ""
         document += sections.get_string("Document")
         if document:
@@ -803,8 +846,13 @@ class TypeModule():
         if isinstance(t, Type):
             t.describe(typename=typename, value_type=value_type, doc=doc, scope=scope, bits=bits)
             t.load()
-
-        if not delayedload:
+        
+        if isinstance(t, TypeDefinition) and t.is_mixin_type():
+            # Mixin型は直ちにロードが行われる
+            t.mixin(self)
+        
+        elif not delayedload:
+            # 型をデータベースに登録
             key = t.typename
             if key is None:
                 raise ValueError("TypeDefinition typename is not defined")
