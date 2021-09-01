@@ -537,7 +537,7 @@ class tkLauncher(Launcher):
                     self.log.mark_set(value, index)
                 elif key == "image":
                     print("unsupported text element '{}': {}".format(key, value))
-                
+
         self.log.configure(state='disabled')
 
         if self.does_stick_bottom.get():

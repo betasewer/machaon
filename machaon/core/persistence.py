@@ -14,8 +14,6 @@ def get_persistent_path(root, name):
     path = os.path.join(d, *name.split("/"))
     if not os.path.isfile(path):
         path = path + ".txt"
-        if not os.path.isfile(path):
-            raise ValueError("ファイルが見つかりません")
     return path
 
 def enum_persistent_names(root):
@@ -59,15 +57,37 @@ class StoredMessage():
             Str:
         """
         return self.name or "<no-name>"
-            
+    
+    def exists(self):
+        """ @method
+        ファイルパスが存在するか。
+        Returns:
+            bool:
+        """
+        return os.path.isfile(self.path)
+        
     def message(self):
         """ @method
-        メッセージを表示する。
+        メッセージの内容を返す。
         Returns:
             Str:
         """
+        if not self.exists():
+            raise ValueError("ファイルが存在しません")
         f = TextFile(Path(self.path))
         return f.text()
+    
+    def write(self, message):
+        """ @method
+        メッセージを保存する。
+        Params:
+            message(str):
+        """
+        if self.exists():
+            raise ValueError("すでにファイルが存在します")
+        f = TextFile(Path(self.path), encoding="utf-8")
+        with f.write_stream():
+            f.stream.write(message)
         
     def do(self, context, app):
         """ @task context
@@ -93,6 +113,8 @@ class StoredMessage():
         """ @method
         エディタで開く。
         """
+        if not self.exists():
+            raise ValueError("ファイルが存在しません")
         from machaon.types.shellplatform import shellpath
         return shellpath().start_file(self.path)
 

@@ -1,3 +1,5 @@
+import os
+
 from machaon.types.shell import Path
 
 class BasicLoadFile():
@@ -173,6 +175,8 @@ class TextFile(BasicContextFile):
         """
         if self._enc is not None:
             return self._enc
+        if not os.path.isfile(self.pathstr):
+            raise ValueError("パスが存在しないため、文字列エンコーディングの指定が必要です")
         encoding = detect_text_encoding(self.pathstr)
         self._enc = encoding
         return encoding

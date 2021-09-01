@@ -576,9 +576,8 @@ class InvocationContext:
     def constructor(self, context, value):
         """ @meta """
         if isinstance(value, int):
-            proc = context.root.find_process(value)
-            if proc is None:
-                raise ValueError("プロセス'{}'は存在しません".format(value))
+            from machaon.process import Process
+            proc = Process.constructor(Process, context, value)
             cxt = proc.get_last_invocation_context()
             if cxt is None:
                 raise ValueError("プロセス'{}'にコンテキストが紐づいていません".format(value))

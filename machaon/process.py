@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import inspect
+from machaon.core.type import Type
 import os
 import sys
 import threading
@@ -222,6 +223,35 @@ class Process:
         self.last_input = text
         self.event_inputend.set()
     
+    #
+    #
+    #
+    def store(self, context, name):
+        """ @method context
+        フォルダにメッセージを書き出す
+        Params:
+            name(str): メッセージ名
+        """
+        from machaon.core.persistence import StoredMessage
+        m = StoredMessage.constructor(StoredMessage, context, name)
+        message = self.message.get_expression()
+        m.write(message)
+
+    #
+    #
+    #
+    def constructor(self, context, value):
+        """ @meta """
+        if isinstance(value, int):
+            proc = context.root.find_process(value)
+            if proc is None:
+                raise ValueError("プロセス'{}'は存在しません".format(value))
+            return proc
+        elif isinstance(value, str):
+            v = int(value)
+            return Process.constructor(self, context, v)
+        else:
+            raise TypeError(value)
 
 #
 # プロセスの中断指示
