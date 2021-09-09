@@ -38,8 +38,8 @@ class Employee():
 
 def employees_sheet(objectdesk, args, columns):
     datas = [Employee(*a) for a in args]
-    view = Sheet.constructor(Sheet, objectdesk, datas, "Employee", *columns)
-    return view
+    view = objectdesk.new_object(datas, *columns, conversion="Sheet[Employee]")
+    return view.value
 
 @pytest.fixture
 def objectdesk():
@@ -61,8 +61,6 @@ def values(objects):
 #
 def test_column(objectdesk):
     view = employees_sheet(objectdesk, [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")], ["name", "postcode"])
-
-    assert view.get_item_type_conversion() == "Employee"
 
     namecol = view.get_current_columns()[0]
     assert namecol.get_name() == "name"
@@ -287,7 +285,7 @@ def heterovalues():
         123.4,
     ]
     cxt = instant_context()
-    v = Sheet.constructor(Sheet, cxt, values)
+    v = Sheet.constructor(Sheet, cxt, values, None)
     return v
 
 #
@@ -297,6 +295,14 @@ def test_construct():
     assert rooms.get_current_columns()
     assert isinstance(rooms.get_current_columns()[0], DataItemItselfColumn)
     assert rooms.get_current_column_names() == ["@"]
+
+    # 型推定をテスト
+    values = heterovalues()
+    assert values.at(0).get_typename() == "Str"
+    assert values.at(1).get_typename() == "Str"
+    assert values.at(2).get_typename() == "Int"
+    assert values.at(3).get_typename() == "Float"
+
 
 def test_apis():
     rooms, cxt = hotelrooms("Okehazama")
@@ -320,7 +326,7 @@ def test_apis():
 
 def test_list_conversion_construct():
     cxt = instant_context()
-    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str]: (length, @)")
+    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str](length, @)")
     sh = r.value
     assert values(sh.row_values(0)) == [2, "A1"]
     assert values(sh.row_values(1)) == [3, "B2B"]
@@ -352,4 +358,5 @@ def test_string_tables():
         (2, ["31", "62"]),
         (3, ["123.4", "246.8"])
     ]
+
 

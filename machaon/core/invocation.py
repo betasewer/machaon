@@ -3,8 +3,9 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 import inspect
 
 from machaon.core.type import Type, TypeModule
+from machaon.core.typedecl import TypeProxy, parse_type_declaration
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
-from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION, RETURN_SELF, parse_typename_syntax
+from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION
 from machaon.core.symbol import (
     BadTypename,
     normalize_method_target, normalize_method_name, 
@@ -123,24 +124,29 @@ class InvocationEntry():
 
     def result_object(self, context, *, value, spec=None, objectType=None) -> Object:
         """ 返り値をオブジェクトに変換する """
-        rettype = None
-        retspec = None
-        if isinstance(value, Object):
-            rettype = value.type
-            retval = value.value
-            objectType = type(value)
-        else:
-            retval = value
-            objectType = objectType or Object
-            retspec = spec or self.result_spec()
-
+        isobject = isinstance(value, Object)
+        if objectType is None:
+            if isobject:
+                objectType = type(value)
+            else:
+                objectType = Object
+        
         # エラーが発生した
         if self.exception:
             return _new_process_error_object(context, self.exception, objectType)
 
-        # return reciever
-        if retspec and retspec.is_return_self():
-            return objectType(context.get_type("Any"), INVOCATION_RETURN_RECIEVER)
+        if isinstance(value, Object):
+            rettype = value.type
+            retval = value.value
+        else:
+            retval = value
+            retspec = spec or self.result_spec()
+            if retspec is None:
+                raise ValueError("result_spec must be specified as MethodResult instance")
+            rettype = retspec.get_typedecl().instance(context)
+            if retspec.is_return_self():
+                # return reciever 型は無視される
+                return objectType(rettype, INVOCATION_RETURN_RECIEVER) 
 
         # Noneが返された
         if retval is None:
@@ -153,32 +159,18 @@ class InvocationEntry():
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
             retval = not retval
         
-        # 型指定から型を決定する
-        if retspec and not retspec.is_type_unspecified():
-            typename = retspec.get_typename()
-            rettype = context.select_type(typename)
-            if rettype is None:
-                return _new_process_error_object(context, BadTypename(typename), objectType)
-
-        # 型指定がない、型がAny型の場合は、値から推定する
+        # Any型の指定がある場合は、型を値から推定する
         if rettype is None or rettype.is_any():
             deducedtype = context.deduce_type(retval)
             if deducedtype is not None:
                 rettype = deducedtype
-        
-        if rettype is None:
-            rettype = context.get_type("Any") # 推定もできなかった
-        
-        # 返り値型に値が適合しない場合は、暗黙の型変換を行う
-        if not rettype.check_value_type(type(retval)):
-            if isinstance(retspec, Type):
-                retval = rettype.construct(context, retval)
-            elif isinstance(retspec, MethodResult):
-                retval = retspec.convert_object(context, retval, rettype).value
             else:
-                err = ValueError("返り値が型に適合しません '{}' -> '{}'".format(type(retval).__name__, rettype.typename))
-                return _new_process_error_object(context, err, objectType)
-
+                rettype = context.get_type("Any") # 推定もできなかった
+        
+        # 返り値型に値が適合しない場合は、型変換を行う
+        if not rettype.check_value_type(type(retval)):
+            retval = rettype.construct(context, retval)
+        
         return objectType(rettype, retval)
 
     def is_failed(self):
@@ -198,12 +190,13 @@ LOG_MESSAGE_EVAL_END = 4
 LOG_MESSAGE_END = 10
 LOG_RUN_FUNCTION = 11
 
-def instant_return_test(context, value, typename, typeparams=()):
+def instant_return_test(context, value, typename):
     """ メソッド返り値テスト用 """
     from machaon.core.method import MethodResult
     inv = BasicInvocation(0)
     entry = InvocationEntry(inv, None, (), {})
-    return entry.result_object(context, value=value, spec=MethodResult(typename, typeparams=typeparams))
+    decl = parse_type_declaration(typename)
+    return entry.result_object(context, value=value, spec=MethodResult(decl))
 
 #
 #
@@ -270,46 +263,54 @@ class InvocationContext:
         self.subject_object = None
     
     #    
-    def get_type(self, typename, *, scope=None) -> Type:
-        """ 型名を渡し、型定義を取得する """
-        t = self.type_module.get(typename, scope=scope)
-        if t is None:
-            raise BadTypename(typename)
-        return t
-    
-    def select_type(self, typecode, *, scope=None) -> Optional[Type]:
+    def select_type(self, typecode, *, scope=None) -> Optional[TypeProxy]:
         """ 型名を渡し、型定義を取得する。関連するパッケージをロードする """
+        if isinstance(typecode, TypeProxy):
+            return typecode
+        
         if scope is None:
             if isinstance(typecode, str) and SIGIL_SCOPE_RESOLUTION in typecode:
                 typecode, _, scope = typecode.rpartition(SIGIL_SCOPE_RESOLUTION)
-
         if scope:
             # 関連パッケージをロードする
             package = self.root.get_package(scope, fallback=False)
             self.root.load_pkg(package)
         
         t = self.type_module.get(typecode, scope=scope)
+        if t is None:
+            return None
+        return t
+
+    def get_type(self, typename, *, scope=None) -> TypeProxy:
+        """ 型名を渡し、型定義を取得する """
+        t = self.type_module.get(typename, scope=scope)
+        if t is None:
+            raise BadTypename(typename)
         return t
     
-    def define_type(self, typecode, *, scope=None):
-        """ 型を定義する """
-        return self.type_module.define(typecode, scope=scope)
-    
-    def new_temp_type(self, describer: Any) -> Type:
-        """ 新しい型を作成するが、モジュールに登録しない """
-        return Type.from_dict(describer)
-    
-    def deduce_type(self, value: Any) -> Optional[Type]:
+    def deduce_type(self, value: Any) -> Optional[TypeProxy]:
         """ 値から型を推定する """
         if isinstance(value, Object):
             return value.type
         value_type = type(value) 
-        return self.type_module.deduce(value_type)
+        t = self.type_module.deduce(value_type)
+        if t is None:
+            return None
+        return t
+
+    def define_type(self, typecode, *, scope=None) -> Type:
+        """ 型を定義する """
+        return self.type_module.define(typecode, scope=scope)
+
+    def define_temp_type(self, describer: Any) -> Type:
+        """ 新しい型を作成するが、モジュールに登録しない """
+        return Type(describer).load()
     
-    def new_object(self, value: Any, *, type=None, conversion=None) -> Object:
+    def new_object(self, value: Any, *args, type=None, conversion=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 
         Params:
             value(Any): 値; Noneの場合、デフォルトコンストラクタを呼び出す
+            args(Sequence[Any]): 追加のコンストラクタ引数
         KeywordParams:
             type(Any): 型を示す値（型名、型クラス、型インスタンス）
             conversion(str): 値の変換方法を示す文字列
@@ -317,23 +318,16 @@ class InvocationContext:
         if type:
             t = self.select_type(type)
             if t is None:
-                t = self.type_module.define(type) # 無ければ定義して返す 
-            if value is None:
-                defvalue = t.get_value_type()() # デフォルトコンストラクタ
-                return t.new_object(defvalue)
+                t = self.define_type(type) # 無ければ定義して返す 
+            if value is None and not args:
+                convobj = t.construct_obj(self, None) # デフォルトコンストラクタ
             else:
-                convvalue = t.construct(self, value)
-                return t.new_object(convvalue)
+                convobj = t.construct_obj(self, value)
+            return convobj
         elif conversion:
-            if value is None:
-                raise ValueError("Cannot convert None to '{}'".format(conversion))
-            tname, _, doc = conversion.partition(":")
-            typename, doc, typeparams = parse_typename_syntax(tname.strip(), doc.strip())
-            t = self.select_type(typename)
-            if t is None:
-                raise BadTypename(typename)
-            convvalue = t.construct(self, value, *typeparams)
-            return t.new_object(convvalue)
+            typedecl = parse_type_declaration(conversion)
+            tins = typedecl.instance(self, args)
+            return tins.construct_obj(self, value)
         else:
             if isinstance(value, Object):
                 return value
@@ -341,8 +335,7 @@ class InvocationContext:
                 return self.get_type("None").new_object(value)
             valtype = self.deduce_type(value)
             if valtype:
-                convvalue = valtype.construct(self, value)
-                return valtype.new_object(convvalue)
+                return valtype.construct_obj(self, value)
             else:
                 return self.get_type("Any").new_object(value)
     
@@ -477,7 +470,7 @@ class InvocationContext:
         """ @method alias-name [all-invocation]
         呼び出された関数のリスト。
         Returns:
-            Sheet[ObjectCollection]: (message-expression, result)
+            Sheet[ObjectCollection](message-expression, result):
         """ 
         vals = []
         for inv in self.invocations:
@@ -491,7 +484,7 @@ class InvocationContext:
         """ @task alias-name [all-error]
         サブコンテキストも含めたすべてのエラーを表示する。
         Returns:
-            Sheet[ObjectCollection]: (context-id, message-expression, error)
+            Sheet[ObjectCollection](context-id, message-expression, error):
         """
         errors = []
 
@@ -547,7 +540,7 @@ class InvocationContext:
         """ @method alias-name [all-sub-context all-sub]
         サブコンテキストの一覧。
         Returns:
-            Sheet[Context]: (is-failed, message, last-result)
+            Sheet[Context](is-failed, message, last-result):
         """
         rets = []
         submessages = [x for x in self._log if x[0] == LOG_RUN_FUNCTION]
@@ -687,7 +680,7 @@ class BasicInvocation():
         raise NotImplementedError()
     
     def get_result_spec(self):
-        return None
+        return MethodResult() # 値から推定する
 
     def is_task(self):
         return False
@@ -851,9 +844,6 @@ class InstanceMethodInvocation(BasicInvocation):
         method = self.resolve_instance_method(instance)
         return InvocationEntry(self, method, args, {})
     
-    def get_result_spec(self):
-        return MethodResult() # 値から推定する
-
 #
 # グローバルな関数を呼び出す
 #
@@ -926,7 +916,8 @@ class ObjectMemberGetterInvocation(BasicInvocation):
         return None
     
     def get_result_spec(self):
-        return MethodResult(self.typename)
+        decl = parse_type_declaration(self.typename)
+        return MethodResult(decl)
     
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         return None
@@ -1090,7 +1081,8 @@ class TypeConstructorInvocation(BasicInvocation):
         return None
     
     def get_result_spec(self):
-        return MethodResult(self._typename)
+        decl = parse_type_declaration(self._typename)
+        return MethodResult(decl)
 
 
 class Bind1stInvocation(BasicInvocation):

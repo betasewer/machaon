@@ -1,15 +1,18 @@
-from machaon.core.docstring import DocStringParser
-from machaon.core.method import Method
+import pytest
+
+from machaon.core.typedecl import parse_type_declaration
 from machaon.types.fundamental import fundamental_type
+from machaon.core.method import Method
 from machaon.core.invocation import instant_context
 
 class SomeValue:
     """ @type
     適当な値オブジェクト
     """
-    def __init__(self, x, y):
+    def __init__(self, x, y, itemtype=None):
         self.x = x
         self.y = y
+        self.itemtype = itemtype
     
     def perimeter(self):
         """ @method
@@ -29,10 +32,14 @@ class SomeValue:
         self.x = a+b
         self.y = a-b
     
-    def constructor(self, context, value, param1):
-        """ @meta extra-args """
-        p = int(param1)
-        return SomeValue(value, value*p)
+    def constructor(self, context, value, T, param1):
+        """ @meta 
+        Params:
+            int:
+            T(Type):
+            param1(int):
+        """
+        return SomeValue(value, value*param1, T)
     
     def stringify(self):
         """ @meta """
@@ -109,11 +116,70 @@ def test_method_return_self():
 def test_meta_method():
     cxt = instant_context()
     t = fundamental_type.define(SomeValue)
-    v = t.construct(cxt, 3, "2")
+    v = t.instance("2").construct(cxt, 3)
     assert isinstance(v, SomeValue)
     assert v.x == 3
     assert v.y == 6
+    assert v.itemtype is None
 
-    v = t.convert_to_string(SomeValue(1,2))
+    decl = parse_type_declaration("SomeValue[Str](42)")
+    v = decl.instance(cxt).construct(cxt, 11)
+    assert isinstance(v, SomeValue)
+    assert v.x == 11
+    assert v.y == 11 * 42
+    assert v.itemtype is fundamental_type.get("Str")
+
+    v = t.stringify_value(SomeValue(1,2))
     assert v == "(1,2)"
 
+@pytest.mark.xfail
+def test_constructor_typecheck_fail():
+    cxt = instant_context()
+    p = cxt.get_type("Function")
+    p.construct(cxt, 12345) # TypeConversionError
+
+
+#
+def test_load_from_dict():
+    # Dog型を定義
+    cxt = instant_context()
+    Dog = cxt.define_type({
+        "Typename" : "Dog",
+        "name" : ("Returns: Str", lambda x: "gabliel"),
+        "type" : ("Returns: Str", lambda x: "Shiba"),
+        "sex" : ("Returns: Str", lambda x: "male"),
+        "age" : ("Returns: Int", lambda x: 2),
+    })
+    m = Dog.select_method("name")
+    assert m.is_loaded()
+    assert m.get_name() == "name"
+    assert m.get_param_count() == 0
+    assert m.get_required_argument_min() == 0
+    assert m.get_acceptable_argument_max() == 0
+    r = m.get_result()
+    assert r is not None
+    assert r.get_typename() == "Str"
+    assert r.get_typedecl().to_string() == "Str"
+
+
+def test_load_from_docstring():
+    # 終わりのコロンが無い
+    doc = """@method
+    Returns:
+        Int
+    Params:
+        p1 (Float)
+        p2 (Complex)
+    """
+    m = Method()
+    m.parse_syntax_from_docstring(doc)
+    assert m.get_required_argument_min() == 2
+    assert m.get_acceptable_argument_max() == 2
+    assert m.get_param_count() == 2
+    assert m.get_param(0).get_name() == "p1"
+    assert m.get_param(0).get_typename() == "Float"
+    assert m.get_param(1).get_name() == "p2"
+    assert m.get_param(1).get_typename() == "Complex"
+    assert m.get_result() is not None
+    assert m.get_result().get_typename() == "Int"
+    

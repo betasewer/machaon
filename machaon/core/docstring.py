@@ -11,9 +11,11 @@ class DocStringParseError(Exception):
 #
 class DocStringParser():
     def __init__(self, doc, section_names, indented_with_head=True):
+        self.sections = {}
+
         lines = doc.splitlines()
         if not lines:
-            raise DocStringParseError()
+            return
         
         indent = self.detect_indent(lines, indented_with_head)
 
@@ -51,7 +53,6 @@ class DocStringParser():
                 sections[curkey].append(line)
         
         # 最後の改行を落とす
-        self.sections = {}
         for k, ls in sections.items():
             lls = []
             # 前後についている空行を落とす

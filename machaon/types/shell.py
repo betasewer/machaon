@@ -55,7 +55,7 @@ class Path():
         """ @method spirit
         場所の名前のリスト。
         Returns:
-            Sheet[ObjectCollection]: (name, path)
+            Sheet[ObjectCollection](name, path):
         """
         res = []
         for k, v in shellpath().known_paths(spirit.get_root()):
@@ -279,7 +279,7 @@ class Path():
         """ @method [ls]
         ディレクトリに含まれるファイルとサブディレクトリの一覧を返す。
         Returns:
-            Sheet[Path]: (name, filetype, modtime, size)
+            Sheet[Path](name, filetype, modtime, size):
         """
         return [x for x in self.listdirall() if x.exists() and not x.ishidden()]
     
@@ -287,7 +287,7 @@ class Path():
         """ @method [lsd]
         ディレクトリに含まれるサブディレクトリの一覧を返す。
         Returns:
-            Sheet[Path]: (name, filetype, modtime, size)
+            Sheet[Path](name, filetype, modtime, size):
         """
         if not self.isdir():
             return []
@@ -297,7 +297,7 @@ class Path():
         """ @method [lsf]
         ディレクトリに含まれるファイルの一覧を返す。
         Returns:
-            Sheet[Path]: (name, filetype, modtime, size)
+            Sheet[Path](name, filetype, modtime, size):
         """
         if not self.isdir():
             return [Path(self._path)]
@@ -307,7 +307,7 @@ class Path():
         """ @method [lsa]
         隠しファイルも含めた全てのファイルとサブディレクトリの一覧を返す。
         Returns:
-            Sheet[Path]: (name, filetype, modtime, size)
+            Sheet[Path](name, filetype, modtime, size):
         """
         if not self.isdir():
             return [Path(self._path)]
@@ -329,7 +329,7 @@ class Path():
             predicate(Function): 述語関数
             depth(int): 探索する階層の限界
         Returns:
-            Sheet[Path]: (name, extension, modtime, size)
+            Sheet[Path](name, extension, modtime, size):
         """
         basedir = self.dir().path()
         for dirpath, dirname, filenames in os.walk(basedir):
@@ -465,7 +465,10 @@ class Path():
         return Path(os.path.join(self._path, r))
     
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
         if isinstance(value, str):
             head, tail = os.path.split(value)
             if not head: # no slash in path
@@ -478,9 +481,9 @@ class Path():
                 if p is not None:
                     return Path(p)
             # 識別名が存在しなければパスとする
-            return Path(value)
         else:
-            return Path(str(value))
+            value = os.fspath(value)
+        return Path(value)
     
     def stringify(self):
         """ @meta """
@@ -586,7 +589,10 @@ class TextPath:
         context.root.open_by_text_editor(self._path.get(), self._line, self._column)
 
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta 
+        Params:
+            Path|Tuple[Path, Str]
+        """
         path = None
         line = None
         column = None
@@ -594,9 +600,6 @@ class TextPath:
             path, line, column, *_ = (value + (None, None))
         else:
             path = value
-        
-        if not isinstance(path, Path):
-            path = Path.constructor(Path, context, path)
         
         return TextPath(path, line, column)
     

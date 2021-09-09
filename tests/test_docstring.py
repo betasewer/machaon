@@ -9,7 +9,7 @@ def test_oneliner():
     p = DocStringParser(doc, ("Params",))
     assert p.get_string("Document") == "字下げされた一行のドキュメント"
 
-def test_methoddoc():
+def test_methoddoc_ordinal():
     def plus(a, b):
         """
         整数の加算を行う。
@@ -37,5 +37,7 @@ Using:
     p = DocStringParser(module_doc, ("Using", ))
     assert p.detect_indent(module_doc, True) == 0
     assert p.get_string("Using") == "    Typename1: module-name\n    Typename2: module-name"
+
+    
 
     

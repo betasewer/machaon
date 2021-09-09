@@ -98,7 +98,7 @@ class ObjectTuple():
         """
         tlo = None
         for i, o in enumerate(self.objects):
-            s = o.to_string()
+            s = o.stringify()
             if s.startswith(value):
                 return o
             elif s.endswith(value):
@@ -272,7 +272,7 @@ class ObjectTuple():
         Returns:
             Str: 結果の文字列
         """
-        strs = [x.to_string() for x in self.objects]
+        strs = [x.stringify() for x in self.objects]
         return sep.join(strs)
 
     # 内部使用
@@ -294,30 +294,29 @@ class ObjectTuple():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, homotype=None):
-        """ @meta extra-args """
+    def constructor(self, context, value, itemtype):
+        """ @meta 
+        Params:
+            Any: 
+            itemtype(Type): 同一の要素型
+        """
         try:
             iter(value)
         except TypeError:
             value = (value,)
         
-        objs = []
         # 型を値から推定する
-        for val in value:
-            if not isinstance(val, Object):
-                val = context.new_object(val, type=homotype)
-            objs.append(val)
-
+        objs = [context.new_object(x, type=itemtype) for x in value]
         return ObjectTuple(objs)
     
     def summarize(self):
         """ @meta """
         if len(self.objects) < 5:
-            summ = [o.summary() for o in self.objects]
+            summ = [o.summarize() for o in self.objects]
             return "{}".format(", ".join(summ))
         else:
-            summ1 = [o.summary() for o in self.objects[0:2]]
-            summ2 = [o.summary() for o in self.objects[-2:]]
+            summ1 = [o.summarize() for o in self.objects[0:2]]
+            summ2 = [o.summarize() for o in self.objects[-2:]]
             return "{}".format(", ".join(summ1) + "..." + ", ".join(summ2))
 
     def pprint(self, app):
@@ -330,7 +329,7 @@ class ObjectTuple():
             columns = ["値", "型"]
             rows = []
             for i, o in enumerate(self.objects):
-                sm = o.summary()  
+                sm = o.summarize()  
                 tn = o.get_typename()
                 rows.append((i, [sm, tn]))
             app.post("object-sheetview", rows=rows, columns=columns, context=context)

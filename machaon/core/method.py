@@ -1,10 +1,10 @@
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, DefaultDict, Tuple
 
 import inspect
-from collections import defaultdict
 
-from machaon.core.symbol import normalize_typename, normalize_method_target, normalize_method_name, normalize_return_typename
-from machaon.core.docstring import DocStringParser, parse_doc_declaration
+from machaon.core.symbol import normalize_method_target, normalize_method_name
+from machaon.core.docstring import parse_doc_declaration
+from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeConversionError
 
 # imported from...
 # type
@@ -19,6 +19,7 @@ METHOD_TASK = 0x0004 | METHOD_SPIRIT_BOUND
 METHOD_TYPE_BOUND = 0x0010
 METHOD_CONSUME_TRAILING_PARAMS = 0x0020
 METHOD_EXTERNAL_TARGET = 0x0040
+METHOD_BOUND_TRAILING = 0x0080
 
 METHOD_LOADED = 0x0100
 METHOD_DECL_LOADED = 0x0200
@@ -33,14 +34,16 @@ METHOD_FROM_INSTANCE = 0x10000
 METHOD_FROM_FUNCTION = 0x20000
 METHOD_FROM_MASK = 0xF0000
 
-METHOD_META_EXTRAARGS = 0x100000
+METHOD_META_EXTRAARG = 0x100000
 
 #
 PARAMETER_REQUIRED = 0x0100
 PARAMETER_VARIABLE = 0x0200
+PARAMETER_KEYWORD  = 0x0400
 
 #
-RETURN_SELF = "<return-self>"
+class RETURN_SELF:
+    pass
 
 #
 class BadMethodDeclaration(Exception):
@@ -54,6 +57,23 @@ class MethodLoadError(Exception):
         return self.args[0]
     def name(self):
         return self.args[1]
+    
+    def child_exception(self):
+        return self.args[0]
+
+# メタメソッド呼び出し時のエラー
+class BadMetaMethod(Exception):
+    def __init__(self, error, type, method):
+        super().__init__(error, type, method)
+    
+    def __str__(self):
+        errtype = type(self.args[0]).__name__
+        typename = self.args[1].typename
+        methname = self.args[2].get_action_target()
+        return " {}.{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
+    
+    def child_exception(self):
+        return self.args[0]
 
 #
 class MethodParameterNoDefault:
@@ -140,6 +160,14 @@ class Method():
         """
         return (self.flags & METHOD_SPIRIT_BOUND) > 0
     
+    def is_trailing_bound(self):
+        """ @method
+        メソッドに追加で束縛されるオブジェクトが、引数リストの後ろに付加される
+        Returns:
+            Bool:
+        """
+        return (self.flags & METHOD_BOUND_TRAILING) > 0
+    
     def is_task(self):
         """ @method
         メソッドがタスク（非同期実行）か
@@ -191,24 +219,22 @@ class Method():
     # 仮引数を追加
     def add_parameter(self,
         name,
-        typename,
+        typedecl,
         doc = "",
         default = MethodParameterNoDefault,
         variable = False,
         *,
         flags = 0,
-        typeparams = None,
     ):
         """
         仮引数を追加する。
         Params:
             name(str): 引数名
-            typename(str): 型名
+            typedecl(str|None): 型宣言
             doc(str): *説明文
             default(Any): *デフォルト値
             variable(bool): *可変長引数であるか
             flags(int): *フラグ
-            typeparams(str[]): *型パラメータ
         """
         f = 0
         if flags:
@@ -218,14 +244,15 @@ class Method():
         if default is MethodParameterNoDefault:
             default = None
             f |= PARAMETER_REQUIRED
-        p = MethodParameter(name, typename, doc, default, f, typeparams)
+        decl = parse_type_declaration(typedecl)
+        p = MethodParameter(name, decl, doc, default, f)
         self.params.append(p)
     
     def get_params(self):
         """ @method alias-name [params]
         仮引数のリスト
         Returns:
-            Sheet[MethodParameter]: (name, typename, doc)
+            Sheet[MethodParameter](name, typename, doc):
         """
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
@@ -249,32 +276,34 @@ class Method():
 
     # 返り値宣言を追加
     def add_result(self, 
-        typename, 
-        doc = "",
-        typeparams = None
+        typedecl, 
+        doc = ""
     ):
         """
         返り値宣言を追加
         Params:
-            typename(str): 型名
+            typedecl(str): 型宣言
             doc(str): *説明文
-            typeparams(List[str]): *生成時に引数として与えられる追加の情報
         """
-        r = MethodResult(typename, doc, typeparams)
+        decl = parse_type_declaration(typedecl)
+        r = MethodResult(decl, doc)
         self.result = r
     
     def add_result_self(self, type):
         """ メソッドのselfオブジェクトを返す """
-        r = MethodResult(type.typename, "selfオブジェクト", (RETURN_SELF,))
+        decl = parse_type_declaration(type.typename)
+        r = MethodResult(decl, "selfオブジェクト", RETURN_SELF)
         self.result = r
 
     def get_result(self):
         """ @method alias-name [result]
-        返り値のリスト
+        返り値
         Returns:
-            Sheet[MethodResult]: (name, typename, doc)
+            MethodResult:
         """
         if self.flags & METHOD_RESULT_UNSPECIFIED:
+            raise UnloadedMethod(self.name)
+        if self.result is None:
             raise UnloadedMethod(self.name)
         return self.result
     
@@ -411,60 +440,33 @@ class Method():
             funcsig = inspect.signature(function)
         
         # 引数
-        lines = sections.get_lines("Params")
-        for line in lines:
-            head, _, paramdoc = [x.strip() for x in line.partition(":")]
-            if not head and not paramdoc:
-                continue # 空の行
-
-            flags = 0
-            if head.startswith("*"):
-                name, _, right = head[1:].partition("(")
-                if right:
-                    typename, _, _ = right.partition(")")
-                    typename = typename.strip()
-                else:
-                    typename = "Any"
-                flags |= PARAMETER_VARIABLE
-            else:
-                name, _, paren = head.partition("(")
-                name = name.strip()
-                typename, _, _ = paren.partition(")")
-                typename = typename.strip()
+        for line in sections.get_lines("Params"):
+            typename, name, doc, flags = parse_parameter_line(line.strip())
             
-            if not name or not typename:
-                raise BadMethodDeclaration("引数'{}'の型指定が間違っています。「引数名(型名): 説明文」と指定してください".format(name))
-        
             if typename.endswith("..."):
                 self.flags |= METHOD_CONSUME_TRAILING_PARAMS
                 typename = typename.rstrip(".")
             
+            default = None
             if funcsig:
                 p = funcsig.parameters.get(name)
                 if p is None:
                     raise BadMethodDeclaration("存在しない引数です：" + name)
-                
-                default = p.default
-                if default is inspect.Signature.empty:
-                    default = None
-                    flags |= PARAMETER_REQUIRED
-                
-                if p.kind == p.VAR_KEYWORD or p.kind == p.KEYWORD_ONLY:
-                    flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                    break
-            
-            typename, paramdoc, typeparams = parse_typename_syntax(typename, paramdoc)
-            self.add_parameter(name, typename, paramdoc, default, flags=flags, typeparams=typeparams)
+    
+                default, f = pick_parameter_default_value(p)
+                if f & PARAMETER_KEYWORD:
+                    self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                    break # 未対応
+                flags |= f
+            else:
+                flags |= PARAMETER_REQUIRED
+        
+            self.add_parameter(name, typename, doc, default, flags=flags)
 
         # 戻り値
-        lines = sections.get_lines("Returns")
-        for line in lines:
-            typename, _, doc = [x.strip() for x in line.partition(":")]
-            if not typename:
-                continue
-
-            typename, doc, typeparams = parse_typename_syntax(typename, doc)
-            self.add_result(typename, doc, typeparams)
+        for line in sections.get_lines("Returns"):
+            typename, doc, flags = parse_result_line(line.strip())
+            self.add_result(typename, doc)
         
     def load_declaration_properties(self, props: Sequence[str]):
         """
@@ -480,6 +482,8 @@ class Method():
             self.flags |= METHOD_TASK
         if "nospirit" in props:
             self.flags &= ~METHOD_SPIRIT_BOUND
+        if "trailing" in props:
+            self.flags |= METHOD_BOUND_TRAILING
         
         self.flags |= METHOD_DECL_LOADED
             
@@ -521,17 +525,12 @@ class Method():
             else:
                 typename = "Any" # 型注釈から推定できるかもしれないが、不明とする
 
-            if p.default == inspect.Parameter.empty:
-                flags |= PARAMETER_REQUIRED
-                default = None
-            else:
-                default = p.default
+            default, f = pick_parameter_default_value(p)        
 
-            if p.kind == inspect.Parameter.VAR_POSITIONAL:
-                flags |= PARAMETER_VARIABLE
-            elif p.kind == p.VAR_KEYWORD or p.kind == p.KEYWORD_ONLY:
-                flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                break
+            if f & PARAMETER_KEYWORD:
+                self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                break # 未対応
+            flags |= f
 
             self.add_parameter(p.name, typename, "", default, flags=flags)
         
@@ -624,42 +623,17 @@ class Method():
             app.post("message", l)
 
 
-#
-# Typename[Typename2]: (param1, param2, ...) document
-#
-def parse_typename_syntax(name, doc):
-    if "[" in name:
-        name1, _, name2 = name.partition("[")
-        typename = normalize_typename(name1)
-        name2 = name2.rstrip("]")
-        secondtypename = normalize_typename(name2) if name2 else ""
-    else:
-        typename = normalize_typename(name)
-        secondtypename = ""
-    
-    typeparams: List[str] = []
-    if secondtypename:
-        typeparams.append(secondtypename)
-    
-    if doc and doc[0] == "(":
-        typeparamend = doc.find(")")
-        if typeparamend != -1:
-            typeparams.extend(x.strip() for x in doc[1:typeparamend].split(","))
-            doc = doc[typeparamend+1:].lstrip()
-    
-    return typename, doc, typeparams
 
 #
 #
 #
 class MethodParameter():
-    def __init__(self, name, typename, doc, default=None, flags=0, typeparams=None):
+    def __init__(self, name, typedecl, doc, default=None, flags=0):
         self.name = name
-        self.typename = typename
         self.doc = doc
         self.default = default
         self.flags = flags
-        self.typeparams = typeparams
+        self.typedecl = typedecl or TypeDecl()
     
     def __str__(self):
         name = self.name
@@ -669,6 +643,12 @@ class MethodParameter():
         if self.default:
             line = line + "= {}".format(self.default)
         return line
+    
+    @property
+    def typename(self):
+        if self.typedecl:
+            return self.typedecl.to_string()
+        return None
 
     def get_name(self):
         return self.name
@@ -680,7 +660,7 @@ class MethodParameter():
         return self.doc
     
     def is_type_unspecified(self):
-        return self.typename == "Any" or self.typename == "Object"
+        return self.typename is None or self.typename == "Any" or self.typename == "Object"
         
     def is_string(self):
         return self.typename == "Str"
@@ -700,34 +680,31 @@ class MethodParameter():
     def get_default(self):
         return self.default
     
-    def get_typeparams(self):
-        return self.typeparams or []
-    
-    def convert_object(self, context, value, type=None):
-        if type is None:
-            type = context.get_type(self.get_typename())
-        convval = type.construct(context, value, *self.get_typeparams())
-        return type.new_object(convval)
+    def get_typedecl(self):
+        return self.typedecl
 
 #
 #
 #
 class MethodResult:
-    def __init__(self, typename=None, doc="", typeparams=None):
-        self.typename = typename
+    def __init__(self, typedecl=None, doc="", special=None):
+        self.typedecl = typedecl or TypeDecl()
         self.doc = doc
-        self.typeparams = typeparams
+        self.special = special
 
     def __str__(self):
         line = "Return [{}]".format(self.typename)
         return line
     
-    def get_typename(self):
-        return self.typename or "Any" 
-    
-    def get_typeparams(self):
-        return self.typeparams or []
+    @property
+    def typename(self):
+        if not self.is_return_self():
+            return self.typedecl.to_string()
+        return None
 
+    def get_typename(self):
+        return self.typename
+    
     def get_doc(self):
         return self.doc
     
@@ -735,39 +712,112 @@ class MethodResult:
         return self.typename is None
     
     def is_return_self(self):
-        return self.typeparams and self.typeparams[0] is RETURN_SELF
+        return self.special is RETURN_SELF
 
-    def convert_object(self, context, value, type=None):
-        if type is None:
-            type = context.get_type(self.typename)
-        v = type.construct(context, value, *self.get_typeparams())
-        return type.new_object(v)
+    def get_typedecl(self):
+        return self.typedecl
+
+
+def parse_parameter_line(line):
+    """
+    Params:
+        line(str):
+    Returns:
+        Tuple[str, str, int]: 型名、変数名、フラグ
+    """
+    head, _sep, doc = [x.strip() for x in line.partition(":")]
+    # sepが無くても続行する    
+
+    flags = 0
+    if head.startswith("*"):
+        name, _, right = head[1:].partition("(")
+        if right:
+            typename, _, _ = right.partition(")")
+            typename = typename.strip()
+        else:
+            typename = "Any"
+        flags |= PARAMETER_VARIABLE
+    else:
+        name, _, paren = head.partition("(")
+        name = name.strip()
+        typename, _, _ = paren.partition(")")
+        typename = typename.strip()
+    
+    if not name or not typename:
+        raise BadMethodDeclaration("引数'{}'の型指定が間違っています。「引数名(型名): 説明文」と指定してください".format(name))
+
+    return typename, name, doc, flags
+
+    
+def pick_parameter_default_value(p):
+    """
+    Params:
+        p(inspect.Parameter):
+    Returns:
+        Tuple[Any, int]:
+    """
+    flags = 0
+    default = p.default
+    if default is inspect.Signature.empty:
+        default = None
+        flags |= PARAMETER_REQUIRED
+    
+    if p.kind == p.VAR_KEYWORD or p.kind == p.KEYWORD_ONLY:
+        flags |= PARAMETER_KEYWORD
+        
+    return default, flags
+
+
+def parse_result_line(line):
+    """
+    Params:
+        line(str):
+    Returns:
+        Tuple[str, str, int]:
+    """
+    typename, sep, doc = [x.strip() for x in line.partition(":")]
+    if not sep:
+        return typename, "", 0
+    return typename, doc, 0
+
 
 #
 #
 #
 class MetaMethod():
-    def __init__(self, target, flags=0):
+    def __init__(self, target, flags=0, method=False):
         self.target = target
         self.flags = flags
+        if method:
+            self._method = {
+                "params" : [],
+                "type_params" : []
+            }
+        else:
+            self._method = None
     
     def get_action_target(self):
         return self.target
     
-    def new(self, declprops):
-        """ 特殊メソッドを構築 """
+    def new(self, decl):
+        """ 特殊メソッドを構築 
+        Params:
+            decl(DocStringDeclaration)
+        """
         flags = self.flags
-        if "extra-args" in declprops:
-            flags |= METHOD_META_EXTRAARGS
-        if "context" in declprops:
+        if "context" in decl.props:
             flags |= METHOD_CONTEXT_BOUND
-        if "spirit" in declprops:
+        if "spirit" in decl.props:
             flags |= METHOD_SPIRIT_BOUND
-        return MetaMethod(self.target, flags)
-    
-    def has_extra_args(self):
-        return (self.flags & METHOD_META_EXTRAARGS) > 0
-    
+        
+        method = False
+        if flags & METHOD_META_EXTRAARG:
+            method = True
+
+        meth = MetaMethod(self.target, flags, method=method)
+        meth.load_from_docstring(decl)
+        return meth
+
     def is_type_bound(self):
         return (self.flags & METHOD_TYPE_BOUND) > 0
     
@@ -776,6 +826,100 @@ class MetaMethod():
 
     def is_spirit_bound(self):
         return (self.flags & METHOD_SPIRIT_BOUND) > 0
+    
+    def load_from_docstring(self, decl):
+        """
+        Params: ですべて指定
+        第1引数は変数名を省略可能（value）
+        追加引数においては、型がTypeなら型引数、そうでないなら追加コンストラクタ引数とみなす
+        """
+        if self._method is None:
+            return
+
+        sections = decl.create_parser((
+            "Params Parameters",
+        ))
+
+        # 説明文
+        desc = sections.get_string("Document")
+        if desc:
+            self.doc = desc.strip()
+
+        # 引数
+        for i, line in enumerate(sections.get_lines("Params")):
+            if i == 0:
+                name = "value"
+                typename, doc, flags = parse_result_line(line.strip())
+            else:
+                typename, name, doc, flags = parse_parameter_line(line.strip())
+
+            if i != 0 and typename == "Type":
+                p = MethodParameter(name, TypeDecl("Type"), doc, flags=flags)
+                self._method["type_params"].append(p)
+            else:
+                typedecl = parse_type_declaration(typename)
+                p = MethodParameter(name, typedecl, doc, flags=flags)
+                self._method["params"].append(p)
+
+    def prepare_invoke_args(self, context, value, typeinst):
+        """ メソッド実行時に渡す引数を準備する """
+        args = []
+        if self._method is None:
+            if typeinst:
+                raise ValueError("このメソッドは追加の引数を受け入れません")
+
+        if not self._method["params"]:
+            # 何も検査しないで追加する
+            args.append(value) 
+            if typeinst:
+                args.extend(typeinst.type_args)
+                args.extend(typeinst.constructor_args)
+
+        else:
+            # コンストラクタ引数の型をチェック
+            p = self._method["params"][0]
+            t = p.get_typedecl().instance(context)
+            if not t.check_value_type(type(value)):
+                raise TypeConversionError(type(value), t)
+        
+            args.append(value)
+            
+            if typeinst:
+                # 型引数と追加の実引数を設定
+                for i, _tp in enumerate(self._method["type_params"]):
+                    if i < len(typeinst.type_args):
+                        ta = typeinst.type_args[i]
+                    else:
+                        ta = None
+                    args.append(ta)
+                
+                for i, cp in enumerate(self._method["params"][1:]):
+                    if i < len(typeinst.constructor_args):
+                        ct = cp.get_typedecl().instance(context)
+                        if cp.is_variable():
+                            for a in typeinst.constructor_args[i:]:
+                                ca = ct.construct(context, a)
+                                args.append(ca)
+                            break # 全て使い切る
+                        else:
+                            ca = ct.construct(context, typeinst.constructor_args[i])
+                            args.append(ca)
+                    else:
+                        break
+            else:
+                # デフォルト型引数をセット
+                for _ in self._method["type_params"]:
+                    ta = None
+                    args.append(ta)
+
+        return args
+
+meta_method_prototypes = (
+    MetaMethod("constructor", METHOD_TYPE_BOUND|METHOD_META_EXTRAARG),
+    MetaMethod("stringify"),
+    MetaMethod("summarize"),
+    MetaMethod("pprint"),
+)
 
 
 def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
@@ -794,11 +938,3 @@ def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Metho
     method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey)
     method.load_declaration_properties(decl.props)
     return method, decl.aliases
-
-meta_method_prototypes = (
-    MetaMethod("constructor", METHOD_TYPE_BOUND),
-    MetaMethod("stringify"),
-    MetaMethod("summarize"),
-    MetaMethod("pprint"),
-)
-

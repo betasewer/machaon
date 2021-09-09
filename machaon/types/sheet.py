@@ -44,14 +44,14 @@ class BasicDataColumn():
         object = self.convert(context, object)
 
         if object.is_error():
-            return "<{}>".format(object.summary())
+            return "<{}>".format(object.summarize())
         if object.value is None:
             return "-"
 
         if method == DATASET_STRINGIFY_SUMMARIZE:
-            return object.summary()
+            return object.summarize()
         else:
-            return object.to_string()
+            return object.stringify()
 
 class DataMessageColumn(BasicDataColumn):
     """
@@ -651,7 +651,7 @@ class Sheet():
         """
         values = []
         for item in self.current_items():
-            o = predicate.run_function(item, context)
+            o = predicate.run_function(item, context, raiseerror=False)
             if o.is_truth():
                 values.append(o)
         return values
@@ -769,26 +769,19 @@ class Sheet():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, itemtypeconversion=None, *columnnames):
-        """ @meta extra-args 
+    def constructor(self, context, value, itemtype, *column_names):
+        """ @meta 
         Params:
-            value(Any): イテラブル型
-            itemtypeconversion(Str): 型表現（全要素に適用する）
-            *columnnames(Str): カラム名のリスト
+            Any: イテラブル型
+            itemtype(Type): 要素の型（全要素に適用する）
+            *column_names(Str): カラム名のリスト
         """
         if not isinstance(value, list):
             value = list(value)
 
         # 型変換を行う
-        if itemtypeconversion is None:
-            objs = [context.new_object(x) for x in value]
-        elif isinstance(itemtypeconversion, str):
-            objs = [context.new_object(x, conversion=itemtypeconversion) for x in value]
-        else:
-            objs = [context.new_object(x, type=itemtypeconversion) for x in value]
-            t = context.get_type(itemtypeconversion)
-            itemtypeconversion = t.typename
-        return Sheet(objs, typeconversion=itemtypeconversion, context=context, column_names=columnnames)
+        objs = [context.new_object(x, type=itemtype) for x in value]
+        return Sheet(objs, context=context, column_names=column_names)
     
     def summarize(self):
         """ @meta """

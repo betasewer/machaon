@@ -1,7 +1,7 @@
 import re
 import datetime
 
-from machaon.core.type import BadTypeDeclaration, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+from machaon.core.type import BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import full_qualified_name
 from machaon.core.message import enum_selectable_attributes
@@ -18,17 +18,17 @@ class TypeType():
         Params:
             Str: 型名 / クラスの完全な名前(qualname)
         """
-        if isinstance(value, str):
-            if "." in value:
-                from machaon.core.importer import attribute_loader
-                d = TypeDefinition(attribute_loader(value))
-                if not d.load_declaration_docstring():
-                    raise BadTypeDeclaration()
-                return d.define(context.type_module) # 即座にロードする
-            else:
-                return context.select_type(value)
+        if "." in value:
+            from machaon.core.importer import attribute_loader
+            d = TypeDefinition(attribute_loader(value))
+            if not d.load_declaration_docstring():
+                raise BadTypeDeclaration()
+            return d.define(context.type_module) # 即座にロードする
         else:
-            raise TypeError("value")
+            t = context.select_type(value)
+            if t is None:
+                raise BadTypename(value)
+            return t
 
     def stringify(self, v):
         """ @meta """
@@ -70,7 +70,7 @@ class TypeType():
         context.spirit.post("message", "\n".join(docs))
         # メソッドの表示
         meths = self.methods(type, context, value)
-        meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection]: (names,doc,signature)")
+        meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection](names,doc,signature)")
         meths_sheet.pprint(context.spirit)
 
     def methods(self, type, context, instance=None):
@@ -78,7 +78,7 @@ class TypeType():
         使用可能なメソッドを列挙する。
         Params:
         Returns:
-            Sheet[ObjectCollection]: (names,doc,signature) メソッドのリスト
+            Sheet[ObjectCollection](names,doc,signature): メソッドのリスト
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
@@ -156,7 +156,7 @@ class AnyType():
         """ @method
         属性の一覧を返す。
         Returns:
-            Sheet[ObjectCollection]: (name, type, value)
+            Sheet[ObjectCollection](name, type, value):
         """
         items = []
         for name in enum_selectable_attributes(v):
@@ -194,14 +194,15 @@ class AnyType():
     
     def summarize(self, v):
         """ @meta """
-        return "<Object: {}>".format(full_qualified_name(type(v)))
+        return "<{} object>".format(full_qualified_name(type(v)))
     
     def stringify(self, v):
         """ @meta """
+        tn = full_qualified_name(type(v))
         if type(v).__repr__ is object.__repr__:
-            return "<Object {:0X}({})>".format(id(v), full_qualified_name(type(v)))
+            return "<{} id={:0X}>".format(tn, id(v))
         else:
-            return "{}({})".format(v, full_qualified_name(type(v)))
+            return "{}({})".format(v, tn)
 
 class NoneType():
     def constructor(self, _context, _s):
@@ -217,7 +218,10 @@ class NoneType():
 
 class FunctionType():
     def constructor(self, _context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Str:
+        """
         from machaon.core.message import parse_function
         f = parse_function(s)
         f.takelog(False)
@@ -254,7 +258,10 @@ class ContextBoundFunction():
         self.context = context
         
     def constructor(self, context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Str:
+        """
         f = FunctionType().constructor(context, s)
         return ContextBoundFunction(context, f)
 
@@ -284,7 +291,10 @@ class ContextBoundFunction():
 # ----------------------------------------------------------
 class StrType():
     def constructor(self, _context, v):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
         return str(v)
     
     def stringify(self, v):
@@ -366,9 +376,9 @@ class StrType():
         r = run_function(s, subject, context, raiseerror=True)
         return r
     
-    def store_do(self, s, context, app):
-        """ @task context [st-do stdo]
-        文字列をストアドメッセージの名前として評価し、実行して返す。
+    def do_external(self, s, context, app):
+        """ @task context [doex do-ex]
+        文字列を外部ファイルの名前として評価し、実行して返す。
         Returns:
             Object: 返り値
         """
@@ -376,8 +386,8 @@ class StrType():
         ret = o.value.do(context, app)
         return ret
 
-    def python_do(self, expr, _app):
-        """ @task [pydo]
+    def do_python(self, expr, _app):
+        """ @task [dopy do-py]
         Pythonの式として評価し、実行して返す。
         式の前に{name1 name2...}と書いてモジュールをインポートできる。
         Returns:
@@ -417,15 +427,16 @@ class StrType():
 
 class BoolType():
     def constructor(self, _context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
         if s == "True":
             return True
         elif s == "False":
             return False
-        elif not s:
-            return False
         else:
-            raise ValueError(s)
+            return bool(s)
     
     #
     # 論理
@@ -503,7 +514,10 @@ class NumericType():
     
 class IntType(NumericType):
     def constructor(self, _context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
         return int(s, 0)
     
     def hex(self, n):
@@ -542,7 +556,10 @@ class IntType(NumericType):
 
 class FloatType(NumericType):
     def constructor(self, _context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
         return float(s)
     
     # math
@@ -559,12 +576,19 @@ class FloatType(NumericType):
 
 class ComplexType():
     def constructor(self, _context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
         return complex(s)
 
 class DatetimeType():
     def constructor(self, _context, s):
-        """ @meta """
+        """ @meta 
+        Params:
+            Str
+        """
+        return datetime.datetime.fromisoformat(s)
     
     def stringify(self, date):
         """ @meta """

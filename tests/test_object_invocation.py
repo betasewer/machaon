@@ -77,7 +77,7 @@ def test_objectref():
 
     # unary type method
     import math
-    inv = ObjectMemberInvocation("pydo")
+    inv = ObjectMemberInvocation("dopy")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() == math.pi
     assert isinstance(inv._resolved, TypeMethodInvocation)
     assert inv.get_min_arity() == 0
@@ -101,7 +101,7 @@ def test_objectref():
     assert isinstance(inv._resolved, TypeMethodInvocation)
     assert inv.get_min_arity() == 1
     assert inv.get_max_arity() == 1
-    assert inv.get_result_spec().get_typename() == "Bool"
+    assert inv.get_result_spec().get_typename() == "bool"
 
     # generic method (移譲先のオブジェクトを参照する)
     inv = ObjectMemberInvocation("=")

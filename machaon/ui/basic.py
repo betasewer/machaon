@@ -68,7 +68,7 @@ class Launcher():
                     self.on_end_process(process)
                 elif code == "error":
                     error = msg.argument("error") # error はProcessError型のオブジェクト
-                    expr = " -> {}".format(error.summary())
+                    expr = " -> {}".format(error.summarize())
                     self.insert_screen_text("error", expr)
                     self.on_error_process(process, error)
                     self.on_end_process(process)
@@ -80,7 +80,7 @@ class Launcher():
                             m = ProcessMessage(tag="object-pretty-view", pr=process, object=obj, context=context)
                             self.message_handler(m)
                         else:
-                            expr = " -> {} [{}]".format(obj.summary(), obj.get_typename())
+                            expr = " -> {} [{}]".format(obj.summarize(), obj.get_typename())
                             self.insert_screen_text("message", expr)
                     self.on_success_process(process)
                     self.on_end_process(process)

@@ -1131,7 +1131,7 @@ def screen_sheetview_select_item(ui, wnd, charindex, _dataid):
 def screen_setview_tuple_generate(ui, wnd, objects, dataname, context):
     # 値
     for i, obj in enumerate(objects):
-        line = "{} [{}]".format(obj.summary(), obj.get_typename())
+        line = "{} [{}]".format(obj.summarize(), obj.get_typename())
         index = str(i)
         head = " "*(5-len(index))
         tags = ("message",)
@@ -1256,7 +1256,7 @@ def screen_insert_object(ui, wnd, deskname, obj, sel):
     wnd.insert("end", midline, frametags) # 
 
     # 下段：オブジェクトの値
-    summary = obj.get_summary()
+    summary = obj.summarize()
     for line, _ in composit_text.filled_lines(summary, width, fill=" "):
         wnd.insert("end", "｜", frametags)
         wnd.insert("end", line, tags) 

@@ -53,8 +53,8 @@ class BasicLoadFile():
     def _with_path(self, *args, **kwargs):
         raise NotImplementedError()
 
-    def save(self, app):
-        """ @task
+    def save(self):
+        """ @task nospirit
         ファイルをセーブする。
         """
         # パスを変えて何度か試行する
@@ -67,7 +67,7 @@ class BasicLoadFile():
             else: # 正常終了
                 break
         else:
-            app.post("error", '"{}"に保存できません。別のアプリで開かれています。'.format(savepath))
+            raise ValueError('"{}"に保存できません。別のアプリで開かれています。'.format(savepath))
         self._path = Path(savepath)
     
     def savefile(self, path):
@@ -75,8 +75,11 @@ class BasicLoadFile():
     
     #
     def constructor(self, context, v):
-        """ @meta """
-        return self.get_value_type()(context.new_object(v, type=Path).value)
+        """ @meta 
+        Params:
+            Path:
+        """
+        return self.get_value_type()(v)
 
     def stringify(self):
         """ @meta """

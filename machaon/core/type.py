@@ -1,18 +1,21 @@
-import os
-import re
-from inspect import signature
 from collections import defaultdict
 
-from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, Generator, Tuple, DefaultDict
+from typing import Any, Sequence, Union, Callable, ItemsView, Optional, Generator, DefaultDict
+from typing import List, Dict, Tuple
 
 from machaon.core.symbol import (
     BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, 
     full_qualified_name, is_valid_typename, summary_escape,
     SIGIL_SCOPE_RESOLUTION
 )
-from machaon.core.method import BadMethodDeclaration, Method, make_method_prototype, meta_method_prototypes, UnloadedMethod, MethodLoadError, MetaMethod
+from machaon.core.typedecl import TypeProxy, TypeInstance
+from machaon.core.method import (
+    BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod,
+    make_method_prototype, meta_method_prototypes, 
+    Method, MetaMethod
+)
 from machaon.core.importer import attribute_loader
-from machaon.core.docstring import DocStringParser, parse_doc_declaration
+from machaon.core.docstring import parse_doc_declaration
 
 # imported from...
 # desktop
@@ -33,20 +36,6 @@ class BadMemberDeclaration(Exception):
 class BadMethodDelegation(Exception):
     pass
 
-# メタメソッド呼び出し時のエラー
-class BadMetaMethod(Exception):
-    def __init__(self, error, type, method):
-        super().__init__(error, type, method)
-    
-    def __str__(self):
-        errtype = type(self.args[0]).__name__
-        typename = self.args[1].typename
-        methname = self.args[2].get_action_target()
-        return " {}.{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
-    
-    def child_exception(self):
-        return self.args[0]
-
 # サポートされない
 class UnsupportedMethod(Exception):
     pass
@@ -65,7 +54,7 @@ TYPE_DELAY_LOAD_METHODS     = 0x2000
 #
 #
 #
-class Type():
+class Type(TypeProxy):
     def __init__(self, describer=None, name=None, value_type=None, scope=None, *, bits = 0):
         self.typename: str = name
         self.doc: str = ""
@@ -87,6 +76,9 @@ class Type():
     
     def __str__(self):
         return "<Type '{}'>".format(self.typename)
+    
+    def get_typename(self):
+        return self.typename
 
     def is_loaded(self):
         return self.flags & TYPE_LOADED > 0
@@ -137,101 +129,25 @@ class Type():
         t._describer = self._describer
         return t
     
-    def new_object(self, value):
-        """ この型のオブジェクトを作る。型変換は行わない """
-        from machaon.core.object import Object
-        if isinstance(value, Object):
-            if value.type is not self:
-                raise ValueError("'{}' -> '{}' 違う型のオブジェクトです".format(value.get_typename(), self.typename))
-            return value
-        else:
-            if not self.check_value_type(type(value)):
-                raise ValueError("'{}' -> '{}' 値の型に互換性がありません".format(type(value).__name__, self.typename))
-            return Object(self, value)
-
     #
-    # 内部実装で使うメソッドを実行する
-    #  -> タプルで返り値を返す。見つからなければNone
-    def invoke_meta_method(self, method, *args, **kwargs):
-        """ 
-        内部実装で使うメソッドを実行する
-        Params:
-            method(MetaMethod): メソッド
-            calltype(str): i = selfは第一オブジェクト  t = selfは型インスタンス
-            *args
-            **kwargs
-        Returns:
-            Any: 実行したメソッドの返り値
-        """
-        if method.is_type_bound():
-            args = (self, *args)
-        else:
-            if self.is_methods_instance_bound():
-                pass
-            elif self.is_methods_type_bound():
-                args = (self, *args)
-
-        fn = self.delegate_method(method.get_action_target())
-        try:
-            return fn(*args, **kwargs)
-        except Exception as e:
-            raise BadMetaMethod(e, self, method)
+    #
+    #
+    def get_typedef(self):
+        return self
     
-    def construct(self, context, value, *args):
-        if self.check_value_type(type(value)):
-            return value # 変換の必要なし
-        
-        fn = self._metamethods.get("constructor")
-        if fn is None:
-            raise UnsupportedMethod("'{}'型には型変換関数'constructor'が定義されていません".format(self.typename))
-        
-        if fn.has_extra_args():
-            return self.invoke_meta_method(fn, context, value, *args)
-        else:
-            return self.invoke_meta_method(fn, context, value)
+    def get_conversion(self):
+        return self.typename
 
-    def convert_to_string(self, value: Any) -> str:
-        fn = self._metamethods.get("stringify")
-        if fn is None:
-            # デフォルト動作
-            return str(value)
+    def check_type_instance(self, type):
+        return self is type
 
-        return self.invoke_meta_method(fn, value)
-
-    def summarize_value(self, value: Any):
-        fn = self._metamethods.get("summarize")
-        if fn is None:
-            s = self.convert_to_string(value)
-            if not isinstance(s, str):
-                s = repr(s) # オブジェクトに想定されない値が入っている
-            s = summary_escape(s)
-            if len(s) > 50:
-                return s[0:30] + "..." + s[-20:]
-            else:
-                return s
-        
-        return self.invoke_meta_method(fn, value)
-
-    def pprint_value(self, app, value: Any):
-        fn = self._metamethods.get("pprint")
-        if fn is None:
-            s = self.convert_to_string(value)
-            app.post("message", s)
-            return
-        self.invoke_meta_method(fn, value, app)
-
-    def check_value_type(self, value_type):
-        if self.flags & TYPE_ANYTYPE: # 制限なし
-            return True
-        return self.value_type is value_type
-    
-    def is_supertype(self, other):
-        """ 対象の型の基底タイプであるか """
+    def check_value_type(self, valtype):
         if self.is_any():
-            return True
-        if self is other:
-            return True
-        return False
+            return True # 制限なし
+        return self.value_type is valtype
+    
+    def instance(self, *args):
+        return TypeInstance(self, ctorargs=args)
 
     # 
     # メソッド呼び出し
@@ -242,7 +158,7 @@ class Type():
         if meth and not meth.is_loaded():
             raise UnloadedMethod()
         return meth
-        
+    
     # エイリアスも参照して探し、ロードされていなければロードする
     def select_method(self, name) -> Optional[Method]:
         meth = self._methods.get(name, None)
@@ -284,10 +200,6 @@ class Type():
                 raise BadMethodName(attrname, self.typename)
             return None
         return fn
-    
-    @classmethod
-    def from_dict(cls, d):
-        return cls(d).load()
 
     @property
     def describer(self):
@@ -336,6 +248,92 @@ class Type():
                 if a.get_destination() == truename:
                     l.append(aliasname)
         return l
+
+    #
+    # 特殊メソッド
+    #
+    def constructor(self, context, value, extraarg=None):
+        """ 
+        コンストラクタ。
+        実装メソッド:
+            constructor
+        """
+        fn = self._metamethods.get("constructor")
+        if fn is None:
+            # 定義が無い場合、単純に生成する
+            return self.value_type(value)
+
+        args = fn.prepare_invoke_args(context, value, extraarg)
+        return self.invoke_meta_method(fn, context, *args)
+    
+    def stringify_value(self, value: Any) -> str:
+        """ 
+        値を文字列に変換する。
+        実装メソッド:
+            stringify
+        """
+        fn = self._metamethods.get("stringify")
+        if fn is None:
+            # デフォルト動作
+            return str(value)
+
+        return self.invoke_meta_method(fn, value)
+
+    def summarize_value(self, value: Any):
+        """ 
+        値を短い文字列に変換する。
+        実装メソッド:
+            summarize
+        """
+        fn = self._metamethods.get("summarize")
+        if fn is None:
+            s = self.stringify_value(value)
+            if not isinstance(s, str):
+                s = repr(s) # オブジェクトに想定されない値が入っている
+            s = summary_escape(s)
+            if len(s) > 50:
+                return s[0:30] + "..." + s[-20:]
+            else:
+                return s
+        return self.invoke_meta_method(fn, value)
+
+    def pprint_value(self, app, value: Any):
+        """ 
+        値を画面に表示する。
+        実装メソッド:
+            pprint
+        """
+        fn = self._metamethods.get("pprint")
+        if fn is None:
+            s = self.stringify_value(value)
+            app.post("message", s)
+            return
+        self.invoke_meta_method(fn, value, app)
+
+    def invoke_meta_method(self, method, *args, **kwargs):
+        """ 
+        内部実装で使うメソッドを実行する
+        Params:
+            method(MetaMethod): メソッド
+            calltype(str): i = selfは第一オブジェクト  t = selfは型インスタンス
+            *args
+            **kwargs
+        Returns:
+            Any: 実行したメソッドの返り値
+        """
+        if method.is_type_bound():
+            args = (self, *args)
+        else:
+            if self.is_methods_instance_bound():
+                pass
+            elif self.is_methods_type_bound():
+                args = (self, *args)
+
+        fn = self.delegate_method(method.get_action_target())
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            raise BadMetaMethod(e, self, method)
 
     #
     # 型定義構文用のメソッド
@@ -435,7 +433,6 @@ class Type():
             # 追加の記述メソッドを呼び出す
             describer.describe_object(self) # type: ignore
         
-
     def load_methods_from_attributes(self, describer, mixinkey=None):
         # クラス属性による記述
         for attrname in dir(describer):
@@ -461,7 +458,7 @@ class Type():
             if decl is None:
                 continue
     
-            meth = meth.new(decl.props)
+            meth = meth.new(decl)
             self._metamethods[name] = meth
         
     def load_methods_from_dict(self, describer, mixinkey=None):
@@ -482,9 +479,6 @@ class Type():
                 else:
                     raise BadTypeDeclaration("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
                 self.add_method(mth)
-
-
-# describer の文字列に value_typeが書かれている場合もある
 
 
 class TypeDefinition():
@@ -727,7 +721,10 @@ class TypeModule():
     #
     # 型を取得する
     #
-    def get(self, typecode: Any, *, scope=None) -> Optional[Type]:
+    def get(self, typecode: Any, *, scope=None) -> Optional[TypeProxy]:
+        if isinstance(typecode, TypeProxy):
+            return typecode
+
         if self._typelib is None:
             raise ValueError("No type library set up")
         
@@ -769,7 +766,7 @@ class TypeModule():
     #
     # 値型に適合する型を取得する
     #    
-    def deduce(self, value_type) -> Optional[Type]:
+    def deduce(self, value_type) -> Optional[TypeProxy]:
         if not isinstance(value_type, type):
             raise TypeError("value_type must be type instance, not value")
 
@@ -897,9 +894,4 @@ class TypeModule():
     def definitions(self):
         return self.DefinitionSyntax(self)
     
-    
-    
-
-
-
 

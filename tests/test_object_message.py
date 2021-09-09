@@ -196,10 +196,9 @@ def test_object_ref():
     ptest("'Dr. ' + (@customer-name capitalize)", "Dr. Yokomizo")
     ptest("@customer-name reg-match [a-zA-Z]+", True)
 
-@pytest.mark.xfail
-def test_double_block_is_denied():    
-    # ((7 mul 8) <no-selector> <no-argument>)　と解釈しエラー
-    ptest("((7 mul 8)) add ((9 mul 10)) ", 7*8+9*10)
+def test_unfinished_block_is_ok():    
+    ptest("1", 1) # identity メッセージをおぎなう
+    ptest("((7 mul 8)) add ((9 mul 10)) ", 7*8+9*10) # 二重括弧は不完全なメッセージ式として補完される
 
 #
 def test_paren_block():

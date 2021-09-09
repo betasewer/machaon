@@ -126,7 +126,7 @@ class Message:
         if spec:
             return spec
         else:
-            return MethodParameter("param{}".format(index), "Any", "")
+            return MethodParameter("param{}".format(index), None, "引数{}".format(index))
     
     def reset_ref(self):
         for elem in (self.reciever, self.selector, *self.args):
@@ -978,13 +978,12 @@ class MessageEngine():
         elif objcode == TERM_OBJ_SPECIFIED_TYPE:
             val = values[0]
             spec = values[1]
-            obj = spec.convert_object(context, val)
+            type = spec.get_typedecl().instance(context)
+            obj = type.construct_obj(context, val)
 
         elif objcode == TERM_OBJ_TUPLE:
             elems = values[0].split() # 文字列を空白で区切る
-            tupletype = context.get_type("Tuple")
-            tpl = tupletype.construct(context, elems)
-            obj = tupletype.new_object(tpl)
+            obj = context.get_type("Tuple").construct_obj(context, elems)
 
         elif objcode == TERM_OBJ_LITERAL:
             obj = select_literal(context, values[0])

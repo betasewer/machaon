@@ -2,7 +2,7 @@ from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
 from collections import OrderedDict, defaultdict
 from copy import copy
 
-from machaon.core.type import Type
+from machaon.core.typedecl import TypeProxy
 from machaon.core.symbol import normalize_typename, full_qualified_name
 
 # imported from...
@@ -19,9 +19,9 @@ class EMPTY_OBJECT:
 class Object():
     def __init__(self, type, value=EMPTY_OBJECT):
         self.value: Any = value
-        self.type: Type = type
-        if not isinstance(self.type, Type):
-            raise TypeError("'type' must be Type instance")
+        self.type: TypeProxy = type
+        if not isinstance(self.type, TypeProxy):
+            raise TypeError("'type' must be TypeInstance")
         if isinstance(self.value, Object):
             raise ValueError("An attempt to assign Object to another Object")
 
@@ -29,7 +29,7 @@ class Object():
         return "<Object {1} [{0}]>".format(self.type.typename, repr(self.value))
     
     def __str__(self):
-        return "{1} [{0}]".format(self.type.typename, self.summary())
+        return "{1} [{0}]".format(self.type.typename, self.summarize())
     
     def value_dstr(self):
         v = self.value
@@ -46,15 +46,18 @@ class Object():
             return ds
     
     def get_typename(self):
-        return self.type.typename
+        return self.type.get_typename()
+    
+    def get_conversion(self):
+        return self.type.get_conversion()
     
     def copy(self):
         return Object(self.type, copy(self.value))
     
-    def to_string(self) -> str:
-        return self.type.convert_to_string(self.value)
+    def stringify(self) -> str:
+        return self.type.stringify_value(self.value)
 
-    def summary(self) -> str:
+    def summarize(self) -> str:
         return self.type.summarize_value(self.value)
 
     def pprint(self, spirit):
@@ -138,15 +141,10 @@ class ObjectCollection():
             return item.value
         return None
 
-    # コンストラクタを実行しつつオブジェクトを新規作成
-    def new(self, name: str, type: Type, *args, **kwargs) -> ObjectCollectionItem:
-        if not isinstance(name, str) or not isinstance(type, Type):
+    # オブジェクトを新規作成
+    def new(self, name: str, type: TypeProxy, value: Any) -> ObjectCollectionItem:
+        if not isinstance(name, str) or not isinstance(type, TypeProxy):
             raise TypeError()
-        value_type = type.get_value_type()
-        if len(args)==1 and len(kwargs)==0 and isinstance(args[0], value_type):
-            value = args[0]
-        else:
-            value = value_type(*args, **kwargs)
         o = Object(type, value)
         return self.push(name, o)
 
@@ -260,7 +258,7 @@ class ObjectCollection():
             for name, ids in self._namemap.items():
                 for i in ids:
                     o = self._items[i].object
-                    sm = o.summary()
+                    sm = o.summarize()
                     tn = o.get_typename()
                     rows_.append([name, sm, tn])
             rows = [(i,x) for i,x in enumerate(rows_)]

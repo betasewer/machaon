@@ -1,6 +1,7 @@
 from machaon.types.fundamental import fundamental_type
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
+from machaon.core.invocation import instant_context
 
 def run(fn):
     fn()
@@ -31,42 +32,49 @@ def test_typemodule_move():
 
     fundamental_type.add_ancestor(new_typeset)
     
-    assert fundamental_type.get("Int").construct(None, "0x35") == 0x35
-    assert fundamental_type.get("AltString").typename == "AltString"
-    assert fundamental_type.get("Dummy_Rabbit") is not None
-    assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
-    assert fundamental_type.get("Dummy_Rabbit").describer.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
-    assert fundamental_type.get("Second_Rabbit") is not None
-    assert fundamental_type.get("Second_Rabbit").typename == "Second-Rabbit"
+    cxt = instant_context()
+    cxt.type_module = fundamental_type
+
+    assert cxt.get_type("Int").construct(cxt, "0x35") == 0x35
+    assert cxt.get_type("AltString").typename == "AltString"
+    assert cxt.get_type("Dummy_Rabbit") is not None
+    assert cxt.get_type("Dummy_Rabbit").typename == "Dummy-Rabbit"
+    assert cxt.get_type("Dummy_Rabbit").describer.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
+    assert cxt.get_type("Second_Rabbit") is not None
+    assert cxt.get_type("Second_Rabbit").typename == "Second-Rabbit"
 
 def test_fundamental():
-    Int = fundamental_type.get("int")
+    cxt = instant_context()
+
+    Int = cxt.get_type("int")
     assert Int.typename == "Int"
-    assert Int.construct(None, "32") == 32
-    assert Int.convert_to_string(32) == "32"
-    assert Int.convert_to_string(0xFF) == "255"
+    assert Int.construct(cxt, "32") == 32
+    assert Int.stringify_value(32) == "32"
+    assert Int.stringify_value(0xFF) == "255"
 
     Bool = fundamental_type.get("bool")
     assert Bool.typename == "Bool"
-    assert Bool.construct(None, "False") is False
+    assert Bool.construct(cxt, "False") is False
 
     Float = fundamental_type.get("float")
     assert Float.typename == "Float"
-    assert Float.construct(None, "-0.05") == -0.05
+    assert Float.construct(cxt, "-0.05") == -0.05
 
     Complex = fundamental_type.get("complex")
     assert Complex.typename == "Complex"
-    assert Complex.construct(None, "2+3j") == 2+3j
+    assert Complex.construct(cxt, "2+3j") == 2+3j
 
     Str = fundamental_type.get("str")
     assert Str.typename == "Str"
-    assert Str.construct(None, "AAA") == "AAA"
+    assert Str.construct(cxt, "AAA") == "AAA"
 
 def test_method():
-    regmatch = fundamental_type.get("Str").select_method("reg-match")
+    cxt = instant_context()
+
+    regmatch = cxt.get_type("Str").select_method("reg-match")
     assert regmatch is not None
     assert regmatch.name == "reg-match"
-    assert regmatch.get_result().get_typename() == "Bool"
+    assert regmatch.get_result().get_typename() == "bool"
 
     act = regmatch.get_action()
     assert act(None, "0123.txt", "[0-9]+")
@@ -80,11 +88,13 @@ def test_any():
     assert anytype.is_any()
     assert anytype.value_type is None
     inst = Dummy_Rabbit()
-    assert anytype.convert_to_string(inst) == anytype.describer.stringify(anytype, inst)
+    assert anytype.stringify_value(inst) == anytype.describer.stringify(anytype, inst)
 
 def test_function():
-    fntype = fundamental_type.get("Function")
-    fnpower = fntype.construct(None, "@ * @")
+    cxt = instant_context()
+
+    fntype = cxt.get_type("Function")
+    fnpower = fntype.construct(cxt, "@ * @")
     assert fnpower
     from machaon.core.message import MessageExpression
     assert isinstance(fnpower, MessageExpression)

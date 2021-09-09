@@ -241,7 +241,10 @@ class Process:
     #
     #
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta 
+        Params:
+            int|str:
+        """
         if isinstance(value, int):
             proc = context.root.find_process(value)
             if proc is None:
@@ -250,8 +253,6 @@ class Process:
         elif isinstance(value, str):
             v = int(value)
             return Process.constructor(self, context, v)
-        else:
-            raise TypeError(value)
 
 #
 # プロセスの中断指示
@@ -1051,11 +1052,10 @@ class ProcessError():
     def constructor(self, context, value):
         """ @meta 
         例外オブジェクトからの変換をサポート
+        Params:
+            builtins.Exception:
         """
-        if isinstance(value, Exception):
-            return ProcessError(context, value)
-        else:
-            raise TypeError(repr(value))
+        return ProcessError(context, value)
 
     def summarize(self):
         """ @meta """
