@@ -235,11 +235,15 @@ class Message:
         if self.selector is None:
             raise ValueError("セレクタが指定されていません")
         
+        reci = self.reciever
+        if isinstance(reci, BasicRef):
+            reci = reci.pick_object(context)
+        
         if isinstance(self.selector, TypeMethodInvocation):
             sign = self.selector.get_method().get_signature()
-            return "{}.{} = {}".format(self.reciever.get_typename(), self.selector.get_method_name(), sign)
+            return "{}.{} = {}".format(reci.get_typename(), self.selector.get_method_name(), sign)
 
-        args = [self.reciever]
+        args = [reci]
         inventry = self.selector.prepare_invoke(context, *args)
         
         from inspect import Signature
@@ -393,7 +397,7 @@ def select_reciever(context, expression):
     if expression and expression[0].isupper():
         ot = select_type(context, expression)
         if ot:
-            if ot.value.is_none():
+            if ot.value.is_none_type():
                 return context.get_type("None").new_object(None) # Noneの型はレシーバの文脈ではNoneの値にする
             return ot
 
@@ -440,7 +444,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
 
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
-        if not typetraits or not typetraits.is_object_collection(): # ObjectCollectionには対応しない
+        if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
             inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
             return Bind1stInvocation(inv, int(name), "Int", modbits)
 
@@ -453,16 +457,18 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     # 型メソッド
     using_type_method = typetraits is not None
     if using_type_method:
-        meth = typetraits.select_method(name)
-        if meth is not None:
-            return TypeMethodInvocation(typetraits, meth, modbits)
-    
-    # レシーバがオブジェクト集合の場合はメンバ参照に変換
-    if typetraits and typetraits.is_object_collection():
-        inv = ObjectMemberInvocation(name, modbits)
-        if reciever:
-            inv.resolve(reciever)
-        return inv
+        # 型メソッドを参照
+        inv = typetraits.select_invocation(name)
+        if inv is not None:
+            inv.set_modifier(modbits)
+            return inv
+        
+        # レシーバがオブジェクト集合の場合はメンバ参照に変換
+        if typetraits.is_object_collection_type():
+            inv = ObjectMemberInvocation(name, modbits)
+            if reciever:
+                inv.resolve(reciever)
+            return inv
     
     # グローバル定義の関数
     from machaon.types.generic import resolve_generic_method_invocation
@@ -470,8 +476,9 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     if inv is not None:
         return inv 
 
-    if using_type_method and not typetraits.is_using_instance_method():
-        raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.typename))
+    if using_type_method:
+        if not typetraits.is_selectable_instance_method():
+            raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.get_typename()))
     
     # インスタンスメソッド
     return InstanceMethodInvocation(name, modbits)
@@ -486,14 +493,14 @@ def enum_selectable_method(typetraits, instance=None):
         typetraits(Type): 型オブジェクト
         *instance(Any): インスタンス
     Yields:
-        Method:
+        Tuple[List[str], Method]:
     """
     # 型メソッドの列挙
-    for meth in typetraits.enum_methods():
+    for names, meth in typetraits.enum_methods():
         tinv = TypeMethodInvocation(typetraits, meth)
-        yield tinv.query_method(typetraits)
+        yield names, tinv.query_method(typetraits)
     
-    if not typetraits.is_using_instance_method():
+    if not typetraits.is_selectable_instance_method():
         return
     
     # インスタンスメソッド
@@ -514,7 +521,7 @@ def enum_selectable_method(typetraits, instance=None):
         meth = query_method(InstanceMethodInvocation(name))
         if meth is None:
             continue
-        yield meth
+        yield [name], meth
 
 def enum_selectable_attributes(instance):
     for name in dir(instance):
@@ -875,13 +882,15 @@ class MessageEngine():
                 return new_block_bits(memberid)
                 
             elif objid[0] == SIGIL_OBJECT_ROOT_MEMBER:
-                # ルートオブジェクトのメンバ参照
+                # ルートオブジェクトの参照
                 tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
                 memberid = token[2:]
-                if not memberid:
-                    raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_ROOT_MEMBER))
-
-                return new_block_bits(memberid)
+                if memberid:
+                    # メンバ参照
+                    return new_block_bits(memberid)
+                else:
+                    # オブジェクト自体を参照
+                    objid = ""
                 
             elif objid.isdigit():
                 # 数値名称のオブジェクト
@@ -1010,9 +1019,14 @@ class MessageEngine():
 
         elif objcode == TERM_OBJ_REF_ROOT_MEMBER:
             rt = context.get_type("RootObject")
-            reciever = rt.new_object(rt.value_type(context))
-            selector = select_method(values[0], reciever.type, reciever=reciever.value)
-            objs = (reciever, selector)
+            rv = rt.value_type(context)
+            root = rt.new_object(rv)
+            member_id = values[0]
+            if member_id:
+                selector = select_method(values[0], root.type, reciever=root.value)
+                objs = (root, selector)
+            else:
+                objs = (root,)
 
         elif objcode == TERM_OBJ_NOTHING:
             pass
@@ -1134,7 +1148,7 @@ class MessageEngine():
         else:
             produce_message = self.produce_message_1st
 
-        self._log(context, LOG_MESSAGE_BEGIN, self)
+        self._log(context, LOG_MESSAGE_BEGIN, self.source)
 
         evalcxt = EvalContext(context)
         self._lastevalcxt = evalcxt
@@ -1315,7 +1329,7 @@ class MemberGetExpression():
         
         inv = select_method(self.name, subject.type, reciever=subject.value)
         message = Message(subject, inv)
-        self._log(subcontext, LOG_MESSAGE_BEGIN, message)
+        self._log(subcontext, LOG_MESSAGE_BEGIN, "@ {}".format(self.name))
         
         evalcontext = EvalContext(subcontext)
         result = message.eval(evalcontext)

@@ -1,7 +1,7 @@
 import pytest
 
 from machaon.core.message import select_method
-from machaon.core.invocation import instant_context, ObjectMemberInvocation
+from machaon.core.invocation import InstanceMethodInvocation, instant_context, ObjectMemberInvocation
 from machaon.types.fundamental import fundamental_type
 from machaon.core.method import Method
 from machaon.core.object import ObjectCollection, Object
@@ -53,6 +53,7 @@ def test_anyobject_method_select():
     assert gm
     assert gm.display() == ("TypeMethod", "GenericMethods:less", "")
 
+
 def test_objcol_select():
     StrType = fundamental_type.get("Str")
 
@@ -79,14 +80,3 @@ def test_objcol_select():
     om = select_method("gorilla", ColType, reciever=col)
     assert om
     assert om.display() == ("ObjectMember", "gorilla", "")
-
-@pytest.mark.xfail()
-def test_objcol_no_delegation():
-    col = ObjectCollection()
-    col.push("apple", Object(StrType, "リンゴ"))
-
-    # ObjectCollectionのinstance method (失敗する)
-    dm = select_method("startswith", ColType, reciever=col)
-    assert dm
-    assert dm.display() == ("ObjectMember", "startswith", "")
-

@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.core.typedecl import parse_type_declaration
+from machaon.core.typedecl import parse_type_declaration, METHODS_BOUND_TYPE_INSTANCE
 from machaon.types.fundamental import fundamental_type
 from machaon.core.method import Method
 from machaon.core.invocation import instant_context
@@ -52,8 +52,8 @@ def test_valuetype_define():
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
     assert t.doc == "<no document>"
-    assert not t.is_methods_type_bound()
-
+    assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
+    
 def test_method_docstring():
     def plus(a, b):
         """ @method

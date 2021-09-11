@@ -1,4 +1,10 @@
-from machaon.core.symbol import SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, BadTypename, full_qualified_name
+from machaon.core.symbol import (
+    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, BadTypename, full_qualified_name,
+    PythonBuiltinTypenames
+)
+
+METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
+METHODS_BOUND_TYPE_INSTANCE = 2
 
 #
 # 型パラメータを与えられたインスタンス。
@@ -7,19 +13,58 @@ from machaon.core.symbol import SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, BadT
 #
 class TypeProxy:
     def get_typedef(self):
-        """ 型定義オブジェクトを返す """
+        """ 型定義オブジェクトを返す
+        Returns:
+            Type: 
+        """
+        raise NotImplementedError()
+    
+    def get_value_type(self):
+        """ 値型を返す
+        Returns:
+            type:
+        """
         raise NotImplementedError()
     
     def get_typename(self):
-        """ 型名を返す """
+        """ 型名を返す
+        Returns:
+            Str: 
+        """
         raise NotImplementedError()
 
     def get_conversion(self):
-        """ 型宣言を返す """
+        """ 型宣言を返す 
+        Returns:
+            Str:
+        """
         raise NotImplementedError()
 
-    def is_any(self):
-        """ Any型か """
+    def get_describer(self, mixin):
+        """ 実装定義オブジェクトを返す
+        Params:
+            mixin(Int): ミキシン実装のインデックス
+        Returns:
+            Any:
+        """
+        raise NotImplementedError()
+
+    def get_describer_qualname(self, mixin=None):
+        """ 実装定義オブジェクトの名前を返す
+        Returns:
+            Str:
+        """
+        describer = self.get_describer(mixin)
+        if isinstance(describer, type):
+            return full_qualified_name(describer)
+        else:
+            return str(describer)
+    
+    def get_document(self):
+        """
+        Returns:
+            Str:
+        """
         raise NotImplementedError()
     
     def check_type_instance(self, type):
@@ -30,15 +75,58 @@ class TypeProxy:
         """ 互換性のある値型か """
         raise NotImplementedError()
 
+    # メソッド関連
+    def select_invocation(self, name):
+        """ メソッド呼び出しを返す
+        Returns:
+            Optional[BasicInvocation]:
+        """
+        raise NotImplementedError()
+
+    def select_method(self, name):
+        """ メソッドを名前で検索する
+        Returns:
+            Optional[Method]:
+        """
+        raise NotImplementedError()
+
+    def enum_methods(self):
+        """ メソッドを列挙する
+        Yields:
+            Tuple[List[str], Method]: メソッド名のリスト、メソッドオブジェクト
+        """
+        raise NotImplementedError()
+    
+    def get_methods_bound_type(self):
+        """ メソッドへのインスタンスの紐づけ方のタイプを返す
+        Returns:
+            Int: METHODS_BOUND_TYPE_XXX
+        """
+        raise NotImplementedError()
+
+    def is_selectable_instance_method(self):
+        """ インスタンスメソッドを参照可能か        
+        """
+        raise NotImplementedError()
+
+    # 特殊メソッド
     def constructor(self, context, value):
         """ オブジェクトを構築する """
         raise NotImplementedError()
     
     def construct(self, context, value):
+        """ オブジェクトを構築して値を返す """
         if self.check_value_type(type(value)):
             return value # 変換の必要なし
-        return self.constructor(context, value)
-    
+        ret = self.constructor(context, value)
+        if not self.check_value_type(type(ret)):
+            raise TypeError("'{}.constructor'の返り値型'{}'は値型'{}'と互換性がありません".format(
+                self.get_conversion(), 
+                full_qualified_name(type(ret)),
+                full_qualified_name(self.get_value_type())
+            ))
+        return ret
+
     def construct_obj(self, context, value):
         """ Objectのインスタンスを返す """
         convval = self.construct(context, value)
@@ -64,9 +152,115 @@ class TypeProxy:
 
     def pprint_value(self, app, value):
         raise NotImplementedError()
+    
+    # 基本型の判定
+    def is_any_type(self):
+        raise NotImplementedError()
+
+    def is_none_type(self):
+        raise NotImplementedError()
+
+    def is_object_collection_type(self):
+        raise NotImplementedError()
+        
+    def is_type_type(self):
+        raise NotImplementedError()
+    
+    def is_function_type(self):
+        raise NotImplementedError()
 
 
-class TypeInstance(TypeProxy):
+class RedirectProxy(TypeProxy):
+    # typedef の先の実装に転送する
+    def get_value_type(self):
+        return self.get_typedef().get_value_type()
+    
+    def get_typename(self):
+        return self.get_typedef().get_typename()
+
+    def get_conversion(self):
+        return self.get_typedef().get_conversion()
+
+    def get_describer(self, mixin):
+        return self.get_typedef().get_describer(mixin)
+
+    def get_document(self):
+        return self.get_typedef().get_document()
+    
+    def select_invocation(self, name):
+        return self.get_typedef().select_invocation(name)
+
+    def select_method(self, name):
+        return self.get_typedef().select_method(name)
+
+    def enum_methods(self):
+        return self.get_typedef().enum_methods()
+    
+    def get_methods_bound_type(self):
+        return self.get_typedef().get_methods_bound_type()
+
+    def is_selectable_instance_method(self):
+        return self.get_typedef().is_selectable_instance_method()
+
+    def constructor(self, context, value):
+        return self.get_typedef().constructor(context, value)
+
+    def stringify_value(self, value):
+        return self.get_typedef().stringify_value(value)
+    
+    def summarize_value(self, value):
+        return self.get_typedef().summarize_value(value)
+
+    def pprint_value(self, spirit, value):
+        return self.get_typedef().pprint_value(spirit, value)
+    
+    def is_any_type(self):
+        return self.get_typedef().is_any_type()
+
+    def is_none_type(self):
+        return self.get_typedef().is_none_type()
+
+    def is_object_collection_type(self):
+        return self.get_typedef().is_object_collection_type()
+        
+    def is_type_type(self):
+        return self.get_typedef().is_type_type()
+
+    def is_function_type(self):
+        return self.get_typedef().is_function_type()
+
+
+class DefaultProxy(TypeProxy):
+    # デフォルト値を提供する
+    def get_typedef(self):
+        return None
+    
+    def get_document(self):
+        return "<no document>"
+
+    def get_methods_bound_type(self):
+        return METHODS_BOUND_TYPE_INSTANCE
+
+    def is_selectable_instance_method(self):
+        return False
+
+    def is_any_type(self):
+        return False
+
+    def is_none_type(self):
+        return False
+
+    def is_object_collection_type(self):
+        return False
+        
+    def is_type_type(self):
+        return False
+
+    def is_function_type(self):
+        return False
+
+
+class TypeInstance(RedirectProxy):
     """
     引数を含むインスタンス
     """
@@ -78,28 +272,13 @@ class TypeInstance(TypeProxy):
     def get_typedef(self):
         return self.type
     
-    def get_typename(self):
-        return self.type.get_typename()
-    
-    def is_any(self):
-        return self.type.is_any()
-
     def check_type_instance(self, type):
         return self.type is type
 
     def check_value_type(self, valtype):
-        if self.type.is_any():
+        if self.type.is_any_type():
             return True # 制限なし
-        return self.type.value_type is valtype
-    
-    def is_supertype(self, other):
-        """ 対象の型の基底タイプであるか 
-        if self.is_any():
-            return True
-        if self is other:
-            return True
-        return False
-        """
+        return issubclass(valtype, self.type.value_type)
     
     def get_conversion(self):
         n = ""
@@ -119,15 +298,6 @@ class TypeInstance(TypeProxy):
     def constructor(self, context, value):
         return self.type.constructor(context, value, self)
 
-    def stringify_value(self, value):
-        return self.type.stringify_value(value)
-    
-    def summarize_value(self, value):
-        return self.type.summarize_value(value)
-
-    def pprint_value(self, value):
-        return self.type.pprint_value(value)
-    
     @property
     def type_args(self):
         return self.typeargs
@@ -141,15 +311,108 @@ class TypeInstance(TypeProxy):
         return [*self.typeargs, *self.ctorargs]
 
 
-class TypeUnion(TypeProxy):
+class PythonType(DefaultProxy):
+    """
+    Pythonの型
+    """
+    def __init__(self, type, expression=None, ctorargs=None):
+        self.type = type
+        self.expr = expression or full_qualified_name(type)
+        self.ctorargs = ctorargs or []
+    
+    @classmethod
+    def load_from_name(cls, name, ctorargs=None):
+        from machaon.core.importer import attribute_loader
+        loader = attribute_loader(name)
+        t = loader()
+        if not isinstance(t, type):
+            raise TypeError("'{}'はtypeのインスタンスではありません".format(name))
+        return cls(t, name, ctorargs)
+
+    def get_typename(self):
+        return self.expr.rpartition(".")[2] # 最下位のシンボルのみ
+
+    def get_conversion(self):
+        return self.expr
+    
+    def get_value_type(self):
+        return self.type
+    
+    def get_describer(self, _mixin):
+        return self.type
+    
+    def get_document(self):
+        doc = getattr(self.type, "__doc__", None)
+        return doc if doc else ""
+    
+    def check_type_instance(self, type):
+        return isinstance(type, PythonType) and type.type is self.type
+    
+    def check_value_type(self, valtype):
+        return issubclass(valtype, self.type)
+
+    def select_method(self, name):
+        inv = self.select_invocation(name)
+        if inv:
+            return inv.get_method()
+        return None
+
+    def select_invocation(self, name):
+        from machaon.core.invocation import FunctionInvocation, select_method_attr
+        value = select_method_attr(self.type, name)
+        if value:
+            return FunctionInvocation(value)
+        return None
+
+    def enum_methods(self):
+        from machaon.core.message import enum_selectable_attributes
+        from machaon.core.invocation import FunctionInvocation, select_method_attr
+        for name in enum_selectable_attributes(self.type):
+            value = select_method_attr(self.type, name)
+            if value:
+                inv = FunctionInvocation(value)
+                meth = inv.get_method()
+                if meth is not None:
+                    yield [name], meth 
+
+    def is_selectable_instance_method(self):
+        return True 
+    
+    def constructor(self, _context, value):
+        return self.type(value, *self.ctorargs)
+
+    def stringify_value(self, value):
+        tn = full_qualified_name(type(value))
+        if type(value).__repr__ is object.__repr__:
+            return "<{} id={:0X}>".format(tn, id(value))
+        else:
+            return "{}({})".format(value, tn)
+    
+    def summarize_value(self, value):
+        if type(value).__str__ is object.__str__:
+            return "<{} object>".format(full_qualified_name(type(value)))
+        else:
+            return str(value)
+
+    def pprint_value(self, app, value):
+        app.post("message", self.summarize_value(value))
+    
+
+class TypeUnion(DefaultProxy):
     """
     共和型
     """
     def __init__(self, types):
         self.types = types
     
+    def get_typename(self):
+        return "Union"
+    
     def get_conversion(self):
         return "|".join([x.get_typename() for x in self.types])
+    
+    def get_document(self):
+        return "Union type of {}".format(", ".join(["'{}'".format(x.get_typename()) for x in self.types]))
     
     def check_type_instance(self, type):
         return any(x is type for x in self.types)
@@ -160,9 +423,49 @@ class TypeUnion(TypeProxy):
                 return True
         return False
 
+    def match_value_type(self, valtype):
+        for t in self.types:
+            if t.check_value_type(valtype):
+                return t
+        return None
+    
     def constructor(self, context, value):
         firsttype = self.types[0]
         return firsttype.constructor(context, value)
+
+    def stringify_value(self, value):
+        t = self.match_value_type(type(value))
+        if t is None:
+            raise TypeError(type(value))
+        return t.stringify_value(value)
+    
+    def summarize_value(self, value):
+        t = self.match_value_type(type(value))
+        if t is None:
+            raise TypeError(type(value))
+        return t.summarize_value(value)
+
+    def pprint_value(self, app, value):
+        t = self.match_value_type(type(value))
+        if t is None:
+            raise TypeError(type(value))
+        return t.pprint_value(app, value)
+    
+#
+def make_conversion_from_value_type(value_type):
+    n = full_qualified_name(value_type)
+    if SIGIL_PYMODULE_DOT not in n:
+        if PythonBuiltinTypenames.literals:
+            return n.capitalize()
+        elif PythonBuiltinTypenames.dictionaries:
+            return "ObjectCollection"
+        elif PythonBuiltinTypenames.iterables:
+            return "Tuple"
+        elif n not in __builtins__:
+            raise ValueError("'{}'の型名を作成できません".format(n))
+        n = "builtins.{}".format(n)
+    return n
+
 
 #
 #
@@ -198,7 +501,9 @@ class TypeDecl:
         """
         if self.typename is None:
             return "Any"
-        
+        elif isinstance(self.typename, TypeProxy):
+            return self.typename.get_conversion()
+
         elems = ""
         elems += self.typename
         if self.declargs:
@@ -220,10 +525,16 @@ class TypeDecl:
         if self.typename is None:
             # Any型を指す
             return context.get_type("Any")
+        elif isinstance(self.typename, TypeProxy):
+            return self.typename
         elif self.typename == "Union":
             # 型制約
             typeargs = [x.instance(context) for x in self.declargs]
             return TypeUnion(typeargs)
+        elif SIGIL_PYMODULE_DOT in self.typename:
+            # machaonで未定義のPythonの型
+            ctorargs = [*self.ctorargs, *(args or [])]
+            return PythonType.load_from_name(self.typename, ctorargs)
         else:
             # 型名を置換する
             typename = type_anon_redirection.get(self.typename.lower(), self.typename)

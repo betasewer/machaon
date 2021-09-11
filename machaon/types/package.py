@@ -295,7 +295,7 @@ class AppPackageType:
             err = None
             try:
                 for typedef in mod.scan_type_definitions():
-                    typename = typedef.typename
+                    typename = typedef.get_typename()
                     qualname = typedef.get_describer_qualname()
                     defs.append({
                         "typename" : typename,

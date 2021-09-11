@@ -8,7 +8,11 @@ from machaon.core.symbol import (
     full_qualified_name, is_valid_typename, summary_escape,
     SIGIL_SCOPE_RESOLUTION
 )
-from machaon.core.typedecl import TypeProxy, TypeInstance
+from machaon.core.typedecl import (
+    TypeProxy, TypeInstance,
+    METHODS_BOUND_TYPE_TRAIT_INSTANCE,
+    METHODS_BOUND_TYPE_INSTANCE
+)
 from machaon.core.method import (
     BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod,
     make_method_prototype, meta_method_prototypes, 
@@ -40,10 +44,12 @@ class BadMethodDelegation(Exception):
 class UnsupportedMethod(Exception):
     pass
 
-#
-TYPE_ANYTYPE      = 0x01
-TYPE_OBJCOLTYPE   = 0x02
-TYPE_NONETYPE     = 0x04
+TYPE_ANYTYPE                = 0x0001
+TYPE_OBJCOLTYPE             = 0x0002
+TYPE_NONETYPE               = 0x0004
+TYPE_TYPETYPE               = 0x0008
+TYPE_FUNTYPE                = 0x0010
+
 TYPE_TYPETRAIT_DESCRIBER    = 0x0100
 TYPE_VALUETYPE_DESCRIBER    = 0x0200
 TYPE_USE_INSTANCE_METHOD    = 0x0400
@@ -67,36 +73,20 @@ class Type(TypeProxy):
         self._metamethods: Dict[str, MetaMethod] = {}
         self._mixin = []
     
-    @property
-    def fulltypename(self):
-        fulltypename = self.typename
-        if self.scope:
-            fulltypename = self.scope + "." + fulltypename
-        return fulltypename
-    
     def __str__(self):
         return "<Type '{}'>".format(self.typename)
     
     def get_typename(self):
         return self.typename
-
-    def is_loaded(self):
-        return self.flags & TYPE_LOADED > 0
     
-    def is_any(self):
-        return self.flags & TYPE_ANYTYPE > 0
-    
-    def is_none(self):
-        return self.flags & TYPE_NONETYPE > 0
-    
-    def is_object_collection(self):
-        return self.flags & TYPE_OBJCOLTYPE > 0
-    
+    def get_conversion(self):
+        if self.scope:
+            return self.typename + SIGIL_SCOPE_RESOLUTION + self.scope
+        else:
+            return self.typename
+        
     def get_value_type(self):
         return self.value_type
-    
-    def is_scope(self, scope):
-        return self.scope == scope
     
     def get_scoped_typename(self):
         if self.scope:
@@ -117,6 +107,16 @@ class Type(TypeProxy):
         else:
             return str(describer)
 
+    def get_document(self):
+        return self.doc
+
+    #
+    def is_loaded(self):
+        return self.flags & TYPE_LOADED > 0
+    
+    def is_scope(self, scope):
+        return self.scope == scope
+    
     def copy(self):
         t = Type()
         t.typename = self.typename
@@ -135,19 +135,32 @@ class Type(TypeProxy):
     def get_typedef(self):
         return self
     
-    def get_conversion(self):
-        return self.typename
-
     def check_type_instance(self, type):
         return self is type
 
     def check_value_type(self, valtype):
-        if self.is_any():
+        if self.flags & TYPE_ANYTYPE:
             return True # 制限なし
-        return self.value_type is valtype
-    
+        return issubclass(valtype, self.value_type)
+
     def instance(self, *args):
         return TypeInstance(self, ctorargs=args)
+    
+    #
+    def is_any_type(self):
+        return self.flags & TYPE_ANYTYPE > 0
+
+    def is_none_type(self):
+        return self.flags & TYPE_NONETYPE > 0
+
+    def is_object_collection_type(self):
+        return self.flags & TYPE_OBJCOLTYPE > 0
+
+    def is_type_type(self):
+        return self.flags & TYPE_TYPETYPE > 0
+
+    def is_function_type(self):
+        return self.flags & TYPE_FUNTYPE > 0
 
     # 
     # メソッド呼び出し
@@ -173,6 +186,12 @@ class Type(TypeProxy):
             except Exception as e:
                 raise MethodLoadError(e, meth.name).with_traceback(e.__traceback__)
         return meth
+    
+    def select_invocation(self, name):
+        from machaon.core.invocation import TypeMethodInvocation
+        meth = self.select_method(name)    
+        if meth:
+            return TypeMethodInvocation(self, meth)
 
     def enum_methods(self):
         for name, meth in self._methods.items():
@@ -180,7 +199,8 @@ class Type(TypeProxy):
                 meth.load(self)
             except Exception as e:
                 raise MethodLoadError(e, name)
-            yield meth
+            names = self.get_member_identical_names(name)
+            yield names, meth
     
     def add_method(self, method):
         name = method.name
@@ -205,13 +225,13 @@ class Type(TypeProxy):
     def describer(self):
         return self._describer
 
-    def is_methods_type_bound(self):
-        return (self.flags & TYPE_TYPETRAIT_DESCRIBER) > 0
-    
-    def is_methods_instance_bound(self):
-        return (self.flags & TYPE_VALUETYPE_DESCRIBER) > 0
+    def get_methods_bound_type(self):
+        if (self.flags & TYPE_TYPETRAIT_DESCRIBER) > 0:
+            return METHODS_BOUND_TYPE_TRAIT_INSTANCE
+        else:
+            return METHODS_BOUND_TYPE_INSTANCE
 
-    def is_using_instance_method(self):
+    def is_selectable_instance_method(self):
         return (self.flags & TYPE_USE_INSTANCE_METHOD) > 0
 
     #
@@ -324,9 +344,8 @@ class Type(TypeProxy):
         if method.is_type_bound():
             args = (self, *args)
         else:
-            if self.is_methods_instance_bound():
-                pass
-            elif self.is_methods_type_bound():
+            bt = self.get_methods_bound_type()
+            if bt == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
                 args = (self, *args)
 
         fn = self.delegate_method(method.get_action_target())
@@ -411,7 +430,7 @@ class Type(TypeProxy):
         
         if isinstance(describer, type):
             # describerをtypemodule.getで識別子として使用可能にする
-            setattr(describer, "Type_typename", self.fulltypename) 
+            setattr(describer, "Type_typename", self.get_conversion()) 
 
         # ロード完了
         self.flags |= TYPE_LOADED
@@ -735,11 +754,12 @@ class TypeModule():
         elif isinstance(typecode, Type):
             t = typecode
         elif hasattr(typecode, "Type_typename"):
-            fulltypename = typecode.Type_typename
-            if "." in fulltypename:
-                thisscope, _, typename = fulltypename.rpartition(".")
+            tn = typecode.Type_typename
+            if SIGIL_SCOPE_RESOLUTION in tn:
+                thisscope, _, typename = tn.rpartition(SIGIL_SCOPE_RESOLUTION)
             else:
-                thisscope, typename = None, fulltypename
+                thisscope = None
+                typename = tn
             t = self.find(typename, scope=thisscope)
         
         if t is None:
@@ -893,5 +913,3 @@ class TypeModule():
     # 遅延登録
     def definitions(self):
         return self.DefinitionSyntax(self)
-    
-

@@ -1,3 +1,4 @@
+from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE
 import pytest
 from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias
 from machaon.types.fundamental import fundamental_type
@@ -26,7 +27,7 @@ def test_valuetype_define():
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
     assert t.doc == "<no document>"
-    assert t.is_methods_instance_bound()
+    assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
 
 # TypeDefinitionで登録
 def test_valuetype_td_define():
@@ -36,7 +37,7 @@ def test_valuetype_td_define():
     assert t.typename == "SomeAlias" # 宣言が反映される
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト" # 宣言が反映される
-    assert t.is_methods_instance_bound()
+    assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
 
 # 文字列で登録
 def test_valuetype_td_docstring_define():
@@ -49,8 +50,8 @@ def test_valuetype_td_docstring_define():
     assert t.typename == "BigEntity"
     assert t.value_type is SomeValue
     assert t.doc == "巨大なオブジェクト"
-    assert t.is_methods_instance_bound()
-    assert t.is_using_instance_method()
+    assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
+    assert t.is_selectable_instance_method()
 
 # 宣言と値がかみ合わない場合
 @pytest.mark.xfail()
@@ -91,10 +92,9 @@ def test_scoped_define():
     assert spec_str_t.typename == "Str"
     assert spec_str_t.get_value_type() is SpecStrType
     assert spec_str_t.get_describer_qualname() == "tests.test_object_type.SpecStrType"
-    assert getattr(SpecStrType, "Type_typename") == "spec.Str"
-    assert not spec_str_t.is_methods_type_bound()
-    assert spec_str_t.is_methods_instance_bound()
-    assert not spec_str_t.is_using_instance_method()
+    assert getattr(SpecStrType, "Type_typename") == "Str/spec"
+    assert spec_str_t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
+    assert not spec_str_t.is_selectable_instance_method()
 
     str_t = types.define(fundamental_type.get("Str"))
     assert types.get("Str", scope="spec") is spec_str_t

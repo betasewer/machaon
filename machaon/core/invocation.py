@@ -3,7 +3,10 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 import inspect
 
 from machaon.core.type import Type, TypeModule
-from machaon.core.typedecl import TypeProxy, parse_type_declaration
+from machaon.core.typedecl import (
+    PythonType, TypeProxy, 
+    parse_type_declaration, make_conversion_from_value_type
+)
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
 from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION
 from machaon.core.symbol import (
@@ -160,12 +163,8 @@ class InvocationEntry():
             retval = not retval
         
         # Any型の指定がある場合は、型を値から推定する
-        if rettype is None or rettype.is_any():
-            deducedtype = context.deduce_type(retval)
-            if deducedtype is not None:
-                rettype = deducedtype
-            else:
-                rettype = context.get_type("Any") # 推定もできなかった
+        if rettype is None or rettype.is_any_type():
+            rettype = context.deduce_type(retval)
         
         # 返り値型に値が適合しない場合は、型変換を行う
         if not rettype.check_value_type(type(retval)):
@@ -288,15 +287,19 @@ class InvocationContext:
             raise BadTypename(typename)
         return t
     
-    def deduce_type(self, value: Any) -> Optional[TypeProxy]:
+    def get_py_type(self, type) -> PythonType:
+        """ Pythonの型 """
+        return PythonType(type)
+    
+    def deduce_type(self, value: Any) -> TypeProxy:
         """ 値から型を推定する """
         if isinstance(value, Object):
             return value.type
         value_type = type(value) 
         t = self.type_module.deduce(value_type)
-        if t is None:
-            return None
-        return t
+        if t is not None:
+            return t
+        return PythonType(value_type)
 
     def define_type(self, typecode, *, scope=None) -> Type:
         """ 型を定義する """
@@ -318,7 +321,10 @@ class InvocationContext:
         if type:
             t = self.select_type(type)
             if t is None:
-                t = self.define_type(type) # 無ければ定義して返す 
+                if isinstance(value, str):
+                    raise BadTypename(value)
+                else:
+                    t = self.define_type(type) # 無ければ定義して返す 
             if value is None and not args:
                 convobj = t.construct_obj(self, None) # デフォルトコンストラクタ
             else:
@@ -334,10 +340,7 @@ class InvocationContext:
             if value is None:
                 return self.get_type("None").new_object(value)
             valtype = self.deduce_type(value)
-            if valtype:
-                return valtype.construct_obj(self, value)
-            else:
-                return self.get_type("Any").new_object(value)
+            return valtype.construct_obj(self, value)
     
     def new_invocation_error_object(self, exception=None):
         """ エラーオブジェクトを作る """
@@ -410,7 +413,7 @@ class InvocationContext:
         subindex = None
         for code, *args in self._log:
             if code == LOG_MESSAGE_BEGIN:
-                source = args[0].source
+                source = args[0]
                 title = "message"
                 line = source
             elif code == LOG_MESSAGE_CODE:
@@ -638,6 +641,9 @@ class BasicInvocation():
     def __init__(self, modifier):
         self.modifier = modifier
     
+    def set_modifier(self, modifier):
+        self.modifier = modifier
+    
     def display(self):
         raise NotImplementedError()
 
@@ -803,18 +809,13 @@ class InstanceMethodInvocation(BasicInvocation):
     
     def query_method_from_value_type(self, value_type):
         """ インスタンス型から推定してMethodオブジェクトを作成する """
-        fn = getattr(value_type, self.attrname, None)
+        fn = select_method_attr(value_type, self.attrname)
+        if is_bound_method(fn):
+            # クラスメソッドを弾く
+            return None
         if fn is None:
-            raise BadInstanceMethodInvocation(value_type, self.attrname)
+            return None
         
-        if getattr(fn,"__self__",None) is not None:
-            # クラスメソッドを排除する
-            return None
-            
-        if not callable(fn):
-            # 定数の類を取り除く
-            return None
-
         mth = Method(self.attrname, flags=METHOD_FROM_INSTANCE)
         mth.load_from_function(fn)
         self._m = mth
@@ -822,20 +823,22 @@ class InstanceMethodInvocation(BasicInvocation):
     
     def query_method_from_instance(self, instance):
         """ インスタンスからMethodオブジェクトを作成する """
-        fn = self.resolve_instance_method(instance)
+        method = select_method_attr(instance, self.attrname, nullary=True)
+        if method is None:
+            return None
+        
         mth = Method(self.attrname, flags=METHOD_FROM_INSTANCE)
-        mth.load_from_function(fn)
+        if isinstance(method, _nullary):
+            c = make_conversion_from_value_type(type(method.value))
+            mth.load_from_function(method, result_typename=c)
+        else:
+            mth.load_from_function(method)
         return mth
     
     def resolve_instance_method(self, instance):
-        method = getattr(instance, self.attrname, None)
+        method = select_method_attr(instance, self.attrname, nullary=True)
         if method is None:
             raise BadInstanceMethodInvocation(type(instance), self.attrname)
-
-        if not callable(method):
-            # 引数なしの関数に変換する
-            method = _nullary(method)
-        
         return method
     
     def prepare_invoke(self, context, *argobjects):
@@ -845,7 +848,38 @@ class InstanceMethodInvocation(BasicInvocation):
         return InvocationEntry(self, method, args, {})
     
 #
-# グローバルな関数を呼び出す
+def select_method_attr(target, name, *, nullary=False):
+    if not hasattr(target, name):
+        return None
+    fn = getattr(target, name)
+    
+    if not callable(fn):
+        if nullary:
+            # 引数なしの関数に変換する
+            fn = _nullary(fn, name)
+        else:
+            return None
+    
+    return fn
+
+def is_bound_method(target):
+    if getattr(target, "__self__", None) is not None:
+        return True
+    return False        
+
+
+class _nullary:
+    @property
+    def __name__(self):
+        return self.name
+    def __init__(self, v, n):
+        self.value = v
+        self.name = n
+    def __call__(s, self=None):
+        return s.value
+    
+#
+# 関数を値から呼び出す
 #
 class FunctionInvocation(BasicInvocation):
     def __init__(self, function, modifier=0, *, do_inspect=True):
@@ -938,12 +972,8 @@ class ObjectMemberGetterInvocation(BasicInvocation):
             if elem is None:
                 raise BadObjectMemberInvocation()
             obj = elem.object
-        return InvocationEntry(self, _nullary(obj), (), {})
+        return InvocationEntry(self, _nullary(obj, self.name), (), {})
 
-def _nullary(v):
-    def _method():
-        return v
-    return _method
 
 #
 class ObjectMemberInvocation(BasicInvocation):

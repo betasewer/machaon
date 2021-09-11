@@ -1,5 +1,6 @@
 import pytest
-from machaon.core.typedecl import TypeDecl, parse_type_declaration
+from machaon.core.type import Type
+from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeUnion, PythonType
 from machaon.core.invocation import instant_context
 
 parse_ = parse_type_declaration
@@ -64,9 +65,27 @@ def test_decl_instance():
     assert d.ctorargs[1] == "length"
     assert d.get_typename() == "Sheet"
     assert d.get_conversion() == "Sheet[Int](@, length)"
-    
+
 
 def test_decl_check():
-    #checkvaltype("Int", int)
-    #checkvaltype("Int|Str", int, str)
-    pass
+    cxt = instant_context()
+    def instance(expr):
+        decl = parse_type_declaration(expr)
+        return decl.instance(cxt)
+
+    t = instance("Int")
+    assert isinstance(t, Type)
+    assert t.check_value_type(int)
+    assert not t.check_value_type(str)
+
+    t = instance("Int | Str")
+    assert isinstance(t, TypeUnion)
+    assert t.check_value_type(int)
+    assert t.check_value_type(str)
+    assert not t.check_value_type(float)
+    
+    t = instance("builtins.bytes")
+    assert isinstance(t, PythonType)
+    assert t.check_value_type(bytes)
+    assert not t.check_value_type(str)
+

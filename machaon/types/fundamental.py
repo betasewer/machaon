@@ -1,9 +1,10 @@
+from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
 import re
 import datetime
 
 from machaon.core.type import BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
-from machaon.core.symbol import full_qualified_name
+from machaon.core.symbol import SIGIL_PYMODULE_DOT, full_qualified_name
 from machaon.core.message import enum_selectable_attributes
 
 
@@ -18,25 +19,29 @@ class TypeType():
         Params:
             Str: 型名 / クラスの完全な名前(qualname)
         """
-        if "." in value:
-            from machaon.core.importer import attribute_loader
-            d = TypeDefinition(attribute_loader(value))
-            if not d.load_declaration_docstring():
-                raise BadTypeDeclaration()
-            return d.define(context.type_module) # 即座にロードする
-        else:
-            t = context.select_type(value)
-            if t is None:
-                raise BadTypename(value)
-            return t
+        decl = parse_type_declaration(value)
+        return decl.instance(context)
 
     def stringify(self, v):
         """ @meta """
-        return "<{}>".format(v.typename)
+        return "<{}>".format(v.get_conversion())
 
     #
     # メソッド
     #
+    def load(self, type, context):
+        '''@method context
+        値がクラスであれば型定義として読み込む。
+        Returns:
+            Type: 読み込まれた型
+        '''
+        if isinstance(type, PythonType):
+            raise ValueError("既にロード済みです")
+        d = TypeDefinition(type.type)
+        if not d.load_declaration_docstring():
+            raise BadTypeDeclaration()
+        return d.define(context.type_module) # 即座にロードする
+
     def new(self, type):
         '''@method
         引数無しでコンストラクタを実行する。
@@ -63,8 +68,8 @@ class TypeType():
         型の説明、メソッド一覧を表示する。
         """
         docs = []
-        docs.append(type.fulltypename)
-        docs.extend(type.doc.splitlines())
+        docs.append(type.get_conversion())
+        docs.extend(type.get_document().splitlines())
         docs.append("［実装］\n{}".format(type.get_describer_qualname()))
         docs.append("［メソッド］")
         context.spirit.post("message", "\n".join(docs))
@@ -82,8 +87,7 @@ class TypeType():
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
-        for meth in enum_selectable_method(type, instance):
-            names = type.get_member_identical_names(meth.get_name())
+        for names, meth in enum_selectable_method(type, instance):
             helps.append({
                 "names" : context.new_object(names),
                 "#delegate" : context.new_object(meth, type="Method")
@@ -106,7 +110,7 @@ class TypeType():
         Returns:
             Str:
         '''
-        return type.typename
+        return type.get_typename()
     
     def doc(self, type):
         ''' @method
@@ -114,7 +118,7 @@ class TypeType():
         Returns:
             Str:
         '''
-        return type.doc
+        return type.get_document()
     
     def scope(self, type):
         ''' @method
@@ -122,17 +126,19 @@ class TypeType():
         Returns:
             Str:
         '''
-        if type.scope is None:
-            return ""
-        return type.scope
+        t = type.get_typedef()
+        if t:
+            if type.scope is None:
+                return ""
+            return type.scope
 
-    def qualname(self, type):
+    def conversion(self, type):
         ''' @method
-        スコープを含めた型名。
+        完全な型名。
         Returns:
             Str:
         '''
-        return type.fulltypename
+        return type.get_conversion()
     
     def describer(self, type):
         ''' @method
@@ -142,14 +148,6 @@ class TypeType():
         '''
         return type.get_describer_qualname()
     
-    def sheet(self, type, context):
-        ''' @method context
-        この型の空のSheetを作成する。
-        Returns:
-            Object:
-        '''
-        from machaon.types.sheet import Sheet
-        return Object(context.get_type("Sheet"), Sheet([], type))
 
 class AnyType():
     def vars(self, v):
@@ -411,6 +409,23 @@ class StrType():
             glob[impname] = loader.load_module()
         
         return eval(body, glob, {})
+    
+    def call_python(self, expr, _app, *params):
+        """ @task alias-name [call]
+        Pythonの関数または定数を評価する。
+        Params:
+            *params(Any): 引数
+        Returns:
+            Any:
+        """
+        from machaon.core.importer import attribute_loader
+        loader = attribute_loader(expr)
+        value = loader()
+        if callable(value):
+            return value(*params)
+        else:
+            # 引数は無視される
+            return value
     
     def run_command(self, string, app, *params):
         """ @task
@@ -704,7 +719,7 @@ typedef = fundamental_type.definitions()
 typedef.Type("""
     オブジェクトの型。
     """,
-    value_type=Type, 
+    value_type=TypeProxy, 
     describer="machaon.types.fundamental.TypeType", 
 )
 typedef.Any(

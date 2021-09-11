@@ -26,10 +26,10 @@ class Object():
             raise ValueError("An attempt to assign Object to another Object")
 
     def __repr__(self):
-        return "<Object {1} [{0}]>".format(self.type.typename, repr(self.value))
+        return "<Object {1} [{0}]>".format(self.type.get_typename(), repr(self.value))
     
     def __str__(self):
-        return "{1} [{0}]".format(self.type.typename, self.summarize())
+        return "{1} [{0}]".format(self.type.get_typename(), self.summarize())
     
     def value_dstr(self):
         v = self.value
@@ -38,7 +38,7 @@ class Object():
             ds = "0x{:0X}".format(id(v))
         else:
             ds = str(v)
-        if self.type.is_any():
+        if self.type.is_any_type():
             return "{}({})".format(ds, full_qualified_name(t))
         elif not self.type.check_value_type(t):
             return "{}(!!{})".format(ds, full_qualified_name(t))
@@ -89,7 +89,7 @@ class PrettyObject(Object):
         return True
 
     def __repr__(self):
-        return "<PrettyObject {1} [{0}]>".format(self.type.typename, repr(self.value))
+        return "<PrettyObject {1} [{0}]>".format(self.type.get_typename(), repr(self.value))
 
 #
 #
@@ -222,7 +222,7 @@ class ObjectCollection():
             id = ids[-1]
             item = self._items[id]
             d[item.name] = item.value 
-        return context.get_type("Any").new_object(d)
+        return context.get_py_type(dict).new_object(d)
 
     def constructor(self, context, value):
         """ @meta """

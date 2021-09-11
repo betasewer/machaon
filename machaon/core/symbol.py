@@ -1,5 +1,4 @@
 from typing import Tuple
-from collections import namedtuple
 
 #
 # 型名

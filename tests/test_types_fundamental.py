@@ -85,7 +85,7 @@ def test_method():
 def test_any():
     anytype = fundamental_type.get("Any")
     assert anytype.is_loaded()
-    assert anytype.is_any()
+    assert anytype.is_any_type()
     assert anytype.value_type is None
     inst = Dummy_Rabbit()
     assert anytype.stringify_value(inst) == anytype.describer.stringify(anytype, inst)

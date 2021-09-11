@@ -1,3 +1,4 @@
+from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, DefaultDict, Tuple
 
 import inspect
@@ -68,7 +69,7 @@ class BadMetaMethod(Exception):
     
     def __str__(self):
         errtype = type(self.args[0]).__name__
-        typename = self.args[1].typename
+        typename = self.args[1].get_typename()
         methname = self.args[2].get_action_target()
         return " {}.{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
     
@@ -291,7 +292,7 @@ class Method():
     
     def add_result_self(self, type):
         """ メソッドのselfオブジェクトを返す """
-        decl = parse_type_declaration(type.typename)
+        decl = TypeDecl(type)
         r = MethodResult(decl, "selfオブジェクト", RETURN_SELF)
         self.result = r
 
@@ -369,9 +370,11 @@ class Method():
                 if typefn is not None:
                     callobj = typefn
                     source = "{}:{}".format(this_type.get_scoped_typename(), self.name)
-                    if this_type.is_methods_type_bound() or self.is_mixin():
+                    if this_type.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
                         self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
-            
+                    elif self.is_mixin():
+                        self.flags |= METHOD_TYPE_BOUND
+
             # アクションオブジェクトの初期化処理
             if hasattr(callobj, "describe_method"):
                 # アクションに定義されたメソッド定義処理があれば実行
@@ -487,7 +490,7 @@ class Method():
         
         self.flags |= METHOD_DECL_LOADED
             
-    def load_from_function(self, fn, self_typename=None):
+    def load_from_function(self, fn, self_typename=None, result_typename=None):
         """
         関数オブジェクトから引数を解析しアクションとしてロードする。
         Params:
@@ -500,7 +503,10 @@ class Method():
         self.doc = fn.__doc__ or ""
         
         # 戻り値
-        self.add_result("Any") # 不明だが、値から推定する
+        if result_typename is None:
+            self.add_result("Any") # 不明、値から推定する
+        else:
+            self.add_result(result_typename)
 
         # シグネチャを関数から取得
         try:
@@ -698,9 +704,7 @@ class MethodResult:
     
     @property
     def typename(self):
-        if not self.is_return_self():
-            return self.typedecl.to_string()
-        return None
+        return self.typedecl.to_string()
 
     def get_typename(self):
         return self.typename
