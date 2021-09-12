@@ -113,13 +113,14 @@ class InvocationEntry():
         result = None
         try:
             result = self.action(*self.args, **self.kwargs)
-            self.result = self.result_object(context, value=result)
         except ProcessInterrupted as e:
             raise e
         except Exception as e:
             self.exception = e
+        
+        self.result = self.result_object(context, value=result)
         return self.result
-    
+
     def result_spec(self):
         return self.invocation.get_result_spec()
 
