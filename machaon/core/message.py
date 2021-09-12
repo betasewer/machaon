@@ -16,6 +16,8 @@ from machaon.core.symbol import (
 from machaon.core.object import Object
 from machaon.core.method import MethodParameter
 from machaon.core.invocation import (
+    INVOCATION_FLAG_PRINT_STEP,
+    INVOCATION_FLAG_RAISE_ERROR,
     BasicInvocation,
     TypeMethodInvocation,
     InstanceMethodInvocation,
@@ -673,7 +675,7 @@ class MessageEngine():
         self._readings = []  # type: list[Message]
         self._curblockstack = [] # type: list[int]
         self._msgs = messages or []
-        self._lastdone = ""  # 最後に完成したメッセージの文字列
+        self._lastread = ""  # 最後に完成したメッセージの文字列
         self._lastevalcxt = None
         self._log = _context_dolog
         
@@ -700,7 +702,7 @@ class MessageEngine():
         paren_count = 0
         buffer = self.buffer
         for ch in source:
-            self._lastdone += ch
+            self._lastread += ch
 
             if buffer.quoting():
                 buffer.add(ch)
@@ -1126,10 +1128,13 @@ class MessageEngine():
 
             self._log(evalcontext.context, LOG_MESSAGE_CODE, ConstantLog(code), *values)
 
+            # これから評価するメッセージ式の文字列を排出
+            yield self._lastread.strip()
+            self._lastread = ""
+
             for msg in self.reduce_step(code, values, evalcontext):
-                yield msg
+                yield msg # 組み立てたメッセージを排出
                 self._msgs.append(msg)
-                self._lastdone = ""
     
     def produce_message_cached(self, _evalcontext):
         """ キャッシュされたメッセージをクリアして返す """
@@ -1154,14 +1159,17 @@ class MessageEngine():
         self._lastevalcxt = evalcxt
         try:
             for msg in produce_message(evalcxt):
-                yield msg
+                if isinstance(msg, str):
+                    yield msg
+                    continue
+                else:
+                    yield msg
+                    result = msg.eval(evalcxt)
 
-                result = msg.eval(evalcxt)
-
-                # 返り値をスタックに乗せる
-                evalcxt.locals.push_local_object(result)
-                if context.is_failed(): # エラーが発生したら実行を中断する
-                    return
+                    # 返り値をスタックに乗せる
+                    evalcxt.locals.push_local_object(result)
+                    if context.is_failed(): # エラーが発生したら実行を中断する
+                        return
 
         except Exception as e:
             # メッセージ実行以外の場所でエラーが起きた
@@ -1171,9 +1179,6 @@ class MessageEngine():
             return
 
         self._log(context, LOG_MESSAGE_END)
-    
-    def get_last_done_expression(self):
-        return self._lastdone.strip()
     
     def finish(self, locals, *, raiseerror=False) -> Object:
         """ 結果を取得し、スタックをクリアする """
@@ -1197,14 +1202,8 @@ class MessageEngine():
     #
     #
     #
-    def run(self, context, *, raiseerror=False, runner=False) -> Object:
-        """ 現在のコンテキストでメッセージを実行 """
-        for _ in self.runner(context, runner):
-            pass
-        return self.finish(context, raiseerror=raiseerror)
-    
-    def run_function(self, subject, context, *, raiseerror=False, runner=False) -> Object:
-        """ メッセージを実行 """
+    def run(self, subject, context, *, runner=False):
+        """ コンテキストを継承してメッセージを実行 """
         if subject is not None:
             # 主題オブジェクトを更新した派生コンテキスト
             subcontext = self.start_subcontext(subject, context)
@@ -1213,22 +1212,38 @@ class MessageEngine():
             subcontext = context 
         for _ in self.runner(subcontext, runner):
             pass
-        return self.finish(subcontext, raiseerror=raiseerror)
+        return self.finish(subcontext, raiseerror=context.is_set_raise_error())
 
-    def run_function_step(self, subject, context, *, raiseerror=False, runner=False):
+    def run_here(self, context, *, runner=False) -> Object:
+        """ 現在のコンテキストでメッセージを実行 """
+        for _ in self.runner(context, runner):
+            pass
+        return self.finish(context, raiseerror=context.is_set_raise_error())
+
+    def run_step(self, subject, context, *, runner=False):
         """ 実行するたびにメッセージを返す """
         subcontext = self.start_subcontext(subject, context)
         for step in self.runner(subcontext, runner):
-            expr = self.get_last_done_expression()
-            if expr:
-                yield expr  # Strを返す
-            yield step   # Messageを返す
+            yield step
+        yield self.finish(subcontext, raiseerror=context.is_set_raise_error()) # Objectを返す
         
-        expr = self.get_last_done_expression()
-        if expr:
-            yield expr  # Strを返す：正常実行時は文字列は残っていないはずだが
-        yield self.finish(subcontext, raiseerror=raiseerror) # Objectを返す
+    def run_print_step(self, subject, context, *, runner=False):
+        """ 実行過程を表示する """
+        app = context.spirit
+        indent = "  " * (context.get_depth()-1)
+        for msg in self.run_step(subject, context, runner=runner):
+            if isinstance(msg, Object):
+                return msg
+            elif isinstance(msg, str):
+                app.post("message", indent + msg)
     
+    def run_function(self, subject, context, *, runner=False) -> Object:
+        """ 通常の実行方法：コンテキストのフラグによって実行方法を分岐する """
+        if context.is_set_print_step():
+            return self.run_print_step(subject, context, runner=runner)
+        else:
+            return self.run(subject, context, runner=runner)
+
 
 #
 # ログ表示用に定数名を出力する
@@ -1355,22 +1370,19 @@ def run_function(expression: str, subject, context, *, raiseerror=False) -> Obje
     """
     if not isinstance(expression, str):
         raise TypeError("expression must be str")
+    
+    if raiseerror:
+        context.set_flags(INVOCATION_FLAG_RAISE_ERROR, to_be_inherited=True)
+
     f = MessageEngine(expression)
-    return f.run_function(subject, context, raiseerror=raiseerror)
+    return f.run_function(subject, context)
     
 def run_function_print_step(expression: str, subject, context, *, raiseerror=False):
     """
     経過を表示しつつメッセージを実行する。
     """
-    f = MessageEngine(expression)
-    app = context.spirit
-    for msg in f.run_function_step(subject, context, raiseerror=raiseerror):
-        if isinstance(msg, Object):
-            return msg
-        elif isinstance(msg, str):
-            app.post("message", msg + " ")
-        
-    return None
+    context.set_flags(INVOCATION_FLAG_PRINT_STEP)
+    return run_function(expression, subject, context, raiseerror=raiseerror)
 
 
 SIGIL_TYPE_INDICATOR = "="

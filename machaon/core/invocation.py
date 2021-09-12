@@ -113,13 +113,11 @@ class InvocationEntry():
         result = None
         try:
             result = self.action(*self.args, **self.kwargs)
+            self.result = self.result_object(context, value=result)
         except ProcessInterrupted as e:
             raise e
         except Exception as e:
             self.exception = e
-        
-        # 返り値を構成
-        self.result = self.result_object(context, value=result)
         return self.result
     
     def result_spec(self):
@@ -197,6 +195,11 @@ def instant_return_test(context, value, typename):
     decl = parse_type_declaration(typename)
     return entry.result_object(context, value=value, spec=MethodResult(decl))
 
+
+INVOCATION_FLAG_PRINT_STEP     = 0x0001
+INVOCATION_FLAG_RAISE_ERROR    = 0x0002
+INVOCATION_FLAG_INHERIT_BIT_SHIFT  = 16 # 0xFFFF0000
+
 #
 #
 #
@@ -204,14 +207,16 @@ class InvocationContext:
     """
     メソッドの呼び出しコンテキスト
     """
-    def __init__(self, *, input_objects, type_module, spirit=None, subject=None):
+    def __init__(self, *, input_objects, type_module, spirit=None, subject=None, flags=0, parent=None):
         self.type_module: TypeModule = type_module
         self.input_objects: ObjectCollection = input_objects  # 外部のオブジェクト参照
         self.subject_object: Union[None, Object, Dict[str, Object]] = subject       # 無名関数の引数とするオブジェクト
         self.spirit = spirit
         self.invocations: List[InvocationEntry] = []
+        self.invocation_flags = flags
         self._last_exception = None
         self._log = []
+        self.parent = parent # 継承元のコンテキスト
     
     def get_spirit(self):
         return self.spirit
@@ -222,12 +227,45 @@ class InvocationContext:
     
     #
     def inherit(self, subject=None):
+        # 予約されたフラグを取り出して結合する
+        preserved_flags = 0xFFFF & (self.invocation_flags >> INVOCATION_FLAG_INHERIT_BIT_SHIFT)
+        flags = (0xFFFF & self.invocation_flags) | preserved_flags
+        # subject以外は全て引き継がれる
         return InvocationContext(
             input_objects=self.input_objects, 
             type_module=self.type_module, 
             spirit=self.spirit,
-            subject=subject
+            subject=subject,
+            flags=flags,
+            parent=self
         )
+    
+    def get_depth(self):
+        """@method
+        継承の深さを計算する
+        Returns:
+            Int: 1で始まる深さの数値
+        """
+        level = 1
+        p = self.parent
+        while p:
+            level += 1
+            p = p.parent
+        return level
+    
+    #
+    def set_flags(self, flags, to_be_inherited=False):
+        if to_be_inherited:
+            # 以降の継承コンテキストで有効化されるフラグをセット
+            self.invocation_flags |= (flags << INVOCATION_FLAG_INHERIT_BIT_SHIFT)
+        else:
+            self.invocation_flags |= flags
+
+    def is_set_print_step(self) -> bool:
+        return (self.invocation_flags & INVOCATION_FLAG_PRINT_STEP) > 0
+    
+    def is_set_raise_error(self) -> bool:
+        return (self.invocation_flags & INVOCATION_FLAG_RAISE_ERROR) > 0
 
     #
     def get_object(self, name) -> Optional[Object]:
@@ -649,7 +687,11 @@ class BasicInvocation():
 
     def __str__(self):
         inv = " ".join([x for x in self.display() if x])
-        return "<{}>".format(inv)
+        return "<Invocation {}>".format(inv)
+        
+    def __repr__(self):
+        inv = " ".join([x for x in self.display() if x])
+        return "<Invocation {}>".format(inv)
     
     def get_method_name(self):
         raise NotImplementedError()

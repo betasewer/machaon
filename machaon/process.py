@@ -67,7 +67,9 @@ class Process:
 
         # 実行開始
         for nextmsg in msgroutine:
-            if nextmsg.is_task():
+            if isinstance(nextmsg, str):
+                continue
+            elif nextmsg.is_task():
                 # 非同期実行へ移行する
                 self.thread = threading.Thread(
                     target=self.run_process_async, 
@@ -1101,14 +1103,15 @@ def walk_traceback(exception):
     
     level = 0
     while tb:
-        yield level, tb, exception
-        tb = tb.tb_next
-        if tb is None:
-            tb, exception = next_nested_traceback(exception)
+        nexttb = tb.tb_next
+        yield level, tb, nexttb, exception
+        if nexttb is None:
+            nexttb, exception = next_nested_traceback(exception)
+        tb = nexttb
         level += 1
 
 def goto_traceback(exception, level):
-    for l, tb, excep in walk_traceback(exception):
+    for l, tb, _, excep in walk_traceback(exception):
         if level == l:
             return tb, excep
     raise ValueError("トレースバックの深さの限界に到達")
@@ -1117,7 +1120,7 @@ def verbose_display_traceback(exception, linewidth):
     import linecache
 
     lines = []
-    for level, tb, _excep in walk_traceback(exception):
+    for level, tb, nexttb, excep in walk_traceback(exception):
         frame = tb.tb_frame
         filename = frame.f_code.co_filename
         fnname = frame.f_code.co_name
@@ -1155,6 +1158,10 @@ def verbose_display_traceback(exception, linewidth):
             val_str = collapse_text(val_str, linewidth)
             val_str = val_str.replace('\n', '\n{}'.format(' ' * (len(name) + 2)))
             msg_locals.append("{} = {}".format(name, val_str))
+        
+        excepline = ""
+        if nexttb is None:
+            excepline = traceback.format_exception_only(type(excep), excep)[0]
 
         lines.append(msg_location)
         lines.append(indent + msg_line)
@@ -1163,6 +1170,8 @@ def verbose_display_traceback(exception, linewidth):
         for line in msg_locals:
             lines.append(indent + indent + line)
         lines.append(indent + "-" * 30)
+        if excepline:
+            lines.append("E" + indent[1:] + excepline)
         lines.append("\n")
 
     return '\n'.join(lines)
