@@ -334,6 +334,7 @@ class FrameObject:
         Returns:
             Sheet[ObjectCollection](op, arg, location):
         """
+        check_cpython()
         lines = []
         for instr in dis.get_instructions(self._fr.f_code):
             if lastoffset is not None and instr.offset > lastoffset:
@@ -436,6 +437,11 @@ def verbose_display_traceback(exception, linewidth, showtype=None):
     return '\n'.join(lines)
 
 
+def check_cpython():
+    if sys.implementation.name != "cpython":
+        raise ValueError("CPython以外ではサポートされない動作です")
+
+
 class UNDEFINED:
     pass
 
@@ -445,6 +451,7 @@ def disasm_instruction_variables(code, globaldict, localdict, last_instr_offset=
     Returns:
         Dict[str, Any]: 変数の辞書
     """
+    check_cpython()
     stack = []
     vardict = {}
     for instr in dis.get_instructions(code):
@@ -531,8 +538,8 @@ def display_variables(dictionary, linewidth):
                     val_str = "<{}>".format(full_qualified_name(type(value)))
             else:
                 val_str = repr(value)
-        except:
-            val_str = "<error on __repr__>"
+        except Exception as e:
+            val_str = "<error on __repr__: {}>".format(str(e))
         val_str = collapse_text(val_str, linewidth)
         val_str = val_str.replace('\n', '\n{}'.format(' ' * (len(name) + 2)))
         msg.append("{} = {}".format(name, val_str))

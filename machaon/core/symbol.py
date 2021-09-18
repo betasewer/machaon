@@ -86,11 +86,20 @@ class BadObjectBindName(Exception):
 
 #
 def full_qualified_name(t):
-    mod = t.__module__
-    if mod is None or mod == len.__module__:
-        return t.__qualname__
+    if hasattr(t, "__module__"):
+        mod = t.__module__
     else:
-        return mod + "." + t.__qualname__
+        mod = None
+    if hasattr(t, "__qualname__"):
+        n = t.__qualname__
+    elif hasattr(t, "__name__"):
+        n = t.__name__
+    else:
+        raise ValueError("No __qualname__ or __name__ property")
+    if mod is None or mod == len.__module__:
+        return n
+    else:
+        return mod + "." + n
 
 
 #
