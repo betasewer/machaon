@@ -47,9 +47,8 @@ def _default_result_object(context):
     return context.get_type("Str").new_object(SIGIL_DEFAULT_RESULT)
 
 def _new_process_error_object(context, error, objectType):
-    from machaon.process import ProcessError
-    errtype = context.get_type("Error")
-    return objectType(errtype, ProcessError(context, error))
+    from machaon.types.stacktrace import ErrorObject
+    return objectType(context.get_type("Error"), ErrorObject(context, error))
 
 #
 #
@@ -107,7 +106,9 @@ class InvocationEntry():
         """ アクションを実行（デバッグ用） """
         return self.action(*self.args, **self.kwargs)
 
-    def invoke(self, context):
+    def invoke(self, 
+        context # context
+    ):
         """ アクションを実行し、返り値を保存する """
         from machaon.process import ProcessInterrupted
         result = None
@@ -915,6 +916,8 @@ class _nullary:
     @property
     def __name__(self):
         return self.name
+    def __repr__(self):
+        return "<nullary functor '{}'>".format(self.name)
     def __init__(self, v, n):
         self.value = v
         self.name = n

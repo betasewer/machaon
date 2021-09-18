@@ -846,7 +846,19 @@ typedef.Error( # Error
     """
     発生したエラー。
     """,
-    value_type="machaon.process.ProcessError"
+    value_type="machaon.types.stacktrace.ErrorObject"
+)
+typedef.TracebackObject(
+    """
+    トレースバック。
+    """,
+    value_type="machaon.types.stacktrace.TracebackObject"
+)
+typedef.FrameObject(
+    """
+    フレームオブジェクト。
+    """,
+    value_type="machaon.types.stacktrace.FrameObject"
 )
 typedef.Package(
     """

@@ -368,12 +368,21 @@ class Sheet():
     # 
     def append(self, context, *items):
         """ @method context
-        アイテムを追加する。
+        アイテムを末尾に追加する。
         Params:
             *items: 
         """
+        self.insert(context, -1, *items)
+
+    def insert(self, context, rowindex, *items):
+        """ @method context
+        アイテムを追加する。
+        Params:
+            rowindex(Int): 行インデックス
+            *items: 
+        """
         items = [context.new_object(x) for x in items]
-        self.append_items_and_generate_rows(context, items)
+        self.insert_items_and_generate_rows(context, rowindex, items)
 
     def count(self):
         """ @method [len]
@@ -387,7 +396,7 @@ class Sheet():
     # 選択
     def select(self, rowindex):
         """ @method
-        インデックスによって指定した行を選択する。
+        インデックスで行を選択する。
         Params:
             rowindex(int): 行インデックス
         Returns:
@@ -401,7 +410,7 @@ class Sheet():
 
     def select_by_item(self, itemindex):
         """ @method
-        アイテムIDによって指定した行を選択する。
+        アイテムIDで行を選択する。
         Params:
             itemindex(int): アイテムID
         Returns:
@@ -540,16 +549,36 @@ class Sheet():
         self.rows = newrows
         self.viewcolumns = [DataItemItselfColumn()] # identical
     
-    def append_items_and_generate_rows(self, context, items):
-        """ アイテムを追加し、値を計算して行も追加する """
+    def insert_items_and_generate_rows(self, context, rowindex, items):
+        """ 一連のアイテムを追加し、値を計算して行も追加する """
         if not self.viewcolumns:
             raise ValueError("uninitialized")
         
-        start = len(self.items)
-        for itemindex, item in enumerate(items, start=start):
+        indexstart = rowindex if rowindex != -1 else len(self.items)
+        
+        # 行の値を生成する
+        newrows = []
+        for i, item in enumerate(items, start=indexstart):
             newrow = [col.eval(item, context) for col in self.viewcolumns]
-            self.rows.append((itemindex, newrow))
-            self.items.append(item)
+            newrows.append((i, newrow))
+        
+        if rowindex == -1:
+            # 後ろに追加する
+            self.items = self.items + list(items)
+            self.rows = self.rows + newrows
+        
+        else:
+            # 後ろの行のインデックスをずらす
+            tailrows = []
+            offset = rowindex + len(items)
+            for row in self.rows[rowindex:]:
+                index, values = row
+                tailrows.append((index+offset, values))
+        
+            # 挿入する
+            self.items = self.items[:rowindex] + list(items) + self.items[rowindex:]
+            self.rows = self.rows[:rowindex] + newrows + tailrows
+
 
     def rows_to_string_table(self, context, method=None): 
         """ 
@@ -651,7 +680,7 @@ class Sheet():
         """
         values = []
         for item in self.current_items():
-            o = predicate.run_function(item, context, raiseerror=False)
+            o = predicate.run_function(item, context)
             if o.is_truth():
                 values.append(o)
         return values

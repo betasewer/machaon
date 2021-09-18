@@ -1,15 +1,13 @@
 ﻿#!/usr/bin/env python3
 # coding: utf-8
 
-import os
-import sys
-import traceback
 import threading
 import pprint
 from typing import Tuple, Sequence, List, Optional
 
 from machaon.cui import composit_text
-from machaon.process import ProcessError, ProcessMessage, NotExecutedYet, ProcessChamber, TempSpirit
+from machaon.process import ProcessMessage
+from machaon.types.stacktrace import ErrorObject
 
 #
 #
@@ -67,7 +65,7 @@ class Launcher():
                     self.on_interrupt_process(process)
                     self.on_end_process(process)
                 elif code == "error":
-                    error = msg.argument("error") # error はProcessError型のオブジェクト
+                    error = msg.argument("error") # error はError型のオブジェクト
                     expr = " -> {}".format(error.summarize())
                     self.insert_screen_text("error", expr)
                     self.on_error_process(process, error)
@@ -134,7 +132,7 @@ class Launcher():
                 raise e # エラーの詳細表示中にさらにエラーが起きた
             if process:
                 context = process.get_last_invocation_context()
-                error = ProcessError(context, e)
+                error = ErrorObject(context, e)
                 error.pprint(context.spirit)
                 # ただちにメッセージを取得し処理する
                 for msg in process.handle_post_message():
@@ -142,7 +140,7 @@ class Launcher():
                 # オブジェクトを追加
                 context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
             else:
-                from machaon.process import verbose_display_traceback
+                from machaon.types.stacktrace import verbose_display_traceback
                 self.insert_screen_text("error", "プロセスの外でエラーが発生：{}[{}]".format(e, type(e).__name__))
                 self.insert_screen_text("message", verbose_display_traceback(e, 0x7FFFFF))
     

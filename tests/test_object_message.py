@@ -49,7 +49,7 @@ def test_context():
 def ptest(s, rhs):
     context = test_context()
     parser = MessageEngine(s)
-    lhso = parser.run(context)
+    lhso = parser.run_here(context)
     assert parse_test(parser, context, lhso.value, rhs)
 
 def run(f):
@@ -214,7 +214,7 @@ def test_parse_function():
         context = InvocationContext(input_objects=ObjectCollection(), type_module=fundamental_type)
         
         engine = MessageEngine(s)
-        returned = engine.run(context)
+        returned = engine.run_here(context)
         if returned.is_error():
             spi = TempSpirit()
             returned.pprint(spi)

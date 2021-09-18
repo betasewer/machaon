@@ -5,7 +5,7 @@ from typing import List, Dict, Tuple
 
 from machaon.core.symbol import (
     BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, 
-    full_qualified_name, is_valid_typename, summary_escape,
+    full_qualified_name, is_valid_typename, summary_escape, normalize_method_name,
     SIGIL_SCOPE_RESOLUTION
 )
 from machaon.core.typedecl import (
@@ -174,6 +174,8 @@ class Type(TypeProxy):
     
     # エイリアスも参照して探し、ロードされていなければロードする
     def select_method(self, name) -> Optional[Method]:
+        name = normalize_method_name(name)
+
         meth = self._methods.get(name, None)
         if meth is None:
             name2 = self.get_member_alias(name)

@@ -132,7 +132,7 @@ class TypeProxy:
         convval = self.construct(context, value)
         return self.new_object(convval)
     
-    def new_object(self, value):
+    def new_object(self, value, *, object_type=None):
         """ この型のオブジェクトを作る。型変換は行わない """
         from machaon.core.object import Object
         if isinstance(value, Object):
@@ -142,8 +142,11 @@ class TypeProxy:
         else:
             if not self.check_value_type(type(value)):
                 raise ValueError("'{}' -> '{}' 値の型に互換性がありません".format(type(value).__name__, self.typename))
-            return Object(self, value)
-    
+            if object_type is None:
+                return Object(self, value)
+            else:
+                return object_type(self, value)
+
     def stringify_value(self, value):
         raise NotImplementedError()
     

@@ -70,8 +70,8 @@ class Object():
         return False
     
     def is_error(self):
-        from machaon.process import ProcessError
-        return isinstance(self.value, ProcessError)
+        from machaon.types.stacktrace import ErrorObject
+        return isinstance(self.value, ErrorObject)
     
     def is_truth(self):
         if self.is_error():

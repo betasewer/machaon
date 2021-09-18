@@ -454,8 +454,6 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     if name[0].isupper():
         return TypeConstructorInvocation(name, modbits)
 
-    name = normalize_method_name(name)
-
     # 型メソッド
     using_type_method = typetraits is not None
     if using_type_method:
@@ -524,6 +522,7 @@ def enum_selectable_method(typetraits, instance=None):
         if meth is None:
             continue
         yield [name], meth
+
 
 def enum_selectable_attributes(instance):
     for name in dir(instance):

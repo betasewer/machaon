@@ -115,7 +115,7 @@ def test_expand_view(objectdesk):
     assert values(view.row_values(0)) == ["ken", "111-1111", 3, 300]
 
     employee = objectdesk.get_type("Employee")
-    view.append_items_and_generate_rows(objectdesk, [employee.new_object(Employee("irina", "444-4444"))])
+    view.insert_items_and_generate_rows(objectdesk, -1, [employee.new_object(Employee("irina", "444-4444"))])
     assert view.get_current_column_names() == ["name", "postcode", "tall", '"@ tall * 100"']
     assert view.count() == 4
     assert values(view.row_values(3)) == ["irina", "444-4444", 5, 500]
@@ -271,10 +271,11 @@ class Room:
         """
         return self._style
 
-def hotelrooms(name):
+def hotelrooms(name, rooms=None):
     h = Hotel(name)
     cxt = instant_context()
-    o = Sheet.constructor(Sheet, cxt, h.rooms(), cxt.define_type(Room))
+    rooms = rooms if rooms is not None else h.rooms()
+    o = Sheet.constructor(Sheet, cxt, rooms, cxt.define_type(Room))
     return o, cxt
 
 def heterovalues():
@@ -359,4 +360,22 @@ def test_string_tables():
         (3, ["123.4", "246.8"])
     ]
 
+
+
+def test_none_value():
+    rooms, cxt = hotelrooms("Okehazama", [
+        Room("1408", None, None),
+        Room("1408", None, None),
+        Room("1408", None, None),
+    ])
+    rooms.insert(cxt, 1, Room("404", "Double", "Bed"))
+    
+    rooms.view(cxt, ["name", "type", "style"])
+    table = rooms.rows_to_string_table(cxt)
+    assert table == [
+        (0, ["1408", "-", "-"]),
+        (1, ["404", "Double", "Bed"]),
+        (2, ["1408", "-", "-"]),
+        (3, ["1408", "-", "-"]),
+    ]
 

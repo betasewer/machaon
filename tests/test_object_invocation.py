@@ -79,6 +79,7 @@ def test_objectref():
     col.push("apple", Object(StrType, "リンゴ"))
     col.push("gorilla", Object(StrType, "ゴリラ"))
     col.push("trumpet", Object(StrType, "ラッパ"))
+    col.push("staff_id", Object(StrType, "社員ID"))
 
     arg = fundamental_type.get("ObjectCollection").new_object(col)
 
@@ -92,6 +93,12 @@ def test_objectref():
     
     inv = ObjectMemberInvocation("trumpet")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ラッパ"
+
+    inv = ObjectMemberInvocation("staff_id")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "社員ID"
+    
+    inv = ObjectMemberInvocation("staff-id")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction() is None
 
     # generic method (Collectionを参照する)
     inv = ObjectMemberInvocation("=")
