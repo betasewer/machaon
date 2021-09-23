@@ -73,7 +73,7 @@ class DataMessageColumn(BasicDataColumn):
         return self._fn.get_type_conversion()
     
     def eval(self, subject, context):
-        obj = self._fn.run_function(subject, context)
+        obj = self._fn.run(subject, context)
         return self.convert(context, obj)
 
 
@@ -660,13 +660,13 @@ class Sheet():
         """ @task context
         アイテムに関数を適用し、タプルとして返す。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
         Returns:
             Tuple:
         """
         values = []
         for item in self.current_items():
-            v = predicate.run_function(item, context)
+            v = predicate.run(item, context)
             values.append(v)
         return values
 
@@ -674,13 +674,13 @@ class Sheet():
         """ @task context
         アイテムに関数を適用し、偽でない返り値のみをタプルとして返す。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
         Returns:
             Tuple:
         """
         values = []
         for item in self.current_items():
-            o = predicate.run_function(item, context)
+            o = predicate.run(item, context)
             if o.is_truth():
                 values.append(o)
         return values
@@ -721,22 +721,22 @@ class Sheet():
         """ @task context [%]
         行に関数を適用する。
         Params:
-            predicate(Function): 関数
+            predicate(Function[](seq)): 関数
         """
         for entry in self.rows:
             subject = self.row_to_object(context, *entry)
-            predicate.run_function(subject, context)
+            predicate.run(subject, context)
     
     def filter(self, context, _app, predicate):
         """ @task context [&]
         行を絞り込む。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
         """
         # 関数を行に適用する
         def fn(entry):
             subject = self.row_to_object(context, *entry)
-            return predicate.run_function(subject, context).test_truth()
+            return predicate.run(subject, context).test_truth()
         
         self.rows = list(filter(fn, self.rows))
 
@@ -747,11 +747,11 @@ class Sheet():
         """ @task context
         行の順番を並べ替える。
         Params:
-            sorter(Function): 並べ替え関数
+            sorter(Function[](seq)): 並べ替え関数
         """
         def sortkey(entry):
             subject = self.row_to_object(context, *entry)
-            return sorter.run_function(subject, context).test_truth()
+            return sorter.run(subject, context).test_truth()
 
         self.rows.sort(key=sortkey)
         

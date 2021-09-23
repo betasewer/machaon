@@ -200,7 +200,9 @@ def instant_return_test(context, value, typename):
 
 INVOCATION_FLAG_PRINT_STEP     = 0x0001
 INVOCATION_FLAG_RAISE_ERROR    = 0x0002
+INVOCATION_FLAG_SEQUENTIAL     = 0x0004
 INVOCATION_FLAG_INHERIT_BIT_SHIFT  = 16 # 0xFFFF0000
+INVOCATION_FLAG_INHERIT_REMBIT_SHIFT = 32
 
 #
 #
@@ -218,6 +220,7 @@ class InvocationContext:
         self.invocation_flags = flags
         self._last_exception = None
         self._log = []
+        self.log = self._add_log
         self.parent = parent # 継承元のコンテキスト
     
     def get_spirit(self):
@@ -232,6 +235,8 @@ class InvocationContext:
         # 予約されたフラグを取り出して結合する
         preserved_flags = 0xFFFF & (self.invocation_flags >> INVOCATION_FLAG_INHERIT_BIT_SHIFT)
         flags = (0xFFFF & self.invocation_flags) | preserved_flags
+        remove_flags = 0xFFFF & (self.invocation_flags >> INVOCATION_FLAG_INHERIT_REMBIT_SHIFT)
+        flags = flags & ~remove_flags
         # subject以外は全て引き継がれる
         return InvocationContext(
             input_objects=self.input_objects, 
@@ -241,7 +246,15 @@ class InvocationContext:
             flags=flags,
             parent=self
         )
-    
+
+    def inherit_silent(self):
+        """ 実行情報を残さない設定のコンテクストを生成する """
+        cxt = self.inherit()
+        cxt.remove_flags(INVOCATION_FLAG_PRINT_STEP|INVOCATION_FLAG_RAISE_ERROR)
+        cxt.set_flags(INVOCATION_FLAG_SEQUENTIAL)
+        cxt.disable_log()
+        return cxt
+
     def get_depth(self):
         """@method
         継承の深さを計算する
@@ -255,19 +268,27 @@ class InvocationContext:
             p = p.parent
         return level
     
-    #
-    def set_flags(self, flags, to_be_inherited=False):
-        if to_be_inherited:
+    def set_flags(self, flags, inherit_set=False, inherit_remove=False):
+        if inherit_remove:
+            # 以降の継承コンテキストで削除されるフラグをセット
+            self.invocation_flags |= (flags << INVOCATION_FLAG_INHERIT_REMBIT_SHIFT)
+        elif inherit_set:
             # 以降の継承コンテキストで有効化されるフラグをセット
             self.invocation_flags |= (flags << INVOCATION_FLAG_INHERIT_BIT_SHIFT)
         else:
             self.invocation_flags |= flags
+    
+    def remove_flags(self, flags):
+        self.invocation_flags &= ~flags
 
     def is_set_print_step(self) -> bool:
         return (self.invocation_flags & INVOCATION_FLAG_PRINT_STEP) > 0
     
     def is_set_raise_error(self) -> bool:
         return (self.invocation_flags & INVOCATION_FLAG_RAISE_ERROR) > 0
+    
+    def is_sequential_invocation(self) -> bool: 
+        return (self.invocation_flags & INVOCATION_FLAG_SEQUENTIAL) > 0
 
     #
     def get_object(self, name) -> Optional[Object]:
@@ -348,6 +369,12 @@ class InvocationContext:
     def define_temp_type(self, describer: Any) -> Type:
         """ 新しい型を作成するが、モジュールに登録しない """
         return Type(describer).load()
+
+    def instantiate_type(self, conversion, *args) -> TypeProxy:
+        """ 型をインスタンス化する """
+        typedecl = parse_type_declaration(conversion)
+        tins = typedecl.instance(self, args)
+        return tins
     
     def new_object(self, value: Any, *args, type=None, conversion=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 
@@ -371,8 +398,7 @@ class InvocationContext:
                 convobj = t.construct_obj(self, value)
             return convobj
         elif conversion:
-            typedecl = parse_type_declaration(conversion)
-            tins = typedecl.instance(self, args)
+            tins = self.instantiate_type(conversion, *args)
             return tins.construct_obj(self, value)
         else:
             if isinstance(value, Object):
@@ -390,15 +416,22 @@ class InvocationContext:
     
     def begin_invocation(self, entry: InvocationEntry):
         """ 呼び出しの直前に """
-        self.invocations.append(entry)
+        if self.is_sequential_invocation():
+            # 上書きする
+            if not self.invocations:
+                self.invocations.append(entry)
+            else:
+                self.invocations[-1] = entry 
+        else:
+            self.invocations.append(entry)
         index = len(self.invocations)-1
-        self.add_log(LOG_MESSAGE_EVAL_BEGIN, index)
+        self.log(LOG_MESSAGE_EVAL_BEGIN, index)
         return index
 
     def finish_invocation(self, entry: InvocationEntry):
         """ 呼び出しの直後に """
         index = len(self.invocations)-1
-        self.add_log(LOG_MESSAGE_EVAL_END, index)
+        self.log(LOG_MESSAGE_EVAL_END, index)
         if entry.is_failed():
             self._last_exception = entry.exception
         return index
@@ -436,10 +469,13 @@ class InvocationContext:
         """ 呼び出し以外の場所で起きた例外を保存する """
         self._last_exception = exception
 
-    #
-    def add_log(self, logcode, *args):
-        """ 実行ログの収集 """
+    def _add_log(self, logcode, *args):
+        """ 実行ログを追加する """
         self._log.append((logcode, *args))
+
+    def disable_log(self):
+        """ ログを蓄積しない """
+        self.log = _context_no_log
     
     def pprint_log(self, printer=None):
         """ 蓄積されたログを出力する """
@@ -629,6 +665,10 @@ class InvocationContext:
                 return cxt
         else:
             raise TypeError(value)
+
+# ログを無へ流す
+def _context_no_log(*a, **kw):
+    pass
 
 _instant_context_types = None
 

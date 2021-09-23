@@ -486,7 +486,10 @@ def disasm_instruction_variables(code, globaldict, localdict, last_instr_offset=
             varname = instr.argval
             if not stack:
                 varval = "<stack error>"
-            top = stack.pop()
+            if stack:
+                top = stack.pop()
+            else:
+                top = UNDEFINED
             if top is UNDEFINED:
                 varval = "<stack error>"
             else:

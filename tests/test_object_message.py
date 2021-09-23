@@ -233,11 +233,11 @@ def test_parse_function():
         subj = Object(fundamental_type.get("Dog"), subject)
         fn = returned.value
 
-        lhso = fn.run_function(subj, subcontext)
+        lhso = fn.run(subj, subcontext)
         assert parse_test(fn, subcontext, lhso, rhs[0])
         
         # 再入
-        lhso = fn.run_function(subj, subcontext)
+        lhso = fn.run(subj, subcontext)
         assert parse_test(fn, subcontext, lhso, rhs[0])
 
     lucky = {}
@@ -296,13 +296,13 @@ def test_constructed_reenter():
     func = MessageEngine("210 / @ * 100")
 
     # 1st
-    r = func.run_function(context.new_object(7), context, runner=True)
+    r = func.run_function(context.new_object(7), context, cache=True)
     assert r.value == 3000
     # 2nd (constructed)
-    r = func.run_function(context.new_object(5), context, runner=True)
+    r = func.run_function(context.new_object(5), context, cache=True)
     assert r.value == 4200
     # 3rd (constructed)
-    r = func.run_function(context.new_object(2), context, runner=True)
+    r = func.run_function(context.new_object(2), context, cache=True)
     assert r.value == 10500
 
 
@@ -345,7 +345,7 @@ def test_message_type_indicator():
     assert isinstance(r, MessageExpression)
     assert r.get_type_conversion() == "Int"
     assert r.get_expression() == "1 + 2"
-    assert r.run_function(None, context).value == 3
+    assert r.run(None, context).value == 3
     
     r = parse_function("Str = name")
     assert isinstance(r, MemberGetExpression)
@@ -353,5 +353,5 @@ def test_message_type_indicator():
     assert r.get_expression() == "name"
 
     obj = context.new_object({"name" : "waon"})
-    assert r.run_function(obj, context).value == "waon"
+    assert r.run(obj, context).value == "waon"
     

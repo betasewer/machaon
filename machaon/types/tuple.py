@@ -152,11 +152,11 @@ class ObjectTuple():
         """ @task context [&]
         行を絞り込む。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
         """
         # 関数を行に適用する
         def fn(subject):
-            return predicate.run_function(subject, context).test_truth()
+            return predicate.run(subject, context).test_truth()
         
         self.objects = list(filter(fn, self.objects))
     
@@ -164,10 +164,10 @@ class ObjectTuple():
         """ @task context
         行の順番を並べ替える。
         Params:
-            key(Function): 並べ替え関数
+            key(Function[](seq)): 並べ替え関数
         """
         def sortkey(subject):
-            return key.run_function(subject, context).test_truth()
+            return key.run(subject, context).test_truth()
 
         self.objects.sort(key=sortkey)
         
@@ -175,22 +175,22 @@ class ObjectTuple():
         """ @task context [%]
         値に関数を適用する。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
         """
         for o in self.objects:
-            predicate.run_function(o, context)
+            predicate.run(o, context)
 
     def map(self, context, _app, predicate):
         """ @task context
         値に関数を適用し、新しいタプルとして返す。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
         Returns:
             Tuple: 新しいタプル
         """
         rets: List[Object] = []
         for o in self.objects:
-            r = predicate.run_function(o, context)
+            r = predicate.run(o, context)
             rets.append(r)
         return ObjectTuple(rets)
     
@@ -198,7 +198,7 @@ class ObjectTuple():
         """ @task context alias-name [reduce]
         要素に次々と関数を適用し、一つの値として返す。
         Params:
-            predicate(Function): 述語関数
+            predicate(Function[](seq)): 述語関数
             start(Object): *初期値
         Returns:
             Object: 結果
@@ -214,7 +214,7 @@ class ObjectTuple():
         
         for o in objs:
             subject = context.new_object({"0": cur, "1": o})
-            cur = predicate.run_function(subject, context)
+            cur = predicate.run(subject, context)
             
         return cur
 

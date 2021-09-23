@@ -215,14 +215,17 @@ class NoneType():
 
 
 class FunctionType():
-    def constructor(self, _context, s):
+    def constructor(self, context, s, qualifier=None):
         """ @meta 
         Params:
             Str:
+            qualifier(Str): None|(seq)uential
         """
-        from machaon.core.message import parse_function
-        f = parse_function(s)
-        f.takelog(False)
+        from machaon.core.message import parse_function, parse_sequential_function
+        if qualifier is None:
+            f = parse_function(s)
+        elif qualifier == "sequential" or qualifier == "seq":
+            f = parse_sequential_function(s, context)
         return f
 
     def stringify(self, f):
@@ -240,46 +243,8 @@ class FunctionType():
         Returns:
             Any: 返り値
         """
-        r = f.run_function(subject, context, raiseerror=True)
-        return r
-    
-    def takelog(self, f):
-        """ @method
-        ログをとるフラグをオンにする。
-        """
-        f.takelog()
-
-
-class ContextBoundFunction():
-    def __init__(self, context, f):
-        self.f = f
-        self.context = context
-        
-    def constructor(self, context, s):
-        """ @meta 
-        Params:
-            Str:
-        """
-        f = FunctionType().constructor(context, s)
-        return ContextBoundFunction(context, f)
-
-    def stringify(self, f):
-        """ @meta """
-        return FunctionType().stringify(self.f)
-    
-    def run_function(self, value, *, conversion=None, raiseerror=True):
-        # コード内で実行する
-        subject = self.context.new_object(value, conversion=conversion)
-        o = self.f.run_function(subject, self.context, raiseerror=raiseerror)
-        return o.value
-    
-    @classmethod
-    def instant(cls, expression):
-        # 文字列を受け取り、即席のコンテキストでインスタンスを作る
-        from machaon.core.invocation import instant_context
-        cxt = instant_context()
-        return cls.constructor(None, cxt, expression)
-        
+        r = f.run(subject, context)
+        return r       
     
 
 # ----------------------------------------------------------
@@ -733,14 +698,8 @@ typedef.Function( # Message
     """
     1引数をとるメッセージ。
     """,
-    value_type="machaon.core.message.MessageExpression",
+    value_type="machaon.core.message.FunctionExpression",
     describer="machaon.types.fundamental.FunctionType",
-)
-typedef.ContextBoundFunction(
-    """
-    1引数をとるメッセージ。呼び出しコンテキストが紐づけられている。
-    """,
-    value_type="machaon.types.fundamental.ContextBoundFunction"
 )
 typedef["None"](
     """

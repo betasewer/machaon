@@ -736,7 +736,7 @@ def parse_parameter_line(line):
     if head.startswith("*"):
         name, _, right = head[1:].partition("(")
         if right:
-            typename, _, _ = right.partition(")")
+            typename, _, _ = right.rpartition(")")
             typename = typename.strip()
         else:
             typename = "Any"
@@ -744,7 +744,7 @@ def parse_parameter_line(line):
     else:
         name, _, paren = head.partition("(")
         name = name.strip()
-        typename, _, _ = paren.partition(")")
+        typename, _, _ = paren.rpartition(")")
         typename = typename.strip()
     
     if not name or not typename:
