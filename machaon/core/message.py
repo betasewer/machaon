@@ -188,13 +188,7 @@ class Message:
 
         if retobj is None:
             raise BadMessageError("No return value exists on the context stack")
-    
-        if retobj.value is INVOCATION_RETURN_RECIEVER:
-            if not args:
-                raise ValueError("No reciever value")
-            return args[0] # recieverの値
-        else:
-            return retobj
+        return retobj
 
     #
     # デバッグ用
@@ -1176,6 +1170,7 @@ class MessageEngine():
     
         if raiseerror and ret.is_error(): # エラーを伝播する
             raise ret.value.error
+
         return ret
     
     def start_subcontext(self, subject, context):
@@ -1217,6 +1212,7 @@ class MessageEngine():
         app = context.spirit
         indent = "  " * (context.get_depth()-1)
         for msg in self.run_step(subject, context, cache=cache):
+            app.interruption_point()
             if isinstance(msg, Object):
                 return msg
             elif isinstance(msg, str):
@@ -1427,7 +1423,7 @@ class SequentialMessageExpression(FunctionExpression):
     """
     def __init__(self, parent_context, f, memberspecs = None, cache = True):
         self.f = f
-        self.context = parent_context.inherit_silent()
+        self.context = parent_context.inherit_sequential()
         self.memberspecs = {}
         if memberspecs: 
             # 事前に型をインスタンス化しておく

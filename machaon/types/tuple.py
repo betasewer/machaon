@@ -48,8 +48,8 @@ class ObjectTuple():
     """
     異なる型のオブジェクトを格納する配列。
     """
-    def __init__(self, objects):
-        self.objects = objects
+    def __init__(self, objects=None):
+        self.objects = objects or []
 
     # 要素にアクセスする
     def __iter__(self):

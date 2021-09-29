@@ -231,48 +231,74 @@ class MiniProgressDisplay:
     def __init__(self, spirit, total=None, tag=None, width=30, title=None):
         self.spirit = spirit
         self.total = total
-        self.suma = None
+        self.progress = None
         self.tag = tag or "message"
         self.width = width
-        self.title = title or "進行中"
-        self.marquee = None if total is not None else 0
+        self.title = title or ""
+        self.marquee = None if total else 0
+        self.lastbit = None
+    
+    def set_total(self, total):
+        if total:
+            self.total = total
+            self.marquee = None
+        else:
+            self.total = None
+            self.marquee = 0
+    
+    def header(self):
+        if self.title:
+            return "{}: ".format(self.title)
+        else:
+            return ""
 
     def update(self, delta=None):
-        suma = self.suma 
-        if suma is None:
-            suma = 0
+        progress = self.progress 
+        if progress is None:
+            progress = 0
         else:
-            suma += delta
-            self.spirit.post("delete-message")
+            progress += int(delta)
 
         if self.marquee is not None:
             mq = self.marquee
-            midbarwidth = 2
+            midbarwidth = 3
             fullbar = self.width * "-" + "o" * midbarwidth + (self.width + midbarwidth) * "-"
             d = int(self.width / midbarwidth * mq)
             if self.width + midbarwidth * 2 <= d:
                 d = 0
                 mq = 0
-            bar = "[{}] ({})".format(fullbar[d:self.width+d], suma)
+            
+            bar = "[{}] ({})".format(fullbar[d:self.width+d], progress)
+            bit = d
+
             self.marquee = mq + 1
         else:
-            rate = suma / self.total
+            rate = progress / self.total
             hund = 100 * rate
             factor = self.width / 100
             head = round(factor * hund)
             rest = self.width - head
-            isum = round(suma)
+            isum = round(progress)
             itot = round(self.total)
-            bar = "[{}{}] {}% ({}/{})".format(head*"o", rest*"-", round(hund), isum, itot)
 
-        bar = "{}: ".format(self.title) + bar
-        self.spirit.post(self.tag, bar)
-        self.suma = suma
+            bit = round(hund)
+            bar = "[{}{}] {}% ({}/{})".format(head*"o", rest*"-", bit, isum, itot)
 
-    #
+        if self.lastbit != bit:
+            if self.lastbit is not None:
+                self.spirit.post("delete-message")
+            line = self.header() + bar
+            self.spirit.post(self.tag, line)
+            self.lastbit = bit
+        
+        self.progress = progress
+
     def finish(self, total):
-        if self.suma is not None:
+        if self.progress is not None:
             self.spirit.post("delete-message")
-        bar = "[{}] 完了 ({})".format("o"*self.width, total)
-        bar = "{}: ".format(self.title) + bar
+        if self.total is not None:
+            bar = "[{}] 完了 ({})".format("o"*self.width, self.total)
+        else:
+            bar = "[{}] 完了".format("o"*self.width)
+        bar = self.header() + bar
         self.spirit.post(self.tag, bar)

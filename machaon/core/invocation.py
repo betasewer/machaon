@@ -147,9 +147,17 @@ class InvocationEntry():
             if retspec is None:
                 raise ValueError("result_spec must be specified as MethodResult instance")
             rettype = retspec.get_typedecl().instance(context)
+            
             if retspec.is_return_self():
-                # return reciever 型は無視される
-                return objectType(rettype, INVOCATION_RETURN_RECIEVER) 
+                # レシーバオブジェクトを返す
+                if len(self.args) < 1:
+                    raise ValueError("No reciever")
+                reciever = self.args[0]
+                if isinstance(reciever, Object):
+                    return objectType(reciever.type, reciever.value)
+                else:
+                    return objectType(rettype, reciever)
+            
 
         # Noneが返された
         if retval is None:
@@ -218,7 +226,7 @@ class InvocationContext:
         self.spirit = spirit
         self.invocations: List[InvocationEntry] = []
         self.invocation_flags = flags
-        self._last_exception = None
+        self._extra_exception = None
         self._log = []
         self.log = self._add_log
         self.parent = parent # 継承元のコンテキスト
@@ -247,11 +255,11 @@ class InvocationContext:
             parent=self
         )
 
-    def inherit_silent(self):
-        """ 実行情報を残さない設定のコンテクストを生成する """
+    def inherit_sequential(self):
+        """ 連続実行を行う呼び出しのコンテクストを生成する """
         cxt = self.inherit()
-        cxt.remove_flags(INVOCATION_FLAG_PRINT_STEP|INVOCATION_FLAG_RAISE_ERROR)
-        cxt.set_flags(INVOCATION_FLAG_SEQUENTIAL)
+        cxt.remove_flags(INVOCATION_FLAG_PRINT_STEP)
+        cxt.set_flags(INVOCATION_FLAG_SEQUENTIAL|INVOCATION_FLAG_RAISE_ERROR)
         cxt.disable_log()
         return cxt
 
@@ -432,8 +440,6 @@ class InvocationContext:
         """ 呼び出しの直後に """
         index = len(self.invocations)-1
         self.log(LOG_MESSAGE_EVAL_END, index)
-        if entry.is_failed():
-            self._last_exception = entry.exception
         return index
     
     def get_last_invocation(self) -> Optional[InvocationEntry]:
@@ -447,7 +453,12 @@ class InvocationContext:
         Returns:
             Error:
         """
-        return self._last_exception
+        if self._extra_exception:
+            return self._extra_exception
+        inv = self.get_last_invocation()
+        if inv:
+            return inv.exception
+        return None
     
     def is_failed(self):
         """ @method
@@ -455,7 +466,7 @@ class InvocationContext:
         Returns:
             bool:
         """
-        return self._last_exception is not None
+        return self.get_last_exception() is not None
     
     def get_process(self):
         """ @method alias-name [process]
@@ -467,7 +478,7 @@ class InvocationContext:
     
     def push_extra_exception(self, exception):
         """ 呼び出し以外の場所で起きた例外を保存する """
-        self._last_exception = exception
+        self._extra_exception = exception
 
     def _add_log(self, logcode, *args):
         """ 実行ログを追加する """
@@ -530,8 +541,8 @@ class InvocationContext:
             pad = 16-len(title)
             printer(" {}:{}{}".format(title, pad*" ", line))
 
-        if self._last_exception:
-            err = self._last_exception
+        if self._extra_exception:
+            err = self._extra_exception
             printer("  ERROR: {}".format(type(err).__name__))
         
     def get_message(self):

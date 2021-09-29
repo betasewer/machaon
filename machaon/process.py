@@ -384,15 +384,43 @@ class Spirit():
         return self.process and self.process.is_interrupted()
 
     # プログレスバーを開始する
-    def start_progress_display(self, *, total=None):
-        self.cur_prog_bar = MiniProgressDisplay(spirit=self, total=total)
+    def start_progress_display(self, *, total=None, title=None, tag=None):
+        self.cur_prog_bar = MiniProgressDisplay(spirit=self, total=total, tag=tag, title=title)
 
     # プログレスバーを完了した状態にする
     def finish_progress_display(self, total=None):
         if self.cur_prog_bar is None:
             return
-        if total:
-            self.cur_prog_bar.finish(total)
+        self.cur_prog_bar.finish(total)
+    
+    # with文のためのオブジェクトを作る
+    def progress_display(self, *, total=None, title=None, tag=None):
+        return Spirit.ProgressDisplayScope(self, total, title=title, tag=tag)
+    
+    class ProgressDisplayScope():
+        def __init__(self, spirit, total=None, **kwargs):
+            self.spirit = spirit
+            self.total = total
+            self.kwargs = kwargs
+        
+        def __enter__(self):
+            self.start()
+            return self
+        
+        def __exit__(self, et, ev, tb):
+            self.finish()
+
+        def start(self):
+            self.spirit.start_progress_display(total=self.total, **self.kwargs)
+
+        def finish(self):
+            self.spirit.finish_progress_display(total=self.total)
+        
+        def set_total(self, total):
+            if self.spirit.cur_prog_bar is None:
+                return
+            self.spirit.cur_prog_bar.set_total(total)
+            self.total = total
 
     #
     # カレントディレクトリ

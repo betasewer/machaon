@@ -83,7 +83,7 @@ class Path():
         return os.path.basename(self._path)
     
     def basename(self):
-        """ @method [stemname]
+        """ @method [stem]
         拡張子なしのファイル名
         Returns:
             Str:
