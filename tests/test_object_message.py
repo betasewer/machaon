@@ -1,4 +1,4 @@
-from machaon.core.invocation import _new_process_error_object
+from machaon.core.invocation import INVOCATION_FLAG_RAISE_ERROR, _new_process_error_object
 import pytest
 import re
 
@@ -8,9 +8,6 @@ from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpr
 from machaon.types.fundamental import fundamental_type
 from machaon.process import TempSpirit
 
-#-----------------------------------------------------------------------
-# スタブ
-#-----------------------------------------------------------------------
 def parse_test(parser, context, lhs, rhs):
     if isinstance(lhs, Object):
         if lhs.is_error():
@@ -34,18 +31,20 @@ def parse_test(parser, context, lhs, rhs):
     
     return True
 
-def test_context():
+def test_context(*, silent=False):
     from machaon.core.object import ObjectCollection
-    from machaon.core.invocation import InvocationContext
+    from machaon.core.invocation import InvocationContext, instant_context
     from machaon.types.fundamental import fundamental_type
     
-    inputs = ObjectCollection()
+    cxt = instant_context()
+    inputs = cxt.input_objects
     inputs.new("this-year", fundamental_type.get("Int"), 2020)    
     inputs.new("this-month", fundamental_type.get("Int"), 8) 
     inputs.new("customer-name", fundamental_type.get("Str"), "Yokomizo")
-    context = InvocationContext(input_objects=inputs, type_module=fundamental_type)
-    return context
-                
+    if not silent:
+        cxt.set_flags(INVOCATION_FLAG_RAISE_ERROR)
+    return cxt
+
 def ptest(s, rhs):
     context = test_context()
     parser = MessageEngine(s)
@@ -54,6 +53,7 @@ def ptest(s, rhs):
 
 def run(f):
     f()
+
 
 #-----------------------------------------------------------------------
 
@@ -251,18 +251,18 @@ def test_parse_function():
 #
 def test_message_failure():
     # エラーが起きた時点で実行は中止され、エラーオブジェクトが返される
-    context = test_context()
+    context = test_context(silent=True)
     r = run_function("2 / 0 + 5 non-exisitent-method 0", None, context)
     assert r.is_error() # zero division error
     assert r.value.get_error_typename() == "ZeroDivisionError"
 
-    context = test_context()
+    context = test_context(silent=True)
     r = run_function("2 * 3 + 5 non-exisitent-method 0", None, context)
     assert r.is_error() # bad method
     assert r.value.get_error_typename() == "BadInstanceMethodInvocation"
 
     # 関数の実行中のエラー
-    context = test_context()
+    context = test_context(silent=True)
     r = run_function("--[10 / 0] do non-existent-method", None, context)
     assert r.is_error() # bad method
     assert r.value.get_error_typename() == "ZeroDivisionError" # do以降は中断される
@@ -274,7 +274,7 @@ def test_message_failure():
 
 #
 def test_message_reenter():
-    context = test_context()
+    context = test_context(silent=True)
     func = MessageEngine("210 / @")
 
     # 1.
@@ -323,6 +323,14 @@ def test_message_block():
     # ネスト
     r = run_function("100 / ((1 + 2 + 3) * (4 + 5 + 6))", None, context)
     assert r.value == 100 / ((1 + 2 + 3) * (4 + 5 + 6))
+    
+    # ブロックの完結後に値が続く場合
+    r = run_function("title center: (5 * (3 + 1)) =", None, context)
+    assert r.value == "title".center(5 * (3 + 1), "=")
+
+    r = run_function("(10 ** (1 + 2)) * 3", None, context)
+    assert r.value == 10 ** (1 + 2) * 3
+
 
 #
 def test_message_discard():

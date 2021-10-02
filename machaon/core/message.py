@@ -1065,10 +1065,15 @@ class MessageEngine():
             self._curblockstack.append(newpos) # 新しいブロックの番号を記録する
 
         if astinstr & TERM_END_LAST_BLOCK:
-            if self._readings:
-                msg = self._readings[-1]
+            if not self._curblockstack:
+                raise ValueError("Empty paren block stack")
+            top = self._curblockstack[-1]
+            for i, msg in enumerate(reversed(self._readings)):
+                j = len(self._readings) - i - 1
+                if j < top:
+                    break 
                 msg.conclude(context)
-                self._curblockstack.pop()
+            self._curblockstack.pop()
 
         if astinstr & TERM_END_ALL_BLOCK:
             for msg in self._readings:

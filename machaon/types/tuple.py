@@ -68,7 +68,7 @@ class ObjectTuple():
         Params:
             index(int): インデックス
         Returns:
-            Object: 値
+            Any: 値
         """
         return self.objects[index]
     
@@ -94,7 +94,7 @@ class ObjectTuple():
         Params:
             value(Str):
         Returns:
-            Object:
+            Any:
         """
         tlo = None
         for i, o in enumerate(self.objects):
@@ -201,7 +201,7 @@ class ObjectTuple():
             predicate(Function[](seq)): 述語関数
             start(Object): *初期値
         Returns:
-            Object: 結果
+            Any: 結果
         """
         if start is None:
             if not self.objects:
@@ -235,7 +235,7 @@ class ObjectTuple():
         """ @method
         最後の要素を取り出す。
         Returns:
-            Object:
+            Any:
         """
         return self.objects.pop()
     
@@ -243,7 +243,7 @@ class ObjectTuple():
         """ @method
         最初の要素を取り出す。
         Returns:
-            Object:
+            Any:
         """
         return self.objects.pop(0)
     
