@@ -597,7 +597,7 @@ class tkLauncher(Launcher):
         """ アクティブなプロセスの発するメッセージを読みに行く """
         running = super().watch_chamber_message(chamber)
         if running:
-            self.log.after(300, self.watch_chamber_message, chamber) # 300ms
+            self.log.after(30, self.watch_chamber_message, chamber) # 30ms
         return running
 
     def watch_chamber_state(self, states):

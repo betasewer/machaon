@@ -279,6 +279,7 @@ class Spirit():
         self.process = process
         # プログレスバー
         self.cur_prog_display = None 
+        self._slp = 0
     
     def inherit(self, other):
         self.root = other.root
@@ -371,8 +372,13 @@ class Spirit():
             if not noexception:
                 raise ProcessInterrupted()
             return False
+        
         if not nowait:
-            time.sleep(0.05)
+            slp = time.monotonic()
+            if slp - self._slp > 0.1:
+                time.sleep(0.03)
+                self._slp = slp
+
         if progress and self.cur_prog_bar:
             self.cur_prog_bar.update(progress)
         return True
