@@ -40,8 +40,8 @@ class PyBasicModuleLoader:
     """
     ローダーの基礎クラス
     """
-    def __init__(self):
-        self._m = None
+    def __init__(self, m=None): # モジュールのインスタンスを受ける
+        self._m = m
         self._requires = []
         self._pkg_submods = []
         self._usingtypes = []
@@ -177,7 +177,38 @@ class PyBasicModuleLoader:
         for d in self._usingtypes:
             yield d
     
+    def scan_print_type_definitions(self, app):
+        """ 型を定義するクラスの詳細を取り出す。調査用
+        Yields:
+            ObjectCollection(typename, qualname, error):
+        """
+        count = 0
 
+        modqualname = str(self)
+        app.post("message", "{}".format(modqualname))
+
+        err = None
+        try:
+            for typedef in self.scan_type_definitions():
+                typename = typedef.get_scoped_typename()
+                qualname = typedef.get_describer_qualname()
+                yield {
+                    "typename" : typename,
+                    "qualname" : qualname
+                }
+                app.post("message", "  {}".format(typename))
+                count += 1
+        except Exception as e:
+            err = e
+        
+        if count > 0:
+            app.post("message", "  型定義を{}個発見".format(count))
+        if err:
+            app.post("error", "  ロードエラー:{}".format(err))
+            yield {
+                "qualname" : modqualname,
+                "error" : err
+            }
 
 
 class PyModuleLoader(PyBasicModuleLoader):
@@ -214,6 +245,7 @@ class PyModuleFileLoader(PyBasicModuleLoader):
     ファイルパスを指定してロードする
     """
     def __init__(self, module, path):
+        super().__init__()
         self.module_name = module
         self._path = path
     
@@ -229,7 +261,24 @@ class PyModuleFileLoader(PyBasicModuleLoader):
         return self._path
 
     def __str__(self) -> str:
-        return "{}[{}]".format(self.module_name, self._path)
+        return "{} ({})".format(self.module_name, self._path)
+
+
+class PyModuleInstance(PyBasicModuleLoader):
+    """
+    ロードずみのインスタンスを操作する
+    """
+    def load_module(self):
+        return self._m
+
+    def load_filepath(self):
+        spec = self._m.__spec__
+        if not spec.has_location:
+            raise ValueError("ビルトインモジュールなので場所を参照できません")
+        return spec.origin
+
+    def __str__(self) -> str:
+        return "{} ({})".format(self._m.__name__, self.load_filepath())
 
 
 class AttributeLoader():

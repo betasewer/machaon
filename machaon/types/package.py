@@ -1,6 +1,6 @@
-from typing import Type
 from types import ModuleType
 import os
+from machaon.core.importer import PyBasicModuleLoader
 
 from machaon.package.package import PackageManager
 
@@ -278,7 +278,7 @@ class AppPackageType:
         以前読み込んだ定義を破棄し、再度読み込みをおこなう。
         """
         context.root.unload_pkg(package)
-        context.root.load_pkg(package, force=True)
+        context.root.load_pkg(package, force=True)        
     
     def scan(self, package, app):
         """ @task
@@ -288,33 +288,8 @@ class AppPackageType:
         """
         elems = []
         for mod in package.load_module_loaders():
-            modqualname = str(mod)
-            app.post("message", "モジュール {}".format(modqualname))
-
-            defs = []
-            err = None
-            try:
-                for typedef in mod.scan_type_definitions():
-                    typename = typedef.get_typename()
-                    qualname = typedef.get_describer_qualname()
-                    defs.append({
-                        "typename" : typename,
-                        "qualname" : qualname
-                    })
-            except Exception as e:
-                err = e
-            
-            if defs:
-                app.post("message", "　型定義を{}個発見".format(len(defs)))
-            if err:
-                app.post("error", "  ロードエラー:{}".format(err))
-                defs.append({
-                    "qualname" : modqualname,
-                    "error" : err
-                })
-            
-            elems.extend(defs)
-        
+            for df in mod.scan_print_type_definitions(app):
+                elems.append(df)
         return elems
     
     def extra_requires(self, package):
@@ -335,6 +310,10 @@ class Module():
     """
     def __init__(self, m) -> None:
         self._m = m
+    
+    def mloader(self):
+        from machaon.core.importer import PyModuleInstance
+        return PyModuleInstance(self._m)
 
     def constructor(self, context, value):
         """ @meta """
@@ -365,10 +344,8 @@ class Module():
         Returns:
             Path:
         """
-        spec = self._m.__spec__
-        if not spec.has_location:
-            raise ValueError("ビルトインモジュールなので場所を参照できません")
-        return spec.origin
+        mod = self.mloader()
+        return mod.load_filepath()
     
     def version(self):
         """ @method
@@ -386,5 +363,14 @@ class Module():
         """
         return self._m
 
+    def scan(self, app):
+        """ @task
+        このモジュールに定義された型を収集しログを表示する。登録はしない。
+        Returns:
+            Sheet[ObjectCollection](typename, qualname, error):
+        """
+        mod = self.mloader()
+        elems = list(mod.scan_print_type_definitions(app))
+        return elems
 
 
