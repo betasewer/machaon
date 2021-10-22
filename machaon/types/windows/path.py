@@ -15,14 +15,21 @@ def shell_get_known_folder_path(SHGetKnownFolderPath, guid):
     SHGetKnownFolderPath(byref(guid), 0, None, byref(pathptr))
     return pathptr.value
 
+def get_GUID_names_file(approot=None):
+    """ デフォルトのGUIDリストを取得する """
+    if approot is not None:
+        p = approot.get_GUID_names_file()
+        if p is not None:
+            return p
+    p = os.path.join(os.path.dirname(__file__), "guid.ini")
+    if not os.path.exists(p):
+        raise ValueError("Default guid.init does not exist")
+    return p
 
 class KnownPaths():
     def __init__(self, approot):
         self.SHGetKnownFolderPath = None
-        if approot:
-            self.guid_db_path = approot.get_GUID_names_file()
-        else:
-            self.guid_db_path = None
+        self.guid_db_path = get_GUID_names_file(approot)
 
     def _load_apis(self):
         self.SHGetKnownFolderPath = windll.shell32.SHGetKnownFolderPath

@@ -92,10 +92,7 @@ class AppRoot:
         p = os.path.join(self.basicdir, "guid.ini")
         if os.path.exists(p):
             return p
-        p = os.path.join(os.path.dirname(__file__), "types\\windows", "guid.ini")
-        if not os.path.exists(p):
-            raise ValueError("Default guid.init does not exist")
-        return p
+        return None
  
     #
     # クラスパッケージ

@@ -10,6 +10,12 @@ from machaon.shellpopen import popen_capture
 from machaon.types.fundamental import NotFound
 from machaon.types.shellplatform import shellpath
 
+
+def _normext(extension):
+    if not extension.startswith("."):
+        return "." + extension
+    return extension
+
 # Path new known-location-names
 #
 #
@@ -252,8 +258,7 @@ class Path():
             Path:
         """
         up, _ext = os.path.splitext(self._path)
-        if not extension.startswith("."):
-            extension = "." + extension
+        extension = _normext(extension)
         return Path(up + extension)
     
     def without_ext(self):
@@ -265,10 +270,18 @@ class Path():
         up, _ext = os.path.splitext(self._path)
         return Path(up)
     
-    def with_basename_format(self, format, *args):
-        """ 書式に基づいて名前のみ変更する。（内部利用）"""
+    def with_name_format(self, format, *args):
+        """ 書式に基づいて名前を変更する。（内部利用）"""
+        head, basename = os.path.split(self._path)
+        newpath = os.path.join(head, format.format(basename, *args))
+        return Path(newpath)
+    
+    def with_basename_format(self, format, *args, ext=None):
+        """ 書式に基づいて拡張子を除く名前を変更する。（内部利用）"""
         head, basename = os.path.split(self._path)
         filename, fext = os.path.splitext(basename)
+        if ext is not None:
+            fext = _normext(ext)
         newpath = os.path.join(head, format.format(filename, *args) + fext)
         return Path(newpath)
 
@@ -464,6 +477,18 @@ class Path():
 
         return Path(os.path.join(self._path, r))
     
+    @classmethod
+    def known(self, value, approot=None):
+        """ 場所の名前からパスを得る """
+        if value == "machaon" and approot:
+            p = approot.get_basic_dir()
+        else:
+            name, _, param  = value.partition(":")
+            p = shellpath().get_known_path(name, param, approot)
+        if p is not None:
+            return Path(p)
+        return None
+
     def constructor(self, context, value):
         """ @meta 
         Params:
@@ -473,13 +498,9 @@ class Path():
             head, tail = os.path.split(value)
             if not head: # no slash in path
                 # 場所の識別名として解釈
-                if tail == "machaon":
-                    p = context.spirit.get_root().get_basic_dir()
-                else:
-                    name, _, param  = value.partition(":")
-                    p = shellpath().get_known_path(name, param, context.spirit.get_root())
+                p = Path.known(value, context.spirit.get_root())
                 if p is not None:
-                    return Path(p)
+                    return p
             # 識別名が存在しなければパスとする
         else:
             value = os.fspath(value)
