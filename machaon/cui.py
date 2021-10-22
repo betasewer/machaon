@@ -269,7 +269,7 @@ class MiniProgressDisplay:
                 mq = 0
             
             bar = "[{}] ({})".format(fullbar[d:self.width+d], progress)
-            bit = d
+            bit = mq
 
             self.marquee = mq + 1
         else:
