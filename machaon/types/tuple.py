@@ -58,6 +58,9 @@ class ObjectTuple():
         
     def __len__(self):
         return len(self.objects)
+    
+    def __getitem__(self, index):
+        return self.at(index)
 
     #
     # メンバ値へのアクセス
@@ -279,6 +282,16 @@ class ObjectTuple():
     def values(self):
         return [x.value for x in self.objects]
     
+    def tuplevalues(self):
+        """ タプル型とオブジェクト型を除去する """
+        def devalue(x):
+            if isinstance(x, Object):
+                x = x.value
+            if isinstance(x, ObjectTuple):
+                x = x.tuplevalues()
+            return x
+        return [devalue(x) for x in self.objects]
+    
     def sheet(self, context, type):
         """ @method context
         同一の型に変換した後、Sheetにして返す
@@ -290,6 +303,26 @@ class ObjectTuple():
         from machaon.types.sheet import Sheet
         tpl = self.convertas(context, type)
         return Sheet(tpl.objects, type)
+
+    def column(self, index):
+        """ @method
+        各要素がリストの場合、そのn番目の要素をタプルにして返す
+        Params:
+            index(int):
+        Returns:
+            Tuple:
+        """
+        return [x.value[index] for x in self.objects]
+    
+    def columns(self, *indices):
+        """ @method
+        各要素がリストの場合、そのn1, n2...番目の要素を抜き出したリストに変える
+        Params:
+            *indices(int):
+        Returns:
+            Tuple:
+        """
+        return [[x.value[i] for i in indices] for x in self.objects]
 
     #
     # オブジェクト共通関数
