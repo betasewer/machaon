@@ -1,5 +1,6 @@
+from typing import Any
+
 import ast
-import sys
 from itertools import zip_longest
 
 from machaon.core.symbol import (
@@ -11,6 +12,7 @@ from machaon.core.symbol import (
     SIGIL_DEFAULT_RESULT,
     SIGIL_END_OF_KEYWORDS,
     SIGIL_DISCARD_MESSAGE,
+    SIGIL_TYPE_INDICATOR,
     QUOTE_ENDPARENS
 )
 from machaon.core.object import Object
@@ -1312,16 +1314,15 @@ class FunctionExpression():
     def get_expression(self) -> str:
         raise NotImplementedError()
     
-    def get_type_conversion(self):
+    def get_type_conversion(self) -> str:
         raise NotImplementedError()
     
-    def run(self, subject, context, **kwargs):
+    def run(self, subject, context, **kwargs) -> Object:
         raise NotImplementedError()
 
 
 class MessageExpression(FunctionExpression):
     """
-    コンテクストを
     """
     def __init__(self, expression, typeconv):
         self.f = MessageEngine(expression)
@@ -1380,8 +1381,6 @@ class MemberGetExpression(FunctionExpression):
         return result
 
 
-SIGIL_TYPE_INDICATOR = "="
-
 def parse_function(expression):
     """
     メッセージ式から関数オブジェクトを作成する。
@@ -1426,16 +1425,23 @@ class SequentialMessageExpression(FunctionExpression):
     """
     同じコンテキストで同型のメッセージを複数回実行する
     """
-    def __init__(self, parent_context, f, memberspecs = None, cache = True):
+    def __init__(self, parent_context, f, argspec = None, cache = True):
         self.f = f
         self.context = parent_context.inherit_sequential()
         self.memberspecs = {}
-        if memberspecs: 
-            # 事前に型をインスタンス化しておく
-            for key, typename in memberspecs.items():
-                self.memberspecs[key] = self.context.instantiate_type(typename)
         self._subjecttype = None
         self.cached = cache
+        
+        # 事前に型をインスタンス化しておく
+        if isinstance(argspec, dict): 
+            for key, typename in argspec.items():
+                t = self.context.instantiate_type(typename)
+                if key == "@":
+                    self._subjecttype = t
+                else:
+                    self.memberspecs[key] = t
+        elif isinstance(argspec, str):
+            self._subjecttype = self.context.instantiate_type(argspec)
 
     def get_expression(self) -> str:
         return self.f.get_expression()
@@ -1446,23 +1452,26 @@ class SequentialMessageExpression(FunctionExpression):
     def set_subject_type(self, conversion):
         self._subjecttype = self.context.instantiate_type(conversion)
     
-    def run(self, subject, _context=None):
-        """ 共通メンバの実装 """
+    def run(self, subject, context=None, **kwargs) -> Object:
+        """ 共通メンバの実装 オブジェクトを返す """
         self.context.set_subject(subject) # subjecttypeは無視する
         o = self.f.run_here(self.context, cache=self.cached)
-        return o.value
+        return o
 
-    def run_unary(self, value):
-        """ コード内で実行する（サブジェクト引数の値を指定） """
+    def call_unary(self, value) -> Any:
+        """ コード内で実行する（サブジェクト引数の値を指定）値を返す """
         subject = self.context.new_object(value, type=self._subjecttype)
         self.context.set_subject(subject)
         o = self.f.run_here(self.context, cache=self.cached) # 同じコンテキストで実行
         return o.value
     
-    def __call__(self, *args):
-        """ コード内で実行する（複数の引数に対応） """
-        objc = {k:self.context.new_object(v, type=t) for (v,(k,t)) in zip(args, self.memberspecs.items())}
-
+    def __call__(self, **args) -> Any:
+        """ コード内で実行する（複数の引数に対応） 値を返す"""
+        objc = {}
+        for k, v in args.items():
+            t = self.memberspecs.get(k, None)
+            objc[k] = self.context.new_object(v, type=t)
+        
         if self._subjecttype is None:
             self._subjecttype = self.context.get_type("ObjectCollection")
         subject = self.context.new_object(objc, type=self._subjecttype)
@@ -1483,6 +1492,6 @@ class SequentialMessageExpression(FunctionExpression):
         return parse_sequential_function(expression, cxt)
 
 
-def parse_sequential_function(expression, context, memberspec=None):
+def parse_sequential_function(expression, context, argspec=None):
     fn = parse_function(expression)
-    return SequentialMessageExpression(context, fn, memberspec)
+    return SequentialMessageExpression(context, fn, argspec)

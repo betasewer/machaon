@@ -4,7 +4,7 @@ import re
 
 from machaon.core.type import Type
 from machaon.core.object import Object
-from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, parse_function, run_function, MessageEngine
+from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, SequentialMessageExpression, parse_function, parse_sequential_function, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_type
 from machaon.process import TempSpirit
 
@@ -271,7 +271,6 @@ def test_message_failure():
     # "--[10 / 0] don ifn --[] else --[]" 
     #
 
-
 #
 def test_message_reenter():
     context = test_context(silent=True)
@@ -290,8 +289,7 @@ def test_message_reenter():
     r = func.run_function(context.new_object(2), context)
     assert r.value == 105
 
-
-def test_constructed_reenter():
+    # use cache
     context = test_context()
     func = MessageEngine("210 / @ * 100")
 
@@ -317,7 +315,7 @@ def test_message_block():
     r = run_function("'1-2-3' startswith: (1 Str + '-')", None, context)
     assert r.value is True
     
-    r = run_function("('1 2 3' + ' ' + '4 5') split as Int reduce '@.0 + @.1'", None, context)
+    r = run_function("('1 2 3' + ' ' + '4 5') split as Int reduce +", None, context)
     assert r.value == (1 + 2 + 3 + 4 + 5)
 
     # ネスト
@@ -363,3 +361,47 @@ def test_message_type_indicator():
     obj = context.new_object({"name" : "waon"})
     assert r.run(obj, context).value == "waon"
     
+#
+def test_message_sequential_function():
+    context = test_context()
+    assert not context.is_sequential_invocation()
+
+    fn = parse_sequential_function("1 + 1", context)
+    assert isinstance(fn, SequentialMessageExpression)
+    assert fn.context.is_sequential_invocation()
+    assert fn.context.is_set_raise_error()
+    assert not fn.context.is_set_print_step()
+    assert fn.get_expression() == "1 + 1"
+
+    # run - no subject
+    obj = context.new_object(None)
+    r = fn.run(obj) 
+    assert isinstance(r, Object)
+    assert r.value == 2
+    assert r.get_typename() == "Int"
+
+    # call with subject
+    fn = parse_sequential_function("@ reduce +", context, "Tuple[Int]")
+    r = fn.call_unary([1,2,3])
+    assert isinstance(r, int)
+    assert r == 6
+    r = fn.call_unary([4,5,6])
+    assert isinstance(r, int)
+    assert r == 15
+
+    # call with multiple args
+    fn = parse_sequential_function("(@ values) reduce (@ operator)", context, {
+            "values": "Tuple[Int]", 
+            "operator" : "Str",
+        })
+    
+    assert fn.memberspecs["values"].get_conversion() == "Tuple[Int]"
+    assert fn.memberspecs["operator"].get_conversion() == "Str"
+    r = fn(values=[7,8,9], operator="+")
+    assert isinstance(r, int)
+    assert r == 7+8+9
+    r = fn(values=[7,8,9], operator="*")
+    assert r == 7*8*9
+    r = fn(values=[7,8,9], operator="/")
+    assert r == 7/8/9
+

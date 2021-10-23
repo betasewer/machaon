@@ -3,6 +3,7 @@ from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Gene
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
 from machaon.types.fundamental import NotFound
+from machaon.core.message import parse_sequential_function
 
 
 #
@@ -159,7 +160,7 @@ class ObjectTuple():
         """
         # 関数を行に適用する
         def fn(subject):
-            return predicate.run(subject, context).test_truth()
+            return predicate.run(subject).test_truth()
         
         self.objects = list(filter(fn, self.objects))
     
@@ -170,7 +171,7 @@ class ObjectTuple():
             key(Function[](seq)): 並べ替え関数
         """
         def sortkey(subject):
-            return key.run(subject, context).test_truth()
+            return key.run(subject).value
 
         self.objects.sort(key=sortkey)
         
@@ -197,11 +198,11 @@ class ObjectTuple():
             rets.append(r)
         return ObjectTuple(rets)
     
-    def reduce_(self, context, _app, predicate, start=None):
+    def reduce_(self, context, _app, methodname, start=None):
         """ @task context alias-name [reduce]
         要素に次々と関数を適用し、一つの値として返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            methodname(str): 左辺オブジェクトのメソッド名
             start(Object): *初期値
         Returns:
             Any: 結果
@@ -215,13 +216,13 @@ class ObjectTuple():
             cur = start
             objs = self.objects
         
+        predicate = parse_sequential_function("(@ left) {} (@ right)".format(methodname), context)
         for o in objs:
-            subject = context.new_object({"0": cur, "1": o})
-            cur = predicate.run(subject, context)
-            
+            subject = context.new_object({"left": cur, "right": o})
+            cur = predicate.run(subject)
+        
         return cur
 
-    # 1 to 10 reduce [@.left + @.right]
     
     #
     #
