@@ -21,7 +21,7 @@ def get_GUID_names_file(approot=None):
         p = approot.get_GUID_names_file()
         if p is not None:
             return p
-    p = os.path.join(os.path.dirname(__file__), "guid.ini")
+    p = os.path.normpath(os.path.join(os.path.dirname(__file__), "../../configs", "guid.ini"))
     if not os.path.exists(p):
         raise ValueError("Default guid.init does not exist")
     return p

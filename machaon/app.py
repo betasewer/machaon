@@ -486,7 +486,7 @@ def deploy_directory(path):
         p.makedirs()
     
     # 空ファイルの配置
-    configs = Path(__file__).dir() / "configs"
+    configs = Path(__file__).dir() / "configs" / "deploy"
     machaon.copy_from(configs / "readme.txt")
     machaon.copy_from(configs / "apps.ini")
     credentials.copy_from(configs / "credential.ini")
@@ -503,7 +503,7 @@ def deploy_directory(path):
 def deploy_osx_start_command(main):
     from machaon.types.file import TextFile
     starter = main.with_name("start.command")
-    configs = Path(__file__).dir() / "configs"
+    configs = Path(__file__).dir() / "configs" / "deploy"
     starter_template = TextFile(configs / "osx" / "start.command").text()
     with TextFile(starter, encoding="utf-8").write_stream() as fo:
         fo.write(starter_template.format(main))

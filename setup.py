@@ -38,7 +38,7 @@ setup(
     version=version,
     
     packages=find_packages(exclude=['tests', 'tests.*']),
-    package_data={"machaon" : ["configs/*.*", "configs/osx/*.*"]},
+    package_data={"machaon" : ["configs/*.*", "configs/*/*.*", "configs/*/*/*.*"]},
     
     license=license,
     

@@ -557,7 +557,7 @@ class KeybindMap():
         self._commands = {x:KeyCommand(x) for x in cmds}
     
     def load(self, app):
-        p = os.path.join(os.path.dirname(__file__), "keybind.ini")
+        p = os.path.join(os.path.dirname(__file__), "../configs", "keybind.ini")
         if not os.path.isfile(p):
             raise ValueError("default keybind.ini is not found")
         
