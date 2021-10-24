@@ -93,6 +93,12 @@ class AppRoot:
         if os.path.exists(p):
             return p
         return None
+    
+    def get_keybind_file(self):
+        p = os.path.join(self.basicdir, "keybind.ini")
+        if os.path.exists(p):
+            return p
+        return None
  
     #
     # クラスパッケージ
@@ -409,6 +415,7 @@ class AppRoot:
     
     def watch_stray_message(self):
         self.ui.watch_chamber_message(self._stray_process)
+
         
     #
     # 外部アプリ

@@ -1,9 +1,13 @@
 ﻿#!/usr/bin/env python3
 # coding: utf-8
 
+from collections import defaultdict
+from platform import platform
 import threading
 import pprint
-from typing import Tuple, Sequence, List, Optional
+import os
+
+from typing import Dict, Iterator, Tuple, Sequence, List, Optional
 
 from machaon.cui import composit_text
 from machaon.process import ProcessMessage
@@ -21,10 +25,12 @@ class Launcher():
         self.screen_geo = geometry or (900,400)
         self.theme = None
         self.history = InputHistory()
+        self.keymap = KeybindMap()
         self.screens = {} 
         
     def init_with_app(self, app):
         self.app = app
+        self.keymap.load(self.app)
         self.init_screen()
         # デスクトップの追加
         #deskchamber = self.app.select_chamber("desktop")
@@ -433,14 +439,6 @@ class Launcher():
         self.insert_screen_text("message", "", end_of_process=procid) # プロセス識別用のタグをつけた改行を1つ入れる
         self.insert_screen_text("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
     
-    #def on_bad_command(self, spirit, process, excep):
-    #    """ 不明なコマンド """
-    #    command = process.get_command_string()
-    #    err = "'{}'は不明なコマンドです".format(command)
-    #    if self.app.search_command("prog"):
-    #        err += "。プログラムの一覧を表示 -> prog"
-    #    self.replace_input_text(err)
-    
     def on_exit(self):
         """ アプリ終了時 """
         self.destroy()
@@ -454,6 +452,12 @@ class Launcher():
     def destroy(self):
         pass
     
+    #
+    #
+    #
+    def get_keymap(self):
+        return self.keymap
+
     #
     #
     #
@@ -506,3 +510,116 @@ class InputHistory():
             return None
         return self._msgs[self._index]
     
+#
+#
+#
+class Keybind:
+    def __init__(self, key, when):
+        self.key = key
+        self.when = when
+
+class KeyCommand:
+    def __init__(self, command):
+        self.command = command
+        self.fn = None
+        self.keybinds: List[Keybind] = []
+
+    def add_keybind(self, k: Keybind):
+        self.keybinds.append(k)
+
+class KeybindMap():
+    def __init__(self):
+        self._commands: Dict[str, KeyCommand] = {}
+        self.defines()
+
+    def defines(self):
+        cmds = (
+            "Run",
+            "Interrupt",
+            "CloseChamber",
+            "InputInsertBreak",
+            "InputClear",
+            "InputRollback",
+            "InputHistoryNext",
+            "InputHistoryPrev",
+            "InputPaneExit",
+            "LogScrollPageUp",
+            "LogScrollPageDown",
+            "LogScrollUp",
+            "LogScrollDown",
+            "LogScrollLeft",
+            "LogScrollRight",
+            "LogScrollNextProcess",
+            "LogScrollPrevProcess",
+            "LogInputSelection",
+            "LogPaneExit",
+        )
+        self._commands = {x:KeyCommand(x) for x in cmds}
+    
+    def load(self, app):
+        p = os.path.join(os.path.dirname(__file__), "keybind.ini")
+        if not os.path.isfile(p):
+            raise ValueError("default keybind.ini is not found")
+        
+        import configparser
+        cfg = configparser.ConfigParser()
+        cfg.read(p, encoding="utf-8")
+        
+        p = app.get_keybind_file()
+        if p is not None:
+            cfg.read(p, encoding="utf-8")
+        
+        import machaon.platforms
+        pltkey = machaon.platforms.current.name
+        
+        for section in cfg.sections():
+            when = "root"
+            if cfg.has_option(section, "when"):
+                when = cfg.get(section, "when")
+            
+            command = None
+            if not cfg.has_option(section, "command"):
+                app.post_stray_message("warn", "キーマップ[{}]読み込み中に：commandキーがありません".format(section))
+                continue
+            command = cfg.get(section, "command")
+
+            key = None
+            if cfg.has_option(section, pltkey):
+                key = cfg.get(section, pltkey)
+            elif cfg.has_option(section, "key"):
+                key = cfg.get(section, "key")
+            else:
+                app.post_stray_message("warn", "キーマップ[{}]読み込み中に：key|win|macキーがありません".format(section))
+                continue
+            
+            cmd = self._commands.get(command, None)
+            if cmd is None:
+                app.post_stray_message("warn", "キーマップ[{}]読み込み中に：コマンド'{}'は存在しません".format(section, command))
+                continue
+
+            keys = key.split("+")
+            keybind = Keybind(keys, when)
+            cmd.add_keybind(keybind)
+    
+    def set_command_function(self, command, fn):
+        cmd = self._commands.get(command, None)
+        if cmd is None:
+            raise ValueError("定義されていないコマンドです")
+        cmd.fn = fn
+    
+    def get_keybinds(self, command) -> List[Keybind]:
+        cmd = self._commands.get(command, None)
+        if cmd is None:
+            raise ValueError("定義されていないコマンドです")
+        return cmd.keybinds
+
+    def all_commands(self) -> Iterator[KeyCommand]:
+        for cmd in self._commands.values():
+            yield cmd
+
+    def all_keybinds(self) -> Iterator[Keybind]:
+        for cmd in self._commands.values():
+            for k in cmd.keybinds:
+                yield k
+    
+

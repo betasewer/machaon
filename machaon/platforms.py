@@ -8,6 +8,8 @@ from typing import Any
 #
 #
 class _Windows:
+    name = "win"
+
     preferred_fontname = "ＭＳ ゴシック"
     preferred_fontsize = 10
 
@@ -24,6 +26,8 @@ class _Windows:
         
 #
 class _Macintosh:
+    name = "mac"
+
     preferred_fontname = "Menlo"
     preferred_fontsize = 14
     
@@ -39,7 +43,9 @@ class _Macintosh:
         return ShellUI("utf-8")
 
 #
-class _Unix:
+class _Linux:
+    name = "linux"
+
     preferred_fontname = "Verdana"
     preferred_fontsize = 10
     
@@ -57,7 +63,7 @@ class _Unix:
 #
 #
 #
-current: Any = _Unix
+current: Any = _Linux
 
 import platform
 _platform = platform.system()

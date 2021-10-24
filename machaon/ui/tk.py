@@ -2,7 +2,6 @@
 # coding: utf-8
 
 import os
-from datetime import datetime
 from typing import Tuple, Sequence, List, Optional, Any, Generator
 
 import tkinter as tk
@@ -314,139 +313,139 @@ class tkLauncher(Launcher):
         import machaon.ui.theme
         self.apply_theme(machaon.ui.theme.light_terminal_theme())
 
-        # イベント
-        def bind_event(*widgets):
+        # 入力イベント
+        def define_command(fn):
+            command = fn.__name__
+            self.keymap.set_command_function(command, fn)
+            return fn
+
+        def bind_event(sequence, *widgets):
             def _deco(fn):
-                fnname: str = fn.__name__
-                onpos = fnname.find("on_")
-                if onpos == -1:
-                    raise ValueError("")
-                sequence = "<{}>".format("-".join(fnname[onpos+3:].split("_")))
                 for w in widgets:
                     w.bind(sequence, fn)
             return _deco
 
-        @bind_event(self.commandline)
-        def cmdline_on_Return(e):
+        # アクション定義
+        @define_command
+        def Run(e):
             self.on_commandline_return()        
             return "break"
         
-        @bind_event(self.commandline)
-        def cmdline_on_Control_Return(e): # 改行を入力
+        @define_command
+        def Interrupt(e):
+            self.app.interrupt_process()
+            return "break"
+
+        @define_command
+        def CloseChamber(e):
+            self.close_active_chamber()
+            return "break"
+
+        @define_command
+        def InputInsertBreak(e): # 改行を入力
             return None
         
-        @bind_event(self.commandline)
-        def cmdline_on_Escape(e):
+        @define_command
+        def InputClear(e):
+            self.replace_input_text("")
+            return "break"
+
+        @define_command
+        def InputRollback(e):
+            self.rollback_input_text()
+            return "break"
+            
+        @define_command
+        def InputHistoryNext(e):
+            self.on_commandline_down()
+            return "break"
+
+        @define_command
+        def InputHistoryPrev(e):
+            self.on_commandline_up()
+            return "break"
+        
+        @define_command
+        def InputPaneExit(e):
             self.log.focus_set() # 選択モードへ
             return "break"
         
-        # ログウィンドウ
-        @bind_event(self.log)
-        def log_on_Return(e):
+        @define_command
+        def LogPaneExit(e):
+            self.log_set_selection() # 項目選択を外す
+            self.commandline.focus_set() # コマンド入力モードへ
+            return None
+        
+        @define_command
+        def LogScrollPageUp(e):
+            self.scroll_page(-1)
+            return "break"
+
+        @define_command
+        def LogScrollPageDown(e):
+            self.scroll_page(1)
+            return "break"
+
+        @define_command
+        def LogScrollUp(e):
+            self.scroll_vertical(-1)
+            return "break"
+
+        @define_command
+        def LogScrollDown(e):
+            self.scroll_vertical(1)
+            return "break"
+        
+        @define_command
+        def LogScrollLeft(e):
+            self.scroll_horizon(-1)
+            return "break"
+
+        @define_command
+        def LogScrollRight(e):
+            self.scroll_horizon(1)
+            return "break"
+        
+        @define_command
+        def LogScrollNextProcess(e):
+            self.hyper_select_next()
+            return "break"
+
+        @define_command
+        def LogScrollPrevProcess(e):
+            self.hyper_select_prev()
+            return "break"
+            
+        @define_command
+        def LogInputSelection(e):
             self.log_input_selection()
             self.commandline.focus_set()
             return "break"
     
-        @bind_event(self.log, self.chambermenu)
-        def log_on_Escape(e):
-            self.log_set_selection() # 項目選択を外す
-            self.commandline.focus_set() # コマンド入力モードへ
-            return None
-
-        # ログスクロール
-        # コマンドモード
-        @bind_event(self.commandline)
-        def on_Control_Shift_Up(e):
-            self.scroll_page(-1)
-            return "break"
-
-        @bind_event(self.commandline)
-        def on_Control_Shift_Down(e):
-            self.scroll_page(1)
-            return "break"
-
-        @bind_event(self.commandline)
-        def on_Control_Shift_Left(e):
-            self.scroll_horizon(-1)
-            return "break"
-
-        @bind_event(self.commandline)
-        def on_Control_Shift_Right(e):
-            self.scroll_horizon(1)
-            return "break"
-            
-        @bind_event(self.commandline, self.log, self.root)
-        def on_Control_Left(e):
-            self.replace_input_text("")
-            return "break"
-
-        @bind_event(self.commandline, self.log, self.root)
-        def on_Control_Right(e):
-            self.rollback_input_text()
-            return "break"
-            
-        @bind_event(self.commandline, self.log, self.root)
-        def on_Control_Down(e):
-            self.on_commandline_down()
-            return "break"
-
-        @bind_event(self.commandline, self.log, self.root)
-        def on_Control_Up(e):
-            self.on_commandline_up()
-            return "break"
-            
-        # ログ閲覧モード
-        @bind_event(self.log)
-        def on_Key_w(e):
-            self.scroll_vertical(-1)
-
-        @bind_event(self.log)
-        def on_Key_s(e):
-            self.scroll_vertical(1)
-            
-        @bind_event(self.log)
-        def on_Key_a(e):
-            self.scroll_horizon(-1)
-
-        @bind_event(self.log)
-        def on_Key_d(e):
-            self.scroll_horizon(1)
-            
-        @bind_event(self.log)
-        def on_Key_q(e):
-            self.scroll_page(-1)
-
-        @bind_event(self.log)
-        def on_Key_e(e):
-            self.scroll_page(1)
-
-        @bind_event(self.root, self.commandline, self.log)
-        def on_Control_q(e):
-            self.app.interrupt_process()
-            return "break"
-
-        @bind_event(self.log)
-        def log_on_Down(e):
-            self.hyper_select_next()
-            return "break"
-
-        @bind_event(self.log)
-        def log_on_Up(e):
-            self.hyper_select_prev()
-            return "break"
-            
-        @bind_event(self.commandline, self.log)
-        def on_Alt_c(e):
-            self.close_active_chamber()
-            return "break"
-
-        @bind_event(self.commandline, self.log)
-        def on_FocusIn(e):
+        @bind_event("<FocusIn>", self.commandline, self.log)
+        def FocusIn(e):
             e.widget.configure(background=self.focusbg[0])
 
-        @bind_event(self.commandline, self.log)
-        def on_FocusOut(e):
+        @bind_event("<FocusOut>", self.commandline, self.log)
+        def FocusOut(e):
             e.widget.configure(background=self.focusbg[1])
+
+        for command in self.keymap.all_commands():
+            for keybind in command.keybinds:
+                if keybind.when == "root":
+                    wids = (self.root, self.commandline, self.log, self.chambermenu)
+                elif keybind.when == "input":
+                    wids = (self.commandline,)
+                elif keybind.when == "log":
+                    wids = (self.log, self.chambermenu)
+                else:
+                    raise ValueError("不明なターゲットウィジェットです: {}".format(keybind.when))
+                
+                sequence = translate_into_tk_event_sequence(keybind.key)
+                if sequence is None:
+                    raise ValueError("tkのシークエンスに変換できませんでした: {} ({})".format(keybind.key, command))
+
+                bind_event(sequence, *wids)(command.fn)
     
     def install_startup_message(self, msgs):
         self.rootframe.after(100, self.app.run_message_sequence, msgs)
@@ -1305,9 +1304,7 @@ def screen_select_object(ui, wnd, charindex, objtag, sel):
         wnd.delete(str(btnchar), str(btnchar.shifted(char=1)))
         wnd.insert(str(btnchar), "O", btntags)
 
-#
-#
-#
+
 class TextDump():
     def __init__(self, d):
         self.dump = d
@@ -1315,4 +1312,43 @@ class TextDump():
     def items(self):
         return self.dump
     
+tk_modifiers = {
+    "Control", 
+    "Alt",
+    "Shift",
+    "Lock",
+    "Extended",
+    "Button1",
+    "Button2",
+    "Button3",
+    "Button4",
+    "Button5",
+    "Mod1", "Command",
+    "Mod2", "Option",
+    "Mod3", 
+    "Mod4", 
+    "Mod5", 
+    "Meta",
+    "Double",
+    "Triple",
+    "Quadruple",
+}
     
+def translate_into_tk_event_sequence(keys: List[str]):
+    mods = []
+    details = []
+    for k in keys:
+        if k == "Ctrl":
+            k = "Control"
+        if k in tk_modifiers:
+            mods.append(k)
+        else:
+            if len(k) == 1 and k.upper():
+                k = k.lower() # 大文字表記はShiftが必要になる
+            details.append(k)
+
+    if not details:
+        raise ValueError("bad sequence")
+    
+    sequence = "<{}>".format("-".join(mods+details))
+    return sequence

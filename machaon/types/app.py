@@ -2,6 +2,7 @@
 # coding: utf-8
 
 from machaon.types.package import AppPackageType
+from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
 
 class RootObject:
     """
@@ -10,6 +11,10 @@ class RootObject:
 
     def __init__(self, context):
         self.context = context
+    
+    @property
+    def root(self) -> AppRoot:
+        return self.context.root
 
     #
     # メソッド
@@ -126,13 +131,33 @@ class RootObject:
             return pr.is_failed()
         self._clear_processes(app, is_failed)
     
+    def keymap(self):
+        ''' @method
+        ショートカットキーの一覧を表示する。 
+        Returns:
+            Sheet[ObjectCollection](key, command):
+        '''
+        keymap = self.root.get_ui().get_keymap()
+        rets = []
+        for cmd in keymap.all_commands():
+            keys = [("+".join(x.key), x.when) for x in cmd.keybinds]
+            if keys:
+                key = ", ".join(["{} [{}]".format(*x) for x in keys])
+            else:
+                key = "割り当てなし"
+
+            rets.append({
+                "command" : cmd.command,
+                "key" : key
+            })
+        return rets
+    
     def deploy(self, app, path):
         ''' @task
         machaonディレクトリを配置する。
         Params:
             path(Path):
         '''
-        from machaon.app import deploy_directory
         deploy_directory(path)
     
     def trans_deploy(self, app, path):
@@ -142,7 +167,6 @@ class RootObject:
             path(Path): 新たにmachaonが配備されるディレクトリ
         '''
         from machaon.types.shell import Path
-        from machaon.app import transfer_deployed_directory
         transfer_deployed_directory(app, Path(self.context.root.get_basic_dir()), path)
 
     def stringify(self):
