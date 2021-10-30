@@ -482,6 +482,8 @@ class Path():
         """ 場所の名前からパスを得る """
         if value == "machaon" and approot:
             p = approot.get_basic_dir()
+        elif value == "store" and approot:
+            p = os.path.join(approot.get_basic_dir(), "store")
         else:
             name, _, param  = value.partition(":")
             p = shellpath().get_known_path(name, param, approot)

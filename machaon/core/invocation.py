@@ -150,9 +150,7 @@ class InvocationEntry():
             
             if retspec.is_return_self():
                 # レシーバオブジェクトを返す
-                if len(self.args) < 1:
-                    raise ValueError("No reciever")
-                reciever = self.args[0]
+                reciever = self.message.get_reciever_value()
                 if isinstance(reciever, Object):
                     return objectType(reciever.type, reciever.value)
                 else:

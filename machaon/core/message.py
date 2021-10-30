@@ -131,6 +131,12 @@ class Message:
             return spec
         else:
             return MethodParameter("param{}".format(index), None, "引数{}".format(index))
+
+    def get_reciever_value(self):
+        if isinstance(self.reciever, BasicRef):
+            return self.reciever.get_lastvalue()
+        else:
+            return self.reciever
     
     def reset_ref(self):
         for elem in (self.reciever, self.selector, *self.args):

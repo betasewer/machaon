@@ -337,7 +337,6 @@ class Type(TypeProxy):
         内部実装で使うメソッドを実行する
         Params:
             method(MetaMethod): メソッド
-            calltype(str): i = selfは第一オブジェクト  t = selfは型インスタンス
             *args
             **kwargs
         Returns:
