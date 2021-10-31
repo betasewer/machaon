@@ -23,17 +23,29 @@ common_known_names = [
     "fonts", 
 ]
 
-def shellpath():
-    """
-    パス関連のモジュール
-    """
-    module = None 
+def _import_platform_module(name):
     system = get_platform()
     if system == "win32":
-        import machaon.types.windows.path as module
+        pltdir = "windows"
     elif system == "darwin":
-        import machaon.types.osx.path as module
+        pltdir = "osx"
     else:
         raise ValueError("Unsupported system: "+system)
-    return module
+    
+    import importlib
+    return importlib.import_module("machaon.types.{}.{}".format(pltdir, name))
+
+def shellpath():
+    """
+    パス関連
+    """
+    return _import_platform_module("path")
+
+def clipboard():
+    """
+    クリップボード
+    """
+    return _import_platform_module("clipboard")
+
+
     

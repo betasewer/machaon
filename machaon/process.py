@@ -202,7 +202,9 @@ class Process:
     # 入力
     #
     def wait_input(self):
-        """ ワーカースレッドで入力終了イベント発生まで待機する """
+        """ @hidden
+        ワーカースレッドで入力終了イベント発生まで待機する 
+        """
         self.event_inputend.clear()
         self.input_waiting = True
         self.event_inputend.wait() # 待機...
@@ -213,11 +215,15 @@ class Process:
         return text
 
     def is_waiting_input(self):
-        """ メインスレッドで入力待ちか確認する """
+        """ @hidden
+        メインスレッドで入力待ちか確認する
+        """
         return self.input_waiting
     
     def tell_input_end(self, text):
-        """ メインスレッドから入力完了を通知する """
+        """ @hidden
+        メインスレッドから入力完了を通知する
+        """
         self.last_input = text
         self.event_inputend.set()
     
@@ -334,6 +340,7 @@ class Spirit():
         return self.get_ui().get_input(self, desc)
     
     def wait_input(self):
+        """ @hidden """
         if self.process is None:
             return None
         return self.process.wait_input()
@@ -427,28 +434,14 @@ class Spirit():
                 return
             self.spirit.cur_prog_bar.set_total(total)
             self.total = total
-
-    #
-    # カレントディレクトリ
-    #
-    def get_current_dir(self):
-        return self.app.get_current_dir()
-
-    def change_current_dir(self, path):
-        if os.path.isdir(path):
-            self.app.set_current_dir(path)
-            return True
-        else:
-            return False
     
-    def abspath(self, path):
-        # 絶対パスにする
-        if not os.path.isabs(path):
-            cd = self.app.get_current_dir()
-            if cd is None:
-                cd = os.getcwd()
-            path = os.path.normpath(os.path.join(cd, path))
-        return path
+    #
+    # クリップボード
+    #
+    def clipboard_copy(self, value):
+        from machaon.types.shellplatform import clipboard
+        clipboard().clipboard_copy(value)
+        self.post("message", "クリップボードに文字列をコピーしました")
 
     #
     # 基本型へのショートカット

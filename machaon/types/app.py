@@ -92,15 +92,22 @@ class RootObject:
         chm = self.context.root.get_active_chamber()
         return chm
     
-    def last_context(self):
-        ''' @method
-        現在のチャンバーで最後に実行されたプロセスの呼び出しコンテキストを取得する。
+    def context_(self):
+        ''' @method alias-name [context]
+        現在の呼び出しコンテキストを取得する。
         Returns:
-            InvocationContext: 
+            Context: 
         '''
-        chm = self.context.root.get_active_chamber()
-        return chm.last_process.get_last_invocation_context()
+        return self.context
     
+    def spirit_(self):
+        ''' @method alias-name [spirit]
+        現在の呼び出しコンテキストのSpiritを取得する。
+        Returns:
+            Any:
+        '''
+        return self.context.spirit
+
     def _clear_processes(self, app, pred):
         ''' プロセスの実行結果とプロセス自体を削除する。 '''
         chm = self.context.root.get_active_chamber()

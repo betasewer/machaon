@@ -404,6 +404,15 @@ class StrType():
         pa = [string, *params]
         run_command_capturing(app, pa)
 
+    # 
+    # その他
+    #
+    def copy(self, string, spirit):
+        """ @task
+        クリップボードに文字列をコピーする。
+        """
+        spirit.clipboard_copy(string)
+
 
 class BoolType():
     def constructor(self, _context, s):
