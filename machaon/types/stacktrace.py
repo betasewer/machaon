@@ -96,6 +96,10 @@ class ErrorObject():
             error = self.error
             return "実行エラー：{}[{}]".format(str(error), self.get_error_typename())
 
+    def summarize(self):
+        """ @meta """
+        return self.stringify() # 文字幅による省略を行わない
+
     def pprint(self, app):
         """ @meta """
         if isinstance(self.error, InternalMessageError):
