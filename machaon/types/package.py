@@ -2,7 +2,7 @@ from types import ModuleType
 import os
 from machaon.core.importer import PyBasicModuleLoader
 
-from machaon.package.package import PackageManager
+from machaon.package.package import Package, PackageManager
 
 class AppPackageType:
     """
@@ -10,7 +10,7 @@ class AppPackageType:
     ValueType: 
         machaon.package.package.Package
     """
-    def name(self, package):
+    def name(self, package: Package):
         """ @method
         パッケージ名
         Returns:
@@ -18,7 +18,7 @@ class AppPackageType:
         """
         return package.name
     
-    def status(self, package, spirit):
+    def status(self, package: Package, spirit):
         """ @method spirit
         パッケージの状態を示す文字列
         Returns:
@@ -62,7 +62,7 @@ class AppPackageType:
         
         return "unexpected status：{}{}".format(loadstatus, installstatus)
     
-    def loading_status(self, package):
+    def loading_status(self, package: Package):
         """ @method
         モジュールのロード状態を示す文字列。
         Returns:
@@ -82,7 +82,7 @@ class AppPackageType:
                 loadstatus = "ready ({} error)".format(errcnt)
         return loadstatus
     
-    def update_status(self, package, spirit):
+    def update_status(self, package: Package, spirit):
         """ @task
         更新状態を示す文字列。
         リモートソースに接続して最新かどうか確認する。
@@ -99,7 +99,7 @@ class AppPackageType:
         
         return "unexpected status：{}".format(installstatus)
 
-    def errors(self, package):
+    def errors(self, package: Package):
         """ @method
         前回のロード時に発生したエラー
         Returns:
@@ -107,7 +107,7 @@ class AppPackageType:
         """
         return package.get_load_errors()
 
-    def scope(self, package):
+    def scope(self, package: Package):
         """ @method
         型を展開するスコープ
         Returns:
@@ -115,7 +115,7 @@ class AppPackageType:
         """
         return package.scope
     
-    def source(self, package):
+    def source(self, package: Package):
         """ @method
         ソースを示す文字列
         Returns:
@@ -123,7 +123,7 @@ class AppPackageType:
         """
         return package.get_source_signature()
     
-    def entrypoint(self, package):
+    def entrypoint(self, package: Package):
         """ @method
         エントリポイントとなるモジュール
         Returns:
@@ -131,7 +131,7 @@ class AppPackageType:
         """
         return package.entrypoint
     
-    def hash(self, package, context):
+    def hash(self, package: Package, context):
         """ @method context
         インストールされているバージョンのハッシュ値
         Returns:
@@ -142,7 +142,7 @@ class AppPackageType:
             return "<no-hash>"
         return h
 
-    def latest_hash(self, package, app):
+    def latest_hash(self, package: Package, app):
         """ @task
         パッケージの最新のハッシュ値
         Returns:
@@ -153,20 +153,20 @@ class AppPackageType:
             return "<no-hash>"
         return h
     
-    def install(self, package, context, app):
+    def install(self, package: Package, context, app):
         """ @task context
         パッケージをインストールし、ロードする。
         """
         self._update(package, context, app, forceinstall=True)
     
-    def update(self, package, context, app):
+    def update(self, package: Package, context, app):
         """ @task context
         パッケージを更新し、再ロードする。
         """
         self._update(package, context, app)
 
     # 
-    def _update(self, package, context, app, forceinstall=False):
+    def _update(self, package: Package, context, app, forceinstall=False):
         if not package.is_remote_source():
             app.post("message", "リモートソースの指定がありません")
             return
@@ -211,7 +211,7 @@ class AppPackageType:
             elif state == PackageManager.PIP_INSTALLING:
                 app.post("message", "pipを呼び出し")
             elif state == PackageManager.PIP_MSG:
-                app.post("message", "> " + state.msg)
+                app.post("message", "  " + state.msg)
             elif state == PackageManager.PIP_END:
                 if state.returncode == 0:
                     app.post("message", "pipによるインストールが成功し、終了しました")
@@ -221,18 +221,13 @@ class AppPackageType:
                     app.post("error", "pipによるインストールが失敗しました コード={}".format(state.returncode))
                     return
 
-            elif state == PackageManager.PRIVATE_REQUIREMENTS:
-                app.post("warn", "次の依存パッケージを手動でインストールする必要があります：")
-                for name in state.names:
-                    app.message("  " + name)
-
         # 型をロードする
         approot.load_pkg(package)
 
         # 追加依存モジュールを表示する
         for name, ready in package.check_required_modules_ready().items():
             if not ready:
-                app.post("warn", "モジュール'{}'がありません。後で追加する必要があります".format(name))
+                app.post("warn", "モジュール'{}'がありません。手動で追加する必要があります".format(name))
 
         if operation is approot.install_package:
             app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))

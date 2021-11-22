@@ -11,8 +11,8 @@ from typing import Dict, Any, Union, List, Optional, Iterator
 
 from machaon.core.importer import module_loader, walk_modules, module_name_from_path, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
-from machaon.package.repository import RepositoryURLError
-from machaon.core.docstring import DocStringParser, parse_doc_declaration
+from machaon.package.repository import RepositoryArchive, RepositoryURLError
+from machaon.package.archive import BasicArchive
 
 #
 class DatabaseNotLoadedError(Exception):
@@ -47,8 +47,8 @@ class Package():
         scope = None
     ):
         self.name: str = name
-        self.source = source
-        self.separate = separate
+        self.source: BasicArchive = source
+        self.separate: bool = separate
         
         if type is None: 
             type = PACKAGE_TYPE_MODULES
@@ -81,18 +81,18 @@ class Package():
     def source_name(self):
         if self.source is None:
             raise ValueError("No source")
-        return self.source.name 
+        return self.source.get_name() 
 
     def get_source_signature(self):
         if self.source is None:
             raise ValueError("No source")
         return self.source.get_source()
     
-    def get_source(self):
+    def get_source(self) -> BasicArchive:
         return self.source
     
     def is_remote_source(self) -> bool:
-        return self.source.is_remote
+        return isinstance(self.source, RepositoryArchive)
 
     def is_module_source(self) -> bool:
         return getattr(self.source, "is_module", False) is True
@@ -463,7 +463,7 @@ class PackageManager():
             return ''
         
         rep = pkg.get_source()
-        if rep.is_remote:
+        if isinstance(rep, RepositoryArchive):
             # ダウンロードする
             if not tmpdir: tmpdir = tempfile.mkdtemp()
             try:
@@ -485,7 +485,7 @@ class PackageManager():
                 return
 
         localpath = None
-        if rep.is_archive:
+        if isinstance(rep, BasicArchive):
             # ローカルに展開する
             if not tmpdir: tmpdir = tempfile.mkdtemp()
             try:
@@ -512,7 +512,7 @@ class PackageManager():
                 # pipが作成したデータを見に行く
                 distinfo: Dict[str, str] = {}
                 if pkg.is_installation_separated():
-                    distinfo = _read_pip_dist_info(self.dir, pkg.source_name)
+                    distinfo = _read_pip_dist_info(self.dir, rep.get_name())
 
                 # データベースに書き込む
                 self.add_database(pkg, **distinfo)
@@ -538,7 +538,7 @@ class PackageManager():
 
         
     #
-    def uninstall(self, pkg):
+    def uninstall(self, pkg: Package):
         if pkg.is_module_source():
             # アンインストールは不要
             return

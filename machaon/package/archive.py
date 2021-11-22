@@ -12,23 +12,29 @@ class BasicArchive():
     """
     アーカイブファイル
     """
-    is_remote = False
-    is_archive = True
-
     root_level = 1
 
     def __init__(self):
         self._arc = None
         self._arcroot = None
     
-    def add_credential(self, _cred):
+    def add_credential(self, _cred) -> None:
         pass
     
-    def match_credential(self, _cred):
+    def match_credential(self, _cred) -> bool:
         return False
-        
+    
+    def get_name(self) -> str:
+        raise NotImplementedError()
+    
+    def get_source(self) -> str:
+        raise NotImplementedError()
+    
     def query_hash(self):
         return None
+        
+    def get_arcfilepath(self, workdir) -> str:
+        raise NotImplementedError()
     
     #
     # アーカイブを操作する
@@ -124,9 +130,6 @@ class DummyArchive():
     """
     アーカイブではない
     """
-    is_remote = False
-    is_archive = False
-
     def add_credential(self, _cred):
         pass
     

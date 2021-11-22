@@ -16,9 +16,6 @@ class RepositoryURLError(Exception):
 #
 #
 class RepositoryArchive(BasicArchive):
-    is_remote = True
-    is_archive = True
-
     download_chunk_size = 20 * 1024 # 20kb
     download_timeout = 15 # 秒
 
@@ -40,6 +37,9 @@ class RepositoryArchive(BasicArchive):
     def get_arcfilepath(self, workdir):
         return os.path.join(workdir, self.arcfilename)
 
+    def get_name(self) -> str:
+        return self.name
+    
     def get_source(self) -> str:
         return "{}/{}/{}".format(type(self).hostname, self.username, self.name)
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
+from machaon.package.repository import RepositoryArchive
 from machaon.types.package import AppPackageType
 from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
 
@@ -43,7 +44,6 @@ class RootObject:
         spirit.post("message", "")
         spirit.post("message", "ヘルプ")
         spirit.post("message", "")
-
 
     def types(self, spirit):
         '''@task
@@ -175,6 +175,14 @@ class RootObject:
         '''
         from machaon.types.shell import Path
         transfer_deployed_directory(app, Path(self.context.root.get_basic_dir()), path)
+    
+    def machaon_update(self, context, app):
+        ''' @task context
+        machaonをリポジトリからダウンロードして更新する。
+        '''
+        from machaon.package.package import create_package
+        pkg = create_package("machaon", "github:betasewer/machaon")
+        AppPackageType().update(pkg, context, app)
 
     def stringify(self):
         """ @meta """
@@ -280,70 +288,4 @@ def command_ui_theme(spi, themename=None, alt="", show=False):
             theme.setval(cfgname, cfgval)
         
         root.get_ui().apply_theme(theme)
-
-
-# 立ち上げスクリプトのひな形を吐き出す
-def command_bootstrap(app, tk=True):
-    pass
-
-#
-# クラスサンプル用コマンド
-#
-class TestProcess():
-    def __init__(self, app):
-        self.app = app
-    
-    def init_process(self):
-        self.app.message("文字列を倍増するプロセスを開始.")
-    
-    def process_target(self):
-        target = self.app.get_input("文字列を入力してください...")
-        templ = self.app.get_input("倍数を入力してください...")
-        if not templ.isdigit():
-            self.app.error("数値が必要です")
-        else:
-            self.app.message-em("\n".join([target for _ in range(int(templ))]))   
-
-    def exit_process(self):
-        self.app.message("文字列を倍増するプロセスを終了.")
-    
-    @classmethod
-    def describe(cls, cmd):
-        cmd.describe(
-            description = "文字列を倍増します。"
-        )
-
-#
-class LinkProcess():
-    def __init__(self, app):
-        self.app = app
-    
-    def init_process(self):
-        self.app.message("リンク作成を開始.")
-    
-    def process_target(self, url):
-        spl = url.split(maxsplit=1)
-        if len(spl)==1:
-            url = spl[0]
-            target = url
-        elif len(spl)==2:
-            url = spl[0]
-            target = spl[1]
-        else:
-            raise ValueError("")
-
-        self.app.hyperlink(target, link=url)
-
-    def exit_process(self):
-        self.app.message("リンク作成を終了.")
-        
-    @classmethod
-    def describe(cls, cmd):
-        cmd.describe(
-            description = "リンクを貼ります。"
-        )["target url_and_text"](
-            help = "リンクのURLと文字列",
-            dest = "url"
-        )
-
 """
