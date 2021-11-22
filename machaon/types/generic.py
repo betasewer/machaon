@@ -461,7 +461,7 @@ class GenericMethods:
         if left.test_truth():
             from machaon.types.fundamental import FunctionType
             fn = FunctionType.constructor(FunctionType(), context, "@ " + right)
-            return fn.run_function(left, context, raiseerror=True)
+            return fn.run(left, context)
         else:
             return None
 
@@ -477,7 +477,7 @@ class GenericMethods:
         if not left.test_truth():
             from machaon.types.fundamental import FunctionType
             fn = FunctionType.constructor(FunctionType(), context, "@ " + right)
-            return fn.run_function(left, context, raiseerror=True)
+            return fn.run(left, context)
         else:
             return None
         

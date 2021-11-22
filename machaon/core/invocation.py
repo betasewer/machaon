@@ -155,7 +155,6 @@ class InvocationEntry():
                     return objectType(reciever.type, reciever.value)
                 else:
                     return objectType(rettype, reciever)
-            
 
         # Noneが返された
         if retval is None:
