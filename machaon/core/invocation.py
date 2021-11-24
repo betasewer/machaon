@@ -550,7 +550,7 @@ class InvocationContext:
         """
         for code, *values in self._log:
             if code == LOG_MESSAGE_BEGIN:
-                return values[0].source
+                return values[0]
         raise ValueError("実行ログに記録がありません")
     
     def get_invocations(self):
