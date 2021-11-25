@@ -664,10 +664,8 @@ class InvocationContext:
             return cxt
         elif isinstance(value, str):
             procindex, sep, sublevel = value.partition("-")
-            if not sep:
-                raise ValueError("[プロセスID]-[サブコンテキスト]の形式で指定してください")
             cxt = InvocationContext.constructor(self, context, int(procindex))
-            if sublevel:
+            if sep:
                 return cxt.get_subcontext(sublevel)
             else:
                 return cxt

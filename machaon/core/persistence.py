@@ -38,9 +38,10 @@ def enum_persistent_names(root):
 
 class StoredMessage():
     """ 記述されたメッセージ """
-    def __init__(self, path, name):
+    def __init__(self, path, name=None):
         self.path = path
         self.name = name
+        self._buf = []
     
     def get_path(self):
         """ @method alias-name [path]
@@ -76,19 +77,40 @@ class StoredMessage():
             raise ValueError("ファイルが存在しません")
         f = TextFile(Path(self.path))
         return f.text()
-    
-    def write(self, message):
+
+    def recall(self, context, context_index):
+        """ @method context
+        コンテキストに紐づけられたメッセージを書き留める。
+        Params:
+            context_index(str):
+        """
+        from machaon.core.invocation import InvocationContext
+        cxt = InvocationContext.constructor(InvocationContext, context, context_index)
+        self._buf.append(cxt.get_message())
+
+    def record(self, message):
         """ @method
-        メッセージを保存する。
+        メッセージを書き留める。
         Params:
             message(str):
         """
+        self._buf.append(message)
+    
+    def save(self):
+        """ @method
+        書き留められたメッセージを保存する。
+        """
+        if not self._buf:
+            raise ValueError("record, recallで保存するメッセージを追加してください")
         if self.exists():
             raise ValueError("すでにファイルが存在します")
         f = TextFile(Path(self.path), encoding="utf-8")
         with f.write_stream():
-            f.stream.write(message)
-        
+            for line in self._buf[:-1]:
+                f.stream.write(line + ' . \n')
+            f.stream.write(self._buf[-1])
+        self._buf.clear()
+
     def do(self, context, app):
         """ @task context
         メッセージを実行し、返り値を返す。
