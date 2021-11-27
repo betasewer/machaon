@@ -78,20 +78,26 @@ class TypeType():
         meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection](names,doc,signature)")
         meths_sheet.pprint(context.spirit)
 
-    def methods(self, type, context, instance=None):
+    def methods(self, typ, context, instance=None):
         '''@method context
         使用可能なメソッドを列挙する。
-        Params:
         Returns:
             Sheet[ObjectCollection](names,doc,signature): メソッドのリスト
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
-        for names, meth in enum_selectable_method(type, instance):
-            helps.append({
-                "names" : context.new_object(names),
-                "#delegate" : context.new_object(meth, type="Method")
-            })
+        for names, meth in enum_selectable_method(typ, instance):
+            if isinstance(meth, Exception):
+                helps.append({
+                    "names" : context.new_object(names),
+                    "doc" : "!{}: {}".format(type(meth).__name__, meth),
+                    "signature" : ""
+                })
+            else:
+                helps.append({
+                    "names" : context.new_object(names),
+                    "#delegate" : context.new_object(meth, type="Method")
+                })
         return helps
     
     def method(self, type, name):

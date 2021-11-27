@@ -512,7 +512,7 @@ class Sheet():
         """ @method
         カラムを追加する
         Params:
-            Str:
+            name(str): 
         """
         col, *_ = make_data_columns(name)
         self.viewcolumns.append(col)
@@ -684,25 +684,6 @@ class Sheet():
             if o.is_truth():
                 values.append(o)
         return values
-    
-    def convertas(self, context, conversion):
-        """ @method context alias-name [as]
-        TODO: 削除する
-        全てのアイテムを新しい型に変換し、変換に成功したアイテムのみを返す。
-        Params:
-            conversion(Str): 新しい型
-        Returns:
-            Tuple:
-        """
-        items = []
-        for item in self.current_items():
-            try:
-                o = context.new_object(item.value, conversion=conversion)
-            except Exception as e:
-                items.append(context.new_process_error_object(e))
-            else:
-                items.append(o)
-        return items
     
     #
     # 行関数

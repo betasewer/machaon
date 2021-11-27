@@ -196,13 +196,18 @@ class Type(TypeProxy):
             return TypeMethodInvocation(self, meth)
 
     def enum_methods(self):
+        """
+        Yields:
+            Tuple[List[str], Method|Exception]:
+        """
         for name, meth in self._methods.items():
             try:
                 meth.load(self)
             except Exception as e:
-                raise MethodLoadError(e, name)
-            names = self.get_member_identical_names(name)
-            yield names, meth
+                yield [name], MethodLoadError(e, name)
+            else:
+                names = self.get_member_identical_names(name)
+                yield names, meth
     
     def add_method(self, method):
         name = method.name
