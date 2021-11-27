@@ -1,3 +1,4 @@
+from collections import defaultdict
 import importlib
 import importlib.util
 import builtins
@@ -5,6 +6,7 @@ import os
 import ast
 
 from machaon.core.docstring import parse_doc_declaration
+from machaon.core.symbol import full_qualified_name
 
 
 def module_loader(expr=None, *, location=None):
@@ -164,10 +166,10 @@ class PyBasicModuleLoader:
             if classname is None:
                 raise ValueError("no classname")
             
-            loader = AttributeLoader(self, classname)
+            describer = ClassDescriber(AttributeLoader(self, classname))
 
             from machaon.core.type import TypeDefinition
-            d = TypeDefinition(loader, classname)
+            d = TypeDefinition(describer, classname)
             if not d.load_declaration_docstring(doc):
                 continue
 
@@ -334,3 +336,78 @@ def module_name_from_path(path, basepath, basename=None):
     if basename:
         name = basename + "." + name
     return name
+
+#
+#
+#
+class ClassDescriber():
+    def __init__(self, resolver):
+        self._resolver = resolver
+        self._resolved = None
+
+    def get_classname(self):
+        return getattr(self.klass, "__name__", None)
+
+    def get_docstring(self):
+        return getattr(self.klass, "__doc__", None)
+    
+    def get_qualname(self):
+        return full_qualified_name(self.klass)
+    
+    def do_describe_object(self, type):
+        if hasattr(self.klass, "describe_object"):
+            self.klass.describe_object(type) # type: ignore
+
+    @property
+    def klass(self):
+        if self._resolved is None:
+            if isinstance(self._resolver, type):
+                self._resolved = self._resolver
+            else:
+                self._resolved = self._resolver()
+        return self._resolved
+
+    def get_attribute(self, name):
+        return getattr(self.klass, name, None)
+
+    def enum_attributes(self):
+        members = []
+        
+        ranks = {}
+        top = 1
+        bases = [self.klass]
+        while bases:
+            kls = bases.pop()
+            ranks[full_qualified_name(kls)] = top 
+            for base in kls.__bases__:
+                if base is not object:
+                    bases.append(base)
+            top += 1
+
+        for attrname in dir(self.klass):
+            if attrname.startswith("__"):
+                continue
+
+            attr = getattr(self.klass, attrname, None)
+            if attr is None:
+                continue
+            
+            code = getattr(attr, "__code__", None)
+            if code is None:
+                continue
+            
+            # クラス名を取り出す
+            qual = full_qualified_name(attr)
+            if "." in qual:
+                klass = qual.rpartition(".")[0]
+            else:
+                klass = None
+            qualkey = ranks.get(klass, 0xFF) # 優先度に変換する
+            members.append(((qualkey, code.co_firstlineno), attrname, attr))
+
+        members.sort(key=lambda x:x[0])
+
+        for _key, attrname, attr in members:
+            yield attrname, attr
+
+

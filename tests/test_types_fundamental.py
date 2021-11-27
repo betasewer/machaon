@@ -23,7 +23,7 @@ def test_fundamental_find():
 def test_typemodule_get():
     assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
     assert fundamental_type.get(Dummy_Rabbit).typename == "Dummy-Rabbit"
-    assert fundamental_type.get(Dummy_Rabbit).describer.describe_count == 1
+    assert Dummy_Rabbit.describe_count == 1
 
 def test_typemodule_move():
     new_typeset = TypeModule()
@@ -39,7 +39,7 @@ def test_typemodule_move():
     assert cxt.get_type("AltString").typename == "AltString"
     assert cxt.get_type("Dummy_Rabbit") is not None
     assert cxt.get_type("Dummy_Rabbit").typename == "Dummy-Rabbit"
-    assert cxt.get_type("Dummy_Rabbit").describer.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
+    assert Dummy_Rabbit.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
     assert cxt.get_type("Second_Rabbit") is not None
     assert cxt.get_type("Second_Rabbit").typename == "Second-Rabbit"
 
@@ -88,7 +88,7 @@ def test_any():
     assert anytype.is_any_type()
     assert anytype.value_type is None
     inst = Dummy_Rabbit()
-    assert anytype.stringify_value(inst) == anytype.describer.stringify(anytype, inst)
+    assert anytype.stringify_value(inst) == anytype.describer.klass.stringify(anytype, inst)
 
 def test_function():
     cxt = instant_context()

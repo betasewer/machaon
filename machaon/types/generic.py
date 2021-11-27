@@ -1,7 +1,8 @@
 from machaon.core.type import TYPE_DELAY_LOAD_METHODS, Type
-from machaon.core.symbol import normalize_method_target
+from machaon.core.symbol import normalize_method_name, normalize_method_target
 from machaon.core.method import make_method_prototype
 from machaon.core.invocation import TypeMethodInvocation
+from machaon.core.importer import ClassDescriber
 
 #
 # どんな型にも共通のメソッドを提供
@@ -94,7 +95,7 @@ class GenericMethods:
         """
         return left == right
 
-    def not_equal(self, left, right):       
+    def not_equal(self, left, right):
         """ @method reciever-param
         二項!=演算子。（等しくない）
         Arguments:
@@ -104,7 +105,7 @@ class GenericMethods:
             Bool:
         """
         return left != right
-        
+    
     def less_equal(self, left, right):  
         """ @method reciever-param
         二項<=演算子。（以下）
@@ -569,5 +570,9 @@ class GenericMethodValue():
         raise TypeError("Should not be constructed")
 
 # メソッドオブジェクトのキャッシュ
-_GenericMethodsType = Type(GenericMethods, name="GenericMethods", value_type=GenericMethodValue)
+_GenericMethodsType = Type(
+    ClassDescriber(lambda:GenericMethods), 
+    name="GenericMethods", 
+    value_type=GenericMethodValue
+)
 _GenericMethodsType.load(TYPE_DELAY_LOAD_METHODS)

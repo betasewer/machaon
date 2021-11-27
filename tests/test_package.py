@@ -39,10 +39,10 @@ def test_load_singlemodule_fundamental():
 
     tm = root.get_type_module()
     assert tm.get("Path")
-    assert tm.get("Path").get_describer() is shell.Path
+    assert tm.get("Path").get_describer_qualname() == "machaon.types.shell.Path"
     
     assert tm.get("PathDialog")
-    assert tm.get("PathDialog").get_describer() is shell.PathDialog
+    assert tm.get("PathDialog").get_describer_qualname() == "machaon.types.shell.PathDialog"
 
 test_load_singlemodule_fundamental()
 
@@ -67,11 +67,11 @@ def test_load_submodules_types():
 
     import machaon.types.app
     assert tm.get("AppTestObject", scope="ion")
-    assert tm.get("AppTestObject", scope="ion").get_describer() is machaon.types.app.AppTestObject
+    assert tm.get("AppTestObject", scope="ion").get_describer_qualname() == "machaon.types.app.AppTestObject"
 
     import machaon.types.shell
     assert tm.get("Path", scope="ion")
-    assert tm.get("Path", scope="ion").get_describer() is machaon.types.shell.Path
+    assert tm.get("Path", scope="ion").get_describer_qualname() == "machaon.types.shell.Path"
     
 
 @pytest.mark.skip()

@@ -5,7 +5,16 @@ from machaon.types.fundamental import fundamental_type
 from machaon.core.method import Method
 from machaon.core.invocation import instant_context
 
-class SomeValue:
+class BasicValue:
+    def basic_constant(self):
+        """ @method
+        定数
+        Returns:
+            int: 値
+        """
+        return 100
+
+class SomeValue(BasicValue):
     """ @type
     適当な値オブジェクト
     """
@@ -138,6 +147,19 @@ def test_constructor_typecheck_fail():
     p = cxt.get_type("Function")
     p.construct(cxt, 12345) # TypeConversionError
 
+def test_enum_method():
+    t = fundamental_type.define(SomeValue)
+    n = []
+    for names, method in t.enum_methods():
+        if isinstance(method, Exception):
+            continue
+        n.extend(names)
+    # 定義順、派生→基底クラス順
+    assert n == [
+        "perimeter",
+        "modify",
+        "basic-constant"
+    ]
 
 #
 def test_load_from_dict():

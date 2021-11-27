@@ -1,6 +1,7 @@
 from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE
 import pytest
 from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias
+from machaon.core.importer import ClassDescriber
 from machaon.types.fundamental import fundamental_type
 
 def run(fn): fn()
@@ -31,7 +32,7 @@ def test_valuetype_define():
 
 # TypeDefinitionで登録
 def test_valuetype_td_define():
-    td = TypeDefinition(SomeValue, "SomeValue2")
+    td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue2")
     assert td.load_declaration_docstring()
     t = td.define(fundamental_type)
     assert t.typename == "SomeAlias" # 宣言が反映される
@@ -41,7 +42,7 @@ def test_valuetype_td_define():
 
 # 文字列で登録
 def test_valuetype_td_docstring_define():
-    td = TypeDefinition(SomeValue, "SomeValue")
+    td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue")
     td.load_docstring('''@type use-instance-method alias-name [BigEntity]
     巨大なオブジェクト
     ''')
@@ -61,6 +62,13 @@ def test_valuetype_td_docstring_failure():
     巨大なオブジェクト
     ''') # traitだが値型を指定していない
     td.define(fundamental_type)
+
+# value_typeをdescriberに使う
+def test_value_type_as_describer():
+    td = TypeDefinition(None, "SomeValue", value_type=SomeValue)
+    t = td.define(fundamental_type)
+    assert t.value_type is SomeValue
+    assert t.describer.klass is SomeValue
 
 #
 # スコープ付きの型を定義する

@@ -1,3 +1,4 @@
+from machaon.core.importer import ClassDescriber
 from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
 from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, DefaultDict, Tuple
 
@@ -195,10 +196,14 @@ class Method():
         Params:
             this_type(Type):
         Returns:
-            Any:
+            Any: クラス型か辞書型
         """
-        return this_type.get_describer(self.mixin)
-        
+        d = this_type.get_describer(self.mixin)
+        if isinstance(d, ClassDescriber):
+            return d.klass
+        else:
+            return d
+
     def get_describer_qualname(self, this_type):
         """ @method
         定義クラスを得る。
@@ -211,11 +216,10 @@ class Method():
     
     def make_type_instance(self, this_type):
         """ 型を拘束する場合の実行時のインスタンスを得る """
-        describer = self.get_describer(this_type)
-        if isinstance(describer, type):
-            return describer()
-        else:
-            return describer
+        descclass = self.get_describer(this_type)
+        if isinstance(descclass, dict):
+            raise TypeError("dict describer cannot be type method instance")
+        return descclass()
     
     # 仮引数を追加
     def add_parameter(self,
