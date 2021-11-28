@@ -234,9 +234,7 @@ class PyModuleLoader(PyBasicModuleLoader):
         spec = importlib.util.find_spec(self.module_name)
         if spec is None:
             raise ValueError("モジュールが見つかりません")
-        if spec.has_location is None:
-            return None
-        return spec.origin
+        return get_first_package_path(self._m, spec)
     
     def __str__(self) -> str:
         return self.module_name
@@ -274,10 +272,7 @@ class PyModuleInstance(PyBasicModuleLoader):
         return self._m
 
     def load_filepath(self):
-        spec = self._m.__spec__
-        if not spec.has_location:
-            raise ValueError("ビルトインモジュールなので場所を参照できません")
-        return spec.origin
+        return get_first_package_path(self._m, self._m.__spec__)
 
     def __str__(self) -> str:
         return "{} ({})".format(self._m.__name__, self.load_filepath())
@@ -337,6 +332,17 @@ def module_name_from_path(path, basepath, basename=None):
         name = basename + "." + name
     return name
 
+
+def get_first_package_path(module, spec):
+    if spec.has_location:
+        return spec.origin
+    if module and module.__path__:
+        if isinstance(module.__path__, str):
+            return module.__path__
+        # 名前空間パッケージの場合、最初のパスのみを得る
+        return next(iter(module.__path__), None)
+    return None
+
 #
 #
 #
@@ -371,6 +377,7 @@ class ClassDescriber():
         return getattr(self.klass, name, None)
 
     def enum_attributes(self):
+        # 定義順でメソッドを列挙する
         members = []
         
         ranks = {}
@@ -402,8 +409,9 @@ class ClassDescriber():
                 klass = qual.rpartition(".")[0]
             else:
                 klass = None
-            qualkey = ranks.get(klass, 0xFF) # 優先度に変換する
-            members.append(((qualkey, code.co_firstlineno), attrname, attr))
+            qualkey = ranks.get(klass, 0xFF) # クラスの優先度に変換する
+            key = (qualkey, code.co_firstlineno) # 行番号を付加する
+            members.append((key, attrname, attr))
 
         members.sort(key=lambda x:x[0])
 
