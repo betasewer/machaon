@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # coding: utf-8
-
-from machaon.package.repository import RepositoryArchive
+import os
+from machaon.core.importer import PyModuleLoader
+from machaon.package.package import PackageManager
 from machaon.types.package import AppPackageType
 from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
 
@@ -180,9 +181,49 @@ class RootObject:
         ''' @task context
         machaonをリポジトリからダウンロードして更新する。
         '''
-        from machaon.package.package import create_package
+        curmodule = PyModuleLoader("machaon")
+        location = curmodule.load_filepath()
+        if location is None:
+            raise ValueError("インストール先が不明です")
+        installdir = os.path.normpath(os.path.join(os.path.dirname(location), "../.."))
+        lock = os.path.join(installdir, ".machaon-update-lock")
+        if os.path.isfile(lock):
+            raise ValueError("{}: 上書きしないようにロックされています".format(lock))
+
+        from machaon.package.package import create_package, package_extraction, run_pip
         pkg = create_package("machaon", "github:betasewer/machaon")
-        AppPackageType().update(pkg, context, app)
+
+        # ダウンロードしてインストールする
+        def operation(pkg):
+            path = None
+            tmpdir = None
+            for status in package_extraction(pkg):
+                if status == PackageManager.EXTRACTED_FILES:
+                    path = status.path
+                    tmpdir = status.tmpdir
+                    break
+                yield status
+            
+            if path is None:
+                return
+            
+            yield PackageManager.PIP_INSTALLING
+            try:
+                yield from run_pip(installtarget=path, installdir=installdir)
+            finally:
+                tmpdir.cleanup()
+        
+        if AppPackageType().display_download_and_install(app, pkg, operation):
+            app.post("message", "machaonを更新しました。次回起動時に反映されます")
+
+
+    def update_all(self, context, app):
+        ''' @task context
+        すべてのパッケージに更新を適用する。
+        '''
+        apppkg = AppPackageType()
+        for pkg in self.context.root.enum_packages():
+            apppkg.update(pkg, context, app)
 
     def stringify(self):
         """ @meta """

@@ -1,3 +1,4 @@
+from threading import local
 from machaon.core.type import TypeDefinition
 import os
 import shutil
@@ -7,7 +8,7 @@ import configparser
 import re
 import importlib
 import traceback
-from typing import Dict, Any, Union, List, Optional, Iterator
+from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
 from machaon.core.importer import module_loader, walk_modules, module_name_from_path, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
@@ -363,6 +364,8 @@ class PackageModuleLoadError(Exception):
     def get_module_name(self):
         return super().args[1]
 
+
+
 #
 #
 #
@@ -372,7 +375,7 @@ class PackageManager():
     DOWNLOADING = milestone_msg("size")
     DOWNLOAD_END = milestone_msg("total")
     DOWNLOAD_ERROR = milestone_msg("error")
-    EXTRACTED_FILES = milestone_msg("path")
+    EXTRACTED_FILES = milestone_msg("path", "tmpdir")
     NOT_INSTALLED = milestone()
     UNINSTALLING = milestone()
     PIP_INSTALLING = milestone()
@@ -456,55 +459,25 @@ class PackageManager():
         if pkg.is_module_source():
             # インストールは不要
             return
-        
-        tmpdir = ''
-        def cleanup_tmpdir(d):
-            shutil.rmtree(d)
-            return ''
-        
-        rep = pkg.get_source()
-        if isinstance(rep, RepositoryArchive):
-            # ダウンロードする
-            if not tmpdir: tmpdir = tempfile.mkdtemp()
-            try:
-                total = rep.query_download_size()
-                yield PackageManager.DOWNLOAD_START.bind(total=total)
 
-                arcfilepath = rep.get_arcfilepath(tmpdir)
-                for size in rep.download_iter(arcfilepath):
-                    yield PackageManager.DOWNLOADING.bind(size=size, total=total)
-                    
-                yield PackageManager.DOWNLOAD_END.bind(total=total)
-
-            except RepositoryURLError as e:
-                yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
-                tmpdir = cleanup_tmpdir(tmpdir)
-                return
-            except Exception:
-                tmpdir = cleanup_tmpdir(tmpdir)
-                return
-
+        # ダウンロードと展開を行う
         localpath = None
-        if isinstance(rep, BasicArchive):
-            # ローカルに展開する
-            if not tmpdir: tmpdir = tempfile.mkdtemp()
-            try:
-                arcfilepath = rep.get_arcfilepath(tmpdir)
-                out = os.path.join(tmpdir, "content")
-                os.mkdir(out)
-                localpath = rep.extract(arcfilepath, out)
-            except Exception:
-                cleanup_tmpdir(tmpdir)
-                return
-        else:
-            # 単にパスを取得する
-            localpath = rep.get_local_path()
+        tmpdir = None
+        for status in package_extraction(pkg):
+            if status == PackageManager.EXTRACTED_FILES:
+                localpath = status.path
+                tmpdir = status.tmpdir
+                break
+            yield status
         
+        if localpath is None:
+            return
+
         # pipにインストールさせる
         yield PackageManager.PIP_INSTALLING
         try:
             if newinstall:
-                yield from _run_pip(
+                yield from run_pip(
                     installtarget=localpath, 
                     installdir=self.dir if pkg.is_installation_separated() else None
                 )
@@ -512,14 +485,14 @@ class PackageManager():
                 # pipが作成したデータを見に行く
                 distinfo: Dict[str, str] = {}
                 if pkg.is_installation_separated():
-                    distinfo = _read_pip_dist_info(self.dir, rep.get_name())
+                    distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
 
                 # データベースに書き込む
                 self.add_database(pkg, **distinfo)
 
             else:
                 isseparate = self.database.getboolean(pkg.name, "separate", fallback=False)   
-                yield from _run_pip(
+                yield from run_pip(
                     installtarget=localpath, 
                     installdir=self.dir if isseparate else None,
                     options=["--upgrade"]
@@ -529,7 +502,7 @@ class PackageManager():
                 self.add_database(pkg)
         
         finally:
-            tmpdir = cleanup_tmpdir(tmpdir)
+            tmpdir.cleanup()
         
         # パッケージの情報を修正する
         if "toplevel" in self.database[pkg.name]:
@@ -554,7 +527,7 @@ class PackageManager():
         else:
             # pipにアンインストールさせる
             yield PackageManager.PIP_UNINSTALLING
-            yield from _run_pip(
+            yield from run_pip(
                 uninstalltarget=pkg.name,
                 options=["--yes"]
             )
@@ -588,7 +561,62 @@ class PackageManager():
 #
 #
 #
-def _run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):
+def package_extraction(pkg: Package):
+    class TempDir():
+        def __init__(self):
+            self.dir = None
+        def init(self):
+            if self.dir is None:
+                self.dir = tempfile.mkdtemp()
+        def cleanup(self):
+            if self.dir is None:
+                shutil.rmtree(self.dir)
+        def get(self):
+            return self.dir
+    tmpdir = TempDir()
+    
+    rep = pkg.get_source()
+    if isinstance(rep, RepositoryArchive):
+        # ダウンロードする
+        tmpdir.init()
+        try:
+            total = rep.query_download_size()
+            yield PackageManager.DOWNLOAD_START.bind(total=total)
+
+            arcfilepath = rep.get_arcfilepath(tmpdir.get())
+            for size in rep.download_iter(arcfilepath):
+                yield PackageManager.DOWNLOADING.bind(size=size, total=total)
+                
+            yield PackageManager.DOWNLOAD_END.bind(total=total)
+
+        except RepositoryURLError as e:
+            yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
+            tmpdir.cleanup()
+            return
+        except Exception:
+            tmpdir.cleanup()
+            return
+
+    localpath = None
+    if isinstance(rep, BasicArchive):
+        # ローカルに展開する
+        tmpdir.init()
+        try:
+            arcfilepath = rep.get_arcfilepath(tmpdir.get())
+            out = os.path.join(tmpdir.get(), "content")
+            os.mkdir(out)
+            localpath = rep.extract(arcfilepath, out)
+        except Exception:
+            tmpdir.cleanup()
+            return
+    else:
+        # 単にパスを取得する
+        localpath = rep.get_local_path()
+
+    yield PackageManager.EXTRACTED_FILES.bind(path=localpath, tmpdir=tmpdir)
+
+
+def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):
     cmd = [sys.executable, "-m", "pip"]
 
     if installtarget is not None:

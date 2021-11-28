@@ -158,16 +158,46 @@ class AppPackageType:
         """ @task context
         パッケージをインストールし、ロードする。
         """
-        self._update(package, context, app, forceinstall=True)
+        self.display_update(package, context, app, forceinstall=True)
     
     def update(self, package: Package, context, app):
         """ @task context
         パッケージを更新し、再ロードする。
         """
-        self._update(package, context, app)
+        self.display_update(package, context, app)
 
     # 
-    def _update(self, package: Package, context, app, forceinstall=False):
+    def display_download_and_install(self, app, package:Package, operation):
+        for state in operation(package):
+            # ダウンロード中
+            if state == PackageManager.DOWNLOAD_START:
+                url = package.get_source().get_download_url()
+                app.post("message", "パッケージのダウンロードを開始 --> {}".format(url))
+                app.start_progress_display(total=state.total)
+            elif state == PackageManager.DOWNLOADING:
+                app.interruption_point(progress=state.size)
+            elif state == PackageManager.DOWNLOAD_END:
+                app.finish_progress_display(total=state.total)
+            elif state == PackageManager.DOWNLOAD_ERROR:
+                app.post("error", "ダウンロードに失敗しました：\n  {}".format(state.error))
+                return False
+
+            # インストール処理
+            elif state == PackageManager.PIP_INSTALLING:
+                app.post("message", "pipを呼び出し")
+            elif state == PackageManager.PIP_MSG:
+                app.post("message", "  " + state.msg)
+            elif state == PackageManager.PIP_END:
+                if state.returncode == 0:
+                    app.post("message", "pipによるインストールが成功し、終了しました")
+                elif state.returncode is None:
+                    pass
+                else:
+                    app.post("error", "pipによるインストールが失敗しました コード={}".format(state.returncode))
+                    return False
+            return True
+        
+    def display_update(self, package: Package, context, app, forceinstall=False):
         if not package.is_remote_source():
             app.post("message", "リモートソースの指定がありません")
             return
@@ -179,6 +209,7 @@ class AppPackageType:
         if rep:
             app.post("message", "ソース = {}".format(rep.get_source()))
         
+        # パッケージの状態を調べる
         operation = approot.update_package
         status = approot.query_package_status(package)
         if status == "none":
@@ -195,32 +226,7 @@ class AppPackageType:
             return
 
         # ダウンロード・インストール処理
-        for state in operation(package):
-            # ダウンロード中
-            if state == PackageManager.DOWNLOAD_START:
-                app.post("message", "パッケージのダウンロードを開始 --> {}".format(rep.get_download_url()))
-                app.start_progress_display(total=state.total)
-            elif state == PackageManager.DOWNLOADING:
-                app.interruption_point(progress=state.size)
-            elif state == PackageManager.DOWNLOAD_END:
-                app.finish_progress_display(total=state.total)
-            elif state == PackageManager.DOWNLOAD_ERROR:
-                app.post("error", "ダウンロードに失敗しました：\n  {}".format(state.error))
-                return
-
-            # インストール処理
-            elif state == PackageManager.PIP_INSTALLING:
-                app.post("message", "pipを呼び出し")
-            elif state == PackageManager.PIP_MSG:
-                app.post("message", "  " + state.msg)
-            elif state == PackageManager.PIP_END:
-                if state.returncode == 0:
-                    app.post("message", "pipによるインストールが成功し、終了しました")
-                elif state.returncode is None:
-                    pass
-                else:
-                    app.post("error", "pipによるインストールが失敗しました コード={}".format(state.returncode))
-                    return
+        self.display_download_and_install(app, package, operation)
 
         # 型をロードする
         approot.load_pkg(package)
