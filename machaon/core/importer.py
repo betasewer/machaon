@@ -53,6 +53,9 @@ class PyBasicModuleLoader:
         if self._m is None:
             self._m = self.load_module()
         return self._m
+
+    def get_name(self):
+        raise NotImplementedError()
         
     def load_module(self):
         raise NotImplementedError()
@@ -221,6 +224,9 @@ class PyModuleLoader(PyBasicModuleLoader):
         super().__init__()
         self.module_name = module
     
+    def get_name(self):
+        return self.module_name
+
     def load_module(self):
         import sys
         if self.module_name in sys.modules:
@@ -249,6 +255,9 @@ class PyModuleFileLoader(PyBasicModuleLoader):
         self.module_name = module
         self._path = path
     
+    def get_name(self):
+        return self.module_name
+    
     def load_module(self):
         spec = importlib.util.spec_from_file_location(self.module_name, self._path)
         if spec is None:
@@ -268,6 +277,9 @@ class PyModuleInstance(PyBasicModuleLoader):
     """
     ロードずみのインスタンスを操作する
     """
+    def get_name(self):
+        return self._m.__name__
+    
     def load_module(self):
         return self._m
 
@@ -337,8 +349,6 @@ def get_first_package_path(module, spec):
     if spec.has_location:
         return spec.origin
     if module and module.__path__:
-        if isinstance(module.__path__, str):
-            return module.__path__
         # 名前空間パッケージの場合、最初のパスのみを得る
         return next(iter(module.__path__), None)
     return None

@@ -1,8 +1,9 @@
 from types import ModuleType
 import os
-from machaon.core.importer import PyBasicModuleLoader
 
+from machaon.core.importer import PyModuleInstance, module_loader, walk_modules
 from machaon.package.package import Package, PackageManager
+
 
 class AppPackageType:
     """
@@ -307,17 +308,14 @@ class Module():
         self._m = m
     
     def mloader(self):
-        from machaon.core.importer import PyModuleInstance
         return PyModuleInstance(self._m)
-
+    
     def constructor(self, context, value):
         """ @meta """
         if isinstance(value, str):
             if os.path.isfile(value):
-                from machaon.core.importer import module_loader
                 loader = module_loader(location=value)
             else:
-                from machaon.core.importer import module_loader
                 loader = module_loader(value)
             return Module(loader.load_module())
         elif isinstance(value, ModuleType):
@@ -367,5 +365,24 @@ class Module():
         mod = self.mloader()
         elems = list(mod.scan_print_type_definitions(app))
         return elems
+
+    def walk(self, app):
+        """ @task
+        サブモジュール名を検索して列挙する。
+        Returns:
+            Tuple[str]:
+        """
+        mod = self.mloader()
+        p = mod.load_filepath()
+        if p is None:
+            return
+        if os.path.isfile(p):
+            d = os.path.dirname(p)
+        else:
+            d = p
+        for loader in walk_modules(d, self.name()):
+            name = loader.get_name()
+            yield name
+
 
 
