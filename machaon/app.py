@@ -99,6 +99,12 @@ class AppRoot:
         if os.path.exists(p):
             return p
         return None
+
+    def local_dir(self, appname):
+        p = os.path.join(self.basicdir, "local", appname)
+        if not os.path.isdir(p):
+            os.makedirs(p)
+        return Path(p)
  
     #
     # クラスパッケージ
