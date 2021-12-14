@@ -492,7 +492,7 @@ class tkLauncher(Launcher):
         if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
     
-    def delete_screen_text(self, lineno=None, count=None):
+    def delete_screen_text(self, lineno=None, count=None, stick=False):
         """ ログ欄からメッセージ行を削除する"""
         if lineno is None:
             lineno = -1
@@ -510,7 +510,7 @@ class tkLauncher(Launcher):
         self.log.delete(*indices)
         self.log.configure(state='disabled')
         
-        if self.does_stick_bottom.get():
+        if stick and self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
 
     def replace_screen_text(self, text):
