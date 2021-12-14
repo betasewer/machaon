@@ -374,7 +374,7 @@ class Spirit():
     # スレッド操作／プログレスバー操作
     #
     # プロセススレッド側で中断指示を確認する
-    def interruption_point(self, *, nowait=False, progress=None, noexception=False):
+    def interruption_point(self, *, nowait=False, progress=None, noexception=False, wait=None):
         if self.process and self.process.is_interrupted():
             if not noexception:
                 raise ProcessInterrupted()
@@ -383,8 +383,12 @@ class Spirit():
         if not nowait:
             slp = time.monotonic()
             if slp - self._slp > 0.1:
-                time.sleep(0.03)
+                time.sleep(0.05)
                 self._slp = slp
+                print("slept 0.05 {}".format(slp))
+            if wait:
+                time.sleep(wait)
+                print("slept {}".format(wait))
 
         if progress and self.cur_prog_bar:
             self.cur_prog_bar.update(progress)
