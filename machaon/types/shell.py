@@ -285,6 +285,10 @@ class Path():
         newpath = os.path.join(head, format.format(filename, *args) + fext)
         return Path(newpath)
 
+    def join(self, *paths):
+        """ パスを結合する """
+        return Path(os.path.join(self._path, *paths))
+
     #
     # シェル機能
     #
