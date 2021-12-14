@@ -1445,6 +1445,7 @@ class SequentialMessageExpression(FunctionExpression):
         self.f = f
         self.context = parent_context.inherit_sequential()
         self.memberspecs = {}
+        self._argforge = lambda x: x # 単一の引数
         self._subjecttype = None
         self.cached = cache
         
@@ -1456,6 +1457,16 @@ class SequentialMessageExpression(FunctionExpression):
                     self._subjecttype = t
                 else:
                     self.memberspecs[key] = t
+                
+            def collectionarg(kwargs):
+                objc = {}
+                for k, v in kwargs.items():
+                    t = self.memberspecs.get(k, None)
+                    objc[k] = self.context.new_object(v, type=t)
+                return objc
+            self._argforge = collectionarg # ObjectCollectionにまとめる
+            self._subjecttype = self.context.get_type("ObjectCollection")
+
         elif isinstance(argspec, str):
             self._subjecttype = self.context.instantiate_type(argspec)
 
@@ -1474,24 +1485,10 @@ class SequentialMessageExpression(FunctionExpression):
         o = self.f.run_here(self.context, cache=self.cached)
         return o
 
-    def call_unary(self, value) -> Any:
-        """ コード内で実行する（サブジェクト引数の値を指定）値を返す """
-        subject = self.context.new_object(value, type=self._subjecttype)
-        self.context.set_subject(subject)
-        o = self.f.run_here(self.context, cache=self.cached) # 同じコンテキストで実行
-        return o.value
-    
-    def __call__(self, **args) -> Any:
+    def __call__(self, arg) -> Any:
         """ コード内で実行する（複数の引数に対応） 値を返す"""
-        objc = {}
-        for k, v in args.items():
-            t = self.memberspecs.get(k, None)
-            objc[k] = self.context.new_object(v, type=t)
-        
-        if self._subjecttype is None:
-            self._subjecttype = self.context.get_type("ObjectCollection")
-        subject = self.context.new_object(objc, type=self._subjecttype)
-        
+        argvalue = self._argforge(arg)
+        subject = self.context.new_object(argvalue, type=self._subjecttype)
         self.context.set_subject(subject)
         o = self.f.run_here(self.context, cache=self.cached) # 同じコンテキストで実行
         return o.value
