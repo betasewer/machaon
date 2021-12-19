@@ -70,6 +70,9 @@ class Message:
         self.args = args or []   # List[Object]
         self._argwaiting = False
     
+    def __repr__(self):
+        return "<Message {}>".format(self.sexpr())
+    
     def set_reciever(self, reciever):
         if reciever is None:
             raise TypeError()
@@ -260,9 +263,7 @@ class Message:
         ps = display_parameters(sig)
         return "{}{}".format(self.selector.get_method_name(), ps)
 
-    # コピーを返す
-    def snapshot(self):
-        return Message(self.reciever, self.selector, self.args[:])
+
 
 #
 #
@@ -681,7 +682,10 @@ class MessageEngine():
         self._msgs = messages or []
         self._lastread = ""  # 最後に完成したメッセージの文字列
         self._lastevalcxt = None
-        
+
+    def __repr__(self) -> str:
+        return "<MessageEngine ({})>".format(self.source)
+    
     def get_expression(self) -> str:
         """ コード文字列を返す """
         return self.source
@@ -1083,15 +1087,17 @@ class MessageEngine():
             self._curblockstack.append(newpos) # 新しいブロックの番号を記録する
 
         if astinstr & TERM_END_LAST_BLOCK:
-            if not self._curblockstack:
-                raise ValueError("Empty paren block stack")
-            top = self._curblockstack[-1]
+            if self._curblockstack:
+                top = self._curblockstack[-1]
+            else:
+                top = 0
             for i, msg in enumerate(reversed(self._readings)):
                 j = len(self._readings) - i - 1
                 if j < top:
                     break 
                 msg.conclude(context)
-            self._curblockstack.pop()
+            if self._curblockstack:
+                self._curblockstack.pop()
 
         if astinstr & TERM_END_ALL_BLOCK:
             for msg in self._readings:
@@ -1335,6 +1341,9 @@ class FunctionExpression():
     
     def run(self, subject, context, **kwargs) -> Object:
         raise NotImplementedError()
+        
+    def run_here(self, context, **kwargs) -> Object:
+        raise NotImplementedError()
 
 
 class MessageExpression(FunctionExpression):
@@ -1404,20 +1413,10 @@ def parse_function(expression):
         expression(str):
     """
     # 式の型指定子と式本体に分ける
-    typeconv, sep, body = expression.partition(SIGIL_TYPE_INDICATOR)
-    if sep:
-        if typeconv:
-            last = typeconv[-1]
-            if not last.isspace() and not last.isalnum(): # 演算子の一部を誤検出した
-                body = expression
-                typeconv = None
-                sep = None
-        if body:
-            head = body[0]
-            if not head.isspace() and not head.isalnum(): # 演算子の一部を誤検出した
-                body = expression
-                typeconv = None
-                sep = None
+    spl = expression.split(maxsplit=2)
+    if len(spl) > 2 and spl[1] == SIGIL_TYPE_INDICATOR:
+        typeconv = spl[0]
+        body = spl[2]
     else:
         body = expression
         typeconv = None
@@ -1479,11 +1478,14 @@ class SequentialMessageExpression(FunctionExpression):
     def set_subject_type(self, conversion):
         self._subjecttype = self.context.instantiate_type(conversion)
     
-    def run(self, subject, context=None, **kwargs) -> Object:
+    def run(self, subject, _context=None, **kwargs) -> Object:
         """ 共通メンバの実装 オブジェクトを返す """
         self.context.set_subject(subject) # subjecttypeは無視する
-        o = self.f.run_here(self.context, cache=self.cached)
-        return o
+        return self.f.run_here(self.context, cache=self.cached)
+        
+    def run_here(self, _context=None, **kwargs) -> Object:
+        """ 共通メンバの実装  """
+        return self.f.run_here(self.context, cache=self.cached)
 
     def __call__(self, arg) -> Any:
         """ コード内で実行する（複数の引数に対応） 値を返す"""
