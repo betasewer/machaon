@@ -2,7 +2,7 @@ import os
 from machaon.types.shell import Path
 from machaon.types.file import TextFile
 from machaon.core.object import Object
-from machaon.core.message import run_function_print_step
+from machaon.core.message import run_function_print_step, run_function
 
 def get_persistent_path(root, name):
     """ オブジェクト名からファイルパスを得る
@@ -111,15 +111,24 @@ class StoredMessage():
             f.stream.write(self._buf[-1])
         self._buf.clear()
 
-    def do(self, context, app):
+    def do(self, context, app=None, *, subject=None):
         """ @task context
         メッセージを実行し、返り値を返す。
         Returns:
             Object:
         """
         content = self.message()
-        return run_function_print_step(content, None, context, raiseerror=True)
-    
+        return run_function_print_step(content, subject, context, raiseerror=True)
+
+    def do_silent(self, context, app=None, *, subject=None):
+        """ @task context 
+        メッセージを表示せずに実行する。
+        Returns:
+            Object:
+        """
+        content = self.message()
+        return run_function(content, subject, context, raiseerror=True)
+
     def bind(self, context):
         """ @method context
         オブジェクトを名前に束縛する。

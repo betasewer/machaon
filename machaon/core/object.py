@@ -60,8 +60,14 @@ class Object():
     def summarize(self) -> str:
         return self.type.summarize_value(self.value)
 
-    def pprint(self, spirit):
-        self.type.pprint_value(spirit, self.value)
+    def pprint(self, spirit=None, *, printer=None):
+        if spirit is None:
+            from machaon.process import TempSpirit
+            spirit = TempSpirit()
+            self.type.pprint_value(spirit, self.value)
+            spirit.printout(printer=printer)
+        else:
+            self.type.pprint_value(spirit, self.value)
     
     def to_pretty(self):
         return PrettyObject(self.type, self.value)

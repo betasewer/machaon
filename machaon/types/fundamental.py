@@ -329,6 +329,27 @@ class StrType():
             Tuple: データ
         """
         return s.split(sep, maxsplit=maxsplit)
+
+    def join(self, s, values):
+        """@method
+        文字を結合する。
+        Params:
+            values(Tuple):
+        Returns:
+            Str:
+        """
+        return s.join(values)
+        
+    def normalize(self, s, form):
+        """
+        Unicode正規化を行う。
+        Params:
+            form(str): NFD, NFC, NFKD, NFKCのいずれか
+        Returns:
+            Str:
+        """
+        import unicodedata
+        return unicodedata.normalize(form, s) # 全角と半角など
     
     # 
     # コード実行
@@ -481,7 +502,7 @@ class BoolType():
             body = if_
         else:
             body = else_
-        return body.run(context) # コンテキストを引き継ぐ
+        return body.run_here(context) # コンテキストを引き継ぐ
 
 #
 #

@@ -482,6 +482,22 @@ class GenericMethods:
         else:
             return None
         
+    def test_then(self, left, context, cond, if_, else_):
+        """ @method reciever-param context 
+        値を条件式で判定し、その結果でif節またはelse節を実行する。
+        Arguments:
+            left(Object): 
+            cond(Function):
+            if_(Function):
+            else_(Function):
+        Returns:
+            Any:
+        """
+        if cond.run(left, context).test_truth():
+            return if_.run(left, context)
+        else:
+            return else_.run(left, context)
+
     # オブジェクト
     def identical(self, obj):
         """ @method reciever-param

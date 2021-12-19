@@ -279,7 +279,7 @@ class ObjectTuple():
         strs = [x.stringify() for x in self.objects]
         return sep.join(strs)
 
-    # 内部使用
+    # 内部利用
     def values(self):
         return [x.value for x in self.objects]
     
