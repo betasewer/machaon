@@ -481,36 +481,15 @@ class TempSpirit(Spirit):
         else:
             self.msgs.append(msg)
     
-    def printout(self):
+    def printout(self, *, printer=None):
+        if printer is None: printer = print
         for msg in self.msgs:
             kwargs = str(msg.args) if msg.args else ""
-            print("[{}]{} {}".format(msg.tag, msg.text, kwargs))
+            printer("[{}]{} {}".format(msg.tag, msg.text, kwargs))
         self.msgs.clear()
     
     def get_message(self):
         return self.msgs
-
-    #
-    # カレントディレクトリ
-    #
-    def get_current_dir(self):
-        return self.cd
-
-    def change_current_dir(self, path):
-        if os.path.isdir(path):
-            self.cd = path
-            return True
-        else:
-            return False
-    
-    def abspath(self, path):
-        # 絶対パスにする
-        if not os.path.isabs(path):
-            cd = self.cd
-            if cd is None:
-                cd = os.getcwd()
-            path = os.path.normpath(os.path.join(cd, path))
-        return path
 
     # プログレスバーの更新のみを行う
     def interruption_point(self, *, nowait=False, progress=None, noexception=False):
