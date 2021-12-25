@@ -35,7 +35,6 @@ class AppRoot:
         self.objcol = ObjectCollection()
         self._extapps = None # 外部アプリコンフィグファイル
         self._startupmsgs = []
-        self._stray_process = StrayProcessChamber()
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
         # UIの初期化処理
@@ -249,7 +248,7 @@ class AppRoot:
     # 一連のメッセージを実行する
     #
     def run_message_sequence(self, lines):
-        active = self.get_active_chamber()
+        active = self.chambers().get_active()
         active.start_process_sequence(self, lines)
 
     def add_startup_message(self, line):
@@ -262,8 +261,6 @@ class AppRoot:
     def run(self):
         if self.ui is None:
             raise ValueError("App UI must be initialized")
-            
-        self.watch_stray_message()
         
         # 自動実行メッセージの登録
         startupmsgs = ["@@startup", *self._startupmsgs] # 初期化処理を行うメッセージを先頭に追加する
@@ -320,8 +317,10 @@ class AppRoot:
         if atnewchm:
             self.ui.activate_new_chamber(process)
         else:
-            chamber = self.processhive.append_to_active(process)
-            self.ui.update_chamber(chamber, updatemenu=False)
+            chamber = self.processhive.get_active()
+            if chamber.add(process) is None:
+                return # 他のプロセスが実行中
+        
         
     # プロセスをスレッドで実行しアクティブにする
     def new_desktop(self, name: str):
@@ -332,65 +331,9 @@ class AppRoot:
     #
     # プロセススレッド
     #
-    # アクティブプロセスの選択
-    def get_active_chamber(self):
-        return self.processhive.get_active()
-        
-    def is_active_chamber(self, index: int):
-        return self.processhive.get_active_index() == index
+    def chambers(self):
+        return self.processhive
 
-    def get_previous_active_chamber(self):
-        return self.processhive.get_previous_active()
-    
-    def get_chamber(self, index, *, activate=False):
-        chm = self.processhive.get(index)
-        if activate:
-            self.processhive.activate(index)
-        return chm
-
-    def get_chambers(self):
-        return self.processhive.get_chambers()
-    
-    def count_chamber(self):
-        return self.processhive.count()
-    
-    def get_chambers_state(self):
-        runs = self.processhive.get_runnings()
-        report = {
-            "running" : [x.get_index() for x in runs]
-        }
-        return report
-
-    def select_chamber(self, index=None, *, activate=False) -> Optional[ProcessChamber]:
-        chm = None
-        if index is None or index == "":
-            chm = self.get_active_chamber()
-        elif isinstance(index, str):
-            if index=="desktop":
-                chm = self.processhive.get_last_active_desktop()
-            else:
-                try:
-                    index = int(index, 10)-1
-                except ValueError:
-                    raise ValueError(str(index))
-                chm = self.get_chamber(index, activate=activate)
-        elif isinstance(index, int):
-            chm = self.get_chamber(index, activate=activate)
-        return chm
-    
-    # 隣接するチャンバーをアクティブにする
-    def shift_active_chamber(self, delta: int) -> Optional[ProcessChamber]:
-        i = self.processhive.get_next_index(delta=delta)
-        if i is not None:
-            self.processhive.activate(i)
-            return self.processhive.get(i)
-        return None
-    
-    def remove_chamber(self, index=None):
-        self.processhive.remove(index)
-    
-    def addnew_chamber(self, initial_prompt=None):
-        return self.processhive.addnew(initial_prompt)
     
     #
     def find_process(self, index):
@@ -416,11 +359,7 @@ class AppRoot:
     # プロセスに属さないメッセージ
     #
     def post_stray_message(self, tag, value=None, **options):
-        spi = Spirit(self, self._stray_process.last_process)
-        spi.post(tag, value, **options)
-    
-    def watch_stray_message(self):
-        self.ui.watch_chamber_message(self._stray_process)
+        return self.chambers().get_stray().post_stray_message(tag, value, **options)
 
         
     #

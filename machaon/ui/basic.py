@@ -1,8 +1,6 @@
 ﻿#!/usr/bin/env python3
 # coding: utf-8
 
-from collections import defaultdict
-from platform import platform
 import threading
 import pprint
 import os
@@ -10,8 +8,29 @@ import os
 from typing import Dict, Iterator, Tuple, Sequence, List, Optional
 
 from machaon.cui import composit_text
-from machaon.process import ProcessMessage
 from machaon.types.stacktrace import ErrorObject
+
+#
+#
+#
+message_tags = {
+    "message",
+    "message-em",
+    "warn",
+    "error",
+    "hyperlink",
+    "input",
+    "log-selection",
+    "log-item-selection",
+    "black",
+    "grey",
+    "red",
+    "blue",
+    "green",
+    "cyan",
+    "yellow",
+    "magenta",
+}
 
 #
 #
@@ -27,6 +46,7 @@ class Launcher():
         self.history = InputHistory()
         self.keymap = KeybindMap()
         self.screens = {} 
+        self.chmstates = {}
         
     def init_with_app(self, app):
         self.app = app
@@ -47,64 +67,28 @@ class Launcher():
         pp = pprint.PrettyPrinter(width=type(self).wrap_width)
         return pp.pformat(value)
 
+    @property
+    def chambers(self):
+        return self.app.chambers()
+
     #
     #
     #
     def message_handler(self, msg, *, nested=False):
         """ メッセージを処理する """
-        process = None
         try:
-            if msg.is_embeded():
-                for msg in msg.expand():
-                    self.message_handler(msg)
-                return
-
             tag = msg.tag
-            if tag == "on-exec-process":
-                process_id = msg.argument("process")
-                process = self.app.get_active_chamber().get_process(process_id) # 全チャンバーから探す？
-                code = msg.text
-                if code == "begin":
-                    timestamp = msg.argument("timestamp")
-                    self.on_exec_process(process, timestamp)
-                elif code == "interrupted":
-                    self.on_interrupt_process(process)
-                    self.on_end_process(process)
-                elif code == "error":
-                    error = msg.argument("error") # error はError型のオブジェクト
-                    expr = " -> {}".format(error.summarize())
-                    self.insert_screen_text("error", expr)
-                    self.on_error_process(process, error)
-                    self.on_end_process(process)
-                elif code == "success":
-                    obj = msg.argument("ret")
-                    context = msg.argument("context")
-                    if obj:
-                        if obj.is_pretty():
-                            m = ProcessMessage(tag="object-pretty-view", pr=process, object=obj, context=context)
-                            self.message_handler(m)
-                        else:
-                            expr = " -> {} [{}]".format(obj.summarize(), obj.get_typename())
-                            self.insert_screen_text("message", expr)
-                    self.on_success_process(process)
-                    self.on_end_process(process)
-                else:
-                    self.insert_screen_text(msg.tag, msg.text, **msg.args)
-            
+            if tag in message_tags:
+                # 適宜改行を入れる
+                if msg.argument("wrap", True):
+                    msg.text = composit_text(msg.get_text(), type(self).wrap_width)
+
+                # ログウィンドウにメッセージを出力
+                self.insert_screen_text(msg.tag, msg.text, **msg.args)
             elif tag == "delete-message":
                 cnt = msg.argument("count")
                 lno = msg.argument("line")
                 self.delete_screen_text(lno, cnt)
-
-            elif tag == "object-pretty-view":
-                obj = msg.argument("object")
-                context = msg.argument("context")
-                process = msg.argument("pr") # プロセスオブジェクトが紐づけられている
-                # pprintメソッドを呼ぶ
-                obj.pprint(context.spirit)
-                # ただちにメッセージを取得し処理する
-                for msg in process.handle_post_message():
-                    self.message_handler(msg)
             
             elif tag == "object-summary":
                 self.insert_screen_object_summary(msg)
@@ -124,18 +108,15 @@ class Launcher():
                 self.app.eval_object_message(message) # メッセージを実行する
 
             else:
-                # 適宜改行を入れる
-                if msg.argument("wrap", True):
-                    msg.text = composit_text(msg.get_text(), type(self).wrap_width)
-
-                # ログウィンドウにメッセージを出力
-                self.insert_screen_text(msg.tag, msg.text, **msg.args)
+                raise ValueError("メッセージのタグが不正です：" + tag)
         
         except Exception as e:
             # メッセージ処理中にエラーが起きた
             # エラー内容をメッセージで詳細表示する
             if nested:
                 raise e # エラーの詳細表示中にさらにエラーが起きた
+            procid = msg.argument("process")
+            process = self.chambers.get_active().get_process(procid) if procid is not None else None
             if process:
                 context = process.get_last_invocation_context()
                 error = ErrorObject(context, e)
@@ -150,11 +131,18 @@ class Launcher():
                 self.insert_screen_text("error", "プロセスの外でエラーが発生：{}[{}]".format(e, type(e).__name__))
                 self.insert_screen_text("message", verbose_display_traceback(e, 0x7FFFFF))
     
-    
-    # プロセスから送られたメッセージをひとつひとつ処理する
-    def handle_chamber_message(self, chamber):
-        for msg in chamber.handle_process_messages():
+    def update_chamber_messages(self, count):
+        """ 全チャンバーに送られたメッセージを読みに行く """
+        for msg in self.chambers.handle_process_messages(count):
             self.message_handler(msg)
+
+    def update_chamber_states(self):
+        """ 全チャンバーの状態表示を更新する """
+        states, _begun, ceased = self.chambers.compare_running_states(self.chmstates)
+        for chm in ceased:
+            self.finish_chamber(chm)
+            self.update_chamber_menu(ceased=chm)
+        self.chmstates = states
 
     #
     # メッセージウィンドウの操作
@@ -191,28 +179,6 @@ class Launcher():
         raise NotImplementedError()
     
     #
-    # プロセスの情報を更新するために監視
-    #
-    def watch_chamber_message(self, chamber):        
-        """ チャンバーの発するメッセージを読みに行く """
-        running = not chamber.is_finished()
-        self.handle_chamber_message(chamber)
-        return running
-
-    def watch_chamber_state(self, prevstates):
-        """ 動作中のプロセスの状態を調べる """
-        curstates = self.app.get_chambers_state()
-
-        # 停止したプロセスを調べる
-        for wasrunning in prevstates["running"]:
-            if wasrunning not in curstates["running"]:
-                chm = self.app.get_chamber(wasrunning)
-                self.finish_chamber(chm)
-
-        return curstates
-        
-
-    #
     # 入力欄の操作
     #
     # 入力を取得
@@ -226,7 +192,7 @@ class Launcher():
     # コマンド欄を実行する
     def execute_input_text(self):
         message = self.get_input_text(pop=True) # メッセージを取得
-        cha = self.app.get_active_chamber()
+        cha = self.chambers.get_active()
         if cha is not None and cha.is_waiting_input():
             # 入力を完了する
             cha.finish_input(message)
@@ -264,29 +230,28 @@ class Launcher():
     #
     def activate_new_chamber(self, process=None):
         """ チャンバーを新規作成して追加する """
-        lastchm = self.app.get_active_chamber()
-        newchm = self.app.addnew_chamber(self.get_input_prompt())
+        lastchm = self.chambers.get_active()
+        newchm = self.chambers.addnew(self.get_input_prompt())
         if lastchm:
             self.flip_chamber_content(newchm, lastchm)
         
-        self.watch_chamber_message(newchm) # preludeのメッセージを書き出す
+        #self.watch_chamber_message(newchm) # preludeのメッセージを書き出す
 
         if process:
             newchm.add(process)
-            self.watch_chamber_message(newchm) # processのメッセージを書き出す
+            #self.watch_chamber_message(newchm) # processのメッセージを書き出す
         
         self.add_chamber_menu(newchm)
 
         # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
-        states = self.app.get_chambers_state()
-        states["running"].append(newchm.get_index())
-
-        self.watch_chamber_state(states)
+        #states = self.app.get_chambers_state()
+        #states["running"].append(newchm.get_index())
+        #self.watch_chamber_state(states)
 
     def shift_active_chamber(self, delta):
         """ 隣接したチャンバーをアクティブにする """
-        lastchm = self.app.get_active_chamber()
-        chm = self.app.shift_active_chamber(delta)
+        lastchm = self.chambers.get_active()
+        chm = self.chambers.shift_active(delta)
         if chm is None:
             return
         self.flip_chamber(chm, lastchm)
@@ -301,17 +266,11 @@ class Launcher():
     
     def flip_chamber(self, chamber, prevchamber):
         self.flip_chamber_content(chamber, prevchamber)
-        self.update_chamber(chamber)
-
-    def update_chamber(self, chamber, updatemenu=True):
-        """ チャンバーをアクティブにして画面に移す """
-        self.watch_chamber_message(chamber)
-        if updatemenu:
-            self.update_chamber_menu(active=chamber)
+        self.update_chamber_menu(active=chamber)
 
     def close_active_chamber(self):
         """ アクティブなチャンバーを削除する。動作中なら停止を試みる """
-        chm = self.app.get_active_chamber()
+        chm = self.chambers.get_active()
 
         # 第一デスクトップは削除させない
         if chm.get_index() == 0:
@@ -321,10 +280,10 @@ class Launcher():
         def remove_and_shift(chm):
             # 消去
             self.remove_chamber_menu(chm)
-            self.app.remove_chamber(chm.get_index())
+            self.chambers.remove(chm.get_index())
             
             # 隣のチャンバーに移る
-            nchm = self.app.get_active_chamber() # 新たなチャンバー
+            nchm = self.chambers.get_active() # 新たなチャンバー
             self.flip_chamber(nchm, None)
 
         # 停止処理
@@ -335,7 +294,7 @@ class Launcher():
     
     def break_chamber_process(self, timeout=10, after=None):
         """ アクティブな作動中のチャンバーを停止する """
-        chm = self.app.get_active_chamber()
+        chm = self.chambers.get_active()
         if chm.is_finished():
             return
         if chm.is_interrupted():
@@ -381,23 +340,6 @@ class Launcher():
         if inputmsg is not None:
             self.replace_input_text(inputmsg)
 
-    #
-    # 
-    #
-    # ダイアログからファイルパスを入力
-    def input_filepath(self, *filters:Tuple[str, str]):
-        pass
-    #    filepath = self.openfilename_dialog(filters = filters, initialdir = self.app.get_current_dir())
-    #    if filepath:
-    #        self.insert_input_text("{}".format(filepath))
-    
-    # カレントディレクトリの変更
-    def change_cd_dialog(self):
-        pass
-    #    dirpath = self.opendirname_dialog(initialdir = self.app.get_current_dir())
-    #    if dirpath:
-    #        return self.invoke_command("cd -- {}".format(dirpath))
-
     def openfilename_dialog(self, **options):
         raise NotImplementedError()
 
@@ -413,31 +355,35 @@ class Launcher():
     #
     # ハンドラ
     #    
-    def on_exec_process(self, process, exectime):
+    def post_on_exec_process(self, process, exectime):
         """ プロセス実行開始時 """
         id = process.get_index()
-        self.insert_screen_text("message-em", "[{:04}] ".format(id), nobreak=True, beg_of_process=id)
+        process.post("message-em", "[{:04}] ".format(id), nobreak=True, beg_of_process=id)
         timestamp = exectime.strftime("%Y-%m-%d|%H:%M.%S")
-        self.insert_screen_text("message", "[{}] ".format(timestamp), nobreak=True)
-        self.insert_screen_text("input", process.message.source)
+        process.post("message", "[{}] ".format(timestamp), nobreak=True)
+        process.post("input", process.message.source)
     
-    def on_interrupt_process(self, process):
-        """ プロセス中断時 """
-        self.insert_screen_text("message-em", "中断しました。")
-    
-    def on_error_process(self, process, excep):
-        """ プロセスの異常終了時 """
-        #self.insert_screen_text("error", "実行中にエラーが発生し、失敗しました。")
-
-    def on_success_process(self, process):
+    def post_on_success_process(self, process, ret, spirit):
         """ プロセスの正常終了時 """
-        pass
+        if ret.is_pretty():
+            # 詳細表示を行う
+            ret.pprint(spirit)
+        else:
+            process.post("message", " -> {} [{}]".format(ret.summarize(), ret.get_typename()))
+
+    def post_on_interrupt_process(self, process):
+        """ プロセス中断時 """
+        process.post("message-em", "中断しました")
     
-    def on_end_process(self, process):
+    def post_on_error_process(self, process, excep):
+        """ プロセスの異常終了時 """
+        process.post("error", " -> {}".format(excep.summarize()))
+
+    def post_on_end_process(self, process):
         """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
         procid = process.get_index()
-        self.insert_screen_text("message", "", end_of_process=procid) # プロセス識別用のタグをつけた改行を1つ入れる
-        self.insert_screen_text("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
+        process.post("message", "", end_of_process=procid) # プロセス識別用のタグをつけた改行を1つ入れる
+        process.post("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
     
     def on_exit(self):
         """ アプリ終了時 """
