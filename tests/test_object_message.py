@@ -347,13 +347,13 @@ def test_message_discard():
 def test_message_type_indicator():
     context = test_context()
 
-    r = parse_function("Int = 1 + 2")
+    r = parse_function("Int :: 1 + 2")
     assert isinstance(r, MessageExpression)
     assert r.get_type_conversion() == "Int"
     assert r.get_expression() == "1 + 2"
     assert r.run(None, context).value == 3
     
-    r = parse_function("Str = name")
+    r = parse_function("Str :: name")
     assert isinstance(r, MemberGetExpression)
     assert r.get_type_conversion() == "Str"
     assert r.get_expression() == "name"
@@ -382,10 +382,10 @@ def test_message_sequential_function():
 
     # call with subject
     fn = parse_sequential_function("@ reduce +", context, "Tuple[Int]")
-    r = fn.call_unary([1,2,3])
+    r = fn([1,2,3])
     assert isinstance(r, int)
     assert r == 6
-    r = fn.call_unary([4,5,6])
+    r = fn([4,5,6])
     assert isinstance(r, int)
     assert r == 15
 
@@ -397,11 +397,11 @@ def test_message_sequential_function():
     
     assert fn.memberspecs["values"].get_conversion() == "Tuple[Int]"
     assert fn.memberspecs["operator"].get_conversion() == "Str"
-    r = fn(values=[7,8,9], operator="+")
+    r = fn({"values" : [7,8,9], "operator" : "+"})
     assert isinstance(r, int)
     assert r == 7+8+9
-    r = fn(values=[7,8,9], operator="*")
+    r = fn({"values" : [7,8,9], "operator" : "*"})
     assert r == 7*8*9
-    r = fn(values=[7,8,9], operator="/")
+    r = fn({"values" : [7,8,9], "operator" : "/"})
     assert r == 7/8/9
 

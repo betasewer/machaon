@@ -66,7 +66,7 @@ def test_column(objectdesk):
     assert namecol.get_name() == "name"
     assert namecol.get_type_conversion() is None # 型指定は無し
 
-    view.add_column("Int = tall")
+    view.add_column("Int :: tall")
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
 
     tallcol = view.get_current_columns()[2]
