@@ -6,6 +6,14 @@ from machaon.package.package import PackageManager
 from machaon.types.package import AppPackageType
 from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
 
+logo = '''
+8b    d8    db     dP""b8 88  88    db     dP"Yb  88b 88 
+88b  d88   dPYb   dP   `" 88  88   dPYb   dP   Yb 88Yb88 
+88YbdP88  dP__Yb  Yb      888888  dP__Yb  Yb   dP 88 Y88 
+88 YY 88 dP""""Yb  YboodP 88  88 dP""""Yb  YbodP  88  Y8
+  message-oriented style Python application environment                         
+'''[1:]
+
 class RootObject:
     """
     アプリケーションを表すグローバルなオブジェクト。
@@ -26,13 +34,7 @@ class RootObject:
         起動画面を表示し、パッケージをロードする。
         '''
         spirit.post('message', "Welcome to")
-        spirit.post('message-em', '''
-8b    d8    db     dP""b8 88  88    db     dP"Yb  88b 88 
-88b  d88   dPYb   dP   `" 88  88   dPYb   dP   Yb 88Yb88 
-88YbdP88  dP__Yb  Yb      888888  dP__Yb  Yb   dP 88 Y88 
-88 YY 88 dP""""Yb  YboodP 88  88 dP""""Yb  YbodP  88  Y8
-          [AN OBJECT-BASED PYTHON APP LAUNCHER]                                  
-        '''[1:])
+        spirit.post('message-em', logo)
 
         self.context.root._initialize()
 
@@ -90,7 +92,7 @@ class RootObject:
         Returns:
             AppChamber: プロセス
         '''
-        chm = self.context.root.get_active_chamber()
+        chm = self.context.root.chambers().get_active()
         return chm
     
     def context_(self):
@@ -111,7 +113,7 @@ class RootObject:
 
     def _clear_processes(self, app, pred):
         ''' プロセスの実行結果とプロセス自体を削除する。 '''
-        chm = self.context.root.get_active_chamber()
+        chm = self.context.root.chambers().get_active()
         pids = chm.drop_processes(pred=pred)
         app.get_ui().drop_screen_text(pids)
         
@@ -125,7 +127,7 @@ class RootObject:
         ''' @method spirit [cl]
         直前のプロセスを除いてすべてを削除する。
         '''
-        chm = self.context.root.get_active_chamber()
+        chm = self.context.root.chambers().get_active()
         index = chm.last_process.get_index()
         def is_lastpr(pr):
             return pr.get_index() != index

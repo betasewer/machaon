@@ -3,6 +3,7 @@
 
 import os
 from typing import Tuple, Sequence, List, Optional, Any, Generator
+import time
 
 import tkinter as tk
 import tkinter.filedialog
@@ -151,6 +152,11 @@ def menukeytag(index):
     return "chm{}".format(index)
 
 #
+HANDLE_MESSAGE_MAX = 10
+APP_UPDATE_RATE = 100
+TK_UPDATE_RATE = 10
+
+#
 #
 #
 class tkLauncher(Launcher):
@@ -173,7 +179,7 @@ class tkLauncher(Launcher):
         self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
         #
-        self._destroyed = True
+        self._destroyed = False
 
     def open_pathdialog(self, dialogtype, 
         initialdir=None, 
@@ -281,8 +287,8 @@ class tkLauncher(Launcher):
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
         # ----------------------        
         lefties = [
-            addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog),
-            addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
+            #addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog),
+            #addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
         ]
         for b in reversed(lefties):
             b.pack(side=tk.LEFT, padx=padx)
@@ -591,19 +597,6 @@ class tkLauncher(Launcher):
     def get_screen_texts(self):
         """ プレーンテキストに変換 """
         return self.log.get(1.0, tk.END)
-        
-    def watch_chamber_message(self, chamber):
-        """ アクティブなプロセスの発するメッセージを読みに行く """
-        running = super().watch_chamber_message(chamber)
-        if running:
-            self.log.after(30, self.watch_chamber_message, chamber) # 30ms
-        return running
-
-    def watch_chamber_state(self, states):
-        curstates = super().watch_chamber_state(states)
-        if curstates["running"]:
-            self.log.after(100, self.watch_chamber_state, curstates) 
-        return curstates
     
     #
     def scroll_vertical(self, sign):
@@ -847,7 +840,7 @@ class tkLauncher(Launcher):
         # 表示の末尾に追加
         keytag = menukeytag(chamber.get_index())
         self.chambermenu.configure(state='normal')
-        if self.app.count_chamber() > 1:
+        if self.chambers.count() > 1:
             self.chambermenu.insert(tk.END, " | ", ("chamber",))
         self.chambermenu.insert(tk.END, " "+title+" ", ("running", "chamberlink", "chamber", keytag))
         self.chambermenu.configure(state='disable')
@@ -928,9 +921,9 @@ class tkLauncher(Launcher):
                     continue
                 chmindex = int(idx)
 
-        if chmindex is not None and not self.app.is_active_chamber(chmindex):
-            lastchm = self.app.get_active_chamber()
-            chm = self.app.select_chamber(chmindex, activate=True)
+        if chmindex is not None and not self.chambers.is_active(chmindex):
+            lastchm = self.chambers.get_active()
+            chm = self.chambers.select(chmindex, activate=True)
             self.flip_chamber(chm, lastchm)
 
     #
@@ -956,11 +949,21 @@ class tkLauncher(Launcher):
     #
     #
     def run_mainloop(self):
+        def updatestep():
+            # メッセージを処理
+            self.update_chamber_messages(None)
+            # チャンバーメニューの表示を更新
+            self.update_chamber_states()
+            # DNDを処理
+
+            self.root.after(100, updatestep)
+        
+        self.root.after(0, updatestep)
         self.root.mainloop()
 
     def destroy(self):
-        self.root.destroy()
         self._destroyed = True
+        self.root.destroy()
     
     #
     # テーマ
