@@ -286,24 +286,24 @@ class AppTestObject:
         """
         app.start_progress_display(total=50)
         for _ in range(50):
-            app.interruption_point(progress=1)
+            app.interruption_point(progress=1, wait=1)
         app.finish_progress_display(total=50)
 
     def graphic(self, app):
         """ @method spirit
         図形を描画する。
         """
-        with app.canvas("cv", width=200, height=400) as cv:
-            cv.rectangle_frame(coord=(2,2,100,200), color="#00FF00")
-            cv.rectangle_frame(coord=(50,50,200,250), color="#FF0000", dash=",")
-            cv.rectangle_frame(coord=(10,100,90,300), color="#0000FF")
-        
-        with app.canvas("cv2", width=200, height=400) as cv:
-            cv.oval(coord=(10,10,200,400), color="#004444")
-            cv.rectangle(coord=(2,2,100,200), color="#00FF00")
-            cv.rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
-            cv.rectangle(coord=(10,100,90,300), color="#0000FF")
-
+        app.post("canvas", app.new_canvas("cv1", width=200, height=400)
+            .rectangle_frame(coord=(2,2,100,200), color="#00FF00")
+            .rectangle_frame(coord=(50,50,200,250), color="#FF0000", dash=",")
+            .rectangle_frame(coord=(10,100,90,300), color="#0000FF")
+        )
+        app.post("canvas", app.new_canvas("cv2", width=200, height=400)
+            .oval(coord=(10,10,200,400), color="#004444")
+            .rectangle(coord=(2,2,100,200), color="#00FF00")
+            .rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
+            .rectangle(coord=(10,100,90,300), color="#0000FF")
+        )
 
 
 """

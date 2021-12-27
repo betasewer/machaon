@@ -880,6 +880,12 @@ typedef.RootObject(
     """,
     value_type="machaon.types.app.RootObject"
 )
+typedef.AppTestObject(
+    """
+    アプリのテストインスタンス。
+    """,
+    value_type="machaon.types.app.AppTestObject"
+)
 
 #
 #
