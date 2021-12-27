@@ -5,7 +5,7 @@ import threading
 import pprint
 import os
 
-from typing import Dict, Iterator, Tuple, Sequence, List, Optional
+from typing import Dict, Iterator, Tuple, Sequence, List, Optional, Any
 
 from machaon.cui import composit_text
 from machaon.types.stacktrace import ErrorObject
@@ -101,7 +101,10 @@ class Launcher():
                 self.insert_screen_setview(rows, columns, dataid, context)
 
             elif tag == "canvas":
-                self.insert_screen_canvas(msg)
+                canvas = msg.text
+                if isinstance(canvas, str):
+                    raise TypeError("machaon.ui.basic.ScreenCanvas is required")
+                self.insert_screen_canvas(canvas)
             
             elif tag == "run-process":
                 message = msg.argument("message")
@@ -135,14 +138,6 @@ class Launcher():
         """ 全チャンバーに送られたメッセージを読みに行く """
         for msg in self.chambers.handle_process_messages(count):
             self.message_handler(msg)
-
-    def update_chamber_states(self):
-        """ 全チャンバーの状態表示を更新する """
-        states, _begun, ceased = self.chambers.compare_running_states(self.chmstates)
-        for chm in ceased:
-            self.finish_chamber(chm)
-            self.update_chamber_menu(ceased=chm)
-        self.chmstates = states
 
     #
     # メッセージウィンドウの操作
@@ -234,20 +229,10 @@ class Launcher():
         newchm = self.chambers.addnew(self.get_input_prompt())
         if lastchm:
             self.flip_chamber_content(newchm, lastchm)
-        
-        #self.watch_chamber_message(newchm) # preludeのメッセージを書き出す
-
         if process:
-            newchm.add(process)
-            #self.watch_chamber_message(newchm) # processのメッセージを書き出す
-        
+            newchm.add(process)    
         self.add_chamber_menu(newchm)
-
-        # この時点でプロセスが終了している場合もあり、更新させるために手動で状態を追加しておく
-        #states = self.app.get_chambers_state()
-        #states["running"].append(newchm.get_index())
-        #self.watch_chamber_state(states)
-
+    
     def shift_active_chamber(self, delta):
         """ 隣接したチャンバーをアクティブにする """
         lastchm = self.chambers.get_active()
@@ -320,6 +305,13 @@ class Launcher():
         """ 終了したチャンバーに対する処理 """
         # 文字色を実行中の色から戻す
         self.update_chamber_menu(ceased=chamber)
+
+    def update_chamber_states(self):
+        """ 全チャンバーの状態表示を更新する """
+        states, _begun, ceased = self.chambers.compare_running_states(self.chmstates)
+        for chm in ceased:
+            self.finish_chamber(chm)
+        self.chmstates = states
 
     # メニューの更新
     def add_chamber_menu(self, chamber):
@@ -567,5 +559,35 @@ class KeybindMap():
         for cmd in self._commands.values():
             for k in cmd.keybinds:
                 yield k
-    
+
+
+#
+#
+#
+class ScreenCanvas():
+    def __init__(self, name, width, height, color=None):
+        self.graphs: List[Dict[str, Any]] = []
+        self.name: str = name
+        self.bg: str= color
+        self.width: int = width
+        self.height: int = height
+
+    def add_graph(self, typename, **kwargs):
+        if "type" in kwargs:
+            raise ValueError("key 'type' is reserved")
+        kwargs["type"] = typename
+        self.graphs.append(kwargs)
+        return self
+        
+    def rectangle_frame(self, *, coord=None, width=None, color=None, dash=None, stipple=None):
+        return self.add_graph("rectangle-frame", coord=coord, width=width, color=color, dash=dash, stipple=stipple)
+        
+    def rectangle(self, *, coord=None, color=None, dash=None, stipple=None):
+        return self.add_graph("rectangle", coord=coord, color=color, dash=dash, stipple=stipple)
+
+    def oval(self, *, coord=None, color=None, dash=None, stipple=None):
+        return self.add_graph("oval", coord=coord, color=color, dash=dash, stipple=stipple)
+
+    def text(self, *, coord=None, text=None, color=None):
+        return self.add_graph("text", coord=coord, text=text, color=color)
 

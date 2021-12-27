@@ -460,6 +460,13 @@ class Spirit():
                 return
             self.spirit.cur_prog_bar.set_total(total)
             self.total = total
+
+    #
+    # キャンバス
+    #
+    def new_canvas(self, name, width, height, color=None):
+        from machaon.ui.basic import ScreenCanvas
+        return ScreenCanvas(name, width, height, color)
     
     #
     # クリップボード
@@ -626,46 +633,6 @@ class ProcessMessageIO():
         return False
 
 #
-#
-#
-class ProcessScreenCanvas():
-    def __init__(self, spi, name, width, height, color=None):
-        self.spirit = spi
-        self.graphs = []
-        self.name = name
-        self.bg = color
-        self.width = width
-        self.height = height
-
-    def __enter__(self):
-        return self
-    
-    def __exit__(self, et, ev, tb):
-        self.post()
-        return None
-    
-    def post(self):
-        self.spirit.post_message(ProcessMessage(tag="canvas", canvas=self))
-    
-    def get_graphs(self) -> List[Tuple[str, Dict[str, Any]]]:
-        return self.graphs
-    
-    def add_graph(self, typename, **kwargs):
-        self.graphs.append((typename, kwargs))
-        
-    def rectangle_frame(self, *, coord=None, width=None, color=None, dash=None, stipple=None):
-        self.add_graph("rectangle-frame", coord=coord, width=width, color=color, dash=dash, stipple=stipple)
-        
-    def rectangle(self, *, coord=None, color=None, dash=None, stipple=None):
-        self.add_graph("rectangle", coord=coord, color=color, dash=dash, stipple=stipple)
-
-    def oval(self, *, coord=None, color=None, dash=None, stipple=None):
-        self.add_graph("oval", coord=coord, color=color, dash=dash, stipple=stipple)
-
-    def text(self, *, coord=None, text=None, color=None):
-        self.add_graph("text", coord=coord, text=text, color=color)
-
-#
 # #####################################################################
 #  スクリーン
 # #####################################################################
@@ -824,7 +791,7 @@ class ProcessChamber:
             iline = 0
             while iline < len(messages):
                 c1 = chamber.count_process()
-                if iline <= c1 and chamber.is_finished():
+                if iline <= c1 and chamber.is_messages_consumed():
                     app.post_stray_message("run-process", message=messages[iline])
                     iline += 1
                 else:
@@ -853,10 +820,10 @@ class StrayProcessChamber(ProcessChamber):
         return False
 
     def is_messages_consumed(self):
-        return self.last_process._isconsumed_msgs
+        return False
         
     def post_stray_message(self, tag, value=None, **options):
-        self.last_process.post_message(ProcessMessage(value, tag, **options))
+        self.last_process.post(tag, value, **options)
 
 
 #

@@ -586,10 +586,10 @@ class tkLauncher(Launcher):
         screen_insert_object(self, self.log, deskname, obj, sel)
         self.log.configure(state='disabled')
         
-    def insert_screen_canvas(self, msg):
+    def insert_screen_canvas(self, canvas):
         """ ログ欄に図形を描画する """
         self.log.configure(state='normal')
-        canvas_id = screen_insert_canvas(self.log, msg.argument("canvas"), self.theme)
+        canvas_id = screen_insert_canvas(self.log, canvas, self.theme)
         self.log.window_create(tk.END, window=canvas_id)
         self.log.insert(tk.END, "\n") # 
         self.log.configure(state='disabled')
@@ -949,16 +949,15 @@ class tkLauncher(Launcher):
     #
     #
     def run_mainloop(self):
-        def updatestep():
+        def messagestep(interval):
             # メッセージを処理
-            self.update_chamber_messages(None)
+            self.update_chamber_messages(HANDLE_MESSAGE_MAX)
             # チャンバーメニューの表示を更新
             self.update_chamber_states()
             # DNDを処理
-
-            self.root.after(100, updatestep)
+            self.root.after(interval, messagestep, interval)
         
-        self.root.after(0, updatestep)
+        self.root.after(0, messagestep, 100)
         self.root.mainloop()
 
     def destroy(self):
@@ -1186,7 +1185,7 @@ def screen_insert_canvas(parent, canvas, theme):
         highlightcolor=bg
     )
 
-    for typ, args in canvas.get_graphs():
+    for args in canvas.graphs:
         if args.get("coord") is None:
             args["coord"] = (1, 1, canvas.width, canvas.height)
 
@@ -1196,6 +1195,7 @@ def screen_insert_canvas(parent, canvas, theme):
         if args.get("width") is None:
             args["width"] = 1
             
+        typ = args["type"]
         if typ == "rectangle":
             cv.create_rectangle(*args["coord"], fill=args["color"], outline="", dash=args["dash"])
         elif typ == "rectangle-frame":

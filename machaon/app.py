@@ -254,7 +254,7 @@ class AppRoot:
     def add_startup_message(self, line):
         """ 開始直後に自動で実行されるメッセージ """
         self._startupmsgs.append(line)
-        
+
     #
     # アプリの実行
     #
