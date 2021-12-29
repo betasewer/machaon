@@ -118,6 +118,7 @@ class ErrorObject():
         app.post("message-em", "詳細情報は次のメソッドで：".format(title))
         app.post("message", "parser-log")
         app.post("message", "traceback [level]")
+        app.post("message", "traceback [level] vars")
         app.post("message", "traceback [level] showall")
 
 
@@ -138,6 +139,7 @@ class TracebackObject():
     
     def error(self):
         """ @method
+        発生したエラー
         Returns:
             Error:
         """
@@ -145,6 +147,7 @@ class TracebackObject():
     
     def dive(self, level):
         """ @method
+        任意の深さのトレースバックを得る
         Params:
             level(int):
         Returns:
@@ -159,13 +162,14 @@ class TracebackObject():
         
     def next(self):
         """ @method
+        1つ深いトレースバックを得る
         Returns:
             TracebackObject:
         """
         return self.dive(1)
 
     def walk(self):
-        """ より深いトレースバックへ 
+        """ 深いトレースバックをめぐる 
         Yields:
             Int, TracebackObject, TracebackObject
         """
@@ -193,11 +197,43 @@ class TracebackObject():
 
     def frame(self):
         """ @method
-        トレースバックのフレームオブジェクトを返す
+        トレースバックのフレームオブジェクト
         Returns:
             FrameObject:
         """
         return FrameObject(self._tb.tb_frame)
+    
+    def func(self):
+        """ @method
+        関数名
+        Returns:
+            Str:
+        """
+        return self.frame().funcname()
+
+    def get_using_variables(self, lastoffset=None):
+        """ @method [vars]
+        フレームで使用された変数の一覧 
+        Returns:
+            ObjectCollection:
+        """
+        return self.frame().get_using_variables(lastoffset)
+
+    def get_local_variables(self):
+        """ @method [locals]
+        フレームのローカル変数の一覧
+        Returns:
+            ObjectCollection:
+        """
+        return self.frame().get_local_variables()
+
+    def get_global_variables(self):
+        """ @method [globals]
+        フレームのグローバル変数の一覧
+        Returns:
+            ObjectCollection:
+        """
+        return self.frame().get_global_variables()
     
     def location(self):
         """ @method
@@ -209,13 +245,13 @@ class TracebackObject():
     
     def lasti(self):
         """ @method
-        現在実行中のファイル内の場所
+        現在実行中のバイトコードのインデックス
         Returns:
             Int:
         """
         return self._tb.tb_lasti
 
-    def cur_instructions(self):
+    def instructions(self):
         """ @method
         現在の実行箇所までのバイトコード
         Returns:
@@ -297,16 +333,6 @@ class FrameObject:
             Str:
         """
         return self._fr.f_code.co_name
-    
-    def func(self):
-        """ @method
-        関数オブジェクト
-        Returns:
-            Any:
-        """
-        fn = self._fr.f_trace
-        instr = None
-        print("")
 
     def get_using_variables(self, lastoffset=None):
         """ @method [vars]
@@ -325,7 +351,7 @@ class FrameObject:
         return self._fr.f_locals
 
     def get_global_variables(self):
-        """ @method [locals]
+        """ @method [globals]
         グローバル変数を取得する
         Returns:
             ObjectCollection:
