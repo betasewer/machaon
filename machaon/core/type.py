@@ -116,6 +116,10 @@ class Type(TypeProxy):
     
     def is_scope(self, scope):
         return self.scope == scope
+
+    def is_same_value_type(self, vt):
+        # TypeModule.deduceで使用
+        return self.value_type is vt
     
     def copy(self):
         t = Type()
@@ -564,6 +568,13 @@ class TypeDefinition():
     def is_scope(self, scope):
         return self.scope == scope
     
+    def is_same_value_type(self, vt):
+        # TypeModule.deduceで使用
+        if isinstance(self.value_type, str):
+            return self.value_type == full_qualified_name(vt)
+        else:
+            return self.value_type is vt
+
     def define(self, typemodule):
         """ 実行時に型を読み込み定義する """
         if self._t is not None:
@@ -799,17 +810,11 @@ class TypeModule():
         if t:
             return t
 
-        for _tn, ts in self._typelib.items(): # 型を比較する
+        for ts in self._typelib.values(): # 型を比較する
             for t in ts:
-                vt = t.get_value_type()
-                if vt is not None:
-                    if vt is value_type:
-                        return self._load_type(t)
-                else:
-                    # value_typeの指定がない==describerと同一, であればこれで検出できる
+                if t.is_same_value_type(value_type):
                     try:
-                        if t.get_describer_qualname() == full_qualified_name(value_type):
-                            return self._load_type(t)
+                        return self._load_type(t)
                     except:
                         continue # モジュールの読み込みエラーが起きても続行
         

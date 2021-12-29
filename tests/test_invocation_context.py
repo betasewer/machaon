@@ -20,6 +20,8 @@ def test_newobject_deduction():
     t = context.new_object({"a":1, "b":2, "c":3})
     assert t.get_typename() == "ObjectCollection"
 
+test_newobject_deduction()
+
 
 def test_newobject_conversion():
     context = instant_context()
