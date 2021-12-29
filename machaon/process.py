@@ -759,17 +759,6 @@ class ProcessChamber:
         title = "Chamber"
         return "{}. {}".format(self._index, title)
     
-    #def get_last_object_message(self):
-    #    return self.last_process.message
-    
-    #def get_last_context(self): # -
-    #    return self.last_process.get_invocation_context()
-
-    #def get_input_string(self):
-    #    if not self._processes:
-    #        return ""
-    #    return self.last_process.message.source
-    
     def drop_processes(self, pred=None):
         """
         プロセスとプロセスに関連するメッセージを削除する。
@@ -862,9 +851,7 @@ class DesktopChamber():
     def get_title(self): # -
         title = "机{}. {}".format(self._index+1, self._name)
         return title
-    
-    #def get_input_string(self):
-    #    return ""
+
 
 #
 #
@@ -1006,9 +993,6 @@ class ProcessHive:
             if activate:
                 self.activate(index)
         return chm
-
-    def get_stray(self):
-        return self._straychamber
 
     #
     #
