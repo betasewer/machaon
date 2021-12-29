@@ -25,10 +25,10 @@ def test_message_window(approot):
     spi = Spirit(approot)
     wnd = approot.get_ui()
 
-    assert ">>> \n" == gettext(wnd.log)
+    assert "\n" == gettext(wnd.log)
     wnd.insert_screen_text("message", "test-message")
-    assert ">>> test-message\n\n" == gettext(wnd.log)
-    assert ">>> test-message" == getlastline(wnd.log)
+    assert "test-message\n\n" == gettext(wnd.log)
+    assert "test-message" == getlastline(wnd.log)
 
     wnd.insert_screen_text("error", "test-error-message")
     assert "test-error-message" == getlastline(wnd.log)

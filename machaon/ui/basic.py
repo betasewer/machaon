@@ -136,7 +136,7 @@ class Launcher():
     
     def update_chamber_messages(self, count):
         """ 全チャンバーに送られたメッセージを読みに行く """
-        for msg in self.chambers.handle_process_messages(count):
+        for msg in self.chambers.handle_messages(count):
             self.message_handler(msg)
 
     #
@@ -230,7 +230,7 @@ class Launcher():
         if lastchm:
             self.flip_chamber_content(newchm, lastchm)
         if process:
-            newchm.add(process)    
+            newchm.add(process)
         self.add_chamber_menu(newchm)
     
     def shift_active_chamber(self, delta):
