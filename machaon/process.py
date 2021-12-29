@@ -539,6 +539,15 @@ class ProcessMessage():
     def argument(self, name, default=None):
         return self.args.get(name, default)
 
+    def req_arguments(self, *names):
+        """ 値が存在しない場合は例外を投げる """
+        seq = []
+        for name in names:
+            if name not in self.args:
+                raise KeyError("メッセージ'{}'に必須の引数'{}'が存在しません".format(self.tag, name))
+            seq.append(self.args[name])
+        return seq
+
     def set_argument(self, name, value):
         self.args[name] = value
     
@@ -721,7 +730,9 @@ class ProcessChamber:
         if count is not None:
             count -= len(chmsgs)
 
-        prmsgs = self.last_process.handle_post_message(count)
+        prmsgs = []
+        if self._processes:
+            prmsgs = self.last_process.handle_post_message(count)
 
         msgs = chmsgs + prmsgs
         self.handled_msgs.extend(msgs)
@@ -731,13 +742,14 @@ class ProcessChamber:
         return self.handled_msgs
     
     def is_messages_consumed(self):
-        if not self._processes:
-            return True
         if self.chamber_msgs:
             return False
-        return self.last_process.is_messages_consumed()
+        if self._processes:
+            return self.last_process.is_messages_consumed()
+        else:
+            return True
     
-    def post_chamber_message(self, tag, value, **options):
+    def post_chamber_message(self, tag, value=None, **options):
         self.chamber_msgs.append(ProcessMessage(tag=tag, text=value, **options))
 
     def get_index(self): # -
@@ -793,49 +805,24 @@ class ProcessChamber:
         
         return pis # 削除されたプロセスのリスト
 
-    def start_process_sequence(self, app, messages):
+    def start_process_sequence(self, messages):
         """
         一連のプロセスを順に実行する。
         """
-        def _thread(chamber):
+        def _launch(chamber):
             iline = 0
             while iline < len(messages):
                 c1 = chamber.count_process()
                 if iline <= c1 and chamber.is_messages_consumed():
-                    app.post_stray_message("run-process", message=messages[iline])
+                    chamber.post_chamber_message("eval-message", message=messages[iline])
                     iline += 1
                 else:
                     time.sleep(0.1)
                     continue
         
         # プロセスを順に立ち上げるスレッドを始動
-        thread = threading.Thread(name="ProcessSequenceLauncher", target=_thread, args=(self,), daemon=True)
+        thread = threading.Thread(name="ProcessSequenceLauncher", target=_launch, args=(self,), daemon=True)
         thread.start()
-
-    
-#
-#
-#
-class StrayProcessChamber(ProcessChamber):
-    def __init__(self):
-        super().__init__(-1)
-        self.add(Process(0, ""))
-    
-    def is_failed(self):
-        return False
-    
-    def is_finished(self):
-        return False
-    
-    def is_interrupted(self):
-        return False
-
-    def is_messages_consumed(self):
-        return False
-        
-    def post_stray_message(self, tag, value=None, **options):
-        self.last_process.post(tag, value, **options)
-
 
 #
 #
@@ -888,7 +875,6 @@ class ProcessHive:
         self._allhistory: List[int] = []
         self._nextindex: int = 0
         self._nextprocindex: int = 0
-        self._straychamber = StrayProcessChamber()
     
     # 新しい開始前のプロセスを作成する
     def new_process(self, expression: str):
@@ -1035,9 +1021,6 @@ class ProcessHive:
             cha.interrupt()
 
     def handle_messages(self, count):
-        if not self._straychamber.is_messages_consumed():
-            for msg in self._straychamber.handle_messages(count):
-                yield msg
         for chm in self.chambers.values():
             if chm.is_messages_consumed():
                 continue

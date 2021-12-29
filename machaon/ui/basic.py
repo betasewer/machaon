@@ -13,15 +13,15 @@ from machaon.types.stacktrace import ErrorObject
 #
 #
 #
-message_tags = {
+text_message_tags = {
     "message",
     "message-em",
     "warn",
     "error",
     "hyperlink",
     "input",
-    "log-selection",
-    "log-item-selection",
+    "selection",
+    "item-selection",
     "black",
     "grey",
     "red",
@@ -29,7 +29,47 @@ message_tags = {
     "green",
     "cyan",
     "yellow",
-    "magenta",
+    "magenta"
+}
+
+system_message_tags = {
+    "delete-message",  
+    # 画面の文字を削除する。
+    # Params:
+    #   line: 
+    #       削除を開始する行のインデックス（-1で末尾）
+    #   count: 
+    #       削除する行数
+    "object-summary",
+    # オブジェクトの省略表記をグラフィカルに表示する。
+    # Params:
+    #   (no parameter)
+    "object-sheetview",       
+    # 表組を画面に表示する。  
+    # Params:
+    #   rows: 
+    #       文字列の表
+    #   columns: 
+    #       カラム名のリスト
+    #   context:
+    #       実行コンテキスト
+    "canvas",              
+    # 図形を画面に表示する。     
+    # Params:
+    #   [text]:
+    #       キャンバスオブジェクト
+    "eval-message",      
+    # プロセスを一つ立ち上げてメッセージを評価する。       
+    # Params:
+    #   message: 
+    #       メッセージ文字列
+    "eval-message-seq",  
+    # プロセスを順番に立ち上げて一連のメッセージを評価する。     
+    # Params:
+    #   messages: 
+    #       メッセージ文字列のリスト
+    #   chamber:
+    #       チャンバーオブジェクト
 }
 
 #
@@ -78,40 +118,42 @@ class Launcher():
         """ メッセージを処理する """
         try:
             tag = msg.tag
-            if tag in message_tags:
+            if tag in text_message_tags:
                 # 適宜改行を入れる
                 if msg.argument("wrap", True):
                     msg.text = composit_text(msg.get_text(), type(self).wrap_width)
 
                 # ログウィンドウにメッセージを出力
                 self.insert_screen_text(msg.tag, msg.text, **msg.args)
+
             elif tag == "delete-message":
-                cnt = msg.argument("count")
-                lno = msg.argument("line")
+                lno, cnt = msg.req_arguments("line", "count")
                 self.delete_screen_text(lno, cnt)
             
             elif tag == "object-summary":
                 self.insert_screen_object_summary(msg)
             
             elif tag == "object-sheetview":
-                rows = msg.argument("rows")
-                columns = msg.argument("columns")
-                context = msg.argument("context")
+                rows, columns, context = msg.req_arguments("rows", "columns", "context")
                 dataid = context.spirit.process.get_index()
                 self.insert_screen_setview(rows, columns, dataid, context)
 
             elif tag == "canvas":
                 canvas = msg.text
-                if isinstance(canvas, str):
-                    raise TypeError("machaon.ui.basic.ScreenCanvas is required")
+                if canvas is None or isinstance(canvas, str):
+                    raise TypeError("machaon.ui.basic.ScreenCanvas value is required as message text")
                 self.insert_screen_canvas(canvas)
-            
-            elif tag == "run-process":
-                message = msg.argument("message")
+
+            elif tag == "eval-message":
+                message, = msg.req_arguments("message")
                 self.app.eval_object_message(message) # メッセージを実行する
 
+            elif tag == "eval-message-seq":
+                messages, chamber = msg.req_arguments("messages", "chamber")
+                chamber.start_process_sequence(messages) # eval-messageを順に投稿するスレッドを開始する
+
             else:
-                raise ValueError("メッセージのタグが不正です：" + tag)
+                raise ValueError("メッセージのタグが無効です：" + tag)
         
         except Exception as e:
             # メッセージ処理中にエラーが起きた
@@ -131,7 +173,7 @@ class Launcher():
                 context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
             else:
                 from machaon.types.stacktrace import verbose_display_traceback
-                self.insert_screen_text("error", "プロセスの外でエラーが発生：{}[{}]".format(e, type(e).__name__))
+                self.insert_screen_text("error", "プロセスの外部でエラーが発生：{}[{}]".format(e, type(e).__name__))
                 self.insert_screen_text("message", verbose_display_traceback(e, 0x7FFFFF))
     
     def update_chamber_messages(self, count):

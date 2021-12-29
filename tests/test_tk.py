@@ -42,10 +42,11 @@ def test_message_window(approot):
     l1 = wnd.log.get("end linestart -2 lines", "end linestart -1 lines")
     l2 = wnd.log.get("end linestart -3 lines", "end linestart -2 lines")
 
-    wnd.message_handler(ProcessMessage(tag="delete-message"))
+    wnd.message_handler(ProcessMessage(tag="delete-message", line=-1, count=1))
     assert "test-error-message" == getlastline(wnd.log)
     
     #wnd.run_mainloop()
+
 
 def test_progress_display(approot):
     spi = TempSpirit(approot)

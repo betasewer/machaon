@@ -12,19 +12,16 @@ from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
-from machaon.process import Spirit, ProcessHive, ProcessChamber, StrayProcessChamber
+from machaon.process import Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
 from machaon.types.shellplatform import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 
-#
-# ###################################################################
-#  すべてのmachaonアプリで継承されるアプリクラス
-#   プロセッサーを走らせる、UIの管理を行う
-#   プロセッサーに渡され、メッセージ表示・設定項目へのアクセスを提供する
-# ###################################################################
-#
+
 class AppRoot:
+    """
+    アプリのUI、設定情報、グローバルなオブジェクトの辞書を保持する
+    """
     def __init__(self):
         self.ui = None
         self.processhive = ProcessHive()
@@ -53,7 +50,7 @@ class AppRoot:
         if hasattr(self.ui, "init_with_app"):
             self.ui.init_with_app(self)
         
-        self.ui.activate_new_chamber()
+        self.ui.activate_new_chamber() # 空のチャンバーを追加する
 
         self.typemodule.add_fundamental_types() # 初期化処理メッセージを解読するために必要
     
@@ -245,15 +242,16 @@ class AppRoot:
             raise ValueError("認証情報はどのパッケージにも設定されませんでした")
     
     #
-    # 一連のメッセージを実行する
+    # メッセージ
     #
-    def run_message_sequence(self, lines):
-        active = self.chambers().get_active()
-        active.start_process_sequence(self, lines)
-
     def add_startup_message(self, line):
         """ 開始直後に自動で実行されるメッセージ """
         self._startupmsgs.append(line)
+    
+    def post_stray_message(self, tag, value=None, **options):
+        """ アクティブなチャンバーにプロセス独立のメッセージを投稿する """
+        chm = self.chambers().get_active()
+        chm.post_chamber_message(tag, value, **options)
 
     #
     # アプリの実行
@@ -264,10 +262,10 @@ class AppRoot:
         
         # 自動実行メッセージの登録
         startupmsgs = ["@@startup", *self._startupmsgs] # 初期化処理を行うメッセージを先頭に追加する
-        self.ui.install_startup_message(startupmsgs)
-        self._startupmsgs.clear()
+        chm = self.chambers().get_active()
+        chm.post_chamber_message("eval-message-seq", messages=startupmsgs, chamber=chm)
 
-        self.mainloop()
+        self.ui.run_mainloop()
 
     def exit(self):
         # 停止指示を出す
@@ -283,9 +281,6 @@ class AppRoot:
             # return
 
         self.ui.on_exit()
-    
-    def mainloop(self):
-        self.ui.run_mainloop()
 
     #
     # コマンド処理の流れ
@@ -334,8 +329,6 @@ class AppRoot:
     def chambers(self):
         return self.processhive
 
-    
-    #
     def find_process(self, index):
         # アクティブなチャンバーから検索する
         actchm = self.get_active_chamber()        
@@ -350,17 +343,9 @@ class AppRoot:
             if pr is not None:
                 return pr
         return None
-    
-    #
+
     def select_object_collection(self):
         return self.objcol
-        
-    #
-    # プロセスに属さないメッセージ
-    #
-    def post_stray_message(self, tag, value=None, **options):
-        return self.chambers().get_stray().post_stray_message(tag, value, **options)
-
         
     #
     # 外部アプリ
