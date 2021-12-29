@@ -3,8 +3,8 @@ import stat
 from ctypes import (
     windll, c_wchar_p, byref, wintypes, POINTER
 )
-from machaon.types.shellplatform import common_known_names
-from machaon.types.windows.guid import GUID, parse_guid, guid_entries
+from machaon.platforms.common import common_known_names
+from machaon.platforms.windows.guid import GUID, parse_guid, guid_entries
 
 def shell_get_known_folder_path(SHGetKnownFolderPath, guid):
     """

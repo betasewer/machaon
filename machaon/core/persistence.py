@@ -146,7 +146,7 @@ class StoredMessage():
         """
         if not self.exists():
             raise ValueError("ファイルが存在しません")
-        from machaon.types.shellplatform import shellpath
+        from machaon.platforms import shellpath
         return shellpath().start_file(self.path)
 
     def constructor(self, context, value):

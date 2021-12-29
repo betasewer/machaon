@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+from sys import platform
 from typing import Tuple, Sequence, List, Optional, Any, Generator
 import time
 
@@ -178,6 +179,7 @@ class tkLauncher(Launcher):
         self.focusbg = (None, None)
         self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
+        self.dnd = machaon.platforms.draganddrop().DND()
         #
         self._destroyed = False
 
@@ -314,10 +316,14 @@ class tkLauncher(Launcher):
         tk.Grid.rowconfigure(self.frame, 2, weight=1)
         tk.Grid.rowconfigure(self.frame, 3, weight=0)
 
-        # フレームを除去       
+        # テーマの適用
         #self.root.overrideredirect(True)
         import machaon.ui.theme
         self.apply_theme(machaon.ui.theme.light_terminal_theme())
+
+        # ドラッグアンドドロップの初期化
+        windowhandle = get_tk_window_handle(self.root)
+        self.dnd.enter(windowhandle)
 
         # 入力イベント
         def define_command(fn):
@@ -657,7 +663,7 @@ class tkLauncher(Launcher):
         link, _label = self.hyper_resolve_link(tk.CURRENT)
         if link is not None:
             if os.path.isfile(link) or os.path.isdir(link):
-                machaon.platforms.current.openfile(link)
+                machaon.platforms.shellpath().start_file(link)
             else:
                 import webbrowser
                 webbrowser.open_new_tab(link)
@@ -937,6 +943,13 @@ class tkLauncher(Launcher):
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
 
+    def update_dnd(self):
+        """ DND """
+        values = self.dnd.update()
+        if values is None:
+            return
+        self.insert_input_text(" ".join(values))
+
     # 
     #
     #
@@ -947,6 +960,8 @@ class tkLauncher(Launcher):
             # チャンバーメニューの表示を更新
             self.update_chamber_states()
             # DNDを処理
+            self.update_dnd()
+            # 次回の呼び出し
             self.root.after(interval, messagestep, interval)
         
         self.root.after(0, messagestep, 100)
@@ -1306,7 +1321,17 @@ class TextDump():
     
     def items(self):
         return self.dump
-    
+
+
+def get_tk_window_handle(wnd):
+    if machaon.platforms.is_windows():
+        return wnd.winfo_id()
+    elif machaon.platforms.is_osx():
+        return None
+    else:
+        machaon.platforms.raise_unsupported()
+
+
 tk_modifiers = {
     "Control", 
     "Alt",

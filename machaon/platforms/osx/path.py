@@ -1,5 +1,5 @@
 import os
-from machaon.types.shellplatform import common_known_names
+from machaon.platforms import common_known_names
 
 def get_known_path(name: str, param: str = "", approot = None):
     """

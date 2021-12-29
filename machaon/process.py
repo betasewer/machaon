@@ -472,7 +472,7 @@ class Spirit():
     # クリップボード
     #
     def clipboard_copy(self, value):
-        from machaon.types.shellplatform import clipboard
+        from machaon.platforms import clipboard
         clipboard().clipboard_copy(value)
         self.post("message", "クリップボードに文字列をコピーしました")
 

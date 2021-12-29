@@ -8,7 +8,7 @@ from typing import Optional
 
 from machaon.shellpopen import popen_capture
 from machaon.types.fundamental import NotFound
-from machaon.types.shellplatform import shellpath
+from machaon.platforms import shellpath
 
 
 def _normext(extension):

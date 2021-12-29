@@ -550,7 +550,12 @@ class KeybindMap():
             cfg.read(p, encoding="utf-8")
         
         import machaon.platforms
-        pltkey = machaon.platforms.current.name
+        if machaon.platforms.is_windows():
+            pltkey = "win"
+        elif machaon.platforms.is_osx():
+            pltkey = "osx"
+        else:
+            raise ValueError("サポートされていないプラットフォームです")
         
         for section in cfg.sections():
             when = "root"

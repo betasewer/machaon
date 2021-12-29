@@ -13,15 +13,6 @@ def is_windows():
 def is_osx():
     return get_platform() == "darwin"
 
-#
-# shell
-#
-common_known_names = [
-    "home", "desktop", "documents", "downloads", 
-    "pictures", "musics", "videos", 
-    "applications", "programs", "system",
-    "fonts", 
-]
 
 def _import_platform_module(name):
     system = get_platform()
@@ -33,7 +24,8 @@ def _import_platform_module(name):
         raise ValueError("Unsupported system: "+system)
     
     import importlib
-    return importlib.import_module("machaon.types.{}.{}".format(pltdir, name))
+    return importlib.import_module("machaon.platforms.{}.{}".format(pltdir, name))
+
 
 def shellpath():
     """
@@ -46,6 +38,18 @@ def clipboard():
     クリップボード
     """
     return _import_platform_module("clipboard")
+
+def console():
+    """
+    コンソール
+    """
+    return _import_platform_module("console")
+    
+def draganddrop():
+    """
+    ドラッグアンドドロップの実装
+    """
+    return _import_platform_module("dnd")
 
 
     

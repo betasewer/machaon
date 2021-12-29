@@ -14,7 +14,7 @@ from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
 from machaon.process import Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
-from machaon.types.shellplatform import is_osx, is_windows, shellpath
+from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 
 
@@ -121,7 +121,7 @@ class AppRoot:
         パッケージ定義を追加する。
         Params:
             name(str): パッケージ名
-            package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
+            package(str|Repository): モジュールを含むパッケージの記述 [リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
             modules(str): ロードするモジュール名
             private(bool): Trueの場合、認証情報を同時にロードする [locked]
             delayload(bool): 参照時にロードする
@@ -161,7 +161,7 @@ class AppRoot:
         依存パッケージを追加する。
         Params:
             name(str): パッケージ名
-            package(str|Repository): モジュールを含むパッケージの記述　[リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
+            package(str|Repository): モジュールを含むパッケージの記述 [リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
             locked(bool): Trueの場合、認証情報を同時にロードする
             separate(bool): site-packageにインストールしない
             hashval(str): パッケージハッシュ値の指定
@@ -393,7 +393,6 @@ class AppRoot:
             subprocess.Popen(args, shell=False)
         
         else:
-            from machaon.types.shellplatform import shellpath
             shellpath().open_by_system_text_editor(filepath, line, column)
 
 #
