@@ -252,7 +252,7 @@ class AppChamber:
         """ @method spirit
         処理済みのメッセージを詳細な形式で表示する。
         """
-        for msg in chm.get_process_messages():
+        for msg in chm.get_handled_messages():
             lines = []
             lines.append('"{}"'.format(msg.text))
             lines.append("tag={}".format(msg.tag))

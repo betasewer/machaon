@@ -643,7 +643,7 @@ class ProcessChamber:
     def __init__(self, index):
         self._index = index
         self._processes = {}
-        self.prelude_msgs = []
+        self.chamber_msgs = []
         self.handled_msgs = []
     
     def add(self, process):
@@ -652,9 +652,6 @@ class ProcessChamber:
         i = process.get_index()
         self._processes[i] = process
         return process
-    
-    def add_prelude_messages(self, messages):
-        self.prelude_msgs.extend(messages)
     
     @property
     def last_process(self):
@@ -712,43 +709,54 @@ class ProcessChamber:
     def count_process(self):
         return len(self._processes)
     
-    def handle_process_messages(self, count):
-        if not self._processes:
-            msgs = self.prelude_msgs[0:count]
-        else:
-            msgs = self.last_process.handle_post_message(count)
+    def handle_messages(self, count=None):
+        chmsgs = []
+        if self.chamber_msgs:
+            chmsgs = self.chamber_msgs[0:count]
+            if count is not None:
+                self.chamber_msgs = self.chamber_msgs[count:]
+            else:
+                self.chamber_msgs.clear()
+        
+        if count is not None:
+            count -= len(chmsgs)
+
+        prmsgs = self.last_process.handle_post_message(count)
+
+        msgs = chmsgs + prmsgs
         self.handled_msgs.extend(msgs)
         return msgs
 
+    def get_handled_messages(self): # -
+        return self.handled_msgs
+    
     def is_messages_consumed(self):
         if not self._processes:
             return True
+        if self.chamber_msgs:
+            return False
         return self.last_process.is_messages_consumed()
-
-    def get_process_messages(self): # -
-        return self.handled_msgs
     
-    def add_initial_prompt(self, *args, **kwargs):
-        self.prelude_msgs.append(ProcessMessage(*args, **kwargs))
-    
-    def get_title(self): # -
-        title = "Chamber"
-        title = "{}. {}".format(self._index, title)
-        return title
-    
-    def get_last_object_message(self):
-        return self.last_process.message
-    
-    def get_last_context(self): # -
-        return self.last_process.get_invocation_context()
+    def post_chamber_message(self, tag, value, **options):
+        self.chamber_msgs.append(ProcessMessage(tag=tag, text=value, **options))
 
     def get_index(self): # -
         return self._index
 
-    def get_input_string(self):
-        if not self._processes:
-            return ""
-        return self.last_process.message.source
+    def get_title(self): # -
+        title = "Chamber"
+        return "{}. {}".format(self._index, title)
+    
+    #def get_last_object_message(self):
+    #    return self.last_process.message
+    
+    #def get_last_context(self): # -
+    #    return self.last_process.get_invocation_context()
+
+    #def get_input_string(self):
+    #    if not self._processes:
+    #        return ""
+    #    return self.last_process.message.source
     
     def drop_processes(self, pred=None):
         """
@@ -777,11 +785,13 @@ class ProcessChamber:
                 reserved_msgs.append(msg)
         del self.handled_msgs[0:end]
         self.handled_msgs = reserved_msgs + self.handled_msgs
+
         # プロセスの削除
         pis = [x for x,t in piset.items() if t]
         for pi in pis:
             del self._processes[pi]
-        return pis
+        
+        return pis # 削除されたプロセスのリスト
 
     def start_process_sequence(self, app, messages):
         """
@@ -798,6 +808,7 @@ class ProcessChamber:
                     time.sleep(0.1)
                     continue
         
+        # プロセスを順に立ち上げるスレッドを始動
         thread = threading.Thread(name="ProcessSequenceLauncher", target=_thread, args=(self,), daemon=True)
         thread.start()
 
@@ -851,10 +862,10 @@ class DesktopChamber():
     def is_waiting_input(self): # -
         return False
 
-    def handle_process_messages(self):
+    def handle_messages(self):
         return []
 
-    def get_process_messages(self): #
+    def get_handled_messages(self): #
         msgs = []
         for item in self._objcol.pick_all():
             msg = ProcessMessage(object=item.object, deskname=self._index, tag="object-summary", sel=item.selected)
@@ -865,8 +876,8 @@ class DesktopChamber():
         title = "机{}. {}".format(self._index+1, self._name)
         return title
     
-    def get_input_string(self):
-        return ""
+    #def get_input_string(self):
+    #    return ""
 
 #
 #
@@ -892,7 +903,7 @@ class ProcessHive:
         newindex = self._nextindex
         chamber = ProcessChamber(newindex)
         if initial_prompt:
-            chamber.add_initial_prompt(initial_prompt, tag="message-em", nobreak=True)
+            chamber.post_chamber_message("message-em", initial_prompt, nobreak=True)
         self.chambers[newindex] = chamber
         self._nextindex += 1
         self.activate(newindex)
@@ -1023,14 +1034,14 @@ class ProcessHive:
         for cha in self.get_runnings():
             cha.interrupt()
 
-    def handle_process_messages(self, count):
+    def handle_messages(self, count):
         if not self._straychamber.is_messages_consumed():
-            for msg in self._straychamber.handle_process_messages(count):
+            for msg in self._straychamber.handle_messages(count):
                 yield msg
         for chm in self.chambers.values():
             if chm.is_messages_consumed():
                 continue
-            for msg in chm.handle_process_messages(count):
+            for msg in chm.handle_messages(count):
                 yield msg
 
     def compare_running_states(self, laststates):
