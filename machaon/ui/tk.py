@@ -453,9 +453,6 @@ class tkLauncher(Launcher):
 
                 bind_event(sequence, *wids)(command.fn)
     
-    def install_startup_message(self, msgs):
-        self.rootframe.after(100, self.app.run_message_sequence, msgs)
-
     #
     # ログの操作
     #
@@ -498,13 +495,8 @@ class tkLauncher(Launcher):
         if self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
     
-    def delete_screen_text(self, lineno=None, count=None, stick=False):
-        """ ログ欄からメッセージ行を削除する"""
-        if lineno is None:
-            lineno = -1
-        if count is None:
-            count = 1
-              
+    def delete_screen_text(self, lineno, count, stick=False):
+        """ ログ欄からメッセージ行を削除する"""              
         if lineno < 0:
             indices = ("end linestart {} lines".format(lineno-count), "end linestart {} lines".format(lineno))
         elif 0 < lineno:
