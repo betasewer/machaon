@@ -1,6 +1,6 @@
-import sys
 import ctypes
 import ctypes.wintypes as w
+from machaon.platforms.windows.ctypesx import Symbols
 
 GHND = 0x0042
 CF_UNICODETEXT = 13
