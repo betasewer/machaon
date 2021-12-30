@@ -8,7 +8,7 @@ from machaon.core.typedecl import (
     parse_type_declaration, make_conversion_from_value_type
 )
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
-from machaon.core.method import Method, MethodParameter, MethodResult, METHOD_FROM_INSTANCE, METHOD_FROM_FUNCTION
+from machaon.core.method import METHOD_INVOKEAS_BOUND_METHOD, METHOD_INVOKEAS_FUNCTION, Method, MethodParameter, MethodResult, instance_invokeas, make_method_from_value
 from machaon.core.symbol import (
     BadTypename,
     normalize_method_target, normalize_method_name, 
@@ -37,7 +37,7 @@ class BadObjectMemberInvocation(Exception):
     pass
 
 
-class UnresolvedObjectMemberInvocation(Exception):
+class RedirectUnresolvedInvocation(Exception):
     pass
 
 
@@ -769,6 +769,11 @@ class BasicInvocation():
         else:
             return obj.value
 
+    def _invoke(self, context: InvocationContext, *argvalues):
+        """ デバッグ用：引数を与えアクションを実行する """
+        args = [context.new_object(x) for x in argvalues]
+        return self.prepare_invoke(context, *args)._invokeaction()
+
     #
     # これらをオーバーロードする
     #
@@ -794,10 +799,10 @@ class BasicInvocation():
         return None # 不明
     
 
-#
-# 型に定義されたメソッドの呼び出し 
-#
 class TypeMethodInvocation(BasicInvocation):
+    """
+    型に定義されたメソッドを呼び出す 
+    """
     def __init__(self, type, method, modifier=0):
         super().__init__(modifier)
         self.type = type
@@ -878,15 +883,63 @@ class TypeMethodInvocation(BasicInvocation):
         else:
             p = self.method.get_param(index)
         return p
-    
 
-#
-# 名前だけで定義のわからないメソッドを呼び出す
-#
+
+class RedirectorInvocation(BasicInvocation):
+    def __init__(self, modifier):
+        super().__init__(modifier)
+        self._resolved = None
+
+    def redirect_prepare_invoke(context, *argobjects):
+        raise NotImplementedError()
+    
+    def must_be_resolved(self):
+        if self._resolved is None:
+            raise RedirectUnresolvedInvocation(self.display())
+
+    def is_task(self):
+        self.must_be_resolved()
+        return self._resolved.is_task()
+
+    def is_parameter_consumer(self):
+        self.must_be_resolved()
+        return self._resolved.is_parameter_consumer()
+
+    def get_action(self):
+        self.must_be_resolved()
+        return self._resolved.get_action()
+    
+    def get_result_spec(self):
+        self.must_be_resolved()
+        return self._resolved.get_result_spec()
+
+    def get_max_arity(self):
+        self.must_be_resolved()
+        return self._resolved.get_max_arity()
+
+    def get_min_arity(self):
+        self.must_be_resolved()
+        return self._resolved.get_min_arity()
+
+    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
+        self.must_be_resolved()
+        return self._resolved.get_parameter_spec(index)
+        
+    def prepare_invoke(self, context: InvocationContext, *argobjects):
+        entry = self.redirect_prepare_invoke(context, *argobjects)
+        entry.invocation = self # 呼び出し元をすり替える
+        return entry
+
+
 class InstanceMethodInvocation(BasicInvocation):
-    def __init__(self, attrname, modifier=0):
+    """
+    インスタンスに紐づいたメソッドを呼び出す
+    """
+    def __init__(self, attrname, modifier=0, minarg=0, maxarg=0xFFFF):
         super().__init__(modifier)
         self.attrname = normalize_method_target(attrname)
+        self.minarg = minarg
+        self.maxarg = maxarg
     
     def get_method_name(self):
         return self.attrname
@@ -894,103 +947,56 @@ class InstanceMethodInvocation(BasicInvocation):
     def get_method_doc(self):
         return ""
     
+    def get_max_arity(self):
+        return self.maxarg
+
+    def get_min_arity(self):
+        return self.minarg
+    
     def display(self):
         return ("InstanceMethod", self.attrname, self.modifier_name())
     
-    def query_method_from_value_type(self, value_type):
-        """ インスタンス型から推定してMethodオブジェクトを作成する """
-        fn = select_method_attr(value_type, self.attrname)
-        if is_bound_method(fn):
-            # クラスメソッドを弾く
-            return None
-        if fn is None:
-            return None
-        
-        mth = Method(self.attrname, flags=METHOD_FROM_INSTANCE)
-        mth.load_from_function(fn)
-        self._m = mth
-        return mth
-    
-    def query_method_from_instance(self, instance):
-        """ インスタンスからMethodオブジェクトを作成する """
-        method = select_method_attr(instance, self.attrname, nullary=True)
-        if method is None:
-            return None
-        
-        mth = Method(self.attrname, flags=METHOD_FROM_INSTANCE)
-        if isinstance(method, _nullary):
-            c = make_conversion_from_value_type(type(method.value))
-            mth.load_from_function(method, result_typename=c)
-        else:
-            mth.load_from_function(method)
-        return mth
-    
-    def resolve_instance_method(self, instance):
-        method = select_method_attr(instance, self.attrname, nullary=True)
-        if method is None:
+    def resolve_bound_method(self, instance):
+        if not hasattr(instance, self.attrname):
             raise BadInstanceMethodInvocation(type(instance), self.attrname)
-        return method
+        value = getattr(instance, self.attrname)
+        if callable(value):
+            return value
+        else:
+            return _GetProperty(value, self.attrname)
     
     def prepare_invoke(self, context, *argobjects):
         a = [self.resolve_object_value(x) for x in argobjects]
         instance, *args = a
-        method = self.resolve_instance_method(instance)
+        method = self.resolve_bound_method(instance)
         return InvocationEntry(self, method, args, {})
     
-#
-def select_method_attr(target, name, *, nullary=False):
-    if not hasattr(target, name):
-        return None
-    fn = getattr(target, name)
-    
-    if not callable(fn):
-        if nullary:
-            # 引数なしの関数に変換する
-            fn = _nullary(fn, name)
-        else:
-            return None
-    
-    return fn
 
-def is_bound_method(target):
-    if getattr(target, "__self__", None) is not None:
-        return True
-    return False        
-
-
-class _nullary:
-    @property
-    def __name__(self):
-        return self.name
-    def __repr__(self):
-        return "<nullary functor '{}'>".format(self.name)
+class _GetProperty:
     def __init__(self, v, n):
         self.value = v
         self.name = n
-    def __call__(s, self=None):
-        return s.value
+
+    @property
+    def __name__(self):
+        return self.name
+
+    def __repr__(self):
+        return "<GetProperty '{}'>".format(self.name)
+
+    def __call__(self, _this=None):
+        return self.value
     
-#
-# 関数を値から呼び出す
-#
+
 class FunctionInvocation(BasicInvocation):
-    def __init__(self, function, modifier=0, *, do_inspect=True):
+    """
+    インスタンスに紐づかない関数を呼び出す
+    """
+    def __init__(self, function, modifier=0, minarg=0, maxarg=0xFFFF):
         super().__init__(modifier)
         self.fn = function
-        self.arity = (0, 0xFFFF) # (min, max)
-        if do_inspect:
-            try:
-                sig = inspect.signature(self.fn)
-                minarg = 0
-                for p in sig.parameters.values():
-                    if p.default != inspect.Parameter.empty:
-                        break
-                    minarg += 1
-                if len(sig.parameters) < 1:
-                    raise BadFunctionInvocation(self.fn.__name__) # レシーバを受ける引数が最低必要
-                self.arity = (minarg-1, len(sig.parameters)-1) # レシーバの分を引く
-            except ValueError:
-                pass
+        self.minarg = minarg
+        self.maxarg = maxarg
 
     def get_method_name(self):
         return normalize_method_name(self.fn.__name__)
@@ -1002,77 +1008,39 @@ class FunctionInvocation(BasicInvocation):
         name = full_qualified_name(self.fn)
         return ("Function", name, self.modifier_name())
     
-    def get_method(self):
-        mth = Method(normalize_method_name(self.fn.__name__), flags=METHOD_FROM_FUNCTION)
-        mth.load_from_function(self.fn)
-        return mth
-    
     def prepare_invoke(self, invocations, *argobjects):
-        # そのままの引数で
-        args = [self.resolve_object_value(x) for x in argobjects]
+        args = [self.resolve_object_value(x) for x in argobjects] # そのまま実行
         return InvocationEntry(self, self.fn, args, {})
     
     def get_action(self):
         return self.fn
 
     def get_max_arity(self):
-        return self.arity[1]
+        return self.maxarg
 
     def get_min_arity(self):
-        return self.arity[0]
+        return self.minarg
         
     def get_result_spec(self):
         return MethodResult() # 値から推定する
 
 
-#
-class ObjectMemberGetterInvocation(BasicInvocation):
-    def __init__(self, name, typename, modifier=0):
-        super().__init__(modifier)
-        self.typename = typename
-        self.name = name
-    
-    def is_task(self):
-        return False
-
-    def is_parameter_consumer(self):
-        return False
-    
-    def get_action(self):
-        return None
-    
-    def get_result_spec(self):
-        decl = parse_type_declaration(self.typename)
-        return MethodResult(decl)
-    
-    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        return None
-
-    def get_max_arity(self):
-        return 0
-
-    def get_min_arity(self):
-        return 0
-
-    def prepare_invoke(self, _context, colarg):
-        if self.name == "#=":
-            obj = colarg.value.get_delegation()
-            if obj is None:
-                raise BadObjectMemberInvocation()
-        else:
-            elem = colarg.value.get(self.name)
-            if elem is None:
-                raise BadObjectMemberInvocation()
-            obj = elem.object
-        return InvocationEntry(self, _nullary(obj, self.name), (), {})
-
-
-#
-class ObjectMemberInvocation(BasicInvocation):
+class ObjectMemberInvocation(RedirectorInvocation):
+    """
+    ObjectCollectionのアイテムに対する呼び出し
+    """
     def __init__(self, name, modifier=0):
         super().__init__(modifier)
         self.name = name
-        self._resolved = None
+    
+    def get_method_name(self):
+        return self.name
+
+    def get_method_doc(self):
+        return "オブジェクトのメンバ'{}'".format(self.name)
+
+    def display(self):
+        return ("ObjectMember", self.name, self.modifier_name())
     
     def resolve(self, collection):
         if self._resolved is not None:
@@ -1103,64 +1071,71 @@ class ObjectMemberInvocation(BasicInvocation):
         
         self.must_be_resolved()
 
-    def get_method_name(self):
-        return self.name
-
-    def get_method_doc(self):
-        return "オブジェクトのメンバ'{}'".format(self.name)
-
-    def display(self):
-        return ("ObjectMember", self.name, self.modifier_name())
-    
-    def must_be_resolved(self):
-        if self._resolved is None:
-            raise UnresolvedObjectMemberInvocation(self.name)
-
-    def is_task(self):
-        self.must_be_resolved()
-        return self._resolved.is_task()
-
-    def is_parameter_consumer(self):
-        self.must_be_resolved()
-        return self._resolved.is_parameter_consumer()
-
-    def prepare_invoke(self, context: InvocationContext, *argobjects):
+    def redirect_prepare_invoke(self, context: InvocationContext, *argobjects):
         colarg, *args = argobjects
+        
         # 実行時に呼び出しを解決する
         self.resolve(colarg.value)
+
         # 呼び出しエントリを作成する
         if self.modifier & INVOCATION_DELEGATED_RECIEVER:        
             delg = colarg.value.get_delegation()
             if delg is None:
                 raise BadObjectMemberInvocation()
-            entry = self._resolved.prepare_invoke(context, delg, *args)
+            return self._resolved.prepare_invoke(context, delg, *args)
         else:
-            entry = self._resolved.prepare_invoke(context, colarg, *args)
-        entry.invocation = self # 呼び出し元をすり替える
-        return entry
+            return self._resolved.prepare_invoke(context, colarg, *args)
+
+
+class ObjectMemberGetterInvocation(BasicInvocation):
+    """
+    ObjectCollectionのアイテムを取得する
+    """
+    def __init__(self, name, typename, modifier=0):
+        super().__init__(modifier)
+        self.typename = typename
+        self.name = name
+    
+    def is_task(self):
+        return False
+
+    def is_parameter_consumer(self):
+        return False
     
     def get_action(self):
-        self.must_be_resolved()
-        return self._resolved.get_action()
+        return None
     
     def get_result_spec(self):
-        self.must_be_resolved()
-        return self._resolved.get_result_spec()
+        decl = parse_type_declaration(self.typename)
+        return MethodResult(decl)
+    
+    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
+        return None
 
     def get_max_arity(self):
-        self.must_be_resolved()
-        return self._resolved.get_max_arity()
+        return 0
 
     def get_min_arity(self):
-        self.must_be_resolved()
-        return self._resolved.get_min_arity()
+        return 0
 
-    def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        self.must_be_resolved()
-        return self._resolved.get_parameter_spec(index)
+    def prepare_invoke(self, _context, colarg):
+        collection = colarg.value
+        if self.name == "#=":
+            obj = collection.get_delegation()
+            if obj is None:
+                raise BadObjectMemberInvocation("#delegate")
+        else:
+            elem = collection.get(self.name)
+            if elem is None:
+                raise BadObjectMemberInvocation(self.name)
+            obj = elem.object
+        return InvocationEntry(self, _GetProperty(obj, self.name), (), {})
 
 
 class TypeConstructorInvocation(BasicInvocation):
+    """
+    型コンストラクタを呼び出す
+    """
     def __init__(self, typename, modifier):
         super().__init__(modifier)
         self._typename = typename
@@ -1208,6 +1183,9 @@ class TypeConstructorInvocation(BasicInvocation):
 
 
 class Bind1stInvocation(BasicInvocation):
+    """
+    第1引数を固定して呼び出す
+    """
     def __init__(self, method, arg, argtype, modifier=0):
         super().__init__(modifier)
         self._method = method # TypeMethodInvocation

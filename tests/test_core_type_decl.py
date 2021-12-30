@@ -1,7 +1,8 @@
+from os import stat
 import pytest
 from machaon.core.type import Type
 from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeUnion, PythonType
-from machaon.core.invocation import instant_context
+from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation, instant_context
 
 parse_ = parse_type_declaration
 
@@ -88,4 +89,275 @@ def test_decl_check():
     assert isinstance(t, PythonType)
     assert t.check_value_type(bytes)
     assert not t.check_value_type(str)
+
+#
+# PythonType
+#
+class PyType:
+    """
+    classmethod, instance bound -> method
+    staticmethod -> function
+
+    function (staticmethod, classmethod) -> FunctionInvocation
+    value (type bound) -> FunctionInvocation
+    value (instance bound) -> InstanceMethodInvocation
+    method -> InstanceMethodInvocation 
+    """
+    def __init__(self):
+        self.ivalue = 200
+        self._value = 100
+
+    def method2(self, x, y):
+        """ m x y """
+        return x * y * self._value
+
+    def method0(self):
+        """ m """
+        return self._value
+
+    """ - """
+    const = 10000
+
+    @property
+    def prop(self):
+        """ m """
+        return self._value
+
+    @classmethod
+    def clsmethod2(cls, x, y):
+        """ - """
+        return cls.const - x - y
+
+    @staticmethod
+    def stmethod2(x, y):
+        """ - """
+        return x + y
+
+    
+def test_enummethods_pythontype():
+    cxt = instant_context()
+
+    t = PythonType(PyType, "pytype")
+    
+    assert t.get_typename() == "pytype"
+    assert t.get_conversion() == "pytype"
+    assert t.is_selectable_instance_method()
+
+    methods = list(t.enum_methods())
+
+    instance = PyType()
+
+    # メソッド
+    name, m = methods[0]
+    assert name == ["method2"]
+    assert m.get_param_count() == 2
+    assert m.get_param(0).typename == "Any"
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation().get_min_arity() == 2
+    assert m.make_invocation().get_max_arity() == 2
+    assert m.make_invocation()._invoke(cxt, instance, 2, 3) == instance.method2(2, 3)
+    assert m.get_signature() == "x y -> Any"
+    
+    name, m = methods[1]
+    assert name == ["method0"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation().get_min_arity() == 0
+    assert m.make_invocation().get_max_arity() == 0
+    assert m.make_invocation()._invoke(cxt, instance) == instance.method0()
+    assert m.get_signature() == "-> Any"
+    
+    # classmethod
+    name, m = methods[2]
+    assert name == ["clsmethod2"]
+    assert m.get_param_count() == 2
+    assert m.get_param(0).typename == "Any"
+    assert isinstance(m.make_invocation(), FunctionInvocation)
+    assert m.make_invocation().get_min_arity() == 2
+    assert m.make_invocation().get_max_arity() == 2
+    assert m.make_invocation()._invoke(cxt, 4, 5) == PyType.clsmethod2(4, 5)
+    assert m.get_signature() == "x y -> Any"
+    
+    # staticmethod
+    name, m = methods[3]
+    assert name == ["stmethod2"]
+    assert m.get_param_count() == 2
+    assert m.get_param(0).typename == "Any"
+    assert isinstance(m.make_invocation(), FunctionInvocation)
+    assert m.make_invocation().get_min_arity() == 2
+    assert m.make_invocation().get_max_arity() == 2
+    assert m.make_invocation()._invoke(cxt, 4, 5) == PyType.stmethod2(4, 5)
+    assert m.get_signature() == "x y -> Any"
+    
+    # class value
+    name, m = methods[4]
+    assert name == ["const"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation().get_min_arity() == 0
+    assert m.make_invocation().get_max_arity() == 0
+    assert m.make_invocation()._invoke(cxt, instance) == PyType.const
+    assert m.get_signature() == "-> Int"
+    
+    # property
+    name, m = methods[5]
+    assert name == ["prop"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation()._invoke(cxt, instance) == instance.prop
+    assert m.get_signature() == "-> Any"
+    
+    # instance value
+    inv = InstanceMethodInvocation("ivalue")
+    assert inv.get_min_arity() == 0
+    assert inv.get_max_arity() == 0xFFFF
+    assert inv._invoke(cxt, instance) == instance.ivalue
+
+def test_selectmethod_pythontype():
+    cxt = instant_context()
+
+    t = PythonType(PyType, "pytype")
+
+    instance = PyType()
+
+    m = t.select_method("method2")
+    assert m is not None
+    assert m.get_name() == "method2"
+    assert m.get_param_count() == 2
+    assert m.make_invocation()._invoke(cxt, instance, 2, 3) == instance.method2(2, 3)
+
+    m = t.select_method("clsmethod2")
+    assert m is not None
+    assert m.get_name() == "clsmethod2"
+    assert m.get_param_count() == 2
+    assert m.make_invocation()._invoke(cxt, 2, 3) == PyType.clsmethod2(2, 3)
+
+    m = t.select_method("prop")
+    assert m is not None
+    assert m.get_name() == "prop"
+    assert m.get_param_count() == 0
+    assert m.make_invocation()._invoke(cxt, instance) == instance.prop
+
+
+class PySlotsType:
+    """ 
+    __dict__が無いケース：
+        __slots__を使う場合や、ビルトインクラスなど
+    """
+    __slots__ = ("first", "second")
+
+    def __init__(self) -> None:
+        self.first = 1
+        self.second = 2
+
+    def method0(self):
+        return 32
+
+    @property
+    def prop(self):
+        """ m """
+        return self.first
+
+    @classmethod
+    def clsmethod2(cls, x, y):
+        """ - """
+        return x - y
+
+    @staticmethod
+    def stmethod2(x, y):
+        """ - """
+        return x + y
+
+    const = 10000
+
+
+def test_enummethods_pythontype_2():
+    cxt = instant_context()
+
+    t = PythonType(PySlotsType, "pytype")
+    
+    methods = list(t.enum_methods())
+
+    instance = PySlotsType()
+
+    # メソッド
+    name, m = methods[0]
+    assert name == ["method0"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation().get_min_arity() == 0
+    assert m.make_invocation().get_max_arity() == 0
+    assert m.make_invocation()._invoke(cxt, instance) == instance.method0()
+    
+    # classmethod
+    name, m = methods[1]
+    assert name == ["clsmethod2"]
+    assert m.get_param_count() == 2
+    assert m.get_param(0).typename == "Any"
+    assert isinstance(m.make_invocation(), FunctionInvocation)
+    assert m.make_invocation().get_min_arity() == 2
+    assert m.make_invocation().get_max_arity() == 2
+    assert m.make_invocation()._invoke(cxt, 4, 5) == PySlotsType.clsmethod2(4, 5)
+    
+    # staticmethod
+    name, m = methods[2]
+    assert name == ["stmethod2"]
+    assert m.get_param_count() == 2
+    assert m.get_param(0).typename == "Any"
+    assert isinstance(m.make_invocation(), FunctionInvocation)
+    assert m.make_invocation().get_min_arity() == 2
+    assert m.make_invocation().get_max_arity() == 2
+    assert m.make_invocation()._invoke(cxt, 4, 5) == PySlotsType.stmethod2(4, 5)
+    
+    # class value
+    name, m = methods[3]
+    assert name == ["const"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation().get_min_arity() == 0
+    assert m.make_invocation().get_max_arity() == 0
+    assert m.make_invocation()._invoke(cxt, instance) == PyType.const
+    
+    # property
+    name, m = methods[4]
+    assert name == ["first"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation()._invoke(cxt, instance) == instance.first
+
+    # property
+    name, m = methods[5]
+    assert name == ["prop"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation()._invoke(cxt, instance) == instance.prop
+    
+    # property
+    name, m = methods[6]
+    assert name == ["second"]
+    assert m.get_param_count() == 0
+    assert isinstance(m.make_invocation(), InstanceMethodInvocation)
+    assert m.make_invocation()._invoke(cxt, instance) == instance.second
+
+
+from machaon.core.method import (
+    Method, enum_methods_from_type_and_instance
+)
+import types
+
+#for name, m in enum_methods_from_type_and_instance(PyType, PyType()):
+#    print("{:0X} | {}".format(m.flags, m.get_signature(fully=True)))
+
+def dirdir(x):
+    print(getattr(x, "__dict__", None))
+
+    for name in dir(x):
+        v = getattr(x, name)
+        print("{} = {}".format(name, v))
+        if isinstance(v, types.MethodType):
+            print("  Method")
+        elif isinstance(v, types.FunctionType):
+            print("  Function")
+        else:
+            print("  Other: " + type(v).__name__)
 

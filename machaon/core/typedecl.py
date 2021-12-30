@@ -76,13 +76,6 @@ class TypeProxy:
         raise NotImplementedError()
 
     # メソッド関連
-    def select_invocation(self, name):
-        """ メソッド呼び出しを返す
-        Returns:
-            Optional[BasicInvocation]:
-        """
-        raise NotImplementedError()
-
     def select_method(self, name):
         """ メソッドを名前で検索する
         Returns:
@@ -190,9 +183,6 @@ class RedirectProxy(TypeProxy):
     def get_document(self):
         return self.get_typedef().get_document()
     
-    def select_invocation(self, name):
-        return self.get_typedef().select_invocation(name)
-
     def select_method(self, name):
         return self.get_typedef().select_method(name)
 
@@ -355,28 +345,14 @@ class PythonType(DefaultProxy):
         return issubclass(valtype, self.type)
 
     def select_method(self, name):
-        inv = self.select_invocation(name)
-        if inv:
-            return inv.get_method()
-        return None
-
-    def select_invocation(self, name):
-        from machaon.core.invocation import FunctionInvocation, select_method_attr
-        value = select_method_attr(self.type, name)
-        if value:
-            return FunctionInvocation(value)
-        return None
+        from machaon.core.method import select_method_from_type_and_instance
+        meth = select_method_from_type_and_instance(self.type, self.type, name)
+        return meth
 
     def enum_methods(self):
-        from machaon.core.message import enum_selectable_attributes
-        from machaon.core.invocation import FunctionInvocation, select_method_attr
-        for name in enum_selectable_attributes(self.type):
-            value = select_method_attr(self.type, name)
-            if value:
-                inv = FunctionInvocation(value)
-                meth = inv.get_method()
-                if meth is not None:
-                    yield [name], meth 
+        from machaon.core.method import enum_methods_from_type_and_instance
+        for name, meth in enum_methods_from_type_and_instance(self.type, self.type):
+            yield [name], meth 
 
     def is_selectable_instance_method(self):
         return True 

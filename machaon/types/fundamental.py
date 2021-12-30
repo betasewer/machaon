@@ -5,7 +5,6 @@ import datetime
 from machaon.core.type import BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.object import Object
 from machaon.core.symbol import SIGIL_PYMODULE_DOT, full_qualified_name
-from machaon.core.message import enum_selectable_attributes
 
 
 # ----------------------------------------------------------
@@ -162,8 +161,9 @@ class AnyType():
         Returns:
             Sheet[ObjectCollection](name, type, value):
         """
+        from machaon.core.importer import enum_attributes
         items = []
-        for name in enum_selectable_attributes(v):
+        for name in enum_attributes(type(v), v):
             value = getattr(v, name, None)
             items.append({
                 "name" : name,

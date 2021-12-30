@@ -1,12 +1,16 @@
 from machaon.core.importer import ClassDescriber
 from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
-from typing import Any, Sequence, List, Dict, Union, Callable, ItemsView, Optional, DefaultDict, Tuple
+from typing import (
+    Any, Sequence, List, Dict, Union, Callable, 
+    Optional, Tuple, Generator
+)
 
+import types
 import inspect
 
 from machaon.core.symbol import normalize_method_target, normalize_method_name
 from machaon.core.docstring import parse_doc_declaration
-from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeConversionError
+from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeConversionError, make_conversion_from_value_type
 
 # imported from...
 # type
@@ -29,12 +33,13 @@ METHOD_HAS_RECIEVER_PARAM = 0x0400 # レシーバオブジェクトもパラメ�
 
 METHOD_PARAMETER_UNSPECIFIED = 0x1000
 METHOD_RESULT_UNSPECIFIED = 0x2000
+METHOD_UNSPECIFIED_MASK = 0x3000
 METHOD_KEYWORD_PARAMETER = 0x4000
-METHOD_UNSPECIFIED_MASK = 0xF000
 
-METHOD_FROM_INSTANCE = 0x10000 
-METHOD_FROM_FUNCTION = 0x20000
-METHOD_FROM_MASK = 0xF0000
+METHOD_INVOKEAS_FUNCTION = 0x10000
+METHOD_INVOKEAS_BOUND_METHOD = 0x20000
+METHOD_INVOKEAS_PROPERTY = 0x40000
+METHOD_INVOKEAS_MASK = 0xF0000
 
 METHOD_META_EXTRAARG = 0x100000
 
@@ -249,8 +254,9 @@ class Method():
         if default is MethodParameterNoDefault:
             default = None
             f |= PARAMETER_REQUIRED
-        decl = parse_type_declaration(typedecl)
-        p = MethodParameter(name, decl, doc, default, f)
+        if isinstance(typedecl, str):
+            typedecl = parse_type_declaration(typedecl)
+        p = MethodParameter(name, typedecl, doc, default, f)
         self.params.append(p)
     
     def get_params(self):
@@ -494,12 +500,14 @@ class Method():
         
         self.flags |= METHOD_DECL_LOADED
             
-    def load_from_function(self, fn, self_typename=None, result_typename=None):
+    def load_from_function(self, fn, *, result_typename=None, action=None, self_to_be_bound=False):
         """
         関数オブジェクトから引数を解析しアクションとしてロードする。
         Params:
             fn(Any): 関数オブジェクト
-            self_typename(str): *インスタンスの（Pythonの）型名
+            result_typename(str): 返り値の型指定
+            action(Any): 別のアクションインスタンスを使用する場合
+            self_to_be_bound(bool): selfの分の引数を1つ取り除く
         """
         if self.flags & METHOD_LOADED:
             return 
@@ -507,67 +515,121 @@ class Method():
         self.doc = fn.__doc__ or ""
         
         # 戻り値
-        if result_typename is None:
-            self.add_result("Any") # 不明、値から推定する
-        else:
-            self.add_result(result_typename)
+        self.add_result(result_typename or "Any") # 不明、値から推定する
 
         # シグネチャを関数から取得
         try:
             sig = inspect.signature(fn)
         except ValueError:
             # ビルトイン関数なので情報を取れなかった
-            if self_typename:
-                # 第一引数が指定されていれば設定しておく
-                self.add_parameter("self", self_typename, flags=PARAMETER_REQUIRED)
-                self.flags |= METHOD_HAS_RECIEVER_PARAM
-            else:
-                self.flags |= METHOD_PARAMETER_UNSPECIFIED
+            self.flags |= METHOD_PARAMETER_UNSPECIFIED
             self.flags |= METHOD_LOADED
             return 
         
         # 引数
         for i, p in enumerate(sig.parameters.values()):
-            flags = 0
+            if i==0 and self_to_be_bound:
+                continue # 第一引数を飛ばす
             
-            if i==0 and self_typename:
-                typename = self_typename
-            else:
-                typename = "Any" # 型注釈から推定できるかもしれないが、不明とする
-
+            typename = "Any" # 型注釈から推定できるかもしれないが、不明とする
             default, f = pick_parameter_default_value(p)        
 
             if f & PARAMETER_KEYWORD:
                 self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                break # 未対応
-            flags |= f
+                break # キーワード引数には未対応
 
-            self.add_parameter(p.name, typename, "", default, flags=flags)
+            self.add_parameter(p.name, typename, "", default, flags=f)
         
-        self._action = fn
-        self.target = "function:{}".format(fn.__name__)
+        target = fn.__name__
+
+        self._action = action or fn
+        self.target = target
         self.flags |= METHOD_LOADED
 
-    def load_from_string(self, doc, action):
+    def load_from_dict(self, dictionary):
         """ 
-        構文文字列と実装オブジェクトを直接指定してロードする。
+        辞書からメソッド定義をロードする。
         Params:
-            doc(str): 構文文字列。@指定が無ければ、@methodとみなす
-            action(Any): 実装オブジェクト
+            dictionary(Dict[str, Any]): 定義辞書
         """
         if self.flags & METHOD_LOADED:
             return 
         
-        doc = doc.strip()
-        if not doc.startswith("@"):
-            doc = "@method\n" + doc
-        
-        self.parse_syntax_from_docstring(doc)
+        action = None
+        doc = ""
+        decls = []
+        for key, value in dictionary.items():
+            if key == "Document" or key == "Doc":
+                doc = value.strip()
 
+            elif key == "Params" or key == "Args":
+                for i, pdef in enumerate(value, start=1):
+                    name = "param{}".format(i)
+                    typename = "Any"
+                    default = None
+                    doc = ""
+                    for k, v in pdef.items():
+                        if key == "Name":
+                            name = v
+                        elif key == "Document" or key == "Doc":
+                            doc = v
+                        elif k == "Typename":
+                            typename = v
+                        elif k == "Default":
+                            default = v
+                    # TODO: 可変長引数など
+                    self.add_parameter(name, typename, doc, default)
+
+            elif key == "Results" or key == "Returns":
+                typename = None
+                doc = ""
+                for k, v in value.items():
+                    if key == "Document" or key == "Doc":
+                        doc = v
+                    elif k == "Typename":
+                        typename = v
+                self.add_result(typename, doc)
+
+            elif key == "Action":
+                action = value
+
+            elif key == "Decl" or key == "Declaration":
+                decls = value.split()
+
+            else:
+                raise BadMethodDeclaration("無効な要素が定義辞書にあります: {}".format(key))
+
+        if action is None:
+            raise BadMethodDeclaration()
+
+        self.doc = doc
+        self.load_declaration_properties(decls)
         self._action = action
-        self.target = "function:{}".format(str(action))
+        self.target = "<loaded from dict>".format()
         self.flags |= METHOD_LOADED
-    
+
+    def make_invocation(self, mods=0, type=None):
+        """ 適した呼び出しオブジェクトを作成する """
+        if self.flags & METHOD_INVOKEAS_BOUND_METHOD or self.flags & METHOD_INVOKEAS_PROPERTY:
+            if not isinstance(self._action, InstanceBoundAction):
+                raise ValueError("InstanceBoundAction must be specified when METHOD_INVOKEAS_BOUND_METHOD is set")
+            ami = self.get_required_argument_min()
+            amx = self.get_acceptable_argument_max()
+            from machaon.core.invocation import InstanceMethodInvocation
+            return InstanceMethodInvocation(self._action.target, mods, ami, amx)
+
+        elif self.flags & METHOD_INVOKEAS_FUNCTION:
+            ami = self.get_required_argument_min()
+            amx = self.get_acceptable_argument_max()
+            from machaon.core.invocation import FunctionInvocation
+            return FunctionInvocation(self._action, mods, ami, amx)
+
+        else:
+            if type is None:
+                raise ValueError("type argument must be specified")
+            from machaon.core.invocation import TypeMethodInvocation
+            return TypeMethodInvocation(type, self, mods)
+
     def get_signature(self, *, fully=False, self_typename=None):
         """ @method alias-name [signature]
         メソッドの構文を返す。
@@ -946,3 +1008,144 @@ def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Metho
     method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey)
     method.load_declaration_properties(decl.props)
     return method, decl.aliases
+
+#
+#
+# インスタンスメソッド
+#
+#
+class InstanceBoundAction():
+    def __init__(self, target):
+        self.target = target
+
+    def __call__(self, *args):
+        raise ValueError("未解決のアクションのため呼び出せません")
+
+
+def make_method_from_value(value, name, invokeas):
+    """ 値からメソッドオブジェクトを作成する """
+    m = Method(name, flags=invokeas)
+    if invokeas == METHOD_INVOKEAS_FUNCTION:
+        m.load_from_function(value)
+    elif invokeas == METHOD_INVOKEAS_BOUND_METHOD:
+        if getattr(value, "__self__", None) is not None:
+            m.load_from_function(value, action=InstanceBoundAction(name))
+        else:
+            m.load_from_function(value, action=InstanceBoundAction(name), self_to_be_bound=True)
+    elif invokeas == METHOD_INVOKEAS_PROPERTY:
+        if inspect.ismethoddescriptor(value) or inspect.isdatadescriptor(value):
+            tn = "Any"
+        else:
+            tn = make_conversion_from_value_type(type(value))
+        m.load_from_dict({
+            "Params" : [],
+            "Returns": { "Typename": tn },
+            "Action" : InstanceBoundAction(name)
+        })
+    return m
+
+
+def classdict_invokeas(value):
+    """ ディスクリプタが適用される前の値から判定する """
+    if isinstance(value, classmethod):
+        return METHOD_INVOKEAS_FUNCTION
+    elif isinstance(value, staticmethod):
+        return METHOD_INVOKEAS_FUNCTION
+    elif isinstance(value, property):
+        return METHOD_INVOKEAS_PROPERTY
+    elif isinstance(value, (types.FunctionType, types.MethodType)):
+        return METHOD_INVOKEAS_BOUND_METHOD
+    elif callable(value):
+        if getattr(value, "__objclass__", None) is not None:
+            return METHOD_INVOKEAS_BOUND_METHOD
+        else:
+            return METHOD_INVOKEAS_FUNCTION
+    else:
+        return METHOD_INVOKEAS_PROPERTY
+
+def classdir_invokeas(value):
+    """ value_typeのdirの結果から推定する """
+    if isinstance(value, types.FunctionType):
+        # メソッドあるいはstaticmethodだが、
+        # 二つを区別する方法がわからないので、メソッドに決め打ちする。
+        return METHOD_INVOKEAS_BOUND_METHOD
+    elif isinstance(value, types.MethodType):
+        # classmethod
+        return METHOD_INVOKEAS_FUNCTION
+    else:
+        # その他すべて
+        return METHOD_INVOKEAS_PROPERTY
+
+def instance_invokeas(value, this):
+    """ インスタンスの値から判定する """
+    if isinstance(value, (types.FunctionType, types.BuiltinFunctionType)):
+        # staticmethod
+        return METHOD_INVOKEAS_FUNCTION
+    elif isinstance(value, (types.MethodType, types.BuiltinMethodType)):
+        if getattr(value, "__self__", None) is this:
+            # メソッド
+            return METHOD_INVOKEAS_BOUND_METHOD
+        else:
+            # classmethod
+            return METHOD_INVOKEAS_FUNCTION
+    else:
+        # その他すべて
+        return METHOD_INVOKEAS_PROPERTY
+
+
+class _InvokeasTypeDict():
+    """
+    メソッドや属性の呼び出し方法を推定する
+    """
+    def __init__(self, value_type):
+        self._classdict = None
+        self._dirdict = None
+
+        classdict = getattr(value_type, "__dict__", None)
+        if classdict is not None:
+            self._dict = classdict
+            self._lookup = classdict_invokeas
+        else:
+            self._dict = dir(value_type)
+            self._lookup = classdir_invokeas
+
+    def get(self, name):
+        """ 値の型から呼び出し方法を判別する """
+        if name not in self._dict:
+            return None
+        return self._lookup(self._dict[name])
+
+
+def select_method_from_type_and_instance(value_type, value, name) -> Optional[Method]:
+    """
+    インスタンスでセレクタとして利用可能なメソッドを指定して得る
+    """   
+    invasdict = _InvokeasTypeDict(value_type)
+    invtype = invasdict.get(name)
+    if invtype is None:
+        return None
+
+    if not hasattr(value, name):
+        return None
+    attr = getattr(value, name)
+    return make_method_from_value(attr, name, invtype)  
+
+
+def enum_methods_from_type_and_instance(value_type, value) -> Generator[Tuple[str, Method], None, None]:
+    """
+    インスタンスでセレクタとして利用可能なすべてのメソッドを列挙する
+    """
+    invasdict = _InvokeasTypeDict(value_type)
+
+    from machaon.core.importer import enum_attributes
+    for name, attr in enum_attributes(value_type, value):
+        invtype = invasdict.get(name)
+        if invtype is None:
+            if callable(attr):
+                invtype = METHOD_INVOKEAS_BOUND_METHOD
+            else:
+                invtype = METHOD_INVOKEAS_PROPERTY
+
+        m = make_method_from_value(attr, name, invtype)   
+        yield name, m
+

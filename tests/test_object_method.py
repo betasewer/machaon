@@ -167,10 +167,23 @@ def test_load_from_dict():
     cxt = instant_context()
     Dog = cxt.define_type({
         "Typename" : "Dog",
-        "name" : ("Returns: Str", lambda x: "gabliel"),
-        "type" : ("Returns: Str", lambda x: "Shiba"),
-        "sex" : ("Returns: Str", lambda x: "male"),
-        "age" : ("Returns: Int", lambda x: 2),
+        "Methods" : [{
+            "Name" : "name",
+            "Returns" : { "Typename" : "Str" },
+            "Action" : lambda x: "gabliel"
+        },{
+            "Name" : "type",
+            "Returns" : { "Typename" : "Str" },
+            "Action" : lambda x: "Shiba"
+        },{
+            "Name" : "sex",
+            "Returns" : { "Typename" : "Str" },
+            "Action" : lambda x: "male"
+        },{
+            "Name" : "age",
+            "Returns" : { "Typename" : "Int" },
+            "Action" : lambda x: 2
+        }]
     })
     m = Dog.select_method("name")
     assert m.is_loaded()
