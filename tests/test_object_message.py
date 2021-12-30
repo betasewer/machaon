@@ -223,10 +223,23 @@ def test_parse_function():
 
         fundamental_type.define({
             "Typename" : "Dog",
-            "name" : ("Returns: Str", lambda x: "lucky"),
-            "type" : ("Returns: Str", lambda x: "Golden Retriever"),
-            "sex" : ("Returns: Str", lambda x: "female"),
-            "age" : ("Returns: Int", lambda x: 3),
+            "Methods" : [{
+                "Name" : "name",
+                "Returns" : { "Typename" : "Str" },
+                "Action" : lambda x: "lucky"
+            },{
+                "Name" : "type",
+                "Returns" : { "Typename" : "Str" },
+                "Action" : lambda x: "Golden Retriever"
+            },{
+                "Name" : "sex",
+                "Returns" : { "Typename" : "Str" },
+                "Action" : lambda x: "female"
+            },{
+                "Name" : "age",
+                "Returns" : { "Typename" : "Int" },
+                "Action" : lambda x: 3
+            }]
         })
 
         subcontext = context.inherit()

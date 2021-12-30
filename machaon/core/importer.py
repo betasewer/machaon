@@ -387,45 +387,53 @@ class ClassDescriber():
         return getattr(self.klass, name, None)
 
     def enum_attributes(self):
-        # 定義順でメソッドを列挙する
-        members = []
+        yield from enum_attributes(self.klass, self.klass)
+
+#
+#
+#
+def enum_attributes(value_type, value):
+    # 定義順でメソッドを列挙する    
+    ranks = {}
+    top = 1
+    bases = [value_type]
+    while bases:
+        kls = bases.pop()
+        ranks[full_qualified_name(kls)] = top 
+        for base in kls.__bases__:
+            if base is not object:
+                bases.append(base)
+        top += 1
+
+    members = []
+    nocodemembers = []
+    for attrname in dir(value):
+        if attrname.startswith("__"):
+            continue
+
+        attr = getattr(value, attrname, None)
+        if attr is None:
+            continue
         
-        ranks = {}
-        top = 1
-        bases = [self.klass]
-        while bases:
-            kls = bases.pop()
-            ranks[full_qualified_name(kls)] = top 
-            for base in kls.__bases__:
-                if base is not object:
-                    bases.append(base)
-            top += 1
+        code = getattr(attr, "__code__", None)
+        if code is None:
+            nocodemembers.append((attrname, attr))
+            continue
+        
+        # クラス名を取り出す
+        qual = full_qualified_name(attr)
+        if "." in qual:
+            klass = qual.rpartition(".")[0]
+        else:
+            klass = None
+        qualkey = ranks.get(klass, 0xFF) # クラスの優先度に変換する
+        key = (qualkey, code.co_firstlineno) # 行番号を付加する
+        members.append((key, attrname, attr))
 
-        for attrname in dir(self.klass):
-            if attrname.startswith("__"):
-                continue
+    members.sort(key=lambda x:x[0])
+    for _key, attrname, attr in members:
+        yield attrname, attr
 
-            attr = getattr(self.klass, attrname, None)
-            if attr is None:
-                continue
-            
-            code = getattr(attr, "__code__", None)
-            if code is None:
-                continue
-            
-            # クラス名を取り出す
-            qual = full_qualified_name(attr)
-            if "." in qual:
-                klass = qual.rpartition(".")[0]
-            else:
-                klass = None
-            qualkey = ranks.get(klass, 0xFF) # クラスの優先度に変換する
-            key = (qualkey, code.co_firstlineno) # 行番号を付加する
-            members.append((key, attrname, attr))
-
-        members.sort(key=lambda x:x[0])
-
-        for _key, attrname, attr in members:
-            yield attrname, attr
-
+    for attrname, attr in nocodemembers:
+        yield attrname, attr
 

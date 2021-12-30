@@ -16,7 +16,7 @@ from machaon.core.symbol import (
     QUOTE_ENDPARENS
 )
 from machaon.core.object import Object
-from machaon.core.method import MethodParameter
+from machaon.core.method import MethodParameter, enum_methods_from_type_and_instance
 from machaon.core.invocation import (
     INVOCATION_FLAG_PRINT_STEP,
     INVOCATION_FLAG_RAISE_ERROR,
@@ -32,6 +32,7 @@ from machaon.core.invocation import (
     LOG_MESSAGE_END,
     LOG_RUN_FUNCTION
 )
+from machaon.core.importer import enum_attributes
 
 
 #
@@ -461,10 +462,9 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     using_type_method = typetraits is not None
     if using_type_method:
         # 型メソッドを参照
-        inv = typetraits.select_invocation(name)
-        if inv is not None:
-            inv.set_modifier(modbits)
-            return inv
+        meth = typetraits.select_method(name)
+        if meth is not None:
+            return meth.make_invocation(modbits, typetraits)
         
         # レシーバがオブジェクト集合の場合はメンバ参照に変換
         if typetraits.is_object_collection_type():
@@ -484,7 +484,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
             raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.get_typename()))
     
     # インスタンスメソッド
-    return InstanceMethodInvocation(name, modbits)
+    return InstanceMethodInvocation(name, modifier=modbits)
 
 #
 # 
@@ -513,36 +513,18 @@ def enum_selectable_method(typetraits, instance=None):
     if not typetraits.is_selectable_instance_method():
         return
     
-    # インスタンスメソッド
+    # インスタンスメソッドの列挙
     if instance is not None:
-        target = instance
-        def query_method(inv):
-            return inv.query_method_from_instance(instance)
+        valtype = type(instance)
     else:
         valtype = typetraits.get_value_type()
-        target = valtype
-        def query_method(inv):
-            return inv.query_method_from_value_type(valtype)
-    
-    for name in enum_selectable_attributes(target):
-        if typetraits.select_method(name) is not None:
-            # TypeMethodと被りがある場合はスキップ
-            continue
-        try:
-            meth = query_method(InstanceMethodInvocation(name))
-        except Exception as e:
-            yield [name], e
-        else:
-            if meth is not None:
-                yield [name], meth
+        instance = valtype
 
-
-def enum_selectable_attributes(instance):
-    for name in dir(instance):
-        if name.startswith("_"):
-            continue
-        yield name
-
+    for name, meth in enum_methods_from_type_and_instance(valtype, instance):
+        # TypeMethodと被りがある場合はスキップ
+        if typetraits.select_method(meth.name) is not None:
+            continue        
+        yield [name], meth
 
 
 # --------------------------------------------------------------------

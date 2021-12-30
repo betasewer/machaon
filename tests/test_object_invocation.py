@@ -4,7 +4,6 @@ from machaon.core.invocation import (
     InvocationEntry, BasicInvocation, TypeMethodInvocation, 
     InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
     Bind1stInvocation, 
-    select_method_attr,
     instant_context
 )
 from machaon.core.object import ObjectCollection, Object
@@ -34,40 +33,28 @@ def test_function():
     assert get_first_result(ent)
     assert get_first_result(ent).value == plus2mul(2,3)
 
-    inv = FunctionInvocation(divide, BasicInvocation.MOD_REVERSE_ARGS)
+    inv = FunctionInvocation(divide, modifier=BasicInvocation.MOD_REVERSE_ARGS)
     ent = InvocationEntry(inv, inv.get_action(), (4,2), {})
     ent.invoke(cxt)
     assert get_first_result(ent)
     assert get_first_result(ent).value == 2/4
 
     
-def test_instance_method():
+def test_bound_method():
     cxt = instant_context()
     StrType = cxt.get_type("Str")
 
     # メソッドの呼び出し
     up = InstanceMethodInvocation("upper")
     assert hasattr("abc", "upper")
-    assert select_method_attr("abc", "upper", nullary=True) is not None
-    assert up.resolve_instance_method("abc") is not None
+    assert up.resolve_bound_method("abc") is not None
     assert up.prepare_invoke(cxt, StrType.new_object("abc"))._invokeaction() == "ABC"
-
-    meth = up.query_method_from_instance("abc")
-    assert meth.get_name() == "upper"
-    assert meth.get_param_count() == 0
-    assert meth.get_result().get_typename() == "Any"
 
     # 値の呼び出し
     string = InstanceMethodInvocation("string")
     m = re.match("[a-zA-Z]", "abc")
-    assert select_method_attr(m, "string", nullary=True) is not None
-    assert string.resolve_instance_method(m) is not None
+    assert string.resolve_bound_method(m) is not None
     assert string.prepare_invoke(cxt, cxt.get_py_type(type(m)).new_object(m))._invokeaction() == "abc"
-
-    meth = string.query_method_from_instance(m)
-    assert meth.get_name() == "string"
-    assert meth.get_param_count() == 1
-    assert meth.get_result().get_typename() == "Str"
 
 
 

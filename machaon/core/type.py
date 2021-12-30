@@ -193,12 +193,6 @@ class Type(TypeProxy):
                 raise MethodLoadError(e, meth.name).with_traceback(e.__traceback__)
         return meth
     
-    def select_invocation(self, name):
-        from machaon.core.invocation import TypeMethodInvocation
-        meth = self.select_method(name)    
-        if meth:
-            return TypeMethodInvocation(self, meth)
-
     def enum_methods(self):
         """
         Yields:
@@ -489,19 +483,20 @@ class Type(TypeProxy):
         for key, value in describer.items():
             if key == "Typename":
                 self.typename = value
-            elif key == "Doc":
+            elif key == "Doc" or key == "Document":
                 self.doc = value
             elif key == "ValueType":
                 self.value_type = value
+            elif key == "Methods":
+                for mdict in value:
+                    name = mdict.pop("Name", None)
+                    if name is None:
+                        raise BadTypeDeclaration("Name でメソッド名を指定してください")
+                    mth = Method(name)
+                    mth.load_from_dict(mdict)
+                    self.add_method(mth)
             else:
-                # メソッド定義
-                if len(value)>1 and callable(value[-1]):                      
-                    *docs, action = value
-                    mth = Method(key)
-                    mth.load_from_string("\n".join(docs), action)
-                else:
-                    raise BadTypeDeclaration("任意個のドキュメント文字列と、一つの関数のタプルが必要です")
-                self.add_method(mth)
+                raise BadTypeDeclaration("定義の辞書の中に無効なメンバがあります: {}".format(key))
 
 
 class TypeDefinition():
