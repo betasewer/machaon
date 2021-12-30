@@ -970,6 +970,19 @@ class _nullary:
     def __call__(s, self=None):
         return s.value
     
+class _nullary_fn:
+    @property
+    def __name__(self):
+        return self.name
+    def __repr__(self):
+        return "<nullary functor '{}'>".format(self.name)
+    def __init__(self, v, n):
+        self.fn = v
+        self.name = n
+    def __call__(s, self=None):
+        return s.fn()
+    
+    
 #
 # 関数を値から呼び出す
 #
@@ -987,8 +1000,10 @@ class FunctionInvocation(BasicInvocation):
                         break
                     minarg += 1
                 if len(sig.parameters) < 1:
-                    raise BadFunctionInvocation(self.fn.__name__) # レシーバを受ける引数が最低必要
-                self.arity = (minarg-1, len(sig.parameters)-1) # レシーバの分を引く
+                    self.fn = _nullary_fn(self.fn, self.fn.__name__)
+                    self.arity = (0, 0)
+                else:
+                    self.arity = (minarg-1, len(sig.parameters)-1) # レシーバの分を引く
             except ValueError:
                 pass
 

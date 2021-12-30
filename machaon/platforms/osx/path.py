@@ -1,5 +1,5 @@
 import os
-from machaon.platforms import common_known_names
+from machaon.platforms.common import common_known_names
 
 def get_known_path(name: str, param: str = "", approot = None):
     """
@@ -65,9 +65,9 @@ def has_hidden_attribute(path):
     spec = importlib.util.find_spec("Foundation")
     if spec is None:
         return False
-    Foundation = importlib.util.module_from_spec(spec)
-    url = Foundation.NSURL.fileURLWithPath_(path)
-    result = url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)
+    from Foundation import NSURL, NSURLIsHiddenKey
+    url = NSURL.fileURLWithPath_(path)
+    result = url.getResourceValue_forKey_error_(None, NSURLIsHiddenKey, None)
     return result[1]
     
 def which_path(name):

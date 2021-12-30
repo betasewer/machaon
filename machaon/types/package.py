@@ -169,6 +169,7 @@ class AppPackageType:
     # 
     def display_download_and_install(self, app, package:Package, operation):
         for state in operation(package):
+            print(state)
             # ダウンロード中
             if state == PackageManager.DOWNLOAD_START:
                 url = package.get_source().get_download_url()

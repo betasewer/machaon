@@ -553,7 +553,7 @@ class KeybindMap():
         if machaon.platforms.is_windows():
             pltkey = "win"
         elif machaon.platforms.is_osx():
-            pltkey = "osx"
+            pltkey = "mac"
         else:
             raise ValueError("サポートされていないプラットフォームです")
         

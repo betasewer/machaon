@@ -340,7 +340,7 @@ class Path():
         return self
     
     def search(self, context, app, predicate, depth=3):
-        """ @method task context
+        """ @task context
         ファイルを再帰的に検索する。
         Params:
             predicate(Function): 述語関数
