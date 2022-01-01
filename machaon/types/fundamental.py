@@ -62,39 +62,47 @@ class TypeType():
         value = type.construct(context, s)
         return Object(type, value)
 
-    def help(self, type, context, value=None):
+    def help(self, typ, context, value=None):
         """ @method context
         型の説明、メソッド一覧を表示する。
         """
         docs = []
-        docs.append(type.get_conversion())
-        docs.extend(type.get_document().splitlines())
-        docs.append("［実装］\n{}".format(type.get_describer_qualname()))
+        docs.append("{} [{}]".format(typ.get_conversion(), type(typ).__name__))
+        docs.extend(typ.get_document().splitlines())
+        docs.append("［実装］\n{}".format(typ.get_describer_qualname()))
         docs.append("［メソッド］")
         context.spirit.post("message", "\n".join(docs))
         # メソッドの表示
-        meths = self.methods(type, context, value)
-        meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection](names,doc,signature)")
+        meths = self.methods(typ, context, value)
+        meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection](names,doc,signature,source)")
         meths_sheet.pprint(context.spirit)
 
     def methods(self, typ, context, instance=None):
         '''@method context
         使用可能なメソッドを列挙する。
         Returns:
-            Sheet[ObjectCollection](names,doc,signature): メソッドのリスト
+            Sheet[ObjectCollection](names,doc,signature,source): メソッドのリスト
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
         for names, meth in enum_selectable_method(typ, instance):
+            source = "user"
+            if meth.is_from_class_member():
+                source = "class"
+            elif meth.is_from_instance_member():
+                source = "instance"
+
             if isinstance(meth, Exception):
                 helps.append({
                     "names" : context.new_object(names),
                     "doc" : "!{}: {}".format(type(meth).__name__, meth),
-                    "signature" : ""
+                    "signature" : "",
+                    "source" : ""
                 })
             else:
                 helps.append({
                     "names" : context.new_object(names),
+                    "source" : context.new_object(source),
                     "#delegate" : context.new_object(meth, type="Method")
                 })
         return helps

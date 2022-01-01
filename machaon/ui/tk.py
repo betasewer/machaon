@@ -153,6 +153,14 @@ def menukeytag(index):
     return "chm{}".format(index)
 
 #
+class TkTextDump:
+    def __init__(self, dump):
+        self.dump = dump
+        
+    def items(self):
+        return self.dump
+
+#
 HANDLE_MESSAGE_MAX = 10
 APP_UPDATE_RATE = 100
 TK_UPDATE_RATE = 10
@@ -517,10 +525,10 @@ class tkLauncher(Launcher):
         if stick and self.does_stick_bottom.get():
             self.log.yview_moveto(1.0)
 
-    def replace_screen_text(self, text):
+    def replace_screen_text(self, textdump):
         """ ログ欄をクリアし別のメッセージで置き換える 
         Params:
-            text (TextDump):
+            text (TkTextDump):
         """
         self.log.configure(state='normal')
         self.log.delete(1.0, tk.END)
@@ -538,7 +546,7 @@ class tkLauncher(Launcher):
                     self.log.window_create(tk.END, window=value)
                 elif key == "mark":
                     self.log.mark_set(value, index)
-                elif key == "image":
+                else:
                     print("unsupported text element '{}': {}".format(key, value))
 
         self.log.configure(state='disabled')
@@ -548,10 +556,10 @@ class tkLauncher(Launcher):
         else:
             self.log.yview_moveto(0) # ログ上端へスクロール
     
-    def save_screen_text(self):
+    def dump_screen_text(self):
         """ エディタの内容物をダンプする """
         dumps = self.log.dump(1.0, tk.END)
-        return TextDump(dumps)
+        return TkTextDump(dumps)
 
     def drop_screen_text(self, process_ids):
         """ 指定のプロセスに関連するテキストの区画を削除する """
@@ -1313,14 +1321,6 @@ def screen_select_object(ui, wnd, charindex, objtag, sel):
             wnd.tag_remove("object-selection", beg, end) # なぜか一括削除に対応していない
         wnd.delete(str(btnchar), str(btnchar.shifted(char=1)))
         wnd.insert(str(btnchar), "O", btntags)
-
-
-class TextDump():
-    def __init__(self, d):
-        self.dump = d
-    
-    def items(self):
-        return self.dump
 
 
 def get_tk_window_handle(wnd):

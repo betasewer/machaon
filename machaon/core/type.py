@@ -14,7 +14,7 @@ from machaon.core.typedecl import (
     METHODS_BOUND_TYPE_INSTANCE
 )
 from machaon.core.method import (
-    BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod,
+    BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, make_method_from_dict,
     make_method_prototype, meta_method_prototypes, 
     Method, MetaMethod
 )
@@ -489,11 +489,7 @@ class Type(TypeProxy):
                 self.value_type = value
             elif key == "Methods":
                 for mdict in value:
-                    name = mdict.pop("Name", None)
-                    if name is None:
-                        raise BadTypeDeclaration("Name でメソッド名を指定してください")
-                    mth = Method(name)
-                    mth.load_from_dict(mdict)
+                    mth = make_method_from_dict(mdict)
                     self.add_method(mth)
             else:
                 raise BadTypeDeclaration("定義の辞書の中に無効なメンバがあります: {}".format(key))

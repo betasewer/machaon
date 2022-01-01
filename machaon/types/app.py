@@ -85,16 +85,6 @@ class RootObject:
         '''
         return list(self.context.root.enum_packages())
     
-    def chamber(self):
-        ''' @method
-        現在のチャンバーを取得する。
-        Params:
-        Returns:
-            AppChamber: プロセス
-        '''
-        chm = self.context.root.chambers().get_active()
-        return chm
-    
     def context_(self):
         ''' @method alias-name [context]
         現在の呼び出しコンテキストを取得する。
@@ -162,6 +152,29 @@ class RootObject:
             })
         return rets
     
+    def dump_screen(self, app, path):
+        """ @task
+        アクティブなチャンバーに表示されたテキストをファイルに書き出す。
+        Params:
+                path(Path): 出力ファイル名
+        """
+        t = self.context.root.get_ui().get_screen_texts()
+        with open(path.get(), "w", encoding="utf-8") as fo:
+            fo.write(t)
+        
+    def inspect_message(self, app):
+        """ @task
+        アクティブなチャンバーの処理が済んだメッセージを詳細な形式で表示する。
+        """
+        chm = self.context.root.chambers().get_active()
+        for msg in chm.get_handled_messages():
+            lines = []
+            lines.append('"{}"'.format(msg.text))
+            lines.append("tag={}".format(msg.tag))
+            for k, v in msg.args.items():
+                lines.append("{}={}".format(k, v))
+            app.post("message", "\n".join(lines) + "\n")
+        
     def deploy(self, app, path):
         ''' @task
         machaonディレクトリを配置する。
@@ -218,7 +231,6 @@ class RootObject:
         if AppPackageType().display_download_and_install(app, pkg, operation):
             app.post("message", "machaonを更新しました。次回起動時に反映されます")
 
-
     def update_all(self, context, app):
         ''' @task context
         すべてのパッケージに更新を適用する。
@@ -238,27 +250,6 @@ class RootObject:
             Any
         """
         return AppTestObject()
-
-#
-#
-#
-class AppChamber:
-    """
-    プロセスとその結果を保持するチャンバーオブジェクト。
-    ValueType:
-        machaon.process.ProcessChamber
-    """
-    def dump_message(self, chm, app):
-        """ @method spirit
-        処理済みのメッセージを詳細な形式で表示する。
-        """
-        for msg in chm.get_handled_messages():
-            lines = []
-            lines.append('"{}"'.format(msg.text))
-            lines.append("tag={}".format(msg.tag))
-            for k, v in msg.args.items():
-                lines.append("{}={}".format(k, v))
-            app.post("message", "\n".join(lines) + "\n")
 
 #
 #

@@ -26,7 +26,6 @@ METHOD_TYPE_BOUND = 0x0010
 METHOD_CONSUME_TRAILING_PARAMS = 0x0020
 METHOD_EXTERNAL_TARGET = 0x0040
 METHOD_BOUND_TRAILING = 0x0080
-
 METHOD_LOADED = 0x0100
 METHOD_DECL_LOADED = 0x0200
 METHOD_HAS_RECIEVER_PARAM = 0x0400 # レシーバオブジェクトもパラメータとして扱う
@@ -41,7 +40,12 @@ METHOD_INVOKEAS_BOUND_METHOD = 0x20000
 METHOD_INVOKEAS_PROPERTY = 0x40000
 METHOD_INVOKEAS_MASK = 0xF0000
 
-METHOD_META_EXTRAARG = 0x100000
+METHOD_FROM_CLASS_MEMBER    = 0x100000  # クラスメンバから得た定義
+METHOD_FROM_INSTANCE_MEMBER = 0x200000  # インスタンスメンバから得た定義
+METHOD_FROM_USER_DEFINITION = 0x400000  # コメントや辞書による定義 
+METHOD_DEFINITION_FROM_MASK = 0xF00000  
+
+METHOD_META_EXTRAARG = 0x1000000
 
 #
 PARAMETER_REQUIRED = 0x0100
@@ -194,7 +198,31 @@ class Method():
     def has_reciever_param(self):
         """ レシーバオブジェクトの引数情報があるか """
         return (self.flags & METHOD_HAS_RECIEVER_PARAM) > 0
-    
+
+    def is_user_defined(self):
+        """ @method
+        ユーザー定義によるメソッド
+        Returns:
+            Bool: 
+        """
+        return (self.flags & METHOD_FROM_USER_DEFINITION) > 0
+
+    def is_from_class_member(self):
+        """ @method
+        クラスメンバから定義されたメソッド
+        Returns:
+            Bool: 
+        """
+        return (self.flags & METHOD_FROM_CLASS_MEMBER) > 0
+
+    def is_from_instance_member(self):
+        """ @method
+        インスタンスメンバから定義されたメソッド
+        Returns:
+            Bool: 
+        """
+        return (self.flags & METHOD_FROM_INSTANCE_MEMBER) > 0
+
     def get_describer(self, this_type):
         """ @method
         定義クラスを得る。
@@ -1005,9 +1033,22 @@ def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Metho
         return None, []
 
     mname = decl.name or attrname
-    method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey)
+    method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey, flags=METHOD_FROM_USER_DEFINITION)
     method.load_declaration_properties(decl.props)
     return method, decl.aliases
+
+def make_method_from_dict(di):
+    """
+    辞書による定義からメソッドを作成する
+    
+    """
+    name = di.pop("Name", None)
+    if name is None:
+        raise BadMethodDeclaration("Name でメソッド名を指定してください")
+    mth = Method(name, flags=METHOD_FROM_USER_DEFINITION)
+    mth.load_from_dict(di)
+    return mth
+
 
 #
 #
@@ -1020,31 +1061,8 @@ class InstanceBoundAction():
 
     def __call__(self, *args):
         raise ValueError("未解決のアクションのため呼び出せません")
-
-
-def make_method_from_value(value, name, invokeas):
-    """ 値からメソッドオブジェクトを作成する """
-    m = Method(name, flags=invokeas)
-    if invokeas == METHOD_INVOKEAS_FUNCTION:
-        m.load_from_function(value)
-    elif invokeas == METHOD_INVOKEAS_BOUND_METHOD:
-        if getattr(value, "__self__", None) is not None:
-            m.load_from_function(value, action=InstanceBoundAction(name))
-        else:
-            m.load_from_function(value, action=InstanceBoundAction(name), self_to_be_bound=True)
-    elif invokeas == METHOD_INVOKEAS_PROPERTY:
-        if inspect.ismethoddescriptor(value) or inspect.isdatadescriptor(value):
-            tn = "Any"
-        else:
-            tn = make_conversion_from_value_type(type(value))
-        m.load_from_dict({
-            "Params" : [],
-            "Returns": { "Typename": tn },
-            "Action" : InstanceBoundAction(name)
-        })
-    return m
-
-
+        
+#
 def classdict_invokeas(value):
     """ ディスクリプタが適用される前の値から判定する """
     if isinstance(value, classmethod):
@@ -1116,9 +1134,34 @@ class _InvokeasTypeDict():
         return self._lookup(self._dict[name])
 
 
-def select_method_from_type_and_instance(value_type, value, name) -> Optional[Method]:
+def make_method_from_value(value, name, invokeas, source):
+    """ 値からメソッドオブジェクトを作成する """
+    m = Method(name, flags=invokeas|source)
+    if invokeas == METHOD_INVOKEAS_FUNCTION:
+        m.load_from_function(value)
+    elif invokeas == METHOD_INVOKEAS_BOUND_METHOD:
+        if getattr(value, "__self__", None) is not None:
+            m.load_from_function(value, action=InstanceBoundAction(name))
+        else:
+            m.load_from_function(value, action=InstanceBoundAction(name), self_to_be_bound=True)
+    elif invokeas == METHOD_INVOKEAS_PROPERTY:
+        if inspect.ismethoddescriptor(value) or inspect.isdatadescriptor(value):
+            tn = "Any"
+        else:
+            tn = make_conversion_from_value_type(type(value))
+        m.load_from_dict({
+            "Params" : [],
+            "Returns": { "Typename": tn },
+            "Action" : InstanceBoundAction(name)
+        })
+    return m
+
+
+def select_method_from_type_and_instance(value_type, value, name):
     """
     インスタンスでセレクタとして利用可能なメソッドを指定して得る
+    Returns:
+        Optional[Method]:
     """   
     invasdict = _InvokeasTypeDict(value_type)
     invtype = invasdict.get(name)
@@ -1128,24 +1171,40 @@ def select_method_from_type_and_instance(value_type, value, name) -> Optional[Me
     if not hasattr(value, name):
         return None
     attr = getattr(value, name)
-    return make_method_from_value(attr, name, invtype)  
+    
+    if value_type is value:
+        sourcebit = METHOD_FROM_CLASS_MEMBER
+    else:
+        sourcebit = METHOD_FROM_INSTANCE_MEMBER
+    
+    return make_method_from_value(attr, name, invtype, sourcebit)  
 
 
-def enum_methods_from_type_and_instance(value_type, value) -> Generator[Tuple[str, Method], None, None]:
+def enum_methods_from_type_and_instance(value_type, value):
     """
     インスタンスでセレクタとして利用可能なすべてのメソッドを列挙する
+    Yields:
+        Tuple[str, Method | Exception]:
     """
     invasdict = _InvokeasTypeDict(value_type)
 
     from machaon.core.importer import enum_attributes
     for name, attr in enum_attributes(value_type, value):
+        if isinstance(attr, Exception):
+            yield name, attr
+        
         invtype = invasdict.get(name)
         if invtype is None:
             if callable(attr):
                 invtype = METHOD_INVOKEAS_BOUND_METHOD
             else:
                 invtype = METHOD_INVOKEAS_PROPERTY
-
-        m = make_method_from_value(attr, name, invtype)   
+                
+        if value_type is value:
+            sourcebit = METHOD_FROM_CLASS_MEMBER
+        else:
+            sourcebit = METHOD_FROM_INSTANCE_MEMBER
+        
+        m = make_method_from_value(attr, name, invtype, sourcebit)   
         yield name, m
 

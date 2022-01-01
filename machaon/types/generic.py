@@ -66,6 +66,7 @@ operators = {
     "<<" : "lshift",
     "in" : "is-in",
     "#" : "at",
+    "#>" : "attrat",
     "=" : "identical",
     "?" : "pretty",
     "as" : "convertas",
@@ -426,6 +427,17 @@ class GenericMethods:
             Any:
         """
         return left[index]
+        
+    def attrat(self, left, key):
+        """ @method reciever-param
+        属性にアクセスする。
+        Arguments:
+            left(Any): 配列
+            key(str): 属性名
+        Returns:
+            Any:
+        """
+        return getattr(left, key)
     
     def slice(self, left, start, stop):
         """ @method reciever-param

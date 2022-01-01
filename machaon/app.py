@@ -331,7 +331,7 @@ class AppRoot:
 
     def find_process(self, index):
         # アクティブなチャンバーから検索する
-        actchm = self.get_active_chamber()        
+        actchm = self.chambers().get_active()
         pr = actchm.get_process(index)
         if pr is not None:
             return pr

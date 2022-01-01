@@ -496,20 +496,12 @@ def enum_selectable_method(typetraits, instance=None):
         typetraits(Type): 型オブジェクト
         *instance(Any): インスタンス
     Yields:
-        Tuple[List[str], Method|Exception]:
+        Tuple[List[str], Method|Exception, bool]: 名前と全エイリアス, メソッド（または読み込み時に起きたエラー）
     """
     # 型メソッドの列挙
     for names, meth in typetraits.enum_methods():
-        if isinstance(meth, Exception):
-            yield names, meth
-            continue
-
-        tinv = TypeMethodInvocation(typetraits, meth)
-        try:
-            yield names, tinv.query_method(typetraits)
-        except Exception as e:
-            yield names, e
-
+        yield names, meth
+        
     if not typetraits.is_selectable_instance_method():
         return
     
@@ -522,7 +514,7 @@ def enum_selectable_method(typetraits, instance=None):
 
     for name, meth in enum_methods_from_type_and_instance(valtype, instance):
         # TypeMethodと被りがある場合はスキップ
-        if typetraits.select_method(meth.name) is not None:
+        if typetraits.select_method(name) is not None:
             continue        
         yield [name], meth
 

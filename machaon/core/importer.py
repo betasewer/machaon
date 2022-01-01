@@ -393,7 +393,11 @@ class ClassDescriber():
 #
 #
 def enum_attributes(value_type, value):
-    # 定義順でメソッドを列挙する    
+    """
+    定義順でメソッドを列挙する
+    Yields:
+        Tuple[str, Any | Exception]:
+    """
     ranks = {}
     top = 1
     bases = [value_type]
@@ -410,8 +414,11 @@ def enum_attributes(value_type, value):
     for attrname in dir(value):
         if attrname.startswith("__"):
             continue
-
-        attr = getattr(value, attrname, None)
+        
+        try:
+            attr = getattr(value, attrname, None)
+        except Exception as e:
+            attr = e
         if attr is None:
             continue
         

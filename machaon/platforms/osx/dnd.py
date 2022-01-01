@@ -1,34 +1,35 @@
 from Foundation import (
-    NSWindow, 
-    #NSFilenamesPboardType,
-
-    #NSDragOperationNone, NSDragOperationCopy, 
+    NSWindow, NSPasteboard
 )
 from objc import (
     IBOutlet
 )
 from AppKit import (
-    NSApp
+    NSApp, NSFilenamesPboardType,
+    NSDragOperationNone, NSDragOperationCopy
 )
+
+TypeFileURL = NSFilenamesPboardType
+OpNone = NSDragOperationNone
+OpCopy = NSDragOperationCopy
 
 def install_dnd(self):
     def draggingEntered_(sender):
         print('dragging entered doctor who')
         pboard = sender.draggingPasteboard()
         types = pboard.types()
-        opType = NSDragOperationNone
-        if NSFilenamesPboardType in types:
-            opType = NSDragOperationCopy
+        opType = OpNone
+        if TypeFileURL in types:
+            opType = OpCopy
         return opType
 
     def performDragOperation_(sender):
         print('preform drag operation')
         pboard = sender.draggingPasteboard()
         successful = False
-        if NSFilenamesPboardType in pboard.types():
-            print('my actions finally working')
-            fileAStr = pboard.propertyListForType_(NSFilenamesPboardType)[0]
-            print(type(fileAStr.encode('utf-8')))
+        if TypeFileURL in pboard.types():
+            fileAStr = pboard.propertyListForType_(TypeFileURL)[0]
+            print(fileAStr.encode('utf-8'))
             successful = True
         print(self.form_file)
         return successful
@@ -38,7 +39,7 @@ def install_dnd(self):
     self.draggingEntered_ = draggingEntered_
     self.performDragOperation_ = performDragOperation_
     
-    self.registerForDraggedTypes_([NSFilenamesPboardType, None])
+    self.registerForDraggedTypes_([NS_PasteboardFileURL, None])
     return self
 
 

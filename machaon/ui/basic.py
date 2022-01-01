@@ -448,7 +448,6 @@ class Launcher():
         self.theme = theme
     
 
-
 #
 def parse_procindex(expr):
     argname = expr
