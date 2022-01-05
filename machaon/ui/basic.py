@@ -84,7 +84,7 @@ class Launcher():
         self.screen_geo = geometry or (900,400)
         self.theme = None
         self.history = InputHistory()
-        self.keymap = KeybindMap()
+        self.keymap = self.new_keymap()
         self.screens = {} 
         self.chmstates = {}
         
@@ -438,6 +438,9 @@ class Launcher():
     def get_keymap(self):
         return self.keymap
 
+    def new_keymap(self):
+        raise NotImplementedError()
+
     #
     #
     #
@@ -506,6 +509,10 @@ class KeyCommand:
     def add_keybind(self, k: Keybind):
         self.keybinds.append(k)
 
+    def handler(self, fn):
+        self.fn = fn
+
+
 class KeybindMap():
     def __init__(self):
         self._commands: Dict[str, KeyCommand] = {}
@@ -532,6 +539,7 @@ class KeybindMap():
             "LogScrollPrevProcess",
             "LogInputSelection",
             "LogPaneExit",
+            "DragAndDropPanelToggle"
         )
         self._commands = {x:KeyCommand(x) for x in cmds}
     
@@ -580,16 +588,17 @@ class KeybindMap():
             if cmd is None:
                 app.post_stray_message("warn", "キーマップ[{}]読み込み中に：コマンド'{}'は存在しません".format(section, command))
                 continue
-
+            
+            # キーバインドをセット
             keys = key.split("+")
             keybind = Keybind(keys, when)
             cmd.add_keybind(keybind)
     
-    def set_command_function(self, command, fn):
+    def get(self, command) -> KeyCommand:
         cmd = self._commands.get(command, None)
         if cmd is None:
             raise ValueError("定義されていないコマンドです")
-        cmd.fn = fn
+        return cmd
     
     def get_keybinds(self, command) -> List[Keybind]:
         cmd = self._commands.get(command, None)
@@ -605,6 +614,88 @@ class KeybindMap():
         for cmd in self._commands.values():
             for k in cmd.keybinds:
                 yield k
+
+    def define_ui_handlers(self, ui):
+        """ UIのコマンド関数を関連づける """
+        for cmd in ui.keymap.all_commands():
+            fn = getattr(self, cmd.command, None)
+            if fn is not None:
+                cmd.fn = self.wrap_ui_handler(fn, ui)
+            else:
+                raise ValueError("UI handler '{}' is not implemented".format(cmd.command))
+
+    def wrap_ui_handler(self, fn, ui):
+        raise NotImplementedError()
+
+    def Run(self, ui, e):
+        """ 入力の実行 """
+        pass
+    
+    def Interrupt(self, ui, e):
+        """ 入力中止 """
+        pass
+
+    def CloseChamber(self, ui, e): 
+        """ チャンバーを閉じる """
+        pass
+
+    def InputInsertBreak(self, ui, e): 
+        """ 改行を入力 """
+        pass
+    
+    def InputClear(self, ui, e):
+        """ """
+        pass
+
+    def InputRollback(self, ui, e):
+        """ """
+        pass
+        
+    def InputHistoryNext(self, ui, e):
+        """ """
+        pass
+
+    def InputHistoryPrev(self, ui, e):
+        """ """
+        pass
+    
+    def InputPaneExit(self, ui, e):
+        """ 選択モードへ """
+        pass
+    
+    def LogPaneExit(self, ui, e):
+        """  """
+        pass
+    
+    def LogScrollPageUp(self, ui, e):
+        pass
+
+    def LogScrollPageDown(self, ui, e):
+        pass
+
+    def LogScrollUp(self, ui, e):
+        pass
+
+    def LogScrollDown(self, ui, e):
+        pass
+    
+    def LogScrollLeft(self, ui, e):
+        pass
+
+    def LogScrollRight(self, ui, e):
+        pass
+    
+    def LogScrollNextProcess(self, ui, e):
+        pass
+
+    def LogScrollPrevProcess(self, ui, e):
+        pass
+        
+    def LogInputSelection(self, ui, e):
+        pass
+
+    def DragAndDropPanelToggle(self, ui, e):
+        pass
 
 
 #

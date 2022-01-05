@@ -2,16 +2,14 @@
 # coding: utf-8
 
 import os
-from sys import platform
 from typing import Tuple, Sequence, List, Optional, Any, Generator
-import time
 
 import tkinter as tk
 import tkinter.filedialog
 import tkinter.scrolledtext
 import tkinter.ttk as ttk
 
-from machaon.ui.basic import Launcher
+from machaon.ui.basic import KeybindMap, Launcher
 from machaon.process import ProcessMessage, ProcessChamber
 from machaon.cui import get_text_width, ljust, composit_text, collapse_text
 import machaon.platforms
@@ -187,7 +185,7 @@ class tkLauncher(Launcher):
         self.focusbg = (None, None)
         self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
-        self.dnd = machaon.platforms.draganddrop().DND()
+        self.dnd = machaon.platforms.draganddrop().TkDND()
         #
         self._destroyed = False
 
@@ -228,6 +226,21 @@ class tkLauncher(Launcher):
     #
     # UIの配置と初期化
     #
+    def addbutton(self, parent, **kwargs):
+        b = ttk.Button(parent, **kwargs)
+        self.tkwidgets.append(("button", b))
+        return b
+    
+    def addcheckbox(self, parent, **kwargs):
+        ch = ttk.Checkbutton(parent, **kwargs)
+        self.tkwidgets.append(("checkbox", ch))
+        return ch
+    
+    def addframe(self, parent, **kwargs):
+        f = ttk.Frame(parent, **kwargs)
+        self.tkwidgets.append(("frame", f))
+        return f
+
     def init_screen(self):
         self.root.title(self.screen_title)
         self.root.geometry("{}x{}".format(*self.screen_geo))
@@ -245,20 +258,6 @@ class tkLauncher(Launcher):
         self.commandline.focus_set()
         
         # ボタンパネル
-        def addbutton(parent, **kwargs):
-            b = ttk.Button(parent, **kwargs)
-            self.tkwidgets.append(("button", b))
-            return b
-        
-        def addcheckbox(parent, **kwargs):
-            ch = ttk.Checkbutton(parent, **kwargs)
-            self.tkwidgets.append(("checkbox", ch))
-            return ch
-        
-        def addframe(parent, **kwargs):
-            f = ttk.Frame(parent, **kwargs)
-            self.tkwidgets.append(("frame", f))
-            return f
         
         histlist = tk.Text(self.frame, relief="solid", height=1)
         histlist.tag_configure("chamberlink")
@@ -292,7 +291,7 @@ class tkLauncher(Launcher):
         #self.errlog.configure(state='disabled')
         
         # ボタン等
-        btnpanel = addframe(self.frame)
+        self.btnpanel = self.addframe(self.frame)
         #btnunredo = addframe(btnpanel)
         #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
         # ----------------------        
@@ -304,11 +303,11 @@ class tkLauncher(Launcher):
             b.pack(side=tk.LEFT, padx=padx)
 
         righties = [
-            addbutton(btnpanel, text=u"停止", command=lambda:self.break_chamber_process(), width=4),
-            addbutton(btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4),
-            addbutton(btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4),
-            addcheckbox(btnpanel, text=u"末尾に追従", variable=self.does_stick_bottom, onvalue=True, offvalue=False),
-            addcheckbox(btnpanel, text=u"折り返し", variable=self.does_overflow_wrap, onvalue=True, offvalue=False)
+            self.addbutton(self.btnpanel, text=u"停止", command=lambda:self.break_chamber_process(), width=4),
+            self.addbutton(self.btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4),
+            self.addbutton(self.btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4),
+            self.addcheckbox(self.btnpanel, text=u"末尾に追従", variable=self.does_stick_bottom, onvalue=True, offvalue=False),
+            self.addcheckbox(self.btnpanel, text=u"折り返し", variable=self.does_overflow_wrap, onvalue=True, offvalue=False)
         ]
         for b in reversed(righties):
             b.pack(side=tk.RIGHT, padx=padx)
@@ -318,7 +317,7 @@ class tkLauncher(Launcher):
         self.chambermenu.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady)
         self.log.grid(column=0, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
-        btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
+        self.btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
     
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
         tk.Grid.rowconfigure(self.frame, 2, weight=1)
@@ -329,144 +328,25 @@ class tkLauncher(Launcher):
         import machaon.ui.theme
         self.apply_theme(machaon.ui.theme.light_terminal_theme())
 
-        # ドラッグアンドドロップの初期化
-        windowhandle = get_tk_window_handle(self.root)
-        self.dnd.enter(windowhandle)
-
         # 入力イベント
-        def define_command(fn):
-            command = fn.__name__
-            self.keymap.set_command_function(command, fn)
-            return fn
-
-        def bind_event(sequence, *widgets):
-            def _deco(fn):
-                for w in widgets:
-                    w.bind(sequence, fn)
-            return _deco
-
-        # アクション定義
-        @define_command
-        def Run(e):
-            self.on_commandline_return()        
-            return "break"
-        
-        @define_command
-        def Interrupt(e):
-            self.app.interrupt_process()
-            return "break"
-
-        @define_command
-        def CloseChamber(e):
-            self.close_active_chamber()
-            return "break"
-
-        @define_command
-        def InputInsertBreak(e): # 改行を入力
-            return None
-        
-        @define_command
-        def InputClear(e):
-            self.replace_input_text("")
-            return "break"
-
-        @define_command
-        def InputRollback(e):
-            self.rollback_input_text()
-            return "break"
-            
-        @define_command
-        def InputHistoryNext(e):
-            self.on_commandline_down()
-            return "break"
-
-        @define_command
-        def InputHistoryPrev(e):
-            self.on_commandline_up()
-            return "break"
-        
-        @define_command
-        def InputPaneExit(e):
-            self.log.focus_set() # 選択モードへ
-            return "break"
-        
-        @define_command
-        def LogPaneExit(e):
-            self.log_set_selection() # 項目選択を外す
-            self.commandline.focus_set() # コマンド入力モードへ
-            return None
-        
-        @define_command
-        def LogScrollPageUp(e):
-            self.scroll_page(-1)
-            return "break"
-
-        @define_command
-        def LogScrollPageDown(e):
-            self.scroll_page(1)
-            return "break"
-
-        @define_command
-        def LogScrollUp(e):
-            self.scroll_vertical(-1)
-            return "break"
-
-        @define_command
-        def LogScrollDown(e):
-            self.scroll_vertical(1)
-            return "break"
-        
-        @define_command
-        def LogScrollLeft(e):
-            self.scroll_horizon(-1)
-            return "break"
-
-        @define_command
-        def LogScrollRight(e):
-            self.scroll_horizon(1)
-            return "break"
-        
-        @define_command
-        def LogScrollNextProcess(e):
-            self.hyper_select_next()
-            return "break"
-
-        @define_command
-        def LogScrollPrevProcess(e):
-            self.hyper_select_prev()
-            return "break"
-            
-        @define_command
-        def LogInputSelection(e):
-            self.log_input_selection()
-            self.commandline.focus_set()
-            return "break"
-    
-        @bind_event("<FocusIn>", self.commandline, self.log)
-        def FocusIn(e):
-            e.widget.configure(background=self.focusbg[0])
-
-        @bind_event("<FocusOut>", self.commandline, self.log)
-        def FocusOut(e):
-            e.widget.configure(background=self.focusbg[1])
+        self.keymap.define_ui_handlers(self)
 
         for command in self.keymap.all_commands():
-            for keybind in command.keybinds:
-                if keybind.when == "root":
-                    wids = (self.root, self.commandline, self.log, self.chambermenu)
-                elif keybind.when == "input":
-                    wids = (self.commandline,)
-                elif keybind.when == "log":
-                    wids = (self.log, self.chambermenu)
-                else:
-                    raise ValueError("不明なターゲットウィジェットです: {}".format(keybind.when))
-                
-                sequence = translate_into_tk_event_sequence(keybind.key)
-                if sequence is None:
-                    raise ValueError("tkのシークエンスに変換できませんでした: {} ({})".format(keybind.key, command))
+            self.bind_command(command)
+        self.bind_event("<FocusIn>", "fields", self.keymap.wrap_ui_handler(self.keymap.FocusIn, self))
+        self.bind_event("<FocusOut>", "fields", self.keymap.wrap_ui_handler(self.keymap.FocusOut, self))
 
-                bind_event(sequence, *wids)(command.fn)
+        # 表示する
+        self.root.update()
+
+        # ドラッグアンドドロップの初期化
+        self.dnd.enter(self)
+
+    #
+    #
+    #
     
+
     #
     # ログの操作
     #
@@ -533,9 +413,9 @@ class tkLauncher(Launcher):
         self.log.configure(state='normal')
         self.log.delete(1.0, tk.END)
 
-        if text:
+        if textdump:
             tags = set()
-            for key, value, index in text.items():
+            for key, value, index in textdump.items():
                 if key == "tagon":
                     tags.add(value)
                 elif key == "tagoff":
@@ -780,7 +660,32 @@ class tkLauncher(Launcher):
 
         if not resolved_as_item:
             self.insert_input_text(link)
+
+    #
+    #
+    #
+    def add_toggle_for_DND_pad(self, handler):
+        """ ドラッグドロップパネルを開くボタンを設置する """
+        # ボタンを追加
+        button = self.addbutton(self.btnpanel, text="", command=handler)
+        button.pack(side=tk.LEFT, padx=3)
+        # キーバインドを追加
+        command = self.keymap.get("DragAndDropPanelToggle")
+        @command.handler
+        def DragAndDropPanelToggle(e):
+            handler()
+            return "break"
+        self.bind_command(command)
+        return button
     
+    def update_dnd(self):
+        """ DND """
+        values = self.dnd.update()
+        if values is None:
+            return
+        self.insert_input_text(" ".join(values))
+        self.commandline.focus() # 入力欄にフォーカスする
+
     #
     #
     #
@@ -951,13 +856,6 @@ class tkLauncher(Launcher):
             self.commandline.delete(1.0, tk.END)
         return text.rstrip() # 改行文字が最後に付属する?
 
-    def update_dnd(self):
-        """ DND """
-        values = self.dnd.update()
-        if values is None:
-            return
-        self.insert_input_text(" ".join(values))
-
     # 
     #
     #
@@ -978,7 +876,53 @@ class tkLauncher(Launcher):
     def destroy(self):
         self._destroyed = True
         self.root.destroy()
-    
+
+    #
+    # input 
+    #
+    def new_keymap(self):
+        return TkKeymap()
+
+    def bind_event(self, sequence, wid, fn):
+        if wid == "root":
+            wids = (self.root, self.commandline, self.log, self.chambermenu)
+        elif wid == "input":
+            wids = (self.commandline,)
+        elif wid == "log":
+            wids = (self.log, self.chambermenu)
+        elif wid == "fields":
+            wids = (self.commandline, self.log)
+        else:
+            raise ValueError("不明なターゲットウィジェットです: {}".format(wid))
+        
+        for w in wids:
+            w.bind(sequence, fn)
+
+    def bind_command(self, command):
+        for keybind in command.keybinds:
+            # tkのシークエンスに変換する
+            modifiers = []
+            details = []
+            for k in keybind.key:
+                if k == "Ctrl":
+                    k = "Control"
+                elif k == "Cmd":
+                    k = "Command"
+                if k in tk_event_modifiers:
+                    modifiers.append(k)
+                else:
+                    if len(k) == 1 and k.upper():
+                        k = k.lower() # 大文字表記はShiftが必要になる
+                    details.append(k)
+
+            if not details:
+                raise ValueError("tkのシークエンスに変換できませんでした: {} ({})".format(keybind.key, command))
+            
+            sequence = "<{}>".format("-".join(modifiers+details))
+
+            # 登録
+            self.bind_event(sequence, keybind.when, command.fn)
+
     #
     # テーマ
     #
@@ -1069,6 +1013,7 @@ class tkLauncher(Launcher):
         self.chambermenu.tag_configure("failed", foreground=msg_err)
 
         self.set_theme(theme)
+
 
 #
 #
@@ -1323,18 +1268,116 @@ def screen_select_object(ui, wnd, charindex, objtag, sel):
         wnd.insert(str(btnchar), "O", btntags)
 
 
-def get_tk_window_handle(wnd):
-    if machaon.platforms.is_windows():
-        return wnd.winfo_id()
-    elif machaon.platforms.is_osx():
+
+#
+#
+#
+class TkKeymap(KeybindMap):
+    """ 
+    入力ハンドラを定義する 
+    """
+    def wrap_ui_handler(self, fn, ui):
+        def _handler(e):
+            return fn(ui, e)
+        return _handler
+
+    def Run(self, ui, e):
+        """ 入力の実行 """
+        ui.on_commandline_return()        
+        return "break"
+    
+    def Interrupt(self, ui, e):
+        """ 入力中止 """
+        ui.app.interrupt_process()
+        return "break"
+
+    def CloseChamber(self, ui, e): 
+        """ チャンバーを閉じる """
+        ui.close_active_chamber()
+        return "break"
+
+    def InputInsertBreak(self, ui, e): 
+        """ 改行を入力 """
         return None
-    else:
-        machaon.platforms.raise_unsupported()
+    
+    def InputClear(self, ui, e):
+        """ """
+        ui.replace_input_text("")
+        return "break"
+
+    def InputRollback(self, ui, e):
+        """ """
+        ui.rollback_input_text()
+        return "break"
+        
+    def InputHistoryNext(self, ui, e):
+        """ """
+        ui.on_commandline_down()
+        return "break"
+
+    def InputHistoryPrev(self, ui, e):
+        """ """
+        ui.on_commandline_up()
+        return "break"
+    
+    def InputPaneExit(self, ui, e):
+        """ 選択モードへ """
+        ui.log.focus_set()
+        return "break"
+    
+    def LogPaneExit(self, ui, e):
+        """  """
+        ui.log_set_selection() # 項目選択を外す
+        ui.commandline.focus_set() # コマンド入力モードへ
+        return None
+    
+    def LogScrollPageUp(self, ui, e):
+        ui.scroll_page(-1)
+        return "break"
+
+    def LogScrollPageDown(self, ui, e):
+        ui.scroll_page(1)
+        return "break"
+
+    def LogScrollUp(self, ui, e):
+        ui.scroll_vertical(-1)
+        return "break"
+
+    def LogScrollDown(self, ui, e):
+        ui.scroll_vertical(1)
+        return "break"
+    
+    def LogScrollLeft(self, ui, e):
+        ui.scroll_horizon(-1)
+        return "break"
+
+    def LogScrollRight(self, ui, e):
+        ui.scroll_horizon(1)
+        return "break"
+    
+    def LogScrollNextProcess(self, ui, e):
+        ui.hyper_select_next()
+        return "break"
+
+    def LogScrollPrevProcess(self, ui, e):
+        ui.hyper_select_prev()
+        return "break"
+        
+    def LogInputSelection(self, ui, e):
+        ui.log_input_selection()
+        ui.commandline.focus_set()
+        return "break"
+
+    def FocusIn(self, ui, e):
+        e.widget.configure(background=ui.focusbg[0])
+
+    def FocusOut(self, ui, e):
+        e.widget.configure(background=ui.focusbg[1])
 
 
-tk_modifiers = {
+tk_event_modifiers = {
     "Control", 
-    "Alt",
+    "Alt", "Option",
     "Shift",
     "Lock",
     "Extended",
@@ -1343,32 +1386,14 @@ tk_modifiers = {
     "Button3",
     "Button4",
     "Button5",
-    "Mod1", "Command",
-    "Mod2", "Option",
+    "Mod1", 
+    "Mod2", 
     "Mod3", 
     "Mod4", 
     "Mod5", 
-    "Meta",
+    "Meta", "Command",
     "Double",
     "Triple",
     "Quadruple",
 }
-    
-def translate_into_tk_event_sequence(keys: List[str]):
-    mods = []
-    details = []
-    for k in keys:
-        if k == "Ctrl":
-            k = "Control"
-        if k in tk_modifiers:
-            mods.append(k)
-        else:
-            if len(k) == 1 and k.upper():
-                k = k.lower() # 大文字表記はShiftが必要になる
-            details.append(k)
 
-    if not details:
-        raise ValueError("bad sequence")
-    
-    sequence = "<{}>".format("-".join(mods+details))
-    return sequence

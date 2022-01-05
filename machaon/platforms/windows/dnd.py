@@ -28,6 +28,9 @@ def Win(self):
 
 
 class DND:
+    """
+    ウィンドウプロシージャをドラッグ＆ドロップ対応のものにすり替える
+    """
     def __init__(self):
         Win._load()
         self._dropped = []
@@ -71,30 +74,7 @@ class DND:
         return None
 
 
-if __name__ == "__main__":
-    app = tkinter.Tk()
-    app.title("DnD test")
-    app.geometry("300x300")
+class TkDND(DND):
+    def enter(self, window):
+        super().enter(window.winfo_id()) # hwndを得られる
 
-    class Quit:
-        def __init__(self, w):
-            self.value = False
-            self.w = w
-        def __call__(self):
-            self.value = True
-            self.w.destroy()
-    quitted = Quit(app)
-    app.protocol("WM_DELETE_WINDOW", quitted)
-    
-    tw = tkinter.Text(app, width=30, height=16)
-    tw.pack(fill='both', expand=1)
-
-    dnd = DND()
-    dnd.enter(app.winfo_id(), tw)
-    #dnd.begin_watching(tw)
-    #app.after(1000, dnd.watch_dropfile, app)
-
-    #app.mainloop()
-    while not quitted.value:
-        dnd.update(tw)
-        app.update()

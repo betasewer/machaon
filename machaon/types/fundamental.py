@@ -1,8 +1,11 @@
-from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
 import re
 import datetime
 
-from machaon.core.type import BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+from machaon.core.type import (
+    BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, 
+    TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+)
+from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
 from machaon.core.object import Object
 from machaon.core.symbol import SIGIL_PYMODULE_DOT, full_qualified_name
 
@@ -23,7 +26,10 @@ class TypeType():
 
     def stringify(self, v):
         """ @meta """
-        return "<{}>".format(v.get_conversion())
+        prefix = ""
+        if isinstance(v, PythonType):
+            prefix = "*"
+        return "<{}{}>".format(prefix, v.get_conversion())
 
     #
     # メソッド
@@ -160,6 +166,14 @@ class TypeType():
             Str:
         '''
         return type.get_describer_qualname()
+
+    def is_python_type(self, type):
+        ''' @method
+        Pythonの型から直接作られたインスタンスか。
+        Returns:
+            bool:
+        '''
+        return isinstance(type, PythonType)
     
 
 class AnyType():
@@ -215,6 +229,7 @@ class AnyType():
             return "<{} id={:0X}>".format(tn, id(v))
         else:
             return "{}({})".format(v, tn)
+
 
 class NoneType():
     def constructor(self, _context, _s):

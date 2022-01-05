@@ -1,2 +1,2 @@
-from machaon.types.app import AppPackageType, AppChamber
+from machaon.types.app import AppPackageType
 

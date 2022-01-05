@@ -11,9 +11,9 @@ def reencode(s, encoding, errors="replace"):
     return s.encode(encoding,errors).decode(encoding)
 
 def xprint(*args, **kwargs):
-    from machaon.platforms import current
+    from machaon.platforms import console
     s = " ".join([str(x) for x in args])
-    s = reencode(s, current.default_encoding)
+    s = reencode(s, console().default_encoding)
     print(s, **kwargs)
     
     

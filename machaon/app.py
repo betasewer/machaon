@@ -251,7 +251,10 @@ class AppRoot:
     def post_stray_message(self, tag, value=None, **options):
         """ アクティブなチャンバーにプロセス独立のメッセージを投稿する """
         chm = self.chambers().get_active()
-        chm.post_chamber_message(tag, value, **options)
+        if chm is not None:
+            chm.post_chamber_message(tag, value, **options)
+        else:
+            self._startupmsgs.append("value")
 
     #
     # アプリの実行

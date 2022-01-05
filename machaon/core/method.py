@@ -568,7 +568,9 @@ class Method():
 
             self.add_parameter(p.name, typename, "", default, flags=f)
         
-        target = fn.__name__
+        target = getattr(fn, "__name__", None)
+        if target is None:
+            target = repr("<function name cannot be retrieved>")
 
         self._action = action or fn
         self.target = target
@@ -633,7 +635,7 @@ class Method():
         self.doc = doc
         self.load_declaration_properties(decls)
         self._action = action
-        self.target = "<loaded from dict>".format()
+        self.target = "<loaded from dict>"
         self.flags |= METHOD_LOADED
 
     def make_invocation(self, mods=0, type=None):
@@ -1205,6 +1207,9 @@ def enum_methods_from_type_and_instance(value_type, value):
         else:
             sourcebit = METHOD_FROM_INSTANCE_MEMBER
         
-        m = make_method_from_value(attr, name, invtype, sourcebit)   
+        try:
+            m = make_method_from_value(attr, name, invtype, sourcebit)   
+        except Exception as e:
+            m = e
         yield name, m
 
