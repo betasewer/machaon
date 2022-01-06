@@ -507,13 +507,16 @@ class TypeDefinition():
         scope = None, 
         bits = 0
     ):
-        self.value_type = value_type
+        self.value_type = value_type # Noneの可能性がある
+
         if describer is None:
             # 型名のみが指定されているなら、クラス実装もそこにあるとみなす
             if isinstance(value_type, str):
                 describer = value_type
-            else:
+            elif value_type is not None:
                 describer = ClassDescriber(value_type)
+            else:
+                raise ValueError("value_typeかdescriberを、クラスまたは文字列で与えてください")
 
         if not isinstance(describer, (str, ClassDescriber)):
             raise TypeError("describer type must be 'str' or 'core.importer.ClassDescriber'")
@@ -565,6 +568,9 @@ class TypeDefinition():
             return self.value_type == full_qualified_name(vt)
         else:
             return self.value_type is vt
+
+    def get_loaded(self):
+        return self._t
 
     def define(self, typemodule):
         """ 実行時に型を読み込み定義する """

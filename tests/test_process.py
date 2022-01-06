@@ -39,8 +39,6 @@ def test_handle_messages():
         ">>", "A", "B", "C", "い", "ろ", "は", "金", "土", "日"
     ]
 
-test_handle_messages()
-
 def test_drop_process():
     chm = ten_messages_chamber_zero()
     # プロセス3を開始する
@@ -70,5 +68,39 @@ def test_drop_process_if():
         ">>", "い", "ろ", "は"
     ]
 
+
+def test_handle_messages_gradually():
+    chm = ProcessChamber(0)
+    
+    chm.post_chamber_message("message", "1")
+    chm.post_chamber_message("message", "2")
+    chm.post_chamber_message("message", "3")
+
+    pr1 = chm.add(Process(1, MessageEngine()))
+    pr1.post_message(ProcessMessage("A"))
+    pr1.post_message(ProcessMessage("B"))
+    pr1.post_message(ProcessMessage("C"))
+    pr1.post_message(ProcessMessage("D"))
+    pr1.post_message(ProcessMessage("E"))
+    pr1.post_message(ProcessMessage("F"))
+    pr1.post_message(ProcessMessage("G"))
+    pr1.post_message(ProcessMessage("H"))
+    pr1.post_message(ProcessMessage("I"))
+    pr1.post_message(ProcessMessage("J"))
+
+    msgs = chm.handle_messages(5)
+    assert [x.text for x in msgs] == [
+        "1", "2", "3", "A", "B"
+    ]
+
+    msgs = chm.handle_messages(5)
+    assert [x.text for x in msgs] == [
+        "C", "D", "E", "F", "G"
+    ]
+
+    msgs = chm.handle_messages(5)
+    assert [x.text for x in msgs] == [
+        "H", "I", "J"
+    ]
 
 

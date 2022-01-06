@@ -19,8 +19,11 @@ def test_newobject_deduction():
 
     t = context.new_object({"a":1, "b":2, "c":3})
     assert t.get_typename() == "ObjectCollection"
+    
+    from machaon.types.shell import Path
+    t = context.new_object(Path("/usr/local"))
+    assert t.get_typename() == "Path"
 
-test_newobject_deduction()
 
 
 def test_newobject_conversion():

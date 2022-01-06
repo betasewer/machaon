@@ -237,6 +237,10 @@ class MiniProgressDisplay:
         self.title = title or ""
         self.marquee = None if total else 0
         self.lastbit = None
+
+    def is_starting(self):
+        """ updateでバーが初めて表示された """
+        return self.progress == 0
     
     def set_total(self, total):
         if total:
@@ -263,7 +267,7 @@ class MiniProgressDisplay:
             mq = self.marquee
             midbarwidth = 3
             fullbar = self.width * "-" + "o" * midbarwidth + (self.width + midbarwidth) * "-"
-            d = int(self.width / midbarwidth * mq)
+            d = mq # int(self.width / midbarwidth * mq)
             if self.width + midbarwidth * 2 <= d:
                 d = 0
                 mq = 0
@@ -286,19 +290,20 @@ class MiniProgressDisplay:
 
         if self.lastbit != bit:
             if self.lastbit is not None:
-                self.spirit.post("delete-message")
-            line = self.header() + bar
-            self.spirit.post(self.tag, line)
+                self.spirit.post("delete-message", count=1, line=-1)
+            self.spirit.post(self.tag, self.header() + bar)
             self.lastbit = bit
         
         self.progress = progress
+    
 
     def finish(self, total):
         if self.progress is not None:
             self.spirit.post("delete-message")
+        
+        bar = bar = "[{}] 完了 ".format("o"*self.width)
         if self.total is not None:
-            bar = "[{}] 完了 ({})".format("o"*self.width, self.total)
+            bar += "({})".format(self.total)
         else:
-            bar = "[{}] 完了".format("o"*self.width)
-        bar = self.header() + bar
-        self.spirit.post(self.tag, bar)
+            bar += "({})".format(self.progress)
+        self.spirit.post(self.tag, self.header() + bar)

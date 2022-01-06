@@ -207,10 +207,8 @@ class Process:
         """ 指定の数だけメッセージを取り出す """
         msgs = []
         try:
-            while True:
+            while count is None or len(msgs) < count:
                 msg = self.post_msgs.get_nowait()
-                if count is not None and count < len(msgs):
-                    break
                 msgs.append(msg)
         except queue.Empty:
             self._isconsumed_msgs = True
@@ -304,7 +302,7 @@ class StillExecuting(Exception):
 class Spirit():
     def __init__(self, root, process=None):
         self.root = root
-        self.process = process
+        self.process: Process = process
         # プログレスバー
         self.cur_prog_display = None 
         self._slp = 0
@@ -407,13 +405,15 @@ class Spirit():
             if slp - self._slp > 0.1:
                 time.sleep(0.05)
                 self._slp = slp
-                print("slept 0.05 {}".format(slp))
+                #print("slept 0.05 {}".format(slp))
             if wait:
                 time.sleep(wait)
-                print("slept {}".format(wait))
+                #print("slept {}".format(wait))
 
         if progress and self.cur_prog_bar:
             self.cur_prog_bar.update(progress)
+            if self.cur_prog_bar.is_starting(): 
+                time.sleep(0.1) # 初回はバー全体の表示用に待つ
         return True
     
     def raise_interruption(self):
@@ -535,6 +535,14 @@ class ProcessMessage():
         self.tag = tag
         self.embed_ = embed or []
         self.args = args
+
+    def __repr__(self):
+        parts = []
+        parts.append(self.text)
+        parts.append(self.args)
+        if self.embed_:
+            parts.append(self.embed_)
+        return "<ProcessMessage {}: {}>".format(self.tag, " ".join([str(x) for x in parts]))
 
     def argument(self, name, default=None):
         return self.args.get(name, default)

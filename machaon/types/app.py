@@ -49,15 +49,17 @@ class RootObject:
         spirit.post("message", "")
 
     def types(self, spirit):
-        '''@task
+        ''' @task
         使用可能な型を列挙する。
         Params:
         Returns:
             Sheet[Type](name, scope, doc): 型のリスト
         '''
         types = []
-        for t in self.context.type_module.enum():
-            types.append(t)
+        with spirit.progress_display():
+            for t in self.context.type_module.enum():
+                spirit.interruption_point(progress=1)
+                types.append(t)
         return types
     
     def vars(self):

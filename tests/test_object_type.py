@@ -1,6 +1,7 @@
-from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE
+from machaon.core.invocation import TypeMethodInvocation, instant_context
+from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, PythonType
 import pytest
-from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias
+from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias, Type
 from machaon.core.importer import ClassDescriber
 from machaon.types.fundamental import fundamental_type
 
@@ -89,6 +90,16 @@ class SpecStrType:
         """
         return "0"*self.num
 
+    def get_path(self):
+        """ @method
+        パスを返す。
+        Returns:
+            Any:
+        """
+        from machaon.types.shell import Path
+        return Path("")
+
+
 # defineで登録
 def test_scoped_define():
     types = TypeModule()
@@ -116,6 +127,7 @@ def test_scoped_define():
 
 # 値から型を推定
 def test_deduce():
+    # fundamental types
     assert fundamental_type.deduce(int) is fundamental_type.get("Int")
     assert fundamental_type.deduce(str) is fundamental_type.get("Str")
     assert fundamental_type.deduce(float) is fundamental_type.get("Float")
@@ -123,11 +135,20 @@ def test_deduce():
     assert fundamental_type.deduce(bool) is fundamental_type.get("Bool")
     assert fundamental_type.deduce(ValueError) is None
 
+    # defined type
     types = TypeModule()
     spec_str_t = types.define(SpecStrType, scope="spec")
     str_t = types.define(fundamental_type.get("Str"))
     assert types.deduce(str) is str_t
     assert types.deduce(SpecStrType) is spec_str_t
+
+    # defered defined type
+    from machaon.types.shell import Path
+    types = TypeModule()
+    types.define(TypeDefinition(value_type="machaon.types.shell.Path", typename="Path"))
+    t2 = types.deduce(Path)
+    assert not isinstance(t2, PythonType)
+    assert t2.get_value_type() is Path
 
 # defineで登録
 def test_method():
@@ -171,3 +192,20 @@ def test_method_alias():
     b = TypeMemberAlias(["dest1", "dest2"])
     assert b.get_destination() == ["dest1", "dest2"]
     assert b.is_group_alias()
+
+
+def test_method_return_deduce():
+    cxt = instant_context()
+
+    types = TypeModule()
+    t = types.define(SpecStrType, scope="spec")
+
+    m1 = t.select_method("get-path")
+    assert m1.get_result().get_typedecl().instance(cxt).is_any_type()
+
+    inv = m1.make_invocation(type=t)
+    this = SpecStrType(10)
+    ret = inv._prepare(cxt, this).invoke(cxt)
+    #assert not isinstance(ret.type, PythonType) # 推定できる
+
+

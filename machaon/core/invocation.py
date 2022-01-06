@@ -769,10 +769,14 @@ class BasicInvocation():
         else:
             return obj.value
 
+    def _prepare(self, context: InvocationContext, *argvalues) -> InvocationEntry:
+        """ デバッグ用: ただちに呼び出しエントリを構築する """
+        args = [context.new_object(x) for x in argvalues]
+        return self.prepare_invoke(context, *args)
+
     def _invoke(self, context: InvocationContext, *argvalues):
         """ デバッグ用: 引数を与えアクションを実行する """
-        args = [context.new_object(x) for x in argvalues]
-        return self.prepare_invoke(context, *args)._invokeaction()
+        return self._prepare(context, *argvalues)._invokeaction()
 
     #
     # これらをオーバーロードする

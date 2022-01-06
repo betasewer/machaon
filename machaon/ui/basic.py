@@ -127,7 +127,8 @@ class Launcher():
                 self.insert_screen_text(msg.tag, msg.text, **msg.args)
 
             elif tag == "delete-message":
-                lno, cnt = msg.req_arguments("line", "count")
+                lno = msg.argument("line", -1)
+                cnt = msg.argument("count", 1)
                 self.delete_screen_text(lno, cnt)
             
             elif tag == "object-summary":
