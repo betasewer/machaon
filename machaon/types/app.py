@@ -202,8 +202,8 @@ class RootObject:
         location = curmodule.load_filepath()
         if location is None:
             raise ValueError("インストール先が不明です")
-        installdir = os.path.normpath(os.path.join(os.path.dirname(location), "../.."))
-        lock = os.path.join(installdir, ".machaon-update-lock")
+        installdir = os.path.normpath(os.path.join(os.path.dirname(location), ".."))
+        lock = os.path.normpath(os.path.join(installdir, "..", ".machaon-update-lock"))
         if os.path.isfile(lock):
             raise ValueError("{}: 上書きしないようにロックされています".format(lock))
 

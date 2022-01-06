@@ -153,6 +153,14 @@ class AppPackageType:
         if not h:
             return "<no-hash>"
         return h
+
+    def location(self, package: Package, app):
+        """ @task
+        ファイルシステム上の場所
+        Returns:
+            Path:
+        """
+        return app.root.package_manager().get_installed_location(package)
     
     def install(self, package: Package, context, app):
         """ @task context
@@ -169,7 +177,6 @@ class AppPackageType:
     # 
     def display_download_and_install(self, app, package:Package, operation):
         for state in operation(package):
-            print(state)
             # ダウンロード中
             if state == PackageManager.DOWNLOAD_START:
                 url = package.get_source().get_download_url()
@@ -196,7 +203,7 @@ class AppPackageType:
                 else:
                     app.post("error", "pipによるインストールが失敗しました コード={}".format(state.returncode))
                     return False
-            return True
+        return True
         
     def display_update(self, package: Package, context, app, forceinstall=False):
         if not package.is_remote_source():
@@ -211,11 +218,11 @@ class AppPackageType:
             app.post("message", "ソース = {}".format(rep.get_source()))
         
         # パッケージの状態を調べる
-        operation = approot.update_package
+        operation = approot.package_manager().update
         status = approot.query_package_status(package)
         if status == "none":
             app.post("message", "新たにインストールします")
-            operation = approot.install_package
+            operation = approot.package_manager().install
         elif status == "old":
             app.post("message", "より新しいバージョンが存在します")
         elif status == "latest":
@@ -237,7 +244,7 @@ class AppPackageType:
             if not ready:
                 app.post("warn", "モジュール'{}'がありません。手動で追加する必要があります".format(name))
 
-        if operation is approot.install_package:
+        if operation is approot.package_manager().install:
             app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
         else:
             app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
@@ -256,7 +263,7 @@ class AppPackageType:
 
         app.post("message-em", " ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
 
-        for state in approot.uninstall_package(package):
+        for state in approot.package_manager().uninstall(package):
             if state == PackageManager.UNINSTALLING:
                 app.post("message", "ファイルを削除")
             elif state == PackageManager.PIP_UNINSTALLING:
@@ -302,6 +309,11 @@ class AppPackageType:
             Sheet[ObjectCollection](name, ready):
         """
         return [{"name":x, "ready":y} for x, y in package.check_required_modules_ready().items()]
+
+    def stringify(self, package):
+        """ @meta """
+        return "<Package {}>".format(package.name)
+
 
 
 #

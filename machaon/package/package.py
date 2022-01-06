@@ -100,16 +100,18 @@ class Package():
     
     def is_installation_separated(self) -> bool:
         return self.separate
+
+    def get_hash(self):
+        return self._hash
     
     def load_latest_hash(self) -> Optional[str]:
         if self.source is None:
             return None
-        if self._hash is None:
-            try:
-                _hash = self.source.query_hash()
-            except RepositoryURLError:
-                _hash = None 
-            self._hash = "" if _hash is None else _hash
+        try:
+            _hash = self.source.query_hash()
+        except RepositoryURLError:
+            _hash = None 
+        self._hash = "" if _hash is None else _hash
         return self._hash
 
     def is_type_modules(self) -> bool:
@@ -476,6 +478,10 @@ class PackageManager():
         # pipにインストールさせる
         yield PackageManager.PIP_INSTALLING
         try:
+            if not newinstall:
+                if pkg.name not in self.database:
+                    newinstall = True
+
             if newinstall:
                 yield from run_pip(
                     installtarget=localpath, 
@@ -491,7 +497,7 @@ class PackageManager():
                 self.add_database(pkg, **distinfo)
 
             else:
-                isseparate = self.database.getboolean(pkg.name, "separate", fallback=False)   
+                isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)   
                 yield from run_pip(
                     installtarget=localpath, 
                     installdir=self.dir if isseparate else None,
@@ -509,8 +515,9 @@ class PackageManager():
             if pkg.entrypoint is None:
                 pkg.entrypoint = self.database[pkg.name]["toplevel"]
 
-        
-    #
+    def update(self, pkg):
+        return self.install(pkg, newinstall=False)
+
     def uninstall(self, pkg: Package):
         if pkg.is_module_source():
             # アンインストールは不要
@@ -520,10 +527,12 @@ class PackageManager():
         if separate:
             # 手動でディレクトリを削除する
             yield PackageManager.UNINSTALLING
-            toplevel = self.database[pkg.name]["toplevel"]
-            shutil.rmtree(os.path.join(self.dir, toplevel))
-            infodir = self.database[pkg.name]["infodir"]
-            shutil.rmtree(os.path.join(self.dir, infodir))
+            toplevel = self.database.get(pkg.name, "toplevel", fallback=None)
+            if toplevel:
+                shutil.rmtree(os.path.join(self.dir, toplevel))
+            infodir = self.database.get(pkg.name, "infodir", fallback=None)
+            if infodir:
+                shutil.rmtree(os.path.join(self.dir, infodir))
         else:
             # pipにアンインストールさせる
             yield PackageManager.PIP_UNINSTALLING
@@ -542,6 +551,17 @@ class PackageManager():
         if "hash" not in entry:
             raise ValueError("Bad Entry")
         return entry["hash"]
+
+    def get_installed_location(self, pkg) -> str:
+        """ パッケージがインストールされたパス """
+        if not self.is_installed(pkg.name):
+            return None
+        if self.database.get(pkg.name, "separate"):
+            toplevel = self.database.get(pkg.name, "toplevel")
+            if toplevel:
+                return os.path.join(self.dir, toplevel)
+        else:
+            raise NotImplementedError()
     
     def query_status(self, pkg) -> str:
         if not pkg.is_remote_source():

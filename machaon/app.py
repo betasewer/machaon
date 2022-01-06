@@ -185,16 +185,10 @@ class AppRoot:
         for pkg in self.pkgs:
             yield pkg
     
-    # パッケージをローカル上で展開・削除・更新する
-    def install_package(self, package: Package):
-        yield from self.pkgmanager.install(package, newinstall=True)
-    
-    def uninstall_package(self, package: Package):
-        yield from self.pkgmanager.uninstall(package)
-    
-    def update_package(self, package: Package):
-        yield from self.pkgmanager.install(package, newinstall=False)
-    
+    # パッケージの追加・削除を行うマネージャ
+    def package_manager(self):
+        return self.pkgmanager
+
     # パッケージにアップデートが必要か
     def query_package_status(self, package: Package, *, isinstall=False):
         if isinstall:
