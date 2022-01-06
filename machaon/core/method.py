@@ -764,6 +764,9 @@ class MethodParameter():
     def is_type_unspecified(self):
         return self.typename is None or self.typename == "Any" or self.typename == "Object"
         
+    def is_type_uninstantiable(self):
+        return self.typename is None or self.typename == "Object"
+
     def is_string(self):
         return self.typename == "Str"
     

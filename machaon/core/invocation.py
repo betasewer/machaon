@@ -19,23 +19,35 @@ from machaon.core.symbol import (
 #
 # 
 #
+class ArgumentTypeError(Exception):
+    def __init__(self, spec, value):
+        super().__init__()
+        self.spec = spec
+        self.value = value
+    
+    def __str__(self):
+        if hasattr(self.spec, "name"):
+            spec = "引数'{}'の型'{}'".format(self.spec.name, self.spec.typename)
+        else:
+            spec = "型'{}'".format(self.spec.typename)
+        value = repr(self.value)
+        return "{}は{}に適合しません".format(value, spec)
+
 class BadInstanceMethodInvocation(Exception):
     def __init__(self, valuetype, name):
+        super().__init__()
         self.valuetype = valuetype
         self.name = name
     
     def __str__(self):
         return "'{}'のインスタンスにメソッド'{}'は存在しません".format(full_qualified_name(self.valuetype), self.name)
 
-
 class BadFunctionInvocation(Exception):
     def __init__(self, name):
         self.name = name
 
-
 class BadObjectMemberInvocation(Exception):
     pass
-
 
 class RedirectUnresolvedInvocation(Exception):
     pass
@@ -714,6 +726,20 @@ INVOCATION_BASE_RECIEVER       = 0x008
 INVOCATION_SHOW_HELP           = 0x010
 INVOCATION_DEFAULT_RESULT      = 0x020
 
+def resolve_object_value(obj, spec=None):
+    if spec and spec.is_object():
+        return obj
+    else:
+        return obj.value
+
+def check_argument_value_type(context, spec, value):
+    if spec is None:
+        return True
+    if spec.is_type_uninstantiable():
+        return True
+    t = spec.get_typedecl().instance(context)
+    return t.check_value_type(type(value))
+
 #
 #
 #
@@ -763,12 +789,6 @@ class BasicInvocation():
             m.append("straight")
         return " ".join(m)
     
-    def resolve_object_value(self, obj, spec=None):
-        if spec and spec.is_object():
-            return obj
-        else:
-            return obj.value
-
     def _prepare(self, context: InvocationContext, *argvalues) -> InvocationEntry:
         """ デバッグ用: ただちに呼び出しエントリを構築する """
         args = [context.new_object(x) for x in argvalues]
@@ -846,7 +866,10 @@ class TypeMethodInvocation(BasicInvocation):
             args.append(self.method.make_type_instance(self.type))
 
         # インスタンスを渡す
-        selfvalue = self.resolve_object_value(selfobj, self.get_parameter_spec(-1))
+        selfspec = self.get_parameter_spec(-1)
+        selfvalue = resolve_object_value(selfobj, selfspec)
+        if not check_argument_value_type(context, selfspec, selfvalue):
+            raise ArgumentTypeError(selfspec, selfvalue)
         args.append(selfvalue)
     
         if self.method.is_context_bound():
@@ -860,8 +883,10 @@ class TypeMethodInvocation(BasicInvocation):
         # 引数オブジェクトを整理する
         for i, argobj in enumerate(argobjs):
             argspec = self.get_parameter_spec(i)
-            a = self.resolve_object_value(argobj, argspec)
-            args.append(a)
+            argvalue = resolve_object_value(argobj, argspec)
+            if not check_argument_value_type(context, argspec, argvalue):
+                raise ArgumentTypeError(argspec, argvalue)
+            args.append(argvalue)
         
         action = self.method.get_action()
         return InvocationEntry(self, action, args, {})   
@@ -970,7 +995,7 @@ class InstanceMethodInvocation(BasicInvocation):
             return _GetProperty(value, self.attrname)
     
     def prepare_invoke(self, context, *argobjects):
-        a = [self.resolve_object_value(x) for x in argobjects]
+        a = [resolve_object_value(x) for x in argobjects]
         instance, *args = a
         method = self.resolve_bound_method(instance)
         return InvocationEntry(self, method, args, {})
@@ -1012,7 +1037,7 @@ class FunctionInvocation(BasicInvocation):
         return ("Function", name, self.modifier_name())
     
     def prepare_invoke(self, invocations, *argobjects):
-        args = [self.resolve_object_value(x) for x in argobjects] # そのまま実行
+        args = [resolve_object_value(x) for x in argobjects] # そのまま実行
         return InvocationEntry(self, self.fn, args, {})
     
     def get_action(self):
@@ -1165,7 +1190,7 @@ class TypeConstructorInvocation(BasicInvocation):
         if t is None:
             raise BadTypename(self._typename)
         # 変換コンストラクタの呼び出しを作成
-        arg = self.resolve_object_value(argobj)
+        arg = resolve_object_value(argobj)
         return InvocationEntry(self, t.construct, (context, arg), {})
     
     def get_action(self):

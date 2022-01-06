@@ -74,7 +74,10 @@ class StoredMessage():
             Str:
         """
         if not self.exists():
-            raise ValueError("ファイルが存在しません")
+            if self._buf:
+                return " ".join(self._buf)
+            else:
+                raise ValueError("ファイルが存在しません")
         f = TextFile(Path(self.path))
         return f.text()
 
