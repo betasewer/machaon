@@ -328,16 +328,13 @@ class tkLauncher(Launcher):
         import machaon.ui.theme
         self.apply_theme(machaon.ui.theme.light_terminal_theme())
 
-        # 入力イベント
+        # 入力イベントの定義
         self.keymap.define_ui_handlers(self)
 
         for command in self.keymap.all_commands():
             self.bind_command(command)
         self.bind_event("<FocusIn>", "fields", self.keymap.wrap_ui_handler(self.keymap.FocusIn, self))
         self.bind_event("<FocusOut>", "fields", self.keymap.wrap_ui_handler(self.keymap.FocusOut, self))
-
-        # 表示する
-        self.root.update()
 
         # ドラッグアンドドロップの初期化
         self.dnd.enter(self)

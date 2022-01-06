@@ -41,16 +41,18 @@ class AppRoot:
                 ui = tkLauncher(**uiargs)
             else:
                 raise ValueError("不明なUIタイプです")
+        elif ui is None:
+            print("UIは設定されません")
         self.ui = ui
 
         if basic_dir is None:
             basic_dir = os.path.join(shellpath().get_known_path("documents", approot=self), "machaon")
         self.basicdir = basic_dir
-        
-        if hasattr(self.ui, "init_with_app"):
-            self.ui.init_with_app(self)
-        
-        self.ui.activate_new_chamber() # 空のチャンバーを追加する
+
+        if self.ui is not None:
+            if hasattr(self.ui, "init_with_app"):
+                self.ui.init_with_app(self)
+            self.ui.activate_new_chamber() # 空のチャンバーを追加する
 
         self.typemodule.add_fundamental_types() # 初期化処理メッセージを解読するために必要
     

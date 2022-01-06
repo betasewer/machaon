@@ -75,6 +75,6 @@ class DND:
 
 
 class TkDND(DND):
-    def enter(self, window):
-        super().enter(window.winfo_id()) # hwndを得られる
+    def enter(self, ui):
+        super().enter(ui.root.winfo_id()) # hwndを得られる
 

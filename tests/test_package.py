@@ -1,9 +1,9 @@
 import pytest
 import sys
+import os
 from machaon.app import AppRoot
 from machaon.ui.tk import tkLauncher
 
-#from machaon.commands.catalogue import shell_commands
 from machaon.package.package import Package, create_package
 #from machaon.package.repository import bitbucket_rep
 #from machaon.package.auth import basic_auth
@@ -12,12 +12,13 @@ from machaon.package.package import Package, create_package
 #from machaon.process import TempSpirit
 #from machaon.commands.package import package_install, command_package
 
+def pkgdir():
+    return os.path.normpath(os.path.join(os.path.dirname(__file__), "sample\\pkg"))
+
 def approot():
     app = AppRoot()
-    wnd = tkLauncher("test")
-    app.initialize(ui=wnd, package_dir="C:\\codes\\python\\machaon\\tests\\sample\\pkg")
+    app.initialize(ui=None, package_dir=pkgdir())
     return app
-
     
 def test_load_singlemodule_fundamental():
     root = approot()
@@ -44,7 +45,6 @@ def test_load_singlemodule_fundamental():
     assert tm.get("PathDialog")
     assert tm.get("PathDialog").get_describer_qualname() == "machaon.types.shell.PathDialog"
 
-test_load_singlemodule_fundamental()
 
 def test_load_submodules_types():
     root = approot()
