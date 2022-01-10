@@ -92,12 +92,6 @@ class TypeType():
         helps = []
         from machaon.core.message import enum_selectable_method
         for names, meth in enum_selectable_method(typ, instance):
-            source = "user"
-            if meth.is_from_class_member():
-                source = "class"
-            elif meth.is_from_instance_member():
-                source = "instance"
-
             if isinstance(meth, Exception):
                 helps.append({
                     "names" : context.new_object(names),
@@ -106,6 +100,11 @@ class TypeType():
                     "source" : ""
                 })
             else:
+                source = "user"
+                if meth.is_from_class_member():
+                    source = "class"
+                elif meth.is_from_instance_member():
+                    source = "instance"
                 helps.append({
                     "names" : context.new_object(names),
                     "source" : context.new_object(source),
