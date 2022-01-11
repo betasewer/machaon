@@ -317,6 +317,9 @@ class Spirit():
     def get_process(self):
         return self.process
 
+    def get_last_context(self):
+        return self.process.last_context
+
     #
     # メッセージ出力
     #
@@ -471,10 +474,15 @@ class Spirit():
     #
     # クリップボード
     #
-    def clipboard_copy(self, value):
+    def clipboard_copy(self, value, silent=False):
         from machaon.platforms import clipboard
         clipboard().clipboard_copy(value)
-        self.post("message", "クリップボードに文字列をコピーしました")
+        if not silent:
+            self.post("message", "クリップボードに文字列をコピーしました")
+
+    def clipboard_paste(self):
+        from machaon.platforms import clipboard
+        return clipboard().clipboard_paste()
 
     #
     # 基本型へのショートカット

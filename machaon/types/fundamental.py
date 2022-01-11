@@ -272,7 +272,16 @@ class FunctionType():
             Any: 返り値
         """
         r = f.run(subject, context)
-        return r       
+        return r
+        
+    def apply_clipboard(self, f, context, app):
+        """ @task context
+        クリップボードのテキストを引数として関数を実行する。
+        """
+        text = app.clipboard_paste()
+        newtext = f.run(context.new_object(text), context).value
+        app.clipboard_copy(newtext, silent=True)
+        app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
     
 
 # ----------------------------------------------------------

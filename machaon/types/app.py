@@ -36,13 +36,14 @@ class RootObject:
         spirit.post('message', "Welcome to")
         spirit.post('message-em', logo)
 
-        self.context.root._initialize()
+        self.context.root.boot_core(spirit)
 
         spirit.post("message", "パッケージをロードします")
         for pkg in self.context.root.enum_packages():
             spirit.post("message", "{}".format(pkg.name), nobreak=True)
             self.context.root.load_pkg(pkg)
-            spirit.post("message", " -> {}".format(AppPackageType.status(AppPackageType(), pkg, spirit)))
+            status = AppPackageType.status(AppPackageType(), pkg, spirit)
+            spirit.post("message", " -> {}".format(status))
         
         spirit.post("message", "")
         spirit.post("message", "ヘルプ")

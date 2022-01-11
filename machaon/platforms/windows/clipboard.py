@@ -11,12 +11,16 @@ def Win(self):
     self.GlobalLock = ctypes.windll.kernel32.GlobalLock
     self.GlobalLock.restype = ctypes.c_void_p
     self.GlobalUnlock = ctypes.windll.kernel32.GlobalUnlock
+    self.GlobalSize = ctypes.windll.kernel32.GlobalSize
     self.memcpy = ctypes.cdll.msvcrt.memcpy
     
     self.OpenClipboard = ctypes.windll.user32.OpenClipboard
     self.EmptyClipboard = ctypes.windll.user32.EmptyClipboard
     self.SetClipboardData = ctypes.windll.user32.SetClipboardData
     self.CloseClipboard = ctypes.windll.user32.CloseClipboard
+
+    self.IsClipboardFormatAvailable = ctypes.windll.user32.IsClipboardFormatAvailable
+    self.GetClipboardData = ctypes.windll.user32.GetClipboardData
 
 
 def clipboard_copy(text):
@@ -33,3 +37,21 @@ def clipboard_copy(text):
         Win.EmptyClipboard()
         Win.SetClipboardData(ctypes.c_int(CF_UNICODETEXT), ctypes.c_int(hGlobalMem))
         Win.CloseClipboard()
+
+
+def clipboard_paste():
+    """ クリップボードからテキストをはり付ける """
+    Win._load()
+    # クリップボードを開く
+    text = None
+    if Win.OpenClipboard(0):
+        hData = Win.GetClipboardData(ctypes.c_int(CF_UNICODETEXT))
+        if hData:
+            dataSize = Win.GlobalSize(hData)
+            lpClip = Win.GlobalLock(hData)
+            textbuf = ctypes.create_unicode_buffer(int(dataSize/2))
+            Win.memcpy(textbuf, lpClip, dataSize)
+            Win.GlobalUnlock(hData)
+            text = textbuf.value
+        Win.CloseClipboard()
+    return text

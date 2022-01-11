@@ -13,9 +13,10 @@ from typing import Optional, List, Any, Text
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
 from machaon.process import Spirit, ProcessHive, ProcessChamber
-from machaon.package.package import Package, PackageManager, PackageLoadError, PackageNotFoundError, create_package
+from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
+from machaon.ui.global_hotkey import GlobalHotkey
 
 
 class AppRoot:
@@ -24,17 +25,22 @@ class AppRoot:
     """
     def __init__(self):
         self.ui = None
-        self.processhive = ProcessHive()
+        self.globalhotkey = GlobalHotkey()
+
         self.basicdir = "" # 設定ファイルなどを置くディレクトリ
         self.pkgmanager = None
         self.pkgs = []
+
+        self.processhive = ProcessHive()
         self.typemodule = TypeModule()
         self.objcol = ObjectCollection()
+
         self._extapps = None # 外部アプリコンフィグファイル
         self._startupmsgs = []
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
-        # UIの初期化処理
+        # 初期化内容を設定する
+        # UI
         if isinstance(ui, str):
             if ui == "tk":
                 from machaon.ui.tk import tkLauncher
@@ -42,22 +48,25 @@ class AppRoot:
             else:
                 raise ValueError("不明なUIタイプです")
         elif ui is None:
-            print("UIは設定されません")
+            raise ValueError("UIを指定してください")
         self.ui = ui
 
+        # パス
         if basic_dir is None:
             basic_dir = os.path.join(shellpath().get_known_path("documents", approot=self), "machaon")
         self.basicdir = basic_dir
 
-        if self.ui is not None:
-            if hasattr(self.ui, "init_with_app"):
-                self.ui.init_with_app(self)
-            self.ui.activate_new_chamber() # 空のチャンバーを追加する
-
-        self.typemodule.add_fundamental_types() # 初期化処理メッセージを解読するために必要
+    def boot_ui(self):
+        """ UIを立ち上げる """
+        if self.ui is None:
+            raise ValueError("App UI must be initialized")
+        if hasattr(self.ui, "init_with_app"):
+            self.ui.init_with_app(self)
+        self.ui.activate_new_chamber() # 空のチャンバーを追加する
     
-    def _initialize(self):
-        # コア言語初期化処理
+    def boot_core(self, spirit):
+        """ コア機能を立ち上げる """
+        # パッケージマネージャの初期化
         package_dir = self.get_package_dir()
         self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
         self.pkgmanager.add_to_import_path()
@@ -67,6 +76,10 @@ class AppRoot:
             "shell", "file"
         ):
             self.add_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
+
+        # ホットキーの監視を有効化する
+        if GlobalHotkey.available:
+            self.globalhotkey.start(spirit)
     
     def get_ui(self):
         return self.ui
@@ -250,20 +263,43 @@ class AppRoot:
         if chm is not None:
             chm.post_chamber_message(tag, value, **options)
         else:
-            self._startupmsgs.append("value")
+            self._startupmsgs.append("'{}: {}' =".format(tag, value))
+
+    #
+    # グローバルなホットキー
+    #
+    def add_hotkey(self, key, message):
+        """
+        グローバルなホットキーを定義する
+        Params:
+            key(str):
+            message(str):
+        """
+        self.globalhotkey.add(key, message)
+
+    def enum_hotkeys(self):
+        """
+        グローバルなホットキーの定義をリストアップする
+        Returns:
+            List[Tuple[str, str]]: キーとメッセージの組のリスト 
+        """
+        return self.globalhotkey.enum()
 
     #
     # アプリの実行
     #
     def run(self):
-        if self.ui is None:
-            raise ValueError("App UI must be initialized")
+        self.boot_ui()
         
         # 自動実行メッセージの登録
         startupmsgs = ["@@startup", *self._startupmsgs] # 初期化処理を行うメッセージを先頭に追加する
         chm = self.chambers().get_active()
         chm.post_chamber_message("eval-message-seq", messages=startupmsgs, chamber=chm)
 
+        # 基本型を先に登録：初期化処理メッセージを解読するために必要
+        self.typemodule.add_fundamental_types() 
+
+        # メインループ
         self.ui.run_mainloop()
 
     def exit(self):
@@ -280,6 +316,9 @@ class AppRoot:
             # return
 
         self.ui.on_exit()
+
+    def interrupt(self):
+        self.processhive.interrupt_all()
 
     #
     # コマンド処理の流れ

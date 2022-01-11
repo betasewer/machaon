@@ -1285,7 +1285,7 @@ class TkKeymap(KeybindMap):
     
     def Interrupt(self, ui, e):
         """ 入力中止 """
-        ui.app.interrupt_process()
+        ui.app.interrupt()
         return "break"
 
     def CloseChamber(self, ui, e): 
