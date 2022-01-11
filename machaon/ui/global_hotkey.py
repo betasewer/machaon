@@ -46,12 +46,13 @@ class GlobalHotkey:
         for hk in self._keys:
             hk.release(self.listener.canonical(k))
 
-    def handler(self, fn):
+    def handler(self, key, fn):
         def _handler():
             if self.spi is None:
                 raise ValueError("spirit is not set")
             try:
-                fn.run(self.spi.get_last_context())
+                ret = fn.run(self.spi.get_last_context())
+                self.spi.root.post_stray_message("message", "{} -> {}".format(key, ret.summarize()))
             except Exception as e:
                 from machaon.types.stacktrace import ErrorObject, verbose_display_traceback
                 self.spi.root.post_stray_message("error", ErrorObject(None, e).display_line())
@@ -72,7 +73,7 @@ class GlobalHotkey:
             if isinstance(fn, str):
                 from machaon.core.message import parse_sequential_function
                 fn = parse_sequential_function(fn, app.get_last_context())
-            hk = HotKey(HotKey.parse(key), self.handler(fn))
+            hk = HotKey(HotKey.parse(key), self.handler(key, fn))
             self._keys.append(hk)        
 
         self.spi = app
