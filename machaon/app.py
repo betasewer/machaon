@@ -268,14 +268,14 @@ class AppRoot:
     #
     # グローバルなホットキー
     #
-    def add_hotkey(self, key, message):
+    def add_hotkey(self, label, key, message):
         """
         グローバルなホットキーを定義する
         Params:
             key(str):
             message(str):
         """
-        self.globalhotkey.add(key, message)
+        self.globalhotkey.add(label, key, message)
 
     def enum_hotkeys(self):
         """

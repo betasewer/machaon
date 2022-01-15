@@ -15,11 +15,11 @@ class GlobalHotkey:
     """
     def __init__(self):
         self.spi = None
-        self.hotkeys = [] # HotKey(HotKey.parse('<ctrl>+<cmd>+T'), self.handler)
+        self.hotkeys = [] 
         self.listener = None
         self._keys = []
                 
-    def add(self, key, fn):
+    def add(self, label, key, fn):
         """
         Params:
             key(str): <ctrl>+<cmd>+h のように指定
@@ -29,7 +29,7 @@ class GlobalHotkey:
             message = fn
         else:
             message = fn.get_message()
-        self.hotkeys.append((key, message, fn))
+        self.hotkeys.append((label, key, message, fn))
 
     def enum(self):
         """ 
@@ -46,13 +46,13 @@ class GlobalHotkey:
         for hk in self._keys:
             hk.release(self.listener.canonical(k))
 
-    def handler(self, key, fn):
+    def handler(self, label, key, fn):
         def _handler():
             if self.spi is None:
                 raise ValueError("spirit is not set")
             try:
+                self.spi.root.post_stray_message("message", "{} -> {}".format(key, label))
                 ret = fn.run(self.spi.get_last_context())
-                self.spi.root.post_stray_message("message", "{} -> {}".format(key, ret.summarize()))
             except Exception as e:
                 from machaon.types.stacktrace import ErrorObject, verbose_display_traceback
                 self.spi.root.post_stray_message("error", ErrorObject(None, e).display_line())
@@ -69,11 +69,11 @@ class GlobalHotkey:
             raise ValueError("pynputがありません")
         
         self._keys.clear()
-        for key, fn, _msg in self.hotkeys:
+        for label, key, fn, _msg in self.hotkeys:
             if isinstance(fn, str):
                 from machaon.core.message import parse_sequential_function
                 fn = parse_sequential_function(fn, app.get_last_context())
-            hk = HotKey(HotKey.parse(key), self.handler(key, fn))
+            hk = HotKey(HotKey.parse(key), self.handler(label, key, fn))
             self._keys.append(hk)        
 
         self.spi = app
