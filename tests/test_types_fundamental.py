@@ -1,5 +1,6 @@
-from machaon.types.fundamental import fundamental_type
-from machaon.core.type import Type, TypeModule
+from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
+from machaon.types.fundamental import AnyType, fundamental_type
+from machaon.core.type import TYPE_TYPETRAIT_DESCRIBER, Type, TypeModule
 from machaon.core.object import Object
 from machaon.core.invocation import instant_context
 
@@ -86,8 +87,9 @@ def test_any():
     anytype = fundamental_type.get("Any")
     assert anytype.is_loaded()
     assert anytype.is_any_type()
-    assert anytype.value_type is None
+    assert anytype.value_type is AnyType.DummyValueType
     inst = Dummy_Rabbit()
+    assert anytype.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE
     assert anytype.stringify_value(inst) == anytype.describer.klass.stringify(anytype, inst)
 
 def test_function():

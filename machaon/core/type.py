@@ -105,7 +105,7 @@ class Type(TypeProxy):
         if isinstance(describer, dict):
             return str(describer)
         else:
-            return describer.get_qualname()
+            return describer.get_full_qualname()
 
     def get_document(self):
         return self.doc
@@ -543,32 +543,40 @@ class TypeDefinition():
         else:
             return self.typename
     
-    def get_describer_qualname(self):
-        return self.describer.get_qualname()
-
     def is_loaded(self):
         return self._t is not None
 
-    def get_value_type(self):
-        if isinstance(self.value_type, str):
+    def _resolve_value_type(self):
+        if self.value_type is None:
+            self.value_type = self.describer.klass
+        elif isinstance(self.value_type, str):
             loader = attribute_loader(self.value_type)
-            return loader()
-        else:
-            return self.value_type
+            self.value_type = loader()
+        elif not isinstance(self.value_type, type):
+            raise ValueError("Cannot resolve value_type")
+
+    def get_value_type(self):
+        self._resolve_value_type()
+        return self.value_type
 
     def get_describer(self):
         return self.describer
 
-    def is_scope(self, scope):
-        return self.scope == scope
-    
+    def get_describer_qualname(self):
+        return self.describer.get_full_qualname()
+
     def is_same_value_type(self, vt):
-        # TypeModule.deduceで使用
-        if isinstance(self.value_type, str):
+        # TypeModule.deduceで使用 - ロードせずに名前で一致を判定する
+        if self.value_type is None:
+            return self.describer.get_full_qualname() == full_qualified_name(vt)
+        elif isinstance(self.value_type, str):
             return self.value_type == full_qualified_name(vt)
         else:
             return self.value_type is vt
 
+    def is_scope(self, scope):
+        return self.scope == scope
+    
     def get_loaded(self):
         return self._t
 

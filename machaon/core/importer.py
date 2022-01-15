@@ -169,7 +169,7 @@ class PyBasicModuleLoader:
             if classname is None:
                 raise ValueError("no classname")
             
-            describer = ClassDescriber(AttributeLoader(self, classname))
+            describer = ClassDescriber(AttributeLoader(self, classname), doc)
 
             from machaon.core.type import TypeDefinition
             d = TypeDefinition(describer, classname)
@@ -309,6 +309,12 @@ class AttributeLoader():
                     return None
             return getattr(builtins, self.attr_name)
 
+    def get_name(self):
+        return self.attr_name
+
+    def get_qualname(self):
+        return "{}.{}".format(self.module.get_name(), self.attr_name)
+
 
 def walk_modules(path, package_name=None):
     """
@@ -357,18 +363,31 @@ def get_first_package_path(module, spec):
 #
 #
 class ClassDescriber():
-    def __init__(self, resolver):
+    def __init__(self, resolver, docstring=None):
         self._resolver = resolver
         self._resolved = None
+        self._docstring = docstring
 
     def get_classname(self):
-        return getattr(self.klass, "__name__", None)
-
+        """ ロードせずに名前を取得 """
+        if isinstance(self._resolver, type):
+            return getattr(self._resolver, "__name__", None)
+        else:
+            return self._resolver.get_name()
+        
     def get_docstring(self):
-        return getattr(self.klass, "__doc__", None)
+        """ ロードせずにドキュメントを取得 """
+        if self._docstring is not None:
+            return self._docstring
+        else:
+            return getattr(self.klass, "__doc__", None)
     
-    def get_qualname(self):
-        return full_qualified_name(self.klass)
+    def get_full_qualname(self):
+        """ ロードせずにフルネームを取得 """
+        if isinstance(self._resolver, type):
+            return full_qualified_name(self._resolver)
+        else:
+            return self._resolver.get_qualname()
     
     def do_describe_object(self, type):
         if hasattr(self.klass, "describe_object"):

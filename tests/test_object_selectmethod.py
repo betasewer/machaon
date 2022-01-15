@@ -2,6 +2,7 @@ import pytest
 
 from machaon.core.message import select_method
 from machaon.core.invocation import InstanceMethodInvocation, instant_context, ObjectMemberInvocation
+from machaon.core.typedecl import PythonType
 from machaon.types.fundamental import fundamental_type
 from machaon.core.method import Method
 from machaon.core.object import ObjectCollection, Object
@@ -42,8 +43,8 @@ def test_modified_select():
     assert gm.display() == ("TypeMethod", "GenericMethods:identical", "basic")
 
 
-def test_anyobject_method_select():
-    AnyType = fundamental_type.get("Any")
+def test_pytype_method_select():
+    AnyType = PythonType(complex)
 
     im = select_method("instance-method", AnyType)
     assert im

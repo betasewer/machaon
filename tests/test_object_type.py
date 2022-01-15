@@ -2,7 +2,7 @@ from machaon.core.invocation import TypeMethodInvocation, instant_context
 from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, PythonType
 import pytest
 from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias, Type
-from machaon.core.importer import ClassDescriber
+from machaon.core.importer import ClassDescriber, attribute_loader
 from machaon.types.fundamental import fundamental_type
 
 def run(fn): fn()
@@ -31,7 +31,7 @@ def test_valuetype_define():
     assert t.doc == "<no document>"
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
 
-# TypeDefinitionで登録
+# 宣言をドキュメント文字列で登録
 def test_valuetype_td_define():
     td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue2")
     assert td.load_declaration_docstring()
@@ -40,8 +40,9 @@ def test_valuetype_td_define():
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト" # 宣言が反映される
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
+    assert t.is_same_value_type(SomeValue)
 
-# 文字列で登録
+# 宣言を直接文字列で登録
 def test_valuetype_td_docstring_define():
     td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue")
     td.load_docstring('''@type use-instance-method alias-name [BigEntity]
@@ -54,11 +55,22 @@ def test_valuetype_td_docstring_define():
     assert t.doc == "巨大なオブジェクト"
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
     assert t.is_selectable_instance_method()
+    assert t.is_same_value_type(SomeValue)
+
+# attribute_loaderを用いる
+def test_valuetype_td_attribute_loader():
+    import machaon.types.shell
+    desc = ClassDescriber(attribute_loader("machaon.types.shell.Path"))
+    td = TypeDefinition(desc, "Path2", value_type=None)
+    t = td.define(fundamental_type)
+    assert t.typename == "Path2"
+    assert t.value_type is machaon.types.shell.Path
+    assert t.is_same_value_type(machaon.types.shell.Path)
 
 # 宣言と値がかみ合わない場合
 @pytest.mark.xfail()
 def test_valuetype_td_docstring_failure():
-    td = TypeDefinition(SomeValue, "SomeValue")
+    td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue")
     td.load_docstring('''@type trait
     巨大なオブジェクト
     ''') # traitだが値型を指定していない
@@ -70,6 +82,7 @@ def test_value_type_as_describer():
     t = td.define(fundamental_type)
     assert t.value_type is SomeValue
     assert t.describer.klass is SomeValue
+    
 
 #
 # スコープ付きの型を定義する

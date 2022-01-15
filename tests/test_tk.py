@@ -19,6 +19,7 @@ def approot():
     app = AppRoot()
     wnd = tkLauncher("test")
     app.initialize(ui=wnd)
+    app.boot_ui()
     return app
 
 def test_message_window(approot):

@@ -2,7 +2,7 @@ import re
 import datetime
 
 from machaon.core.type import (
-    BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, 
+    TYPE_TYPETRAIT_DESCRIBER, BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, 
     TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 )
 from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
@@ -176,6 +176,9 @@ class TypeType():
     
 
 class AnyType():
+    class DummyValueType:
+        pass
+    
     def vars(self, v):
         """ @method
         属性の一覧を返す。
@@ -758,8 +761,9 @@ typedef.Any(
     """
     あらゆるオブジェクトを受け入れる型。
     """,
+    value_type=AnyType.DummyValueType,
     describer="machaon.types.fundamental.AnyType",
-    bits=TYPE_ANYTYPE|TYPE_USE_INSTANCE_METHOD,
+    bits=TYPE_ANYTYPE,
 )
 typedef.Function( # Message
     """
