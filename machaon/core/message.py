@@ -211,7 +211,7 @@ class Message:
 
         def put(item):
             if isinstance(item, Object):
-                exprs.append("<{} {}>".format(item.get_typename(), item.value_dstr()))
+                exprs.append("<{} {}>".format(item.get_typename(), item.value_debug_str()))
             elif isinstance(item, BasicRef):
                 exprs.append("<#Ref: {}>".format(item.get_lastvalue()))
             else:

@@ -2,7 +2,7 @@ from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
 from collections import OrderedDict, defaultdict
 from copy import copy
 
-from machaon.core.typedecl import TypeProxy
+from machaon.core.typedecl import PythonType, TypeProxy
 from machaon.core.symbol import normalize_typename, full_qualified_name
 
 # imported from...
@@ -31,14 +31,14 @@ class Object():
     def __str__(self):
         return "{1} [{0}]".format(self.type.get_typename(), self.summarize())
     
-    def value_dstr(self):
+    def value_debug_str(self):
         v = self.value
         t = type(v)
         if t.__str__ is object.__str__:
             ds = "0x{:0X}".format(id(v))
         else:
             ds = str(v)
-        if self.type.is_any_type():
+        if isinstance(self.type, PythonType):
             return "{}({})".format(ds, full_qualified_name(t))
         elif not self.type.check_value_type(t):
             return "{}(!!{})".format(ds, full_qualified_name(t))

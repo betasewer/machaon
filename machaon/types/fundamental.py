@@ -2,12 +2,11 @@ import re
 import datetime
 
 from machaon.core.type import (
-    TYPE_TYPETRAIT_DESCRIBER, BadTypeDeclaration, BadTypename, Type, TypeModule, TypeDefinition, 
-    TYPE_ANYTYPE, TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+    BadTypeDeclaration, TypeModule, TypeDefinition, 
+    TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 )
 from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
 from machaon.core.object import Object
-from machaon.core.symbol import SIGIL_PYMODULE_DOT, full_qualified_name
 
 
 # ----------------------------------------------------------
@@ -174,64 +173,6 @@ class TypeType():
         '''
         return isinstance(type, PythonType)
     
-
-class AnyType():
-    class DummyValueType:
-        pass
-    
-    def vars(self, v):
-        """ @method
-        属性の一覧を返す。
-        Returns:
-            Sheet[ObjectCollection](name, type, value):
-        """
-        from machaon.core.importer import enum_attributes
-        items = []
-        for name in enum_attributes(type(v), v):
-            value = getattr(v, name, None)
-            items.append({
-                "name" : name,
-                "type" : full_qualified_name(type(value)),
-                "value" : str(value),
-            })
-        return items
-    
-    def pick(self, v, name):
-        """ @method alias-name [#]
-        属性にアクセスする。
-        Params:
-            name(str):
-        Returns:
-            Any:
-        """
-        return getattr(v, name)
-    
-    def call(self, v, *args):
-        """ @method
-        この値を実行する。
-        Params:
-            *args(Any):
-        Returns:
-            Any:
-        """
-        return v(*args)
-
-    def constructor(self, _context, value):
-        """ @meta """
-        return value # そのままの値を返す
-    
-    def summarize(self, v):
-        """ @meta """
-        return "<{} object>".format(full_qualified_name(type(v)))
-    
-    def stringify(self, v):
-        """ @meta """
-        tn = full_qualified_name(type(v))
-        if type(v).__repr__ is object.__repr__:
-            return "<{} id={:0X}>".format(tn, id(v))
-        else:
-            return "{}({})".format(v, tn)
-
 
 class NoneType():
     def constructor(self, _context, _s):
@@ -756,14 +697,6 @@ typedef.Type("""
     """,
     value_type=TypeProxy, 
     describer="machaon.types.fundamental.TypeType", 
-)
-typedef.Any(
-    """
-    あらゆるオブジェクトを受け入れる型。
-    """,
-    value_type=AnyType.DummyValueType,
-    describer="machaon.types.fundamental.AnyType",
-    bits=TYPE_ANYTYPE,
 )
 typedef.Function( # Message
     """

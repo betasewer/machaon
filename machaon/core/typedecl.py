@@ -150,9 +150,6 @@ class TypeProxy:
         raise NotImplementedError()
     
     # 基本型の判定
-    def is_any_type(self):
-        raise NotImplementedError()
-
     def is_none_type(self):
         raise NotImplementedError()
 
@@ -207,9 +204,6 @@ class RedirectProxy(TypeProxy):
     def pprint_value(self, spirit, value):
         return self.get_typedef().pprint_value(spirit, value)
     
-    def is_any_type(self):
-        return self.get_typedef().is_any_type()
-
     def is_none_type(self):
         return self.get_typedef().is_none_type()
 
@@ -235,9 +229,6 @@ class DefaultProxy(TypeProxy):
         return METHODS_BOUND_TYPE_INSTANCE
 
     def is_selectable_instance_method(self):
-        return False
-
-    def is_any_type(self):
         return False
 
     def is_none_type(self):
@@ -269,8 +260,6 @@ class TypeInstance(RedirectProxy):
         return self.type is type
 
     def check_value_type(self, valtype):
-        if self.type.is_any_type():
-            return True # 制限なし
         return issubclass(valtype, self.type.value_type)
     
     def get_conversion(self):
@@ -375,7 +364,46 @@ class PythonType(DefaultProxy):
 
     def pprint_value(self, app, value):
         app.post("message", self.summarize_value(value))
+
+
+class TypeAny(DefaultProxy):
+    """
+    全ての型を受け入れる
+    """
+    def get_typename(self):
+        return "Any"
+
+    def get_conversion(self):
+        return "Any"
     
+    def get_document(self):
+        return "Any type"
+    
+    def check_type_instance(self, _type):
+        return True
+    
+    def check_value_type(self, valtype):
+        return True
+
+    def get_methods_bound_type(self):
+        raise TypeAnyInstantiateError()
+
+    def constructor(self, context, value):
+        raise TypeAnyInstantiateError()
+
+    def stringify_value(self, value):
+        raise TypeAnyInstantiateError()
+    
+    def summarize_value(self, value):
+        raise TypeAnyInstantiateError()
+
+    def pprint_value(self, app, value):
+        raise TypeAnyInstantiateError()
+
+class TypeAnyInstantiateError(Exception):
+    def __str__(self) -> str:
+        return "Any type cannot be instantiated"
+
 
 class TypeUnion(DefaultProxy):
     """
@@ -497,15 +525,18 @@ class TypeDecl:
             elems += ")"
         return elems
     
-    def instance(self, context, args=None):
+    def instance(self, context, args=None) -> TypeProxy:
         """
         値を構築する
         """
         if self.typename is None:
             # Any型を指す
-            return context.get_type("Any")
+            return TypeAny()
         elif isinstance(self.typename, TypeProxy):
             return self.typename
+        elif self.typename == "Any":
+            # 型制約
+            return TypeAny()
         elif self.typename == "Union":
             # 型制約
             typeargs = [x.instance(context) for x in self.declargs]

@@ -48,7 +48,7 @@ class AppRoot:
             else:
                 raise ValueError("不明なUIタイプです")
         elif ui is None:
-            raise ValueError("UIを指定してください")
+            print("UI will not be shown") # TODO: shell uiを設定する
         self.ui = ui
 
         # パス

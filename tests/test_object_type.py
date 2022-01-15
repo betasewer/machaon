@@ -214,7 +214,7 @@ def test_method_return_deduce():
     t = types.define(SpecStrType, scope="spec")
 
     m1 = t.select_method("get-path")
-    assert m1.get_result().get_typedecl().instance(cxt).is_any_type()
+    assert m1.get_result().get_typedecl().instance(cxt).get_typename() == "Any"
 
     inv = m1.make_invocation(type=t)
     this = SpecStrType(10)

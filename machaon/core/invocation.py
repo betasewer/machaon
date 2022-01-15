@@ -150,6 +150,7 @@ class InvocationEntry():
         if self.exception:
             return _new_process_error_object(context, self.exception, objectType)
 
+        # 型を決める
         if isinstance(value, Object):
             rettype = value.type
             retval = value.value
@@ -158,7 +159,6 @@ class InvocationEntry():
             retspec = spec or self.result_spec()
             if retspec is None:
                 raise ValueError("result_spec must be specified as MethodResult instance")
-            rettype = retspec.get_typedecl().instance(context)
             
             if retspec.is_return_self():
                 # レシーバオブジェクトを返す
@@ -166,7 +166,12 @@ class InvocationEntry():
                 if isinstance(reciever, Object):
                     return objectType(reciever.type, reciever.value)
                 else:
+                    rettype = retspec.get_typedecl().instance(context)
                     return objectType(rettype, reciever)
+            elif retspec.is_type_to_be_deduced():
+                rettype = context.deduce_type(retval) # 型を値から推定する
+            else:
+                rettype = retspec.get_typedecl().instance(context)
 
         # Noneが返された
         if retval is None:
@@ -178,10 +183,6 @@ class InvocationEntry():
         # NEGATEモディファイアを適用            
         if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
             retval = not retval
-        
-        # Any型の指定がある場合は、型を値から推定する
-        if rettype is None or rettype.is_any_type():
-            rettype = context.deduce_type(retval)
         
         # 返り値型に値が適合しない場合は、型変換を行う
         if not rettype.check_value_type(type(retval)):

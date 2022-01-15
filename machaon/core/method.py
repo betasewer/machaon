@@ -811,8 +811,8 @@ class MethodResult:
     def get_doc(self):
         return self.doc
     
-    def is_type_unspecified(self):
-        return self.typename is None
+    def is_type_to_be_deduced(self):
+        return self.typename == "Any"
     
     def is_return_self(self):
         return self.special is RETURN_SELF

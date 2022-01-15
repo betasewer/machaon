@@ -44,10 +44,9 @@ class BadMethodDelegation(Exception):
 class UnsupportedMethod(Exception):
     pass
 
-TYPE_ANYTYPE                = 0x0001
+TYPE_NONETYPE               = 0x0001
 TYPE_OBJCOLTYPE             = 0x0002
-TYPE_NONETYPE               = 0x0004
-TYPE_TYPETYPE               = 0x0008
+TYPE_TYPETYPE               = 0x0004
 TYPE_FUNTYPE                = 0x0010
 
 TYPE_TYPETRAIT_DESCRIBER    = 0x0100
@@ -143,17 +142,12 @@ class Type(TypeProxy):
         return self is type
 
     def check_value_type(self, valtype):
-        if self.flags & TYPE_ANYTYPE:
-            return True # 制限なし
         return issubclass(valtype, self.value_type)
 
     def instance(self, *args):
         return TypeInstance(self, ctorargs=args)
     
     #
-    def is_any_type(self):
-        return self.flags & TYPE_ANYTYPE > 0
-
     def is_none_type(self):
         return self.flags & TYPE_NONETYPE > 0
 
@@ -401,7 +395,7 @@ class Type(TypeProxy):
         
         # 値を補完する
         # value_type
-        if self.value_type is None and self.flags & TYPE_ANYTYPE == 0:
+        if self.value_type is None:
             if isinstance(describer, ClassDescriber):
                 self.value_type = describer.klass
 
