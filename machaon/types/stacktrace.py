@@ -654,7 +654,10 @@ class FunctionInfo:
             return self.fn.__name__
 
     def display_parameters(self):
-        sig = inspect.signature(self.fn)
+        try:
+            sig = inspect.signature(self.fn)
+        except:
+            return "<シンタックスを得られません>"
         params = []
         if self.bound_name:
             params.append(self.bound_name)

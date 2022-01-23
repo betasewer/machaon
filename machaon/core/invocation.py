@@ -35,12 +35,11 @@ class ArgumentTypeError(Exception):
 
 class BadInstanceMethodInvocation(Exception):
     def __init__(self, valuetype, name):
-        super().__init__()
-        self.valuetype = valuetype
-        self.name = name
+        super().__init__(valuetype, name)
     
     def __str__(self):
-        return "'{}'のインスタンスにメソッド'{}'は存在しません".format(full_qualified_name(self.valuetype), self.name)
+        valtype, name = self.args
+        return "'{}'のインスタンスにメソッド'{}'は存在しません".format(full_qualified_name(valtype), name)
 
 class BadFunctionInvocation(Exception):
     def __init__(self, name):
@@ -908,7 +907,9 @@ class TypeMethodInvocation(BasicInvocation):
         return self.method.get_required_argument_min()
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        if self.is_parameter_consumer():
+        if index == -1:
+            p = self.method.get_param(-1)
+        elif self.is_parameter_consumer():
             p = self.method.params[-1]
         else:
             p = self.method.get_param(index)

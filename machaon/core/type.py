@@ -163,32 +163,40 @@ class Type(TypeProxy):
     # 
     # メソッド呼び出し
     #
-    # エイリアスは参照せず、ロードされていなければエラー
     def get_method(self, name) -> Optional[Method]:
+        """ エイリアスは参照せず、ロードされていなければエラー """
         meth = self._methods.get(name, None)
         if meth and not meth.is_loaded():
             raise UnloadedMethod()
         return meth
-    
-    # エイリアスも参照して探し、ロードされていなければロードする
-    def select_method(self, name) -> Optional[Method]:
-        name = normalize_method_name(name)
 
+    def _resolve_method(self, name):
+        """ メソッドを検索する """
+        name = normalize_method_name(name)
         meth = self._methods.get(name, None)
         if meth is None:
             name2 = self.get_member_alias(name)
             if name2 is not None:
                 meth = self._methods.get(name2)
-        
+        return meth
+    
+    def select_method(self, name) -> Optional[Method]:
+        """ エイリアスも参照して探し、ロードされていなければロードする """
+        meth = self._resolve_method(name)
         if meth:
             try:
                 meth.load(self)
             except Exception as e:
                 raise MethodLoadError(e, meth.name).with_traceback(e.__traceback__)
         return meth
+
+    def is_selectable_method(self, name) -> bool:
+        """ エイリアスも参照して探し、存在すればTrue """
+        meth = self._resolve_method(name)
+        return meth is not None
     
     def enum_methods(self):
-        """
+        """ すべてのメソッドをロードしつつ列挙する
         Yields:
             Tuple[List[str], Method|Exception]:
         """
@@ -889,8 +897,8 @@ class TypeModule():
         self._ancestors.append(other)
     
     def add_fundamental_types(self):
-        from machaon.types.fundamental import fundamental_type
-        self.add_ancestor(fundamental_type)
+        from machaon.types.fundamental import fundamental_types
+        self.add_ancestor(fundamental_types())
 
     # 型登録の構文を提供
     class DefinitionSyntax():

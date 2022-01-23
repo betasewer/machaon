@@ -82,6 +82,13 @@ class TypeProxy:
             Optional[Method]:
         """
         raise NotImplementedError()
+        
+    def is_selectable_method(self, name):
+        """ メソッドが存在するか確認する
+        Returns:
+            Bool:
+        """
+        raise NotImplementedError()
 
     def enum_methods(self):
         """ メソッドを列挙する
@@ -182,6 +189,9 @@ class RedirectProxy(TypeProxy):
     
     def select_method(self, name):
         return self.get_typedef().select_method(name)
+
+    def is_selectable_method(self, name):
+        return self.get_typedef().is_selectable_method(name)
 
     def enum_methods(self):
         return self.get_typedef().enum_methods()
@@ -337,6 +347,10 @@ class PythonType(DefaultProxy):
         from machaon.core.method import select_method_from_type_and_instance
         meth = select_method_from_type_and_instance(self.type, self.type, name)
         return meth
+
+    def is_selectable_method(self, name):
+        from machaon.core.method import is_method_selectable_from_type_and_instance
+        return is_method_selectable_from_type_and_instance(self.type, self.type, name)
 
     def enum_methods(self):
         from machaon.core.method import enum_methods_from_type_and_instance

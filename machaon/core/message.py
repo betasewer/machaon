@@ -57,6 +57,12 @@ class InternalMessageError(Exception):
         self.message = message
         self.with_traceback(self.error.__traceback__) # トレース情報を引き継ぐ
 
+    def __str__(self):
+        lines = []
+        lines.append("メッセージ[{}]の実行中にエラー:".format(self.message.get_expression()))
+        lines.append(str(self.error))
+        return "\n".join(lines)
+
 #
 #
 #
@@ -66,10 +72,14 @@ class Message:
         selector = None, 
         args = None
     ):
-        self.reciever = reciever # Object
-        self.selector = selector # Invocation
+        self.reciever = None # Object
+        self.selector = None # Invocation
         self.args = args or []   # List[Object]
         self._argwaiting = False
+        if reciever:
+            self.set_reciever(reciever)
+        if selector:
+            self.set_selector(selector)
     
     def __repr__(self):
         return "<Message {}>".format(self.sexpr())
@@ -114,12 +124,12 @@ class Message:
             and self.is_selector_specified() 
             and (self.is_max_arg_specified() if self._argwaiting else self.is_min_arg_specified())
         )
-
+    
     def is_selector_parameter_consumer(self):
         if self.selector:
             return self.selector.is_parameter_consumer()
         return False
-    
+
     def is_task(self):
         if self.selector:
             return self.selector.is_task()
@@ -254,15 +264,9 @@ class Message:
         args = [reci]
         inventry = self.selector.prepare_invoke(context, *args)
         
-        from inspect import Signature
-        try:
-            sig = Signature(inventry.action)
-        except:
-            return "<シンタックスを得られません>"
-        
-        from machaon.process import display_parameters
-        ps = display_parameters(sig)
-        return "{}{}".format(self.selector.get_method_name(), ps)
+        from machaon.types.stacktrace import FunctionInfo
+        fn = FunctionInfo(inventry.action)
+        return "{}{}".format(self.selector.get_method_name(), fn.display_parameters())
 
 
 
@@ -514,7 +518,7 @@ def enum_selectable_method(typetraits, instance=None):
 
     for name, meth in enum_methods_from_type_and_instance(valtype, instance):
         # TypeMethodと被りがある場合はスキップ
-        if typetraits.select_method(name) is not None:
+        if typetraits.is_selectable_method(name):
             continue        
         yield [name], meth
 
