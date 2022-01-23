@@ -7,9 +7,11 @@ from machaon.core.invocation import (
     instant_context
 )
 from machaon.core.object import ObjectCollection, Object
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
 from machaon.core.type import full_qualified_name
 from machaon.core.method import Method, MethodParameter, MethodResult
+
+fundamental_type = fundamental_types()
 
 def plus2mul(x, y):
     return (x + 2) * (y + 2)
@@ -109,9 +111,8 @@ def test_objectref():
     assert inv.get_result_spec().get_typename() == "Any"
 
     # unary instance method
-    inv = ObjectMemberInvocation("islower")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction() is True
-    assert isinstance(inv._resolved, InstanceMethodInvocation)
+    #inv = ObjectMemberInvocation("iskanji")
+    #assert isinstance(inv._resolved, InstanceMethodInvocation)
     
     # unary generic method
     inv = ObjectMemberInvocation("length")

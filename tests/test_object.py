@@ -1,6 +1,8 @@
 import pytest
 from machaon.core.object import Object, ObjectCollection
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
+
+fundamental_type = fundamental_types()
 
 Int = fundamental_type.get("Int")
 Float = fundamental_type.get("Float")

@@ -1,9 +1,11 @@
 import pytest
 
 from machaon.core.typedecl import parse_type_declaration, METHODS_BOUND_TYPE_INSTANCE
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
 from machaon.core.method import Method
 from machaon.core.invocation import instant_context
+
+fundamental_type = fundamental_types()
 
 class BasicValue:
     def basic_constant(self):
@@ -124,7 +126,7 @@ def test_method_return_self():
 #
 def test_meta_method():
     cxt = instant_context()
-    t = fundamental_type.define(SomeValue)
+    t = cxt.define_type(SomeValue)
     v = t.instance("2").construct(cxt, 3)
     assert isinstance(v, SomeValue)
     assert v.x == 3
@@ -136,7 +138,7 @@ def test_meta_method():
     assert isinstance(v, SomeValue)
     assert v.x == 11
     assert v.y == 11 * 42
-    assert v.itemtype is fundamental_type.get("Str")
+    assert v.itemtype is cxt.get_type("Str")
 
     v = t.stringify_value(SomeValue(1,2))
     assert v == "(1,2)"

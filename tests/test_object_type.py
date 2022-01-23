@@ -3,7 +3,9 @@ from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, PythonType
 import pytest
 from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias, Type
 from machaon.core.importer import ClassDescriber, attribute_loader
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
+
+fundamental_type = fundamental_types()
 
 def run(fn): fn()
 

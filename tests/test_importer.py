@@ -12,13 +12,13 @@ def onerror(e):
 
 def test_walk_modules():
     for loader in walk_modules(r"C:\codes\python\machaon"):
-        if loader.module_name == "machaon.types.fundamental":
+        if loader.module_name == "machaon.types.string":
             break
     else:
         assert False
 
     # 同じモジュール
-    from machaon.types.fundamental import StrType
+    from machaon.types.string import StrType
     loaded = [
         getattr(loader.module, "StrType", None),
         StrType

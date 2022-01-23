@@ -2,6 +2,7 @@ import os
 
 from machaon.types.shell import Path
 
+
 class BasicLoadFile():
     """
     開いた時に中身を取得できるファイル
@@ -53,21 +54,28 @@ class BasicLoadFile():
     def _with_path(self, *args, **kwargs):
         raise NotImplementedError()
 
-    def save(self):
+    def save(self, *, nooverwrite=False):
         """ @task nospirit
         ファイルをセーブする。
         """
         # パスを変えて何度か試行する
         savepath = self.pathstr
         for retry_level in range(1, 4):
-            try:
-                self.savefile(savepath)
-            except PermissionError:
-                savepath = self._path.with_basename_format("{}_{}", retry_level).get()
-            else: # 正常終了
-                break
+            if nooverwrite and os.path.exists(savepath):
+                pass # 名前を変えて再トライ
+            else:
+                try:
+                    self.savefile(savepath)
+                except PermissionError:
+                    pass # 名前を変えて再トライ
+                else: 
+                    break # 正常終了
+            savepath = self._path.with_basename_format("{}_{}", retry_level).get()
         else:
-            raise ValueError('"{}"に保存できません。別のアプリで開かれています。'.format(savepath))
+            if nooverwrite:
+                raise ValueError('"{}"に保存できません。同名のファイルが既に存在します。'.format(savepath))
+            else:
+                raise ValueError('"{}"に保存できません。別のアプリで開かれています。'.format(savepath))
         self._path = Path(savepath)
     
     def savefile(self, path):
@@ -158,6 +166,108 @@ class BasicContextFile(BasicLoadFile):
             block.run_as_function(subject, context)
 
 
+class BasicStream():
+    """ ストリームの基底クラス """
+    def __init__(self, source):
+        self._source = source
+        self._stream = None
+    
+    def get_path(self):
+        if isinstance(self._source, str):
+            return self._source
+        elif hasattr(self._source, "__fspath__"):
+            return self._source.__fspath__()
+        import io
+        if isinstance(self._source, io.FileIO):
+            return self._source.name
+        if hasattr(self._source, "path"): # Pathオブジェクトが返される
+            return self._source.path().get()
+        
+        return None
+
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, et, ev, tb):
+        self.close()
+
+    def _open_stream(self, rw, binary, encoding):
+        source = self._source
+
+        # ファイルパスから開く
+        fpath = None
+        if isinstance(source, str):
+            fpath = source
+        elif hasattr(source, "__fspath__"):
+            fpath = source.__fspath__()
+        if fpath:
+            mode = rw[0] + ("b" if binary else "")
+            return open(fpath, mode, encoding=encoding)
+        
+        # オブジェクトから開く
+        if hasattr(source, "{}_stream".format(rw)):
+            opener = getattr(source, "{}_stream".format(rw))
+            return opener()
+        
+        # 開かれたストリームである
+        import io
+        if isinstance(source, io.IOBase):
+            if source.closed:
+                raise ValueError("Stream has already been closed")
+            return source
+        
+        raise TypeError("'{}'からストリームを取り出せません".format(repr(source)))
+
+    def _must_be_opened(self):
+        if self._stream is None:
+            raise ValueError("Stream is not opened")
+    
+    def close(self):
+        self._must_be_opened()
+        self._stream.close()
+    
+
+class InputStream(BasicStream):
+    def open(self, binary=False, encoding=None):
+        self._stream = self._open_stream("read", binary=binary, encoding=encoding)
+        return self
+    
+    def lines(self):
+        self._must_be_opened()
+        for l in self._stream:
+            yield l
+    
+    def constructor(self, _context, value):
+        """ @meta """
+        return InputStream(value)
+    
+    def stringify(self, _v):
+        """ @meta """
+        return "<InputStream>"
+
+
+class OutputStream(BasicStream):
+    def open(self, binary=False, encoding=None):
+        self._stream = self._open_stream("write", binary=binary, encoding=encoding)
+        return self
+    
+    def write(self, v):
+        self._must_be_opened()
+        return self._stream.write(v)
+
+    def constructor(self, _context, value):
+        """ @meta """
+        return OutputStream(value)
+
+    def stringify(self, _v):
+        """ @meta """
+        return "<OutputStream>"
+        
+#
+#
+#
+#
+#
 class TextFile(BasicContextFile):
     """ @type
     テキストファイル。
@@ -210,6 +320,24 @@ class TextFile(BasicContextFile):
         """
         return self.loadfile(size)
 
+    def write_text(self, text):
+        """ @method
+        テキストを書き込んで閉じる。
+        Params:
+            text(str): 書き込むテキスト
+        Returns:
+            Str:
+        """
+        with self.read_stream():
+            self.stream.write(text)
+
+    def lines(self):
+        """ @method
+        行を返す。
+        Returns:
+            Tuple[Str]:
+        """
+        return list(self.read_stream())
 
 
 #

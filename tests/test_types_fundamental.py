@@ -1,8 +1,10 @@
 from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
 from machaon.core.type import TYPE_TYPETRAIT_DESCRIBER, Type, TypeModule
 from machaon.core.object import Object
 from machaon.core.invocation import instant_context
+
+fundamental_type = fundamental_types()
 
 def run(fn):
     fn()

@@ -5,8 +5,11 @@ import re
 from machaon.core.type import Type
 from machaon.core.object import Object
 from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, SequentialMessageExpression, parse_function, parse_sequential_function, run_function, MessageEngine
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
 from machaon.process import TempSpirit
+
+fundamental_type = fundamental_types()
+
 
 def parse_test(parser, context, lhs, rhs):
     if isinstance(lhs, Object):
@@ -32,9 +35,7 @@ def parse_test(parser, context, lhs, rhs):
     return True
 
 def test_context(*, silent=False):
-    from machaon.core.object import ObjectCollection
     from machaon.core.invocation import InvocationContext, instant_context
-    from machaon.types.fundamental import fundamental_type
     
     cxt = instant_context()
     inputs = cxt.input_objects
@@ -159,7 +160,7 @@ def test_generic_methods():
     ptest("(7 mul 8) add ((9 sub 10) mul 11) ", 7*8+(9-10)*11)
     ptest("7 mul 8 add 9 sub 10", (((7*8)+9)-10))
     ptest("'573' length", 3)
-    ptest("GODZILLA slice (9 sub 8) -1", "ODZILL")
+    ptest("GODZILLA slice: (9 sub 8) -1", "ODZILL")
 
 #
 def test_generic_methods_operators():
@@ -209,7 +210,6 @@ def test_parse_function():
     def ltest(s, subject, *rhs):
         from machaon.core.object import ObjectCollection, Object
         from machaon.core.invocation import InvocationContext
-        from machaon.types.fundamental import fundamental_type
 
         context = InvocationContext(input_objects=ObjectCollection(), type_module=fundamental_type)
         
@@ -272,7 +272,7 @@ def test_message_failure():
     context = test_context(silent=True)
     r = run_function("2 * 3 + 5 non-exisitent-method 0", None, context)
     assert r.is_error() # bad method
-    assert r.value.get_error_typename() == "BadInstanceMethodInvocation"
+    assert r.value.get_error_typename() == "BadExpressionError"
 
     # 関数の実行中のエラー
     context = test_context(silent=True)

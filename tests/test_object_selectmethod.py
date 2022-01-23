@@ -3,9 +3,11 @@ import pytest
 from machaon.core.message import select_method
 from machaon.core.invocation import InstanceMethodInvocation, instant_context, ObjectMemberInvocation
 from machaon.core.typedecl import PythonType
-from machaon.types.fundamental import fundamental_type
+from machaon.types.fundamental import fundamental_types
 from machaon.core.method import Method
 from machaon.core.object import ObjectCollection, Object
+
+fundamental_type = fundamental_types()
 
 def test_straight_select():
     StrType = fundamental_type.get("Str")
@@ -13,10 +15,6 @@ def test_straight_select():
     tm = select_method("reg-match", StrType)
     assert tm
     assert tm.display() == ("TypeMethod", "Str:reg-match", "")
-
-    im = select_method("startswith", StrType)
-    assert im
-    assert im.display() == ("InstanceMethod", "startswith", "")
 
     gm = select_method("+", StrType)
     assert gm
@@ -29,10 +27,6 @@ def test_modified_select():
     tm = select_method("!reg-search", StrType)
     assert tm
     assert tm.display() == ("TypeMethod", "Str:reg-search", "negate")
-
-    im = select_method("!startswith", StrType)
-    assert im
-    assert im.display() == ("InstanceMethod", "startswith", "negate")
 
     gm = select_method("~in", StrType)
     assert gm

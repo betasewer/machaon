@@ -1,5 +1,3 @@
-import re
-import datetime
 
 from machaon.core.type import (
     BadTypeDeclaration, TypeModule, TypeDefinition, 
@@ -8,12 +6,11 @@ from machaon.core.type import (
 from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
 from machaon.core.object import Object
 
-
-# ----------------------------------------------------------
 #
-#  基本型
 #
-# ----------------------------------------------------------
+#  言語の基本機能に関する型
+#
+#
 class TypeType():
     def constructor(self, context, value):
         """ @meta 
@@ -175,6 +172,7 @@ class TypeType():
     
 
 class NoneType():
+    """ PythonのNone型。 """
     def constructor(self, _context, _s):
         """ @meta 
         いかなる引数もNoneに変換する
@@ -186,237 +184,8 @@ class NoneType():
         return "<None>"
 
 
-class FunctionType():
-    def constructor(self, context, s, qualifier=None):
-        """ @meta 
-        Params:
-            Str:
-            qualifier(Str): None|(seq)uential
-        """
-        from machaon.core.message import parse_function, parse_sequential_function
-        if qualifier is None:
-            f = parse_function(s)
-        elif qualifier == "sequential" or qualifier == "seq":
-            f = parse_sequential_function(s, context)
-        return f
-
-    def stringify(self, f):
-        """ @meta """
-        return f.get_expression()
-    
-    #
-    #
-    #
-    def do(self, f, context, _app, subject=None):
-        """ @task context
-        関数を実行する。
-        Params:
-            subject(Object): *引数
-        Returns:
-            Any: 返り値
-        """
-        r = f.run(subject, context)
-        return r
-        
-    def apply_clipboard(self, f, context, app):
-        """ @task context
-        クリップボードのテキストを引数として関数を実行する。
-        """
-        text = app.clipboard_paste()
-        newtext = f.run(context.new_object(text), context).value
-        app.clipboard_copy(newtext, silent=True)
-        app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
-    
-
-# ----------------------------------------------------------
-#
-#  Pythonのビルトイン型
-#
-# ----------------------------------------------------------
-class StrType():
-    def constructor(self, _context, v):
-        """ @meta 
-        Params:
-            Any:
-        """
-        return str(v)
-    
-    def stringify(self, v):
-        """ @meta """
-        return v
-    
-    #
-    # メソッド
-    #
-    def convertas_literals(self, s, context):
-        """ @method context alias-name [as-literal]
-        値を適当な型に変換する。
-        Params:
-        Returns:
-            Object: 新たな型の値
-        """
-        from machaon.core.message import select_literal
-        return select_literal(context, s)
-
-    def reg_match(self, s, pattern):
-        '''@method
-        正規表現に先頭から一致するかを調べる。
-        Params:
-            pattern (str): 正規表現
-        Returns:
-            bool: 一致するか
-        '''
-        m = re.match(pattern, s)
-        if m:
-            return True
-        return False
-    
-    def reg_search(self, s, pattern):
-        '''@method
-        正規表現にいずれかの部分が一致するかを調べる。
-        Params:
-            pattern (str): 正規表現
-        Returns:
-            bool: 一致するか
-        '''
-        m = re.search(pattern, s)
-        if m:
-            return True
-        return False
-    
-    def format(self, s, *args):
-        """@method
-        引数から書式にしたがって文字列を作成する。
-        Params:
-            *args: 任意の引数
-        Returns:
-            str: 文字列
-        """
-        return s.format(*args)
-
-    def split(self, s, sep=None, maxsplit=-1):
-        """@method
-        文字を区切る。
-        Params:
-            sep(Str): *区切り文字
-            maxsplit(Int): *区切り回数
-        Returns:
-            Tuple: データ
-        """
-        return s.split(sep, maxsplit=maxsplit)
-
-    def join(self, s, values):
-        """@method
-        文字を結合する。
-        Params:
-            values(Tuple):
-        Returns:
-            Str:
-        """
-        return s.join(values)
-        
-    def normalize(self, s, form):
-        """
-        Unicode正規化を行う。
-        Params:
-            form(str): NFD, NFC, NFKD, NFKCのいずれか
-        Returns:
-            Str:
-        """
-        import unicodedata
-        return unicodedata.normalize(form, s) # 全角と半角など
-    
-    # 
-    # コード実行
-    #
-    def do(self, s, context, _app, subject=None):
-        """ @task context
-        文字列をメッセージとして評価する。例外を発生させる。
-        Params:
-            subject(Object): *引数
-        Returns:
-            Object: 返り値
-        """
-        from machaon.core.message import run_function
-        r = run_function(s, subject, context, raiseerror=True)
-        return r
-    
-    def do_external(self, s, context, app):
-        """ @task context [doex do-ex]
-        文字列を外部ファイルの名前として評価し、実行して返す。
-        Returns:
-            Object: 返り値
-        """
-        o = context.new_object(s, type="Stored")
-        ret = o.value.do(context, app)
-        return ret
-
-    def do_python(self, expr, _app):
-        """ @task [dopy do-py]
-        Pythonの式として評価し、実行して返す。
-        式の前に{name1 name2...}と書いてモジュールをインポートできる。
-        Returns:
-            Any:
-        """
-        expr = expr.strip()
-        if expr.startswith("{"):
-            from machaon.core.importer import module_loader
-            rparen = expr.find("}")
-            if rparen == -1:
-                raise ValueError("モジュール指定の括弧が閉じていません")
-            imports = expr[1:rparen].split()
-            body = expr[rparen+1:]
-        else:
-            imports = []
-            body = expr
-
-        glob = {}
-        for impname in imports:
-            loader = module_loader(impname)
-            glob[impname] = loader.load_module()
-        
-        return eval(body, glob, {})
-    
-    def call_python(self, expr, _app, *params):
-        """ @task alias-name [call]
-        Pythonの関数または定数を評価する。
-        Params:
-            *params(Any): 引数
-        Returns:
-            Any:
-        """
-        from machaon.core.importer import attribute_loader
-        loader = attribute_loader(expr)
-        value = loader()
-        if callable(value):
-            return value(*params)
-        else:
-            # 引数は無視される
-            return value
-    
-    def run_command(self, string, app, *params):
-        """ @task
-        コマンドを実行し、終わるまで待つ。入出力をキャプチャする。
-        Params:
-            *params(Any): コマンド引数
-        """
-        if not string:
-            return
-        from machaon.types.shell import run_command_capturing
-        pa = [string, *params]
-        run_command_capturing(app, pa)
-
-    # 
-    # その他
-    #
-    def copy(self, string, spirit):
-        """ @task
-        クリップボードに文字列をコピーする。
-        """
-        spirit.clipboard_copy(string)
-
-
 class BoolType():
+    """ PythonのBool型。 """
     def constructor(self, _context, s):
         """ @meta 
         Params:
@@ -479,381 +248,48 @@ class BoolType():
             body = else_
         return body.run_here(context) # コンテキストを引き継ぐ
 
-#
-#
-# 数学型
-#
-#
-class NumericType():   
-    def abs(self, n):
-        """ @method
-        絶対値。
-        Returns:
-            Any:
-        """
-        return abs(n)
-    
-    def round(self, n, digits=None):
-        """ @method
-        小数を丸める。
-        Arguments:
-            digits(Int): 桁数
-        Returns:
-            Any: 丸められた小数。
-        """
-        return round(n, digits)
-    
-class IntType(NumericType):
-    def constructor(self, _context, s):
+
+class FunctionType():
+    def constructor(self, context, s, qualifier=None):
         """ @meta 
         Params:
-            Any:
-        """
-        return int(s, 0)
-    
-    def hex(self, n):
-        """ @method
-        16進表記を得る。
-        Returns:
             Str:
+            qualifier(Str): None|(seq)uential
         """
-        return hex(n)
+        from machaon.core.message import parse_function, parse_sequential_function
+        if qualifier is None:
+            f = parse_function(s)
+        elif qualifier == "sequential" or qualifier == "seq":
+            f = parse_sequential_function(s, context)
+        return f
+
+    def stringify(self, f):
+        """ @meta """
+        return f.get_expression()
     
-    def oct(self, n):
-        """ @method
-        8進表記を得る。
+    #
+    #
+    #
+    def do(self, f, context, _app, subject=None):
+        """ @task context
+        関数を実行する。
+        Params:
+            subject(Object): *引数
         Returns:
-            Str:
+            Any: 返り値
         """
-        return oct(n)
-    
-    def bin(self, n):
-        """ @method
-        2進表記を得る。
-        Returns:
-            Str:
-        """
-        return bin(n)
-    
-    def pow(self, n, exp):
-        """ @method
-        べき乗を計算する。
-        Params:
-            exp(Int):
-        Returns:
-            Int:
-        """
-        return pow(n, exp)
-
-class FloatType(NumericType):
-    def constructor(self, _context, s):
-        """ @meta 
-        Params:
-            Any:
-        """
-        return float(s)
-    
-    # math
-    def pow(self, n, exp):
-        """ @method
-        べき乗を計算する。
-        Params:
-            exp(Float):
-        Returns:
-            Int:
-        """
-        import math
-        return math.pow(n, exp)
-
-class ComplexType():
-    def constructor(self, _context, s):
-        """ @meta 
-        Params:
-            Any:
-        """
-        return complex(s)
-
-class DatetimeType():
-    def constructor(self, _context, s):
-        """ @meta 
-        Params:
-            Str
-        """
-        return datetime.datetime.fromisoformat(s)
-    
-    def stringify(self, date):
-        """ @meta """
-        return date.strftime("%y/%m/%d (%a) %H:%M.%S")
-
-#
-#
-#
-class BasicStream():
-    """ ストリームの基底クラス """
-    def __init__(self, source):
-        self._source = source
-        self._stream = None
-    
-    def get_path(self):
-        if isinstance(self._source, str):
-            return self._source
-        elif hasattr(self._source, "__fspath__"):
-            return self._source.__fspath__()
-        import io
-        if isinstance(self._source, io.FileIO):
-            return self._source.name
-        if hasattr(self._source, "path"): # Pathオブジェクトが返される
-            return self._source.path().get()
+        r = f.run(subject, context)
+        return r
         
-        return None
-
-    def __enter__(self):
-        return self
+    def apply_clipboard(self, f, context, app):
+        """ @task context
+        クリップボードのテキストを引数として関数を実行する。
+        """
+        text = app.clipboard_paste()
+        newtext = f.run(context.new_object(text), context).value
+        app.clipboard_copy(newtext, silent=True)
+        app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
     
-    def __exit__(self, et, ev, tb):
-        self.close()
-
-    def _open_stream(self, rw, binary, encoding):
-        source = self._source
-
-        # ファイルパスから開く
-        fpath = None
-        if isinstance(source, str):
-            fpath = source
-        elif hasattr(source, "__fspath__"):
-            fpath = source.__fspath__()
-        if fpath:
-            mode = rw[0] + ("b" if binary else "")
-            return open(fpath, mode, encoding=encoding)
-        
-        # オブジェクトから開く
-        if hasattr(source, "{}_stream".format(rw)):
-            opener = getattr(source, "{}_stream".format(rw))
-            return opener()
-        
-        # 開かれたストリームである
-        import io
-        if isinstance(source, io.IOBase):
-            if source.closed:
-                raise ValueError("Stream has already been closed")
-            return source
-        
-        raise TypeError("'{}'からストリームを取り出せません".format(repr(source)))
-
-    def _must_be_opened(self):
-        if self._stream is None:
-            raise ValueError("Stream is not opened")
-    
-    def close(self):
-        self._must_be_opened()
-        self._stream.close()
-    
-
-class InputStream(BasicStream):
-    def open(self, binary=False, encoding=None):
-        self._stream = self._open_stream("read", binary=binary, encoding=encoding)
-        return self
-    
-    def lines(self):
-        self._must_be_opened()
-        for l in self._stream:
-            yield l
-    
-    def constructor(self, _context, value):
-        """ @meta """
-        return InputStream(value)
-    
-    def stringify(self, _v):
-        """ @meta """
-        return "<InputStream>"
-
-
-class OutputStream(BasicStream):
-    def open(self, binary=False, encoding=None):
-        self._stream = self._open_stream("write", binary=binary, encoding=encoding)
-        return self
-    
-    def write(self, v):
-        self._must_be_opened()
-        return self._stream.write(v)
-
-    def constructor(self, _context, value):
-        """ @meta """
-        return OutputStream(value)
-
-    def stringify(self, _v):
-        """ @meta """
-        return "<OutputStream>"
-    
-# ----------------------------------------------------------
-#
-#  データ型登録
-#
-# ----------------------------------------------------------
-fundamental_type = TypeModule()
-typedef = fundamental_type.definitions()
-typedef.Type("""
-    オブジェクトの型。
-    """,
-    value_type=TypeProxy, 
-    describer="machaon.types.fundamental.TypeType", 
-)
-typedef.Function( # Message
-    """
-    1引数をとるメッセージ。
-    """,
-    value_type="machaon.core.message.FunctionExpression",
-    describer="machaon.types.fundamental.FunctionType",
-)
-typedef["None"](
-    """
-    None。
-    """,
-    value_type=type(None), 
-    describer="machaon.types.fundamental.NoneType",
-    bits=TYPE_NONETYPE,
-)
-typedef.Str(
-    """
-    文字列。
-    """,
-    value_type=str, 
-    describer="machaon.types.fundamental.StrType",
-    bits=TYPE_USE_INSTANCE_METHOD
-)
-typedef.Bool(
-    """
-    真偽値。
-    """,
-    value_type=bool, 
-    describer="machaon.types.fundamental.BoolType",
-    bits=TYPE_USE_INSTANCE_METHOD
-)
-typedef.Int(
-    """
-    整数。
-    """,
-    value_type=int,
-    describer="machaon.types.fundamental.IntType",
-    bits=TYPE_USE_INSTANCE_METHOD
-)
-typedef.Float(
-    """
-    浮動小数点数。
-    """,
-    value_type=float, 
-    describer="machaon.types.fundamental.FloatType",
-    bits=TYPE_USE_INSTANCE_METHOD
-)
-typedef.Complex(
-    """
-    複素数。
-    """,
-    value_type=complex, 
-    describer="machaon.types.fundamental.ComplexType",
-    bits=TYPE_USE_INSTANCE_METHOD
-)
-typedef.Datetime(
-    """
-    日付時刻。
-    """,
-    value_type=datetime.datetime, 
-    describer="machaon.types.fundamental.DatetimeType",
-    bits=TYPE_USE_INSTANCE_METHOD
-)
-typedef.Tuple(
-    """
-    任意の型のタプル。
-    """,
-    value_type="machaon.types.tuple.ObjectTuple",
-)
-typedef.Sheet(
-    """
-    同型の配列から作られる表。
-    """,
-    value_type="machaon.types.sheet.Sheet",
-)
-typedef.ObjectCollection(
-    """
-    辞書。
-    """,
-    value_type="machaon.core.object.ObjectCollection",
-    bits=TYPE_OBJCOLTYPE
-)
-typedef.Method(
-    """
-    メソッド。
-    """,
-    value_type="machaon.core.method.Method"
-)
-typedef.Context(
-    """
-    メソッドの呼び出しコンテキスト。
-    """,
-    value_type="machaon.core.invocation.InvocationContext"
-)
-typedef.Process(
-    """
-    メッセージを実行するプロセス。
-    """,
-    value_type="machaon.process.Process"
-)
-typedef.ProcessChamber(
-    """
-    プロセスのリスト。
-    """,
-    value_type="machaon.process.ProcessChamber",
-    describer="machaon.types.app.AppChamber"
-)
-typedef.Error( # Error
-    """
-    発生したエラー。
-    """,
-    value_type="machaon.types.stacktrace.ErrorObject"
-)
-typedef.TracebackObject(
-    """
-    トレースバック。
-    """,
-    value_type="machaon.types.stacktrace.TracebackObject"
-)
-typedef.FrameObject(
-    """
-    フレームオブジェクト。
-    """,
-    value_type="machaon.types.stacktrace.FrameObject"
-)
-typedef.Package(
-    """
-    パッケージ。
-    """,
-    value_type="machaon.package.package.Package",
-    describer="machaon.types.package.AppPackageType"
-)
-typedef.PyModule(
-    """
-    Pythonのモジュール。
-    """,
-    value_type="machaon.types.package.Module",
-)
-typedef.Stored(
-    """
-    外部ファイルのオブジェクトを操作する。
-    """,
-    value_type="machaon.core.persistence.StoredMessage",
-)
-typedef.RootObject(
-    """
-    アプリのインスタンス。
-    """,
-    value_type="machaon.types.app.RootObject"
-)
-typedef.AppTestObject(
-    """
-    アプリのテストインスタンス。
-    """,
-    value_type="machaon.types.app.AppTestObject"
-)
 
 #
 #
@@ -864,6 +300,190 @@ class NotFound(Exception):
     """
     検索したが見つからなかった
     """
+    
+# ----------------------------------------------------------
+#
+#  データ型登録
+#
+# ----------------------------------------------------------
+def fundamental_types():
+    module = TypeModule()
+    typedef = module.definitions()
+    typedef.Type("""
+        オブジェクトの型。
+        """,
+        value_type=TypeProxy, 
+        describer="machaon.types.fundamental.TypeType", 
+    )
+    typedef.Function( # Message
+        """
+        1引数をとるメッセージ。
+        """,
+        value_type="machaon.core.message.FunctionExpression",
+        describer="machaon.types.fundamental.FunctionType",
+    )
+    typedef["None"](
+        """
+        None。
+        """,
+        value_type=type(None), 
+        describer="machaon.types.fundamental.NoneType",
+        bits=TYPE_NONETYPE,
+    )
+    typedef.Bool(
+        """
+        真偽値。
+        """,
+        value_type=bool, 
+        describer="machaon.types.fundamental.BoolType",
+    )
+    typedef.Str(
+        """
+        文字列。
+        """,
+        value_type=str, 
+        describer="machaon.types.string.StrType"
+    )
+    typedef.Int(
+        """
+        整数。
+        """,
+        value_type=int,
+        describer="machaon.types.numeric.IntType",
+    )
+    typedef.Float(
+        """
+        浮動小数点数。
+        """,
+        value_type=float, 
+        describer="machaon.types.numeric.FloatType",
+    )
+    typedef.Complex(
+        """
+        複素数。
+        """,
+        value_type=complex, 
+        describer="machaon.types.numeric.ComplexType",
+    )
+    typedef.Datetime(
+        """
+        日付時刻。
+        """,
+        value_type="datetime.datetime", 
+        describer="machaon.types.dateandtime.DatetimeType",
+        bits=TYPE_USE_INSTANCE_METHOD
+    )
+    typedef.Date(
+        """
+        日付。
+        """,
+        value_type="datetime.date", 
+        describer="machaon.types.dateandtime.DateType",
+        bits=TYPE_USE_INSTANCE_METHOD
+    )
+    typedef.Time(
+        """
+        時刻。
+        """,
+        value_type="datetime.time", 
+        describer="machaon.types.dateandtime.TimeType",
+        bits=TYPE_USE_INSTANCE_METHOD
+    )
+    typedef.Tuple(
+        """
+        任意の型のタプル。
+        """,
+        value_type="machaon.types.tuple.ObjectTuple",
+    )
+    typedef.Sheet(
+        """
+        同型の配列から作られる表。
+        """,
+        value_type="machaon.types.sheet.Sheet",
+    )
+    typedef.ObjectCollection(
+        """
+        辞書。
+        """,
+        value_type="machaon.core.object.ObjectCollection",
+        bits=TYPE_OBJCOLTYPE
+    )
+    typedef.Method(
+        """
+        メソッド。
+        """,
+        value_type="machaon.core.method.Method"
+    )
+    typedef.Context(
+        """
+        メソッドの呼び出しコンテキスト。
+        """,
+        value_type="machaon.core.invocation.InvocationContext"
+    )
+    typedef.Process(
+        """
+        メッセージを実行するプロセス。
+        """,
+        value_type="machaon.process.Process"
+    )
+    typedef.ProcessChamber(
+        """
+        プロセスのリスト。
+        """,
+        value_type="machaon.process.ProcessChamber",
+        describer="machaon.types.app.AppChamber"
+    )
+    typedef.Error( # Error
+        """
+        発生したエラー。
+        """,
+        value_type="machaon.types.stacktrace.ErrorObject"
+    )
+    typedef.TracebackObject(
+        """
+        トレースバック。
+        """,
+        value_type="machaon.types.stacktrace.TracebackObject"
+    )
+    typedef.FrameObject(
+        """
+        フレームオブジェクト。
+        """,
+        value_type="machaon.types.stacktrace.FrameObject"
+    )
+    typedef.Package(
+        """
+        パッケージ。
+        """,
+        value_type="machaon.package.package.Package",
+        describer="machaon.types.package.AppPackageType"
+    )
+    typedef.PyModule(
+        """
+        Pythonのモジュール。
+        """,
+        value_type="machaon.types.package.Module",
+    )
+    typedef.Stored(
+        """
+        外部ファイルのオブジェクトを操作する。
+        """,
+        value_type="machaon.core.persistence.StoredMessage",
+    )
+    typedef.RootObject(
+        """
+        アプリのインスタンス。
+        """,
+        value_type="machaon.types.app.RootObject"
+    )
+    typedef.AppTestObject(
+        """
+        アプリのテストインスタンス。
+        """,
+        value_type="machaon.types.app.AppTestObject"
+    )
+    return module
+
 
 
 
