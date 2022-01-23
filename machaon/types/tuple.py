@@ -203,7 +203,7 @@ class ObjectTuple():
         要素に次々と関数を適用し、一つの値として返す。
         Params:
             methodname(str): 左辺オブジェクトのメソッド名
-            start(Object): *初期値
+            start?(Object): 初期値
         Returns:
             Any: 結果
         """

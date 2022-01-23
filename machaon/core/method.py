@@ -455,7 +455,7 @@ class Method():
         docstringの解析で引数を追加する。
         Params:
             doc(str): docstring
-            function(Callable): *関数の実態。引数デフォルト値を得る
+            function(Callable): *関数の実体。引数デフォルト値を得るのに使用する
         """
         # 1行目はメソッド宣言
         decl = parse_doc_declaration(doc, ("method", "task"))
@@ -494,11 +494,15 @@ class Method():
                 if p is None:
                     raise BadMethodDeclaration("存在しない引数です：" + name)
     
-                default, f = pick_parameter_default_value(p)
-                if f & PARAMETER_KEYWORD:
+                default, pf = pick_parameter_default_value(p)
+                if pf & PARAMETER_KEYWORD:
+                    # キーワード引数には未対応
                     self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                    break # 未対応
-                flags |= f
+                    break 
+                if flags & PARAMETER_REQUIRED == 0 and pf & PARAMETER_REQUIRED:
+                    # オプション引数の設定が食い違う場合、オプション引数として扱う
+                    pf &= ~PARAMETER_REQUIRED
+                flags |= pf
             else:
                 flags |= PARAMETER_REQUIRED
         
@@ -674,9 +678,9 @@ class Method():
                 ps = p.name
             else:
                 if fully:
-                    ps = "?{}={}".format(p.name, repr(p.default))
+                    ps = "{}={}".format(p.name, repr(p.default))
                 else:
-                    ps = "?{}".format(p.name)
+                    ps = "{}?".format(p.name)
             if p.is_variable():
                 ps = "*" + p.name
             params.append(ps)
@@ -833,6 +837,7 @@ def parse_parameter_line(line):
 
     flags = 0
     if head.startswith("*"):
+        # 可変長引数
         name, _, right = head[1:].partition("(")
         if right:
             typename, _, _ = right.rpartition(")")
@@ -843,6 +848,10 @@ def parse_parameter_line(line):
     else:
         name, _, paren = head.partition("(")
         name = name.strip()
+        if name.endswith("?"):
+            name = name[:-1]
+        else:
+            flags |= PARAMETER_REQUIRED
         typename, _, _ = paren.rpartition(")")
         typename = typename.strip()
     
@@ -1184,6 +1193,16 @@ def select_method_from_type_and_instance(value_type, value, name):
     
     return make_method_from_value(attr, name, invtype, sourcebit)  
 
+def is_method_selectable_from_type_and_instance(value_type, value, name):
+    """ 呼び出せるかどうかだけチェックする """
+    invasdict = _InvokeasTypeDict(value_type)
+    invtype = invasdict.get(name)
+    if invtype is None:
+        return False
+
+    if not hasattr(value, name):
+        return False
+    return True
 
 def enum_methods_from_type_and_instance(value_type, value):
     """
