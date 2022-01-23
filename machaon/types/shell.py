@@ -24,8 +24,8 @@ class Path():
     パス、または場所の名前を受ける。
     使用できる場所の名前の一覧は、known-names。
     """
-    def __init__(self, path=""):
-        self._path = path
+    def __init__(self, path=None):
+        self._path = os.fspath(path) if path else ""
         self._isdir = None
         self._stat = None
     
@@ -507,7 +507,7 @@ class Path():
                     return p
             # 識別名が存在しなければパスとする
         else:
-            value = os.fspath(value)
+            pass
         return Path(value)
     
     def stringify(self):
