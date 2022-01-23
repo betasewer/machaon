@@ -227,7 +227,7 @@ class RootObject:
             
             yield PackageManager.PIP_INSTALLING
             try:
-                yield from run_pip(installtarget=path, installdir=installdir)
+                yield from run_pip(installtarget=path, installdir=installdir, options=["--upgrade"])
             finally:
                 tmpdir.cleanup()
         
