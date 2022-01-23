@@ -28,7 +28,7 @@ class DNDPad(NSWindow):
         )
         self.setLevel_(3)
         self.setTitle_ ('')
-        self.registerForDraggedTypes_([TypeFileURL, None])
+        self.registerForDraggedTypes_([TypeFileURL])
 
         label = NSTextField.alloc()
         label.initWithFrame_(((50.0, 130.0), (200.0, 150.0)))
@@ -70,7 +70,6 @@ class DNDPad(NSWindow):
         return False
 
     def keyDown_(self, event):
-        print(event.characters())
         if event.characters() == "d":
             self.toggle_show(True)
         else:
