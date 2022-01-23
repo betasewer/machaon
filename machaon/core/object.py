@@ -149,14 +149,14 @@ class ObjectCollection():
 
     # オブジェクトを新規作成
     def new(self, name: str, type: TypeProxy, value: Any) -> ObjectCollectionItem:
-        if not isinstance(name, str) or not isinstance(type, TypeProxy):
+        if not isinstance(type, TypeProxy):
             raise TypeError()
         o = Object(type, value)
         return self.push(name, o)
 
     def push(self, name: str, obj: Object) -> ObjectCollectionItem:
         # オブジェクトを追加
-        if not isinstance(name, str) or not isinstance(obj, Object):
+        if not isinstance(obj, Object):
             raise TypeError()
         newident = len(self._items)
         item = ObjectCollectionItem(newident, name, obj)
@@ -166,7 +166,7 @@ class ObjectCollection():
     
     def store(self, name: str, obj: Object) -> ObjectCollectionItem:
         # オブジェクトを代入
-        if not isinstance(name, str) or not isinstance(obj, Object):
+        if not isinstance(obj, Object):
             raise TypeError()
         if name not in self._namemap:
             raise ValueError("{} is not found".format(name))
@@ -246,7 +246,7 @@ class ObjectCollection():
         for name, ids in self._namemap.items():
             if not ids:
                 continue
-            heads.append(name)
+            heads.append(str(name))
             if len(heads) > 4:
                 trail = "..."
                 break
@@ -263,10 +263,11 @@ class ObjectCollection():
             columns = ["名前", "値", "型"]
             for name, ids in self._namemap.items():
                 for i in ids:
+                    n = str(name)
                     o = self._items[i].object
                     sm = o.summarize()
                     tn = o.get_typename()
-                    rows_.append([name, sm, tn])
+                    rows_.append([n, sm, tn])
             rows = [(i,x) for i,x in enumerate(rows_)]
             app.post("object-sheetview", rows=rows, columns=columns, context=context)
 
