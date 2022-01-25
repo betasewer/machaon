@@ -21,7 +21,7 @@ class Object():
         self.value: Any = value
         self.type: TypeProxy = type
         if not isinstance(self.type, TypeProxy):
-            raise TypeError("'type' must be TypeInstance")
+            raise TypeError("'type' must be TypeProxy but '{}'".format(self.type))
         if isinstance(self.value, Object):
             raise ValueError("An attempt to assign Object to another Object")
 

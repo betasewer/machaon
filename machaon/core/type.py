@@ -1,4 +1,5 @@
 from collections import defaultdict
+from locale import delocalize
 
 from typing import Any, Sequence, Union, Callable, ItemsView, Optional, Generator, DefaultDict
 from typing import List, Dict, Tuple
@@ -47,14 +48,15 @@ class UnsupportedMethod(Exception):
 TYPE_NONETYPE               = 0x0001
 TYPE_OBJCOLTYPE             = 0x0002
 TYPE_TYPETYPE               = 0x0004
-TYPE_FUNTYPE                = 0x0010
+TYPE_FUNTYPE                = 0x0008
 
 TYPE_TYPETRAIT_DESCRIBER    = 0x0100
 TYPE_VALUETYPE_DESCRIBER    = 0x0200
 TYPE_USE_INSTANCE_METHOD    = 0x0400
-TYPE_MIXIN                  = 0x0800
 TYPE_LOADED                 = 0x1000
 TYPE_DELAY_LOAD_METHODS     = 0x2000
+TYPE_MIXIN                  = 0x10000
+TYPE_SUBTYPE                = 0x20000
 
 #
 #
@@ -452,10 +454,9 @@ class Type(TypeProxy):
             self.load_methods_from_dict(describer, mixinkey=index)
         else:
             self.load_methods_from_describer(describer, mixinkey=index)
-        
             # 追加の記述メソッドを呼び出す
             describer.do_describe_object(self) # type: ignore
-        
+
     def load_methods_from_describer(self, describer, mixinkey=None):
         # クラス属性による記述
         for attrname, attr in describer.enum_attributes():
@@ -507,7 +508,10 @@ class TypeDefinition():
         value_type = None, 
         doc = "", 
         scope = None, 
-        bits = 0
+        bits = 0,
+        # 直接設定可能
+        mixinto = None,
+        subtypeof = None,
     ):
         self.value_type = value_type # Noneの可能性がある
 
@@ -537,7 +541,14 @@ class TypeDefinition():
         self.bits = bits
         self._decl = None
         self._t = None
-        self.mixin_target = None
+
+        self._sub_target = None # Mixin, Subtypeのターゲット
+        if mixinto is not None:
+            self.bits |= TYPE_MIXIN
+            self._sub_target = mixinto
+        if subtypeof is not None:
+            self.bits |= TYPE_SUBTYPE
+            self._sub_target = subtypeof
     
     def get_scoped_typename(self):
         if self.scope:
@@ -582,6 +593,33 @@ class TypeDefinition():
     def get_loaded(self):
         return self._t
 
+    def proto_define(self, typemodule):
+        """ 型を登録する時点での処理 
+        Returns:
+            Str: 登録名. Noneなら登録しない
+        """
+        if self.bits & TYPE_MIXIN:
+            # Mixin型は直ちにロードを行う（この時点で対象型がロード済みの必要あり）
+            target = typemodule.find(self._sub_target)
+            if target is None:
+                raise ValueError("Mixin対象の型'{}'がモジュールに見つかりません".format(self._sub_target))
+            target.mixin_load(self.get_describer())
+            return None # 登録しない
+
+        # 以下、型名が必要
+        if self.typename is None:
+            raise ValueError("TypeDefinition typename is not defined")
+        
+        if self.bits & TYPE_SUBTYPE:
+            # Subtype型を登録する（この時点で対象型はロードされていなくてもよい）
+            self.bits |= TYPE_TYPETRAIT_DESCRIBER
+            self.value_type = _SubtypeTrait # 代入しておかないと補完されてエラーになる
+            base = self._sub_target
+            return (base, self.typename)
+
+        # 型名を登録する
+        return self.typename
+
     def define(self, typemodule):
         """ 実行時に型を読み込み定義する """
         if self._t is not None:
@@ -604,18 +642,6 @@ class TypeDefinition():
         )
         return self._t
     
-    def mixin(self, typemodule):
-        """ 既存の型に定義を追加する """
-        target = typemodule.find(self.mixin_target)
-        if target is None:
-            raise ValueError("Mixin対象の型'{}'がモジュールに見つかりません".format(self.mixin_target))
-
-        describer = self.get_describer()
-        target.mixin_load(describer)
-    
-    def is_mixin_type(self):
-        return self.mixin_target is not None
-
     def load_declaration_docstring(self, doc=None):
         """
         先頭の宣言のみを読み込み、型名を決める
@@ -631,15 +657,24 @@ class TypeDefinition():
         
         if decl.name:
             self.typename = decl.name
-            
+        
         # Mixin宣言はあらかじめ読み込む
         if "mixin" in decl.props:
-            self.bits | TYPE_MIXIN
+            self.bits |= TYPE_MIXIN
             parser = decl.create_parser(("MixinType",))
             mixin = parser.get_value("MixinType")
             if mixin is None:
-                raise ValueError("mixin対象をMixinTypeで指定してください")
-            self.mixin_target = mixin
+                raise ValueError("mixin対象を'MixinType'で指定してください")
+            self._sub_target = mixin
+
+        # Subtype宣言も
+        elif "subtype" in decl.props:
+            self.bits |= TYPE_SUBTYPE
+            parser = decl.create_parser(("BaseType",))
+            base = parser.get_value("BaseType")
+            if base is None:
+                raise ValueError("ベースクラスを'BaseType'で指定してください")
+            self._sub_target = base
 
         self._decl = decl
         return True
@@ -691,6 +726,10 @@ class TypeDefinition():
             raise BadMethodDeclaration()
         self.load_definition_docstring(self._decl)
 
+# ダミーの値型に使用
+class _SubtypeTrait:
+    pass
+
 
 #
 #
@@ -715,6 +754,7 @@ class TypeModule():
     def __init__(self):
         self._typelib: DefaultDict[str, List[Type]] = defaultdict(list)
         self._ancestors: List[TypeModule] = [] 
+        self._subtype_rels: DefaultDict[str, Dict[str, Type]] = defaultdict(dict)
     
     def _load_type(self, t: Union[Type, TypeDefinition]):
         if isinstance(t, TypeDefinition):
@@ -796,6 +836,16 @@ class TypeModule():
                         pass
                     else:
                         raise e
+
+    # サブタイプを取得する
+    def get_subtype(self, parenttypecode: Any, typename: str):
+        t = self.get(parenttypecode)
+        if t is None:
+            return None
+        td = self._subtype_rels[t.get_typename()].get(typename)
+        if td is None:
+            return None
+        return self._load_type(td)
         
     #
     # 値型に適合する型を取得する
@@ -872,17 +922,20 @@ class TypeModule():
         if isinstance(t, Type):
             t.describe(typename=typename, value_type=value_type, doc=doc, scope=scope, bits=bits)
             t.load()
-        
-        if isinstance(t, TypeDefinition) and t.is_mixin_type():
-            # Mixin型は直ちにロードが行われる
-            t.mixin(self)
-        
-        elif not delayedload:
-            # 型をデータベースに登録
-            key = t.typename
-            if key is None:
-                raise ValueError("TypeDefinition typename is not defined")
-            self._typelib[key].append(t)
+            if not delayedload:
+                key = t.get_typename()
+                if key is None:
+                    raise TypeError("No typename is set: {}".format(describer))
+                self._typelib[key].append(t)
+        elif isinstance(t, TypeDefinition):
+            key = t.proto_define(self)
+            if not delayedload and key is not None:
+                if isinstance(key, tuple):
+                    self._subtype_rels[key[0]][key[1]] = t
+                else:
+                    self._typelib[key].append(t)
+        else:
+            raise TypeError("Unknown result value of TypeModule.define: {}".format(t))
 
         return t
     

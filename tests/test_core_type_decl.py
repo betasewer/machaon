@@ -1,8 +1,9 @@
-from os import stat
 import pytest
-from machaon.core.type import Type
-from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeUnion, PythonType
+
+from machaon.core.type import TYPE_SUBTYPE, Type, TypeDefinition
+from machaon.core.typedecl import SubType, TypeDecl, parse_type_declaration, TypeUnion, PythonType
 from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation, instant_context
+from machaon.core.importer import ClassDescriber
 
 parse_ = parse_type_declaration
 
@@ -33,6 +34,21 @@ def test_decl_parse():
 
     equalparse("Sheet[Int|Str]", "Sheet[Union[Int,Str]]")
     equalparse("Tuple[Int|Str]|Sheet[Int|Str]", "Union[Tuple[Union[Int,Str]],Sheet[Union[Int,Str]]]")
+
+    # 空白は削除される
+    equalparse("Sheet[Room](number, type)", "Sheet[Room](number,type)")
+    
+    # コンストラクタ引数で|[]を使用可能
+    reflectparse("Sheet[Room](number|type[])")
+
+    # サブタイプ
+    equalparse("Int:Kanji", "__Sub[Int,Kanji]")
+    equalparse(
+        "Sheet[Int:Kanji, Str:Alpha]", 
+        "Sheet[__Sub[Int,Kanji],__Sub[Str,Alpha]]")
+    equalparse(
+        "Sheet[Function[](seq)|Int:Hex|None, Str:Alpha]", 
+        "Sheet[Union[Function[](seq),__Sub[Int,Hex],None],__Sub[Str,Alpha]]")
 
 
 @pytest.mark.xfail
@@ -89,6 +105,12 @@ def test_decl_check():
     assert isinstance(t, PythonType)
     assert t.check_value_type(bytes)
     assert not t.check_value_type(str)
+
+    t = instance("Float:Fraction")
+    assert isinstance(t, SubType)
+    assert t.check_value_type(float)
+    assert not t.check_value_type(int)
+
 
 #
 # PythonType
@@ -340,24 +362,51 @@ def test_enummethods_pythontype_2():
     assert m.make_invocation()._invoke(cxt, instance) == instance.second
 
 
-from machaon.core.method import (
-    Method, enum_methods_from_type_and_instance
-)
-import types
+#
+#  subtype
+#
+class Hex:
+    def constructor(self, context, s):
+        """ @meta """
+        return int(s, 16)
+    
+    def stringify(self, v):
+        """ @meta """
+        return hex(v)
+        
+class Oct:
+    def constructor(self, context, s):
+        """ @meta """
+        return int(s, 8)
+    
+    def stringify(self, v):
+        """ @meta """
+        return oct(v)
+        
 
-#for name, m in enum_methods_from_type_and_instance(PyType, PyType()):
-#    print("{:0X} | {}".format(m.flags, m.get_signature(fully=True)))
+def test_int_subtype():
+    cxt = instant_context()
+    cxt.define_type(TypeDefinition(ClassDescriber(Hex), "Hex", subtypeof="Int"))
+    cxt.define_type(TypeDefinition(ClassDescriber(Oct), "Oct", subtypeof="Int"))
+    
+    t = cxt.get_subtype("Int", "Hex")
+    assert t
 
-def dirdir(x):
-    print(getattr(x, "__dict__", None))
+    x = cxt.instantiate_type("Int:Hex")
+    assert isinstance(x, SubType)
+    assert x.select_method("abs")
+    assert x.select_method("abs").get_name() == "abs"
 
-    for name in dir(x):
-        v = getattr(x, name)
-        print("{} = {}".format(name, v))
-        if isinstance(v, types.MethodType):
-            print("  Method")
-        elif isinstance(v, types.FunctionType):
-            print("  Function")
-        else:
-            print("  Other: " + type(v).__name__)
+    assert isinstance(x.construct(cxt, "0F"), int)
+    assert x.construct(cxt, "FF") == 0xFF
+    assert x.construct(cxt, 0x24) == 0x24
+    assert x.stringify_value(0x20) == "0x20"
+
+    x = cxt.instantiate_type("Int:Oct")
+    assert isinstance(x, SubType)
+    assert x.construct(cxt, "54") == 0o54
+    assert x.stringify_value(0o43) == "0o43"
+
+
+
 

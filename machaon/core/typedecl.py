@@ -1,6 +1,6 @@
 from machaon.core.symbol import (
-    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, BadTypename, full_qualified_name,
-    PythonBuiltinTypenames
+    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
+    BadTypename, full_qualified_name, PythonBuiltinTypenames
 )
 
 METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
@@ -172,59 +172,71 @@ class TypeProxy:
 
 class RedirectProxy(TypeProxy):
     # typedef の先の実装に転送する
+    def redirect(self):
+        raise NotImplementedError()
+    
     def get_value_type(self):
-        return self.get_typedef().get_value_type()
+        return self.redirect().get_value_type()
     
     def get_typename(self):
-        return self.get_typedef().get_typename()
+        return self.redirect().get_typename()
 
     def get_conversion(self):
-        return self.get_typedef().get_conversion()
+        return self.redirect().get_conversion()
 
     def get_describer(self, mixin):
-        return self.get_typedef().get_describer(mixin)
+        return self.redirect().get_describer(mixin)
 
+    def get_describer_qualname(self, mixin=None):
+        return self.redirect().get_describer_qualname(mixin)
+        
     def get_document(self):
-        return self.get_typedef().get_document()
+        return self.redirect().get_document()
     
+    def check_type_instance(self, type):
+        return self.redirect().check_type_instance(type)
+
+    def check_value_type(self, valtype):
+        return self.redirect().check_value_type(valtype)
+
     def select_method(self, name):
-        return self.get_typedef().select_method(name)
+        return self.redirect().select_method(name)
 
     def is_selectable_method(self, name):
-        return self.get_typedef().is_selectable_method(name)
+        return self.redirect().is_selectable_method(name)
 
     def enum_methods(self):
-        return self.get_typedef().enum_methods()
+        return self.redirect().enum_methods()
     
     def get_methods_bound_type(self):
-        return self.get_typedef().get_methods_bound_type()
+        return self.redirect().get_methods_bound_type()
 
     def is_selectable_instance_method(self):
-        return self.get_typedef().is_selectable_instance_method()
+        return self.redirect().is_selectable_instance_method()
 
     def constructor(self, context, value):
-        return self.get_typedef().constructor(context, value)
+        return self.redirect().constructor(context, value)
 
     def stringify_value(self, value):
-        return self.get_typedef().stringify_value(value)
+        return self.redirect().stringify_value(value)
     
     def summarize_value(self, value):
-        return self.get_typedef().summarize_value(value)
+        return self.redirect().summarize_value(value)
 
     def pprint_value(self, spirit, value):
-        return self.get_typedef().pprint_value(spirit, value)
+        return self.redirect().pprint_value(spirit, value)
     
     def is_none_type(self):
-        return self.get_typedef().is_none_type()
+        return self.redirect().is_none_type()
 
     def is_object_collection_type(self):
-        return self.get_typedef().is_object_collection_type()
+        return self.redirect().is_object_collection_type()
         
     def is_type_type(self):
-        return self.get_typedef().is_type_type()
+        return self.redirect().is_type_type()
 
     def is_function_type(self):
-        return self.get_typedef().is_function_type()
+        return self.redirect().is_function_type()
 
 
 class DefaultProxy(TypeProxy):
@@ -264,6 +276,9 @@ class TypeInstance(RedirectProxy):
         self.ctorargs = ctorargs or []
     
     def get_typedef(self):
+        return self.type
+
+    def redirect(self):
         return self.type
     
     def check_type_instance(self, type):
@@ -471,6 +486,34 @@ class TypeUnion(DefaultProxy):
         if t is None:
             raise TypeError(type(value))
         return t.pprint_value(app, value)
+
+        
+class SubType(RedirectProxy):
+    """
+    サブタイプ型
+    """
+    def __init__(self, basetype, metatype):
+        super().__init__()
+        self.basetype = basetype
+        self.metatype = metatype
+
+    def redirect(self):
+        return self.basetype
+    
+    def constructor(self, context, value):
+        if self.check_value_type(type(value)) and not isinstance(value, str): # Strを除き、元の型なら変換を行わない
+            return value
+        return self.metatype.constructor(context, value)
+
+    def stringify_value(self, value):
+        return self.metatype.stringify_value(value)
+    
+    def summarize_value(self, value):
+        return self.metatype.summarize_value(value)
+
+    def pprint_value(self, app, value):
+        return self.metatype.pprint_value(app, value)
+
     
 #
 def make_conversion_from_value_type(value_type):
@@ -538,6 +581,15 @@ class TypeDecl:
             elems += ",".join([x for x in self.ctorargs])
             elems += ")"
         return elems
+
+    def _instance_type(self, typedef, context, args=None) -> TypeProxy:
+        """ Typeから型のインスタンスを作る """
+        typeargs = [x.instance(context) for x in self.declargs]
+        ctorargs = [*self.ctorargs, *(args or [])]
+        if not typeargs and not ctorargs:
+            return typedef
+        else:
+            return TypeInstance(typedef, typeargs, ctorargs)
     
     def instance(self, context, args=None) -> TypeProxy:
         """
@@ -555,6 +607,14 @@ class TypeDecl:
             # 型制約
             typeargs = [x.instance(context) for x in self.declargs]
             return TypeUnion(typeargs)
+        elif self.typename == "__Sub":
+            # サブタイプを解決する
+            if len(self.declargs) < 2:
+                raise ValueError("not enough type args for __Sub")
+            baset = self.declargs[0].instance(context) # 基底型
+            subtd = context.get_subtype(baset.typename, self.declargs[1].typename)
+            subt = self.declargs[1]._instance_type(subtd, context, args)
+            return SubType(baset, subt)
         elif SIGIL_PYMODULE_DOT in self.typename:
             # machaonで未定義のPythonの型
             ctorargs = [*self.ctorargs, *(args or [])]
@@ -566,12 +626,7 @@ class TypeDecl:
             td = context.select_type(typename)
             if td is None:
                 raise BadTypename(typename)
-            typeargs = [x.instance(context) for x in self.declargs]
-            ctorargs = [*self.ctorargs, *(args or [])]
-            if not typeargs and not ctorargs:
-                return td
-            else:
-                return TypeInstance(td, typeargs, ctorargs)
+            return self._instance_type(td, context, args)
 
 
 class TypeDeclError(Exception):
@@ -598,9 +653,9 @@ def parse_type_declaration(decl):
     return decl
 
 #
-# 型宣言パーサコンビネータ
-#
-# <body> ::= <expr> | <expr> "|" <body>
+# 型宣言パーサコンビネータ 
+# <body> ::= <subtype> | <subtype> "|" <subtype>
+# <subtype> ::= <expr> | <expr> ":" <expr>
 # <expr> ::= <type100> | <type110> | <type111> | <type101> | <type100a>
 # <type100> ::= <name>
 # <type110> ::= <name> "[" <typeargs> "]"
@@ -608,14 +663,14 @@ def parse_type_declaration(decl):
 # <type101> ::= <name> "[]"  "(" <ctorargs> ")"
 # <type100a> ::= <name> "[]"
 # <typeargs> ::= <body> | <body> "," <typeargs>
-# <ctorargs> ::= <value> | <value> "," <ctorargs>
+# <ctorargs> ::= <ctorvalue> | <ctorvalue> "," <ctorargs>
 # <name> ::= ([a-z] | [A-Z] | [0-9] | '_' | '/' | '.')+
-# <value> ::= [^,\[\]\(\)\|]+  
+# <ctorvalue> ::= [^,\[\]\(\)\|]+  
 #
 def _typedecl_body(itr):
     union = []
     while not itr.eos():
-        expr = _typedecl_expr(itr)
+        expr = _typedecl_subtype(itr)
         union.append(expr)
         ch, pos = itr.advance()
         if itr.eos():
@@ -631,6 +686,29 @@ def _typedecl_body(itr):
         raise TypeDeclError(itr, "型がありません")
     else:
         return TypeDecl("Union", union)
+
+def _typedecl_subtype(itr):
+    # サブタイプの記述
+    subtypes = []
+    while not itr.eos():
+        expr = _typedecl_expr(itr)
+        subtypes.append(expr)
+        ch, pos = itr.advance()
+        if itr.eos():
+            break
+        elif ch == SIGIL_SUBTYPE_SEPARATOR:
+            continue
+        else:
+            itr.back(pos)
+            break
+    if len(subtypes)==1:
+        return subtypes[0]
+    elif not subtypes:
+        raise TypeDeclError(itr, "型がありません")
+    elif len(subtypes)==2:
+        return TypeDecl("__Sub", subtypes)
+    else:
+        raise TypeDeclError(itr, "サブタイプは1つしか指定できません")
 
 def _typedecl_expr(itr):
     # 型名
@@ -688,7 +766,7 @@ def _typedecl_typeargs(itr):
 def _typedecl_ctorargs(itr):
     args = []
     while True:
-        value = _typedecl_value(itr)
+        value = _typedecl_ctorvalue(itr)
         args.append(value)
         ch, pos = itr.advance()
         if ch == ",":
@@ -702,6 +780,7 @@ def _typedecl_ctorargs(itr):
     return args
 
 def _typedecl_name(itr):
+    # Pythonの識別名で使える文字 + SIGIL_SCOPE_RESOLUTION + SIGIL_PYMODULE_DOT
     name = ""
     while not itr.eos():
         ch, pos = itr.advance()
@@ -712,12 +791,12 @@ def _typedecl_name(itr):
             break
     return name
 
-def _typedecl_value(itr):
+def _typedecl_ctorvalue(itr):
     # 構文用の文字以外は全て受け入れる
     name = ""
     while not itr.eos():
         ch, pos = itr.advance()
-        if ch is None or ch in ("[]()|,"): 
+        if ch is None or ch in ("),"): 
             itr.back(pos)
             break
         else:

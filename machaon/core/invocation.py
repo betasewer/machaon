@@ -387,6 +387,13 @@ class InvocationContext:
         """ 新しい型を作成するが、モジュールに登録しない """
         return Type(describer).load()
 
+    def get_subtype(self, typecode, subtypename) -> Type:
+        """ サブタイプを取得する """
+        t = self.type_module.get_subtype(typecode, subtypename)
+        if t is None:
+            raise BadTypename((typecode, subtypename))
+        return t
+
     def instantiate_type(self, conversion, *args) -> TypeProxy:
         """ 型をインスタンス化する """
         typedecl = parse_type_declaration(conversion)

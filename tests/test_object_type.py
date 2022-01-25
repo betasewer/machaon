@@ -165,6 +165,7 @@ def test_deduce():
     assert not isinstance(t2, PythonType)
     assert t2.get_value_type() is Path
 
+
 # defineで登録
 def test_method():
     types = TypeModule()

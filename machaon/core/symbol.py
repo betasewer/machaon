@@ -102,19 +102,15 @@ def full_qualified_name(t):
         return mod + "." + n
 
 
-#
 # メッセージで用いられる記号
-#
 SIGIL_OBJECT_ID = "@"
 SIGIL_OBJECT_LAMBDA_MEMBER = "."
 SIGIL_OBJECT_ROOT_MEMBER = "@"
 SIGIL_SCOPE_RESOLUTION = "/"
-SIGIL_PYMODULE_DOT = "."
 SIGIL_END_OF_KEYWORDS = ";"
 SIGIL_DISCARD_MESSAGE = "."
 SIGIL_DEFAULT_RESULT = "-"
 SIGIL_TYPE_INDICATOR = "::"
-
 QUOTE_ENDPARENS = {
     "[" : "]",
     "{" : "}",
@@ -124,6 +120,10 @@ QUOTE_ENDPARENS = {
     "【" : "】",
     "《" : "》",
 }
+
+# 型名
+SIGIL_PYMODULE_DOT = "."
+SIGIL_SUBTYPE_SEPARATOR = ":"
 
 #
 # 
