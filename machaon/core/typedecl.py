@@ -525,6 +525,8 @@ class SubType(RedirectProxy):
     def construct(self, context, value):
         """ オブジェクトを構築して値を返す """
         # 値型と同一でもコンストラクタを呼び出す
+        if self.get_value_type() is not str and self.check_value_type(type(value)):
+            return value 
         ret = self.constructor(context, value)
         if not self.check_value_type(type(ret)):
             raise ConstructorReturnTypeError(self, type(ret))

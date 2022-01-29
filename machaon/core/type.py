@@ -371,7 +371,7 @@ class Type(TypeProxy):
         try:
             return fn(*args, **kwargs)
         except Exception as e:
-            raise BadMetaMethod(e, self, method)
+            raise BadMetaMethod(e, self, method) from e
 
     #
     # 型定義構文用のメソッド

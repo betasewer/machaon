@@ -959,7 +959,13 @@ class MetaMethod():
 
         # 引数
         for i, line in enumerate(sections.get_lines("Params")):
-            if i == 0 and "(" not in line:
+            unnamed_format = False
+            if i == 0:
+                findend = (lambda x: None if x == -1 else x)(line.find(":"))
+                if -1 == line.find("(", 0, findend):
+                    unnamed_format = True
+
+            if unnamed_format:
                 name = "value"
                 typename, doc, flags = parse_result_line(line.strip())
             else:
