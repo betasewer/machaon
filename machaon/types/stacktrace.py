@@ -11,7 +11,7 @@ from machaon.cui import collapse_text, composit_text
 from machaon.core.symbol import full_qualified_name
 
 class ErrorObject():
-    """
+    """ @type [Error]
     プロセスの実行時に起きたエラー。
     """
     def __init__(self, context, error):
@@ -80,7 +80,7 @@ class ErrorObject():
         self.context.pprint_log_as_message(app)
 
     def constructor(self, context, value):
-        """ @meta 
+        """ @meta context
         例外オブジェクトからの変換をサポート
         Params:
             builtins.Exception:
@@ -126,8 +126,8 @@ class ErrorObject():
 #
 #
 class TracebackObject():
-    """
-    トレースバックオブジェクト
+    """ @type
+    トレースバック。
     """
     def __init__(self, tb_or_error, error=None):        
         if isinstance(tb_or_error, Exception):
@@ -274,7 +274,7 @@ class TracebackObject():
         msg = verbose_display_traceback(excep, app.get_ui_wrap_width())
         app.post("message", msg)
 
-    def constructor(self, _context, value):
+    def constructor(self, value):
         """ @meta
         Params:
             types.TracebackType | Exception
@@ -288,8 +288,8 @@ class TracebackObject():
 
 
 class FrameObject:
-    """
-    フレームオブジェクト・コードオブジェクト
+    """ @type
+    フレームオブジェクトおよびコードオブジェクト
     """
     def __init__(self, frame):
         self._fr = frame
@@ -378,6 +378,19 @@ class FrameObject:
                 "location" : location
             })
         return lines
+
+    def constructor(self, value):
+        """ @meta
+        Params:
+            types.FrameType:
+        """
+        return FrameObject(value)
+    
+    def stringify(self):
+        """ @meta
+        """
+        return "<FrameObject at {}, {}>".format(self.filepath, self.lastline)
+
 
 
 def display_this_traceback(tb, linewidth, showtype=None, level=None, printerror=False):

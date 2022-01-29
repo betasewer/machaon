@@ -6,7 +6,7 @@ from machaon.package.package import Package, PackageManager
 
 
 class AppPackageType:
-    """
+    """ @type trait
     プログラムパッケージを操作するための型。
     ValueType: 
         machaon.package.package.Package
@@ -320,8 +320,8 @@ class AppPackageType:
 #
 #
 class Module():
-    """
-    Pythonのモジュール型。
+    """ @type [PyModule]
+    Pythonのモジュール。
     """
     def __init__(self, m) -> None:
         self._m = m
@@ -329,7 +329,7 @@ class Module():
     def mloader(self):
         return PyModuleInstance(self._m)
     
-    def constructor(self, context, value):
+    def constructor(self, value):
         """ @meta """
         if isinstance(value, str):
             if os.path.isfile(value):

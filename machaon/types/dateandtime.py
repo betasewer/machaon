@@ -34,7 +34,7 @@ class DatetimeType():
     ValueType:
         datetime.datetime
     """
-    def constructor(self, _context, s=None):
+    def constructor(self, s=None):
         """ @meta 
         Params:
             None|Str|Int:
@@ -301,7 +301,7 @@ class DateType:
     ValueType:
         datetime.date
     """
-    def constructor(self, _context, s):
+    def constructor(self, s):
         """ @meta """
         if s is None:
             return datetime.datetime.now()
@@ -432,7 +432,7 @@ class TimeType:
     ValueType:
         datetime.time
     """
-    def constructor(self, _context, s):
+    def constructor(self, s):
         """ @meta 
         Params:
             Str|Int:
@@ -555,7 +555,7 @@ class Formatted:
     BaseType:
         Date:
     """
-    def constructor(self, context, s):
+    def constructor(self, s):
         """ @meta """
         parts = [""]
         for ch in s:
@@ -578,7 +578,7 @@ class Date8:
     BaseType:
         Date:
     """
-    def constructor(self, context, s):
+    def constructor(self, s):
         """ @meta """
         if len(s) != 8:
             raise ValueError(s)
@@ -596,20 +596,23 @@ class Date4:
     MMDDな今年の日付表現。
     BaseType:
         Date:
+    Params:
+        year?(int):
     """
-    def constructor(self, context, s, year=None):
-        """ @meta extraargs """
+    def constructor(self, s, year=None):
+        """ @meta """
         if len(s) != 4:
             raise ValueError(s)
         if year is None:
             y = datetime.datetime.today().year
         else:
-            y = int(year)
+            y = year
         m = int(s[0:2])
         d = int(s[2:])
         return datetime.date(y, m, d)
 
     def stringify(self, d):
+        """ @meta noarg """
         return d.strftime("%m%d")
 
 class Month:
@@ -617,22 +620,25 @@ class Month:
     今年のある月の1日を表す。 Intへのflow
     BaseType:
         Date:
+    Params:
+        year?(int):
+        day?(int):
     """
-    def constructor(self, context, s, year=None, day=None):
-        """ @meta extraargs """
+    def constructor(self, s, year=None, day=None):
+        """ @meta """
         v = int(s)
         if year is None:
             y = datetime.datetime.today().year
         else:
-            y = int(year)
+            y = year
         if day is None:
             d = 1
         else:
-            d = int(day)
+            d = day
         return datetime.date(y, v, d)
 
-    def reflux(self, context, d):
-        """ @meta """
+    def reflux(self, d):
+        """ @meta noarg """
         return d.month
 
 class Day:
@@ -640,22 +646,25 @@ class Day:
     今月のある日を表す。 Intへのflow
     BaseType:
         Date:
+    Params:
+        year?(int):
+        month?(int):
     """
-    def constructor(self, context, s, year=None, month=None):
+    def constructor(self, s, year=None, month=None):
         """ @meta """
         v = int(s)
         if year is None:
             y = datetime.datetime.today().year
         else:
-            y = int(year)
+            y = year
         if month is None:
             m = datetime.datetime.today().month
         else:
-            m = int(month)
+            m = month
         return datetime.date(y, m, v)
 
-    def reflux(self, context, d):
-        """ @meta """
+    def reflux(self, d):
+        """ @meta noarg """
         return d.day
 
 

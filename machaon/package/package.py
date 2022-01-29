@@ -210,7 +210,8 @@ class Package():
         for modloader in modules:
             try:
                 for typedef in modloader.scan_type_definitions():
-                    typedef.scope = self.scope
+                    if self.scope:
+                        typedef.scope = self.scope
                     yield typedef
                     typecount += 1
             except Exception as e:

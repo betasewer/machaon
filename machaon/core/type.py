@@ -10,14 +10,15 @@ from machaon.core.symbol import (
     SIGIL_SCOPE_RESOLUTION
 )
 from machaon.core.typedecl import (
-    TypeProxy, TypeInstance,
+    TypeProxy, TypeInstance, TypeDecl,
     METHODS_BOUND_TYPE_TRAIT_INSTANCE,
     METHODS_BOUND_TYPE_INSTANCE
 )
 from machaon.core.method import (
-    BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, make_method_from_dict,
-    make_method_prototype, meta_method_prototypes, 
-    Method, MetaMethod
+    BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, 
+    make_method_from_dict, make_method_prototype, meta_method_prototypes, 
+    Method, MetaMethod, MethodParameter,
+    parse_type_declaration, parse_result_line, parse_parameter_line, 
 )
 from machaon.core.importer import ClassDescriber, attribute_loader
 from machaon.core.docstring import parse_doc_declaration
@@ -62,9 +63,9 @@ TYPE_SUBTYPE                = 0x20000
 #
 #
 class Type(TypeProxy):
-    def __init__(self, describer=None, name=None, value_type=None, scope=None, *, bits = 0):
-        self.typename: str = name
-        self.doc: str = ""
+    def __init__(self, describer=None, name=None, value_type=None, scope=None, params=None, *, doc="", bits=0):
+        self.typename: str = normalize_typename(name) if name else None
+        self.doc: str = doc
         self.flags = bits
         self.value_type: Callable = value_type
         self.scope: Optional[str] = scope
@@ -72,6 +73,7 @@ class Type(TypeProxy):
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
         self._metamethods: Dict[str, MetaMethod] = {}
+        self._params: List[MethodParameter] = params or []
         self._mixin = []
     
     def __str__(self):
@@ -131,7 +133,10 @@ class Type(TypeProxy):
         t.scope = self.scope
         t._methods = self._methods.copy()
         t._methodalias = self._methodalias.copy()
+        t._metamethods = self._metamethods.copy()
         t._describer = self._describer
+        t._params = self._params.copy()
+        t._mixin = self._mixin.copy()
         return t
     
     #
@@ -146,8 +151,12 @@ class Type(TypeProxy):
     def check_value_type(self, valtype):
         return issubclass(valtype, self.value_type)
 
-    def instance(self, *args):
+    def instantiate(self, *args):
+        # 型変換は行われない
         return TypeInstance(self, ctorargs=args)
+
+    def get_type_params(self):
+        return self._params
     
     #
     def is_none_type(self):
@@ -281,41 +290,40 @@ class Type(TypeProxy):
     #
     # 特殊メソッド
     #
-    def constructor(self, context, value, extraarg=None):
+    def constructor(self, context, value, typeinst=None):
         """ 
         コンストラクタ。
         実装メソッド:
             constructor
         """
-        fn = self._metamethods.get("constructor")
-        if fn is None:
+        fns = self.resolve_meta_method("constructor", context, value, typeinst)
+        if fns is None:
             # 定義が無い場合、単純に生成する
             return self.value_type(value)
-
-        args = fn.prepare_invoke_args(context, value, extraarg)
-        return self.invoke_meta_method(fn, context, *args)
+        
+        return self.invoke_meta_method(*fns)
     
-    def stringify_value(self, value: Any) -> str:
+    def stringify_value(self, value, typeinst=None) -> str:
         """ 
         値を文字列に変換する。
         実装メソッド:
             stringify
         """
-        fn = self._metamethods.get("stringify")
-        if fn is None:
+        fns = self.resolve_meta_method("stringify", None, value, typeinst)
+        if fns is None:
             # デフォルト動作
             return str(value)
+        
+        return self.invoke_meta_method(*fns)
 
-        return self.invoke_meta_method(fn, value)
-
-    def summarize_value(self, value: Any):
+    def summarize_value(self, value, typeinst=None):
         """ 
         値を短い文字列に変換する。
         実装メソッド:
             summarize
         """
-        fn = self._metamethods.get("summarize")
-        if fn is None:
+        fns = self.resolve_meta_method("summarize", None, value, typeinst)
+        if fns is None:
             s = self.stringify_value(value)
             if not isinstance(s, str):
                 s = repr(s) # オブジェクトに想定されない値が入っている
@@ -324,31 +332,39 @@ class Type(TypeProxy):
                 return s[0:30] + "..." + s[-20:]
             else:
                 return s
-        return self.invoke_meta_method(fn, value)
+        return self.invoke_meta_method(*fns)
 
-    def pprint_value(self, app, value: Any):
+    def pprint_value(self, app, value, typeinst=None):
         """ 
         値を画面に表示する。
         実装メソッド:
             pprint
         """
-        fn = self._metamethods.get("pprint")
-        if fn is None:
+        fns = self.resolve_meta_method("pprint", None, value, typeinst, app)
+        if fns is None:
             s = self.stringify_value(value)
             app.post("message", s)
             return
-        self.invoke_meta_method(fn, value, app)
+        self.invoke_meta_method(*fns)
 
-    def reflux_value(self, value:Any):
+    def reflux_value(self, value:Any, typeinst=None):
         """
         コンストラクタを呼び出せる別の型の値に変換する。
         実装メソッド:
             reflux
         """
-        fn = self._metamethods.get("reflux")
-        if fn is None:
+        fns = self.resolve_meta_method("reflux", None, value, typeinst)
+        if fns is None:
             return self.stringify_value(value) # 文字に変換する
-        return self.invoke_meta_method(fn, value)
+        return self.invoke_meta_method(*fns)
+
+    def resolve_meta_method(self, name, context, value, typeinst, *moreargs):
+        """ メソッドと引数の並びを解決する """
+        fn = self._metamethods.get(name)
+        if fn is None:
+            return None
+        args = fn.prepare_invoke_args(context, self._params, value, typeinst, *moreargs)
+        return (fn, *args)
 
     def invoke_meta_method(self, method, *args, **kwargs):
         """ 
@@ -377,28 +393,31 @@ class Type(TypeProxy):
     # 型定義構文用のメソッド
     #
     def describe(self, 
-        typename = "",
-        doc = "",
-        value_type = None,
-        scope = None,
-        bits = 0,
+        describer = None,
+        typename = None,
+        value_type = None, 
+        scope = None, 
+        doc = None, 
+        bits = 0
     ):
-        if typename:
-            self.typename = normalize_typename(typename)
-        if doc:
-            self.doc = doc
-        if value_type:
+        if describer is not None:
+            self._describer = describer
+        if typename is not None:
+            self.typename = typename
+        if value_type is not None:
             self.value_type = value_type
-        if scope:
+        if scope is not None:
             self.scope = scope
+        if doc is not None:
+            self.doc = doc
         if bits:
             self.flags |= bits
         return self
-    
-    #
-    #
-    #
-    def load(self, loadbits=0):
+
+    def load(self, *, loadbits = 0):
+        """
+        メソッド定義をロードする
+        """
         if self.is_loaded():
             return
 
@@ -550,7 +569,8 @@ class TypeDefinition():
             self.doc = self.doc.strip()
         self.scope = scope
         self.bits = bits
-        self._decl = None
+        self.params = [] # 型パラメータ
+        self.memberaliases = [] 
         self._t = None
 
         self._sub_target = None # Mixin, Subtypeのターゲット
@@ -619,7 +639,14 @@ class TypeDefinition():
 
         # 以下、型名が必要
         if self.typename is None:
-            raise ValueError("TypeDefinition typename is not defined")
+            if self.describer.get_classname() is not None:
+                # クラス名から補完する
+                name = self.describer.get_classname()
+                if not name[0].isupper():
+                    name = name[0].upper() + name[1:]
+                self.typename = normalize_typename(name)
+            else:
+                raise ValueError("TypeDefinition typename is not defined")
         
         if self.bits & TYPE_SUBTYPE:
             # Subtype型を登録する（この時点で対象型はロードされていなくてもよい）
@@ -631,24 +658,26 @@ class TypeDefinition():
         # 型名を登録する
         return self.typename
 
-    def define(self, typemodule):
+    def load_type(self) -> Type:
         """ 実行時に型を読み込み定義する """
         if self._t is not None:
             return self._t
         
-        #if self._decl is not None:
-        #    self.load_definition_docstring(self._decl)
-    
         self._resolve_value_type()
-        self._t = typemodule.define(
+
+        self._t = Type(
             self.describer, 
-            typename=self.typename, 
+            name=self.typename,
             value_type=self.value_type,
-            doc=self.doc, 
             scope=self.scope, 
-            bits=self.bits,
-            delayedload=True
+            params=self.params,
+            doc=self.doc,
+            bits=self.bits
         )
+        self._t.load()
+        for name, row in self.memberaliases:
+            self._t.add_member_alias(name, row)
+        
         return self._t
     
     def load_docstring(self, doc=None):
@@ -661,14 +690,16 @@ class TypeDefinition():
 
         ValueType:
             <Typename>
-
+        Params:
+            name(typeconversion): description...
         MemberAlias:
             long: (mode ftype modtime size name)
             short: (ftype name)
             link: path
-
+        MixinType:
+            <Typename> (mixin target type)
         BaseType:
-            <Typename> (For subtype)
+            <Typename> (subtype base type)
         """
         if doc is None:
             doc = self.get_describer().get_docstring()
@@ -678,12 +709,14 @@ class TypeDefinition():
         decl = parse_doc_declaration(doc, ("type",))
         if decl is None:
             return False
+            
+        # 定義部をパースする
+        sections = decl.create_parser(("ValueType", "Params", "MemberAlias", "BaseType", "MixinType"))
         
         # Mixin宣言はあらかじめ読み込む
         if "mixin" in decl.props:
             self.bits |= TYPE_MIXIN
-            parser = decl.create_parser(("MixinType",))
-            mixin = parser.get_value("MixinType")
+            mixin = sections.get_value("MixinType")
             if mixin is None:
                 raise ValueError("mixin対象を'MixinType'で指定してください")
             self._sub_target = mixin.rstrip(":") # コロンがついていてもよしとする
@@ -692,8 +725,7 @@ class TypeDefinition():
         # Subtype宣言も
         elif "subtype" in decl.props:
             self.bits |= TYPE_SUBTYPE
-            parser = decl.create_parser(("BaseType",))
-            base = parser.get_value("BaseType")
+            base = sections.get_value("BaseType")
             if base is None:
                 raise ValueError("ベースクラスを'BaseType'で指定してください")
             self._sub_target = base.rstrip(":") # コロンがついていてもよしとする
@@ -708,9 +740,6 @@ class TypeDefinition():
         if decltypename:
             self.typename = decltypename
         
-        # 定義部をパースする
-        sections = decl.create_parser(("ValueType", "MemberAlias", "BaseType", "MixinType"))
-
         document = ""
         document += sections.get_string("Document")
         if document:
@@ -720,6 +749,13 @@ class TypeDefinition():
         if valtypename:
             self.value_type = valtypename.rstrip(":") # コロンがついていてもよしとする
         
+        # 型引数
+        for line in sections.get_lines("Params"):
+            typename, name, doc, flags = parse_parameter_line(line.strip())
+            typedecl = parse_type_declaration(typename)
+            p = MethodParameter(name, typedecl, doc, flags=flags)
+            self.params.append(p)
+
         aliases = sections.get_lines("MemberAlias")
         for alias in aliases:
             name, _, dest = [x.strip() for x in alias.partition(":")]
@@ -728,7 +764,7 @@ class TypeDefinition():
 
             if dest[0] == "(" and dest[-1] == ")":
                 row = dest[1:-1].split()
-                self.add_member_alias(name, row)
+                self.memberaliases.append((name, row))
 
         return True
 
@@ -764,7 +800,7 @@ class TypeModule():
     
     def _load_type(self, t: Union[Type, TypeDefinition]):
         if isinstance(t, TypeDefinition):
-            return t.define(self)
+            return t.load_type()
         else:
             return t
     
@@ -900,8 +936,7 @@ class TypeModule():
         value_type = None,
         doc = "",
         scope = None,
-        bits = 0,
-        delayedload = False
+        bits = 0
     ) -> Type:
         # 登録処理
         t: Any = None # 型オブジェクトのインスタンス
@@ -919,23 +954,24 @@ class TypeModule():
         elif isinstance(describer, ClassDescriber) or isinstance(describer, type):
             if not isinstance(describer, ClassDescriber):
                 describer = ClassDescriber(describer)
-            t = Type(describer)
-            if typename is None and describer.get_classname() is not None:
-                typename = normalize_typename(describer.get_classname())
+            td = TypeDefinition(describer)
+            t = Type(describer, name=td.proto_define(self))
         else:
             raise TypeError("TypeModule.defineは'{}'による型定義に対応していません：".format(type(describer).__name__))
         
         if isinstance(t, Type):
-            t.describe(typename=typename, value_type=value_type, doc=doc, scope=scope, bits=bits)
-            t.load()
-            if not delayedload:
-                key = t.get_typename()
-                if key is None:
-                    raise TypeError("No typename is set: {}".format(describer))
-                self._typelib[key].append(t)
+            # 定義をロードする
+            t.describe(
+                typename=typename, value_type=value_type, 
+                doc=doc, scope=scope, bits=bits
+            ).load()
+            key = t.get_typename()
+            if key is None:
+                raise TypeError("No typename is set: {}".format(describer))
+            self._typelib[key].append(t)
         elif isinstance(t, TypeDefinition):
             key = t.proto_define(self)
-            if not delayedload and key is not None:
+            if key is not None:
                 if isinstance(key, tuple):
                     self._subtype_rels[key[0]][key[1]] = t
                 else:

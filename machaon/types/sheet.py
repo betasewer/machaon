@@ -154,9 +154,11 @@ def make_data_search_predicate(code, column, bound_context):
 #
 #
 class Sheet():  
-    """
+    """ @type
     同じ型のオブジェクトに対する式を縦列とするデータの配列。
-    Typename: Sheet
+    Params:
+        itemtype(Type): 要素の型（全要素に適用する）
+        *column_names(Str): カラム名のリスト
     """
     def __init__(self, items, *, typeconversion=None, context=None, column_names=None, uninitialized=False):
         self.items = items
@@ -780,26 +782,25 @@ class Sheet():
     # オブジェクト共通関数
     #
     def constructor(self, context, value, itemtype, *column_names):
-        """ @meta 
+        """ @meta context
         Params:
             Any: イテラブル型
-            itemtype(Type): 要素の型（全要素に適用する）
-            *column_names(Str): カラム名のリスト
         """
-        if not isinstance(value, list):
-            value = list(value)
-
+        try:
+            iter(value)
+        except TypeError:
+            value = (value,)
         # 型変換を行う
         objs = [context.new_object(x, type=itemtype) for x in value]
         return Sheet(objs, context=context, column_names=column_names)
     
-    def summarize(self):
+    def summarize(self, itemtype, *_column_names):
         """ @meta """
         col = ", ".join([x.get_name() for x in self.get_current_columns()])
-        conv = "({})".format(self.typeconversion) if self.typeconversion else ""
+        conv = "({})".format(itemtype.get_conversion()) if itemtype else ""
         return "[{}]{} {}件のアイテム".format(col, conv, self.count()) 
 
-    def pprint(self, app):
+    def pprint(self, app, itemtype, *_column_names):
         """ @meta """
         if len(self.rows) == 0:
             text = "空です" + "\n"

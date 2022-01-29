@@ -6,6 +6,7 @@ from machaon.core.object import ObjectCollection, Object
 from machaon.core.invocation import InvocationContext, instant_context
 from machaon.core.sort import ValueWrapper
 from machaon.core.message import parse_function
+from machaon.core.typedecl import TypeInstance
 from machaon.types.sheet import Sheet, DataItemItselfColumn
 
 class Employee():
@@ -53,11 +54,28 @@ def objectdesk():
 def values(objects):
     return [x.value for x in objects]
 
-# =================================================
+#
+# 型
+#
+def test_type():
+    datas = [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")]
+    columns = ["name", "postcode"]
+    cxt = instant_context()
+    cxt.type_module.define(Employee)
+    sh = cxt.new_object(datas, *columns, conversion="Sheet[Employee]")
+
+    assert isinstance(sh.type, TypeInstance)
+    assert sh.type.type_args[0].get_conversion() == "Employee"
+    assert sh.type.constructor_args[0] == "name"
+    assert sh.type.constructor_args[1] == "postcode"
+
+    assert sh.value.get_current_column_names() == ["name", "postcode"]
+
+
+#
 #
 # カラム
 #
-# =================================================
 #
 def test_column(objectdesk):
     view = employees_sheet(objectdesk, [("ken", "332-0011"), ("ren", "224-0022"), ("shin", "113-0033")], ["name", "postcode"])

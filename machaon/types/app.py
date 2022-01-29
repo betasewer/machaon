@@ -15,7 +15,7 @@ logo = '''
 '''[1:]
 
 class RootObject:
-    """
+    """ @type
     アプリケーションを表すグローバルなオブジェクト。
     """
 
@@ -246,27 +246,29 @@ class RootObject:
         """ @meta """
         return "<root>"
     
-    def testobj(self):
-        """ @method 
+    def testobj(self, app):
+        """ @method spirit
         様々なテストを実装するオブジェクトを返す。
         Returns:
-            Any
+            Any:
         """
-        return AppTestObject()
+        return AppTestObject(app)
 
 #
 #
 #
 class AppTestObject:
-    """ @type
-    さまざまなテストを提供する。
-    """
-    def colors(self, app, text="サンプルテキスト"):
-        """ @method spirit
+    """ さまざまなテストを提供する。 """
+    def __init__(self, app):
+        self.app = app
+    
+    def colors(self, text="サンプルテキスト"):
+        """
         テキストの色。
         Params:
             text(str): 
         """
+        app = self.app
         app.post("message", text)
         app.post("message-em", "【強調】" + text)
         app.post("input", "【入力】" + text)
@@ -274,19 +276,21 @@ class AppTestObject:
         app.post("warn", "【注意】" + text)
         app.post("error", "【エラー発生】" + text)
     
-    def progress(self, app):
-        """ @task
+    def progress(self):
+        """
         プログレスバーを表示。
         """
+        app = self.app
         app.start_progress_display(total=50)
         for _ in range(50):
             app.interruption_point(progress=1, wait=1)
         app.finish_progress_display(total=50)
 
-    def graphic(self, app):
-        """ @method spirit
+    def graphic(self):
+        """
         図形を描画する。
         """
+        app = self.app
         app.post("canvas", app.new_canvas("cv1", width=200, height=400)
             .rectangle_frame(coord=(2,2,100,200), color="#00FF00")
             .rectangle_frame(coord=(50,50,200,250), color="#FF0000", dash=",")

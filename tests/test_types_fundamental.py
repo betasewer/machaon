@@ -9,44 +9,58 @@ fundamental_type = fundamental_types()
 def run(fn):
     fn()
 
-class Dummy_Rabbit():
-    describe_count = 0
+def test_fundamental_basic():
+    t = fundamental_type.find("Bool")
+    assert t
+    assert t.get_value_type() is bool
+
+    t = fundamental_type.find("Int")
+    assert t
+    assert t.get_value_type() is int
+    assert t.get_conversion() == "Int"
     
-    @classmethod
-    def describe_object(cls, traits):
-        traits.describe(doc="うさぎ")
-        cls.describe_count += 1
+    t = fundamental_type.find("Str")
+    assert t
+    assert t.get_value_type() is str
+    assert t.get_conversion() == "Str"
     
-
-fundamental_type.define(Dummy_Rabbit, typename="Dummy-Rabbit")
-
-def test_fundamental_find():
-    assert fundamental_type.find("Int") is not None
-
-def test_typemodule_get():
-    assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
-    assert fundamental_type.get(Dummy_Rabbit).typename == "Dummy-Rabbit"
-    assert Dummy_Rabbit.describe_count == 1
-
-def test_typemodule_move():
-    new_typeset = TypeModule()
-    new_typeset.define(typename="AltString")
-    new_typeset.define(Dummy_Rabbit, typename="Second-Rabbit")
-
-    fundamental_type.add_ancestor(new_typeset)
+    t = fundamental_type.find("Function")
+    assert t
+    from machaon.core.message import FunctionExpression
+    assert t.get_value_type() is FunctionExpression
     
+    t = fundamental_type.find("None")
+    assert t
+    assert t.get_value_type() is type(None)
+    assert t.is_none_type()
+    
+    t = fundamental_type.find("ObjectCollection")
+    assert t
+    from machaon.core.object import ObjectCollection
+    assert t.get_value_type() is ObjectCollection
+    assert t.is_object_collection_type
+
+
+def test_fundamental_metamethod_resolve():
     cxt = instant_context()
-    cxt.type_module = fundamental_type
 
-    assert cxt.get_type("Int").construct(cxt, "0x35") == 0x35
-    assert cxt.get_type("AltString").typename == "AltString"
-    assert cxt.get_type("Dummy_Rabbit") is not None
-    assert cxt.get_type("Dummy_Rabbit").typename == "Dummy-Rabbit"
-    assert Dummy_Rabbit.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
-    assert cxt.get_type("Second_Rabbit") is not None
-    assert cxt.get_type("Second_Rabbit").typename == "Second-Rabbit"
+    t = fundamental_type.find("Int")
+    assert t
+    assert len(t.get_type_params()) == 0
+    fns = t.resolve_meta_method("constructor", cxt, "0", None)
+    assert fns is not None
+    assert len(fns[1:]) == 1 # 引数1
 
-def test_fundamental():
+    t = fundamental_type.find("Function")
+    assert t
+    assert len(t.get_type_params()) == 1
+    fns = t.resolve_meta_method("constructor", cxt, "0", None)
+    assert fns is not None
+    assert len(fns[1:]) == 2 # 引数2 (contextあり)
+    assert fns[1] is cxt
+
+
+def test_fundamental_construct():
     cxt = instant_context()
 
     Int = cxt.get_type("int")
@@ -85,6 +99,8 @@ def test_method():
 
     assert regmatch.get_action_target() == "Str:reg-match"
 
+test_method()
+
 def test_function():
     cxt = instant_context()
 
@@ -93,4 +109,3 @@ def test_function():
     assert fnpower
     from machaon.core.message import MessageExpression
     assert isinstance(fnpower, MessageExpression)
-

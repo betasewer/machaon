@@ -223,8 +223,8 @@ INVOCATION_FLAG_INHERIT_REMBIT_SHIFT = 32
 #
 #
 class InvocationContext:
-    """
-    メソッドの呼び出しコンテキスト
+    """ @type
+    メソッドの呼び出しコンテキスト。
     """
     def __init__(self, *, input_objects, type_module, spirit=None, subject=None, flags=0, parent=None):
         self.type_module: TypeModule = type_module
@@ -671,7 +671,8 @@ class InvocationContext:
         self.pprint_log(lambda x: app.post("message", x))
     
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta context 
+        """
         if isinstance(value, int):
             from machaon.process import Process
             proc = Process.constructor(Process, context, value)
@@ -705,6 +706,7 @@ def instant_context(subject=None):
         from machaon.package.package import create_package
         for module in BootModuleNames:
             pkg = create_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
+            pkg.scope = None
             for x in pkg.load_type_definitions():
                 t.define(x)
         

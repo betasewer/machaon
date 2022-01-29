@@ -36,8 +36,6 @@ def test_load_singlemodule_fundamental():
     assert pkg.is_load_succeeded()
     assert len(pkg.get_load_errors()) == 0
     
-    import machaon.types.shell as shell
-
     tm = root.get_type_module()
     assert tm.get("Path")
     assert tm.get("Path").get_describer_qualname() == "machaon.types.shell.Path"
@@ -62,17 +60,14 @@ def test_load_submodules_types():
     assert pkg.is_load_succeeded()
     assert len(pkg.get_load_errors()) == 0
 
-    #
     tm = root.get_type_module()
 
-    import machaon.types.app
-    assert tm.get("AppTestObject", scope="ion")
-    assert tm.get("AppTestObject", scope="ion").get_describer_qualname() == "machaon.types.app.AppTestObject"
+    assert tm.get("RootObject", scope="ion") is not None
+    assert tm.get("RootObject", scope="ion").get_describer_qualname() == "machaon.types.app.RootObject"
 
-    import machaon.types.shell
-    assert tm.get("Path", scope="ion")
+    assert tm.get("Path", scope="ion") is not None
     assert tm.get("Path", scope="ion").get_describer_qualname() == "machaon.types.shell.Path"
-    
+
 
 @pytest.mark.skip()
 def test_package_setup(approot):

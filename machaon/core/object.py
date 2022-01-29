@@ -127,7 +127,7 @@ class ObjectCollectionItem:
 
 
 class ObjectCollection():
-    """
+    """ @type
     オブジェクトを文字列によるキーで集めた辞書。
     メソッド名がそのままメンバ参照になる。
     """
@@ -231,7 +231,7 @@ class ObjectCollection():
         return context.get_py_type(dict).new_object(d)
 
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta context """
         col = ObjectCollection()
         for k, v in value.items():
             if not isinstance(v, Object):

@@ -45,7 +45,7 @@ METHOD_FROM_INSTANCE_MEMBER = 0x200000  # インスタンスメンバから得�
 METHOD_FROM_USER_DEFINITION = 0x400000  # コメントや辞書による定義 
 METHOD_DEFINITION_FROM_MASK = 0xF00000  
 
-METHOD_META_EXTRAARG = 0x1000000
+METHOD_META_NOEXTRAPARAMS = 0x1000000
 
 #
 PARAMETER_REQUIRED = 0x0100
@@ -94,7 +94,7 @@ class MethodParameterNoDefault:
 #
 #
 class Method():
-    """
+    """ @type
     メソッド定義。
     """
     def __init__(self, name = None, target = None, doc = "", flags = 0, mixin = None):
@@ -897,16 +897,10 @@ def parse_result_line(line):
 #
 #
 class MetaMethod():
-    def __init__(self, target, flags=0, method=False):
+    def __init__(self, target, flags=0):
         self.target = target
         self.flags = flags
-        if method:
-            self._method = {
-                "params" : [],
-                "type_params" : []
-            }
-        else:
-            self._method = None
+        self._ctorparam = None
     
     def get_action_target(self):
         return self.target
@@ -921,12 +915,10 @@ class MetaMethod():
             flags |= METHOD_CONTEXT_BOUND
         if "spirit" in decl.props:
             flags |= METHOD_SPIRIT_BOUND
+        if "noarg" in decl.props or "noparam" in decl.props:
+            flags |= METHOD_META_NOEXTRAPARAMS
         
-        method = False
-        if flags & METHOD_META_EXTRAARG:
-            method = True
-
-        meth = MetaMethod(self.target, flags, method=method)
+        meth = MetaMethod(self.target, flags)
         meth.load_from_docstring(decl)
         return meth
 
@@ -939,15 +931,15 @@ class MetaMethod():
     def is_spirit_bound(self):
         return (self.flags & METHOD_SPIRIT_BOUND) > 0
     
+    def has_no_extra_params(self):
+        return (self.flags & METHOD_META_NOEXTRAPARAMS) > 0
+    
     def load_from_docstring(self, decl):
         """
         Params: ですべて指定
         第1引数は変数名を省略可能（value）
         追加引数においては、型がTypeなら型引数、そうでないなら追加コンストラクタ引数とみなす
         """
-        if self._method is None:
-            return
-
         sections = decl.create_parser((
             "Params Parameters",
         ))
@@ -957,83 +949,81 @@ class MetaMethod():
         if desc:
             self.doc = desc.strip()
 
-        # 引数
-        for i, line in enumerate(sections.get_lines("Params")):
-            unnamed_format = False
-            if i == 0:
-                findend = (lambda x: None if x == -1 else x)(line.find(":"))
-                if -1 == line.find("(", 0, findend):
-                    unnamed_format = True
+        # コンストラクタ引数
+        params = sections.get_lines("Params")
+        if params:
+            if self.target != "constructor":
+                raise ValueError("constructor以外のメタメソッドで引数を定義することはできません")
 
-            if unnamed_format:
+            firstline = params[0]
+            findend = (lambda x: None if x == -1 else x)(firstline.find(":"))
+            if -1 == firstline.find("(", 0, findend):
                 name = "value"
-                typename, doc, flags = parse_result_line(line.strip())
+                typename, doc, flags = parse_result_line(firstline.strip())
             else:
-                typename, name, doc, flags = parse_parameter_line(line.strip())
+                typename, name, doc, flags = parse_parameter_line(firstline.strip())
 
-            if i != 0 and typename == "Type":
-                p = MethodParameter(name, TypeDecl("Type"), doc, flags=flags)
-                self._method["type_params"].append(p)
-            else:
-                typedecl = parse_type_declaration(typename)
-                p = MethodParameter(name, typedecl, doc, flags=flags)
-                self._method["params"].append(p)
+            typedecl = parse_type_declaration(typename)
+            p = MethodParameter(name, typedecl, doc, flags=flags)
+            self._ctorparam = p
 
-    def prepare_invoke_args(self, context, value, typeinst):
-        """ メソッド実行時に渡す引数を準備する """
-        args = []
-        if self._method is None:
-            if typeinst:
-                raise ValueError("このメソッドは追加の引数を受け入れません")
-
-        if not self._method["params"]:
-            # 何も検査しないで追加する
-            args.append(value) 
-            if typeinst:
-                args.extend(typeinst.type_args)
-                args.extend(typeinst.constructor_args)
-
-        else:
-            # コンストラクタ引数の型をチェック
-            p = self._method["params"][0]
-            t = p.get_typedecl().instance(context)
-            if not t.check_value_type(type(value)):
-                raise TypeConversionError(type(value), t)
+    def prepare_invoke_args(self, context, typeparams, value, typeinst, *moreargs):
+        """ メソッド実行時に渡す引数を準備する """        
+        # コンストラクタ引数の型をチェックする
+        if self._ctorparam and context is not None:
+            t0 = self._ctorparam.get_typedecl().instance(context)
+            if not t0.check_value_type(type(value)):
+                raise TypeConversionError(type(value), t0)
         
-            args.append(value)
-            
-            if typeinst:
-                # 型引数と追加の実引数を設定
-                for i, _tp in enumerate(self._method["type_params"]):
-                    if i < len(typeinst.type_args):
-                        ta = typeinst.type_args[i]
+        args = []
+        if context is not None and self.is_context_bound(): 
+            args.append(context)
+        
+        args.append(value)
+
+        args.extend(moreargs)
+
+        if self.has_no_extra_params():
+            return args
+
+        # 引数を集める
+        if typeinst:
+            thead = 0
+            nthead = 0
+            for tp in typeparams:
+                if tp.is_type():
+                    # 型引数
+                    if thead < len(typeinst.type_args):
+                        ta = typeinst.type_args[thead]
                     else:
                         ta = None
+                    thead += 1
                     args.append(ta)
-                
-                for i, cp in enumerate(self._method["params"][1:]):
-                    if i < len(typeinst.constructor_args):
-                        ct = cp.get_typedecl().instance(context)
-                        if cp.is_variable():
-                            for a in typeinst.constructor_args[i:]:
-                                ca = ct.construct(context, a)
-                                args.append(ca)
-                            break # 全て使い切る
-                        else:
-                            ca = ct.construct(context, typeinst.constructor_args[i])
-                            args.append(ca)
+                else:
+                    # 非型引数
+                    if tp.is_variable():
+                        ntas = typeinst.constructor_args[nthead:]
+                        args.extend(ntas)
+                        nthead = -1
                     else:
-                        break
-            else:
-                # デフォルト型引数をセット
-                for _ in self._method["type_params"]:
-                    ta = None
-                    args.append(ta)
-
+                        if nthead < len(typeinst.constructor_args):
+                            nta = typeinst.constructor_args[nthead]
+                        else:
+                            break
+                        nthead += 1
+                        args.append(nta)
+        else:
+            # デフォルト型引数をセット
+            for tp in typeparams:
+                if not tp.is_type():
+                    break
+                args.append(None)
+        
         return args
 
+
 meta_method_prototypes = (
-    MetaMethod("constructor", METHOD_TYPE_BOUND|METHOD_META_EXTRAARG),
+    MetaMethod("constructor", METHOD_TYPE_BOUND),
     MetaMethod("stringify"),
     MetaMethod("summarize"),
     MetaMethod("pprint"),

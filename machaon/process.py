@@ -17,8 +17,8 @@ from machaon.ui.basic import Launcher
 
 
 class Process:
-    """
-    プロセスの開始、スレッドの実行、停止、操作を行う 
+    """ @type
+    メッセージの実行スレッドを操作する。
     """
     def __init__(self, index, message):
         self.index: int = index
@@ -265,7 +265,7 @@ class Process:
     #
     #
     def constructor(self, context, value):
-        """ @meta 
+        """ @meta context
         Params:
             int|str:
         """

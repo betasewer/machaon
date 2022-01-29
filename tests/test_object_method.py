@@ -19,6 +19,9 @@ class BasicValue:
 class SomeValue(BasicValue):
     """ @type
     適当な値オブジェクト
+    Params:
+        T(Type):
+        param1(int):
     """
     def __init__(self, x, y, itemtype=None):
         self.x = x
@@ -43,17 +46,15 @@ class SomeValue(BasicValue):
         self.x = a+b
         self.y = a-b
     
-    def constructor(self, context, value, T, param1):
+    def constructor(self, value, T, param1):
         """ @meta 
         Params:
             int:
-            T(Type):
-            param1(int):
         """
         return SomeValue(value, value*param1, T)
     
     def stringify(self):
-        """ @meta """
+        """ @meta noarg """
         return "({},{})".format(self.x, self.y)
 
 
@@ -64,6 +65,7 @@ def test_valuetype_define():
     assert t.value_type is SomeValue
     assert t.doc == "<no document>"
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
+
     
 def test_method_docstring():
     def plus(a, b):
@@ -126,15 +128,25 @@ def test_method_return_self():
 #
 def test_meta_method():
     cxt = instant_context()
-    t = cxt.define_type(SomeValue)
-    v = t.instance("2").construct(cxt, 3)
+    t = cxt.type_module.load_definition(SomeValue).load_type()
+    assert len(t.get_type_params()) == 2
+    assert t.get_type_params()[0].get_name() == "T"
+    assert t.get_type_params()[0].is_type()
+    assert t.get_type_params()[1].get_name() == "param1"
+    assert t.get_type_params()[1].get_typename() == "int"
+
+    v = t.instantiate(2).construct(cxt, 3)
     assert isinstance(v, SomeValue)
     assert v.x == 3
     assert v.y == 6
     assert v.itemtype is None
 
     decl = parse_type_declaration("SomeValue[Str](42)")
-    v = decl.instance(cxt).construct(cxt, 11)
+    t = decl.instance(cxt)
+    assert len(t.type_args) == 1
+    assert len(t.constructor_args) == 1
+    assert t.constructor_args[0] == 42
+    v = t.construct(cxt, 11)
     assert isinstance(v, SomeValue)
     assert v.x == 11
     assert v.y == 11 * 42
@@ -142,6 +154,7 @@ def test_meta_method():
 
     v = t.stringify_value(SomeValue(1,2))
     assert v == "(1,2)"
+
 
 @pytest.mark.xfail
 def test_constructor_typecheck_fail():

@@ -603,4 +603,4 @@ _GenericMethodsType = Type(
     name="GenericMethods", 
     value_type=GenericMethodValue
 )
-_GenericMethodsType.load(TYPE_DELAY_LOAD_METHODS)
+_GenericMethodsType.load(loadbits=TYPE_DELAY_LOAD_METHODS)

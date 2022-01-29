@@ -47,7 +47,7 @@ class SomeTrait:
         """
         return cx.real
 
-    def constructor(self, context, value):
+    def constructor(self, value):
         """ @meta """
         return complex(value)
 
@@ -66,7 +66,7 @@ def test_valuetype_define():
 def test_valuetype_td_define():
     td = fundamental_type.load_definition(SomeValue)
     assert td
-    t = td.define(fundamental_type)
+    t = td.load_type()
     assert t.typename == "SomeAlias" # 宣言が反映される
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト" # 宣言が反映される
@@ -79,7 +79,7 @@ def test_valuetype_td_define():
     assert td.doc == "適当な値オブジェクトの型"
     assert td.is_same_value_type(complex)
     
-    t = td.define(fundamental_type)
+    t = td.load_type()
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE
     assert t.get_value_type() is complex
     assert t.get_conversion() == "SomeValueX"
@@ -90,7 +90,7 @@ def test_valuetype_td_docstring_define():
     td.load_docstring('''@type use-instance-method [BigEntity]
     巨大なオブジェクト
     ''')
-    t = td.define(fundamental_type)
+    t = td.load_type()
     assert t.typename == "BigEntity"
     assert t.value_type is SomeValue
     assert t.doc == "巨大なオブジェクト"
@@ -103,7 +103,7 @@ def test_valuetype_td_attribute_loader():
     import machaon.types.shell
     desc = ClassDescriber(attribute_loader("machaon.types.shell.Path"))
     td = TypeDefinition(desc, "Path2", value_type=None)
-    t = td.define(fundamental_type)
+    t = td.load_type()
     assert t.typename == "Path2"
     assert t.value_type is machaon.types.shell.Path
     assert t.is_same_value_type(machaon.types.shell.Path)
@@ -115,12 +115,12 @@ def test_valuetype_td_docstring_failure():
     td.load_docstring('''@type trait
     巨大なオブジェクト
     ''') # traitだが値型を指定していない
-    td.define(fundamental_type)
+    td.load_type()
 
 # value_typeをdescriberに使う
 def test_value_type_as_describer():
     td = TypeDefinition(None, "SomeValue", value_type=SomeValue)
-    t = td.define(fundamental_type)
+    t = td.load_type()
     assert t.value_type is SomeValue
     assert t.describer.klass is SomeValue
     
@@ -263,4 +263,38 @@ def test_method_return_deduce():
     ret = inv._prepare(cxt, this).invoke(cxt)
     #assert not isinstance(ret.type, PythonType) # 推定できる
 
+#
+# TypeModule
+#
+class Dummy_Rabbit():
+    describe_count = 0
+    
+    @classmethod
+    def describe_object(cls, traits):
+        traits.describe(doc="うさぎ")
+        cls.describe_count += 1
+    
+def test_typemodule_get():
+    fundamental_type.define(Dummy_Rabbit, typename="Dummy-Rabbit")
+    assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
+    assert fundamental_type.get(Dummy_Rabbit).typename == "Dummy-Rabbit"
+    assert Dummy_Rabbit.describe_count == 1
+
+def test_typemodule_move():
+    new_typeset = TypeModule()
+    new_typeset.define(typename="AltString")
+    new_typeset.define(Dummy_Rabbit, typename="Second-Rabbit")
+
+    fundamental_type.add_ancestor(new_typeset)
+    
+    cxt = instant_context()
+    cxt.type_module = fundamental_type
+
+    assert cxt.get_type("Int").construct(cxt, "0x35") == 0x35
+    assert cxt.get_type("AltString").typename == "AltString"
+    assert cxt.get_type("Dummy_Rabbit") is not None
+    assert cxt.get_type("Dummy_Rabbit").typename == "Dummy-Rabbit"
+    assert Dummy_Rabbit.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
+    assert cxt.get_type("Second_Rabbit") is not None
+    assert cxt.get_type("Second_Rabbit").typename == "Second-Rabbit"
 

@@ -311,6 +311,18 @@ class TypeInstance(RedirectProxy):
     def constructor(self, context, value):
         return self.type.constructor(context, value, self)
 
+    def stringify_value(self, value):
+        return self.type.stringify_value(value, self)
+    
+    def summarize_value(self, value):
+        return self.type.summarize_value(value, self)
+
+    def pprint_value(self, spirit, value):
+        return self.type.pprint_value(spirit, value, self)
+    
+    def reflux_value(self, value):
+        return self.type.reflux_value(value, self)
+
     @property
     def type_args(self):
         return self.typeargs
@@ -635,8 +647,26 @@ class TypeDecl:
 
     def _instance_type(self, typedef, context, args=None) -> TypeProxy:
         """ Typeから型のインスタンスを作る """
+        # 型引数を作成
         typeargs = [x.instance(context) for x in self.declargs]
-        ctorargs = [*self.ctorargs, *(args or [])]
+        # 非型引数を作成
+        ctorvalues = [*self.ctorargs, *(args or [])]
+        ctorargs = []
+        ihead = 0
+        for tp in typedef.get_type_params():
+            if tp.is_type():
+                continue
+            ct = tp.get_typedecl().instance(context)
+            if tp.is_variable():
+                cas = [ct.construct(context, x) for x in ctorvalues[ihead:]]
+                ctorargs.extend(cas)
+                ihead = -1
+            else:
+                if ihead < len(ctorvalues):
+                    ca = ct.construct(context, ctorvalues[ihead])
+                ctorargs.append(ca)
+                ihead += 1
+        
         if not typeargs and not ctorargs:
             return typedef
         else:

@@ -34,7 +34,12 @@ class NumericType():
 
 
 class IntType(NumericType):
-    def constructor(self, _context, s):
+    """ @type trait [Int]
+    Pythonの整数型。
+    ValueType:
+        int
+    """
+    def constructor(self, s):
         """ @meta 
         Params:
             Any:
@@ -53,7 +58,12 @@ class IntType(NumericType):
 
 
 class FloatType(NumericType):
-    def constructor(self, _context, s):
+    """ @type trait [Float]
+    Pythonの浮動小数点型。
+    ValueType:
+        float
+    """
+    def constructor(self, s):
         """ @meta 
         Params:
             Any:
@@ -74,7 +84,12 @@ class FloatType(NumericType):
 
 
 class ComplexType():
-    def constructor(self, _context, s):
+    """ @type trait [Complex]
+    Pythonの複素数型。
+    ValueType:
+        complex
+    """
+    def constructor(self, s):
         """ @meta 
         Params:
             Any:
@@ -114,7 +129,7 @@ class Hex:
     BaseType:
         Int
     """
-    def constructor(self, context, v):
+    def constructor(self, v):
         """ @meta """
         return int(v, 16)
 
@@ -128,7 +143,7 @@ class Oct:
     BaseType:
         Int
     """
-    def constructor(self, context, v):
+    def constructor(self, v):
         """ @meta """
         return int(v, 8)
 
@@ -142,7 +157,7 @@ class Bin:
     BaseType:
         Int
     """
-    def constructor(self, context, v):
+    def constructor(self, v):
         """ @meta """
         return int(v, 2)
 

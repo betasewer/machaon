@@ -1,7 +1,7 @@
 import pytest
 
 from machaon.core.type import TYPE_SUBTYPE, Type, TypeDefinition
-from machaon.core.typedecl import SubType, TypeDecl, parse_type_declaration, TypeUnion, PythonType
+from machaon.core.typedecl import SubType, TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, PythonType
 from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation, instant_context
 from machaon.core.importer import ClassDescriber
 
@@ -73,9 +73,11 @@ def test_decl_fail_3():
 def test_decl_instance():
     cxt = instant_context()
     assert parse_("Int").instance(cxt) is cxt.get_type("Int")
-    assert parse_("Sheet").instance(cxt) is cxt.get_type("Sheet")
+    assert isinstance(cxt.get_type("Sheet"), Type)
+    assert isinstance(parse_("Sheet").instance(cxt), Type) # 引数なし
     
     d = parse_("Sheet[Int](@, length)").instance(cxt)
+    assert isinstance(d, TypeInstance)
     assert d is not cxt.get_type("Sheet")
     assert d.get_typedef() is cxt.get_type("Sheet")
     assert d.typeargs[0] is cxt.get_type("Int")
@@ -367,7 +369,7 @@ def test_enummethods_pythontype_2():
 #  subtype
 #
 class Hex:
-    def constructor(self, context, s):
+    def constructor(self, s):
         """ @meta """
         return int(s, 16)
     
@@ -376,7 +378,7 @@ class Hex:
         return hex(v)
         
 class Oct:
-    def constructor(self, context, s):
+    def constructor(self, s):
         """ @meta """
         return int(s, 8)
     

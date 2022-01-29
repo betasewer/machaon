@@ -37,7 +37,9 @@ def enum_persistent_names(root):
 
 
 class StoredMessage():
-    """ 記述されたメッセージ """
+    """ @type [Stored] 
+    外部ファイルに記述されたメッセージ。
+    """
     def __init__(self, path, name=None):
         self.path = path
         self.name = name
@@ -153,7 +155,7 @@ class StoredMessage():
         return shellpath().start_file(self.path)
 
     def constructor(self, context, value):
-        """ @meta """
+        """ @meta context """
         # 外部ファイルのパスを得る
         from machaon.types.shell import Path
         if isinstance(value, str):

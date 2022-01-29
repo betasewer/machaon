@@ -1,11 +1,13 @@
 import re
 import string
-from turtle import pos
 
 class StrType():
-    """ [fundamental] Pythonの文字列型。
+    """ @type trait [Str]
+    Pythonの文字列型。
+    ValueType:
+        str
     """
-    def constructor(self, _context, v):
+    def constructor(self, v):
         """ @meta 
         Params:
             Any:
@@ -657,24 +659,21 @@ class RStrip:
     固定の接尾辞を付す。
     BaseType:
         Str:
+    Params:
+        postfix(Str):
     """
-    def constructor(self, context, s, postfix):
-        """ @meta extraargs 
+    def constructor(self, s, postfix):
+        """ @meta
         Params:
-            s(str):
-            postfix(str):
+            Str:
         """
         i = s.rfind(postfix)
         if i == -1:
             return s
         return s[:i]
         
-    def reflux(self, context, s, postfix):
-        """ @meta extraargs 
-        Params:
-            s(Str):
-            postfix(Str):
-        """
+    def reflux(self, s, postfix):
+        """ @meta """
         return s + postfix
 
 
@@ -684,8 +683,8 @@ class LStrip:
     BaseType:
         Str:
     """
-    def constructor(self, context, s, prefix):
-        """ @meta extraargs 
+    def constructor(self, s, prefix):
+        """ @meta
         Params:
             s(Str):
             prefix(Str):
@@ -707,13 +706,14 @@ class Strip:
     前後に文字列を付す。
     BaseType:
         Str:
+    Params:
+        prefix(Str):
+        postfix(Str):
     """
-    def constructor(self, context, s, prefix, postfix):
-        """ @meta extraargs 
+    def constructor(self, s, prefix, postfix):
+        """ @meta
         Params:
             s(Str):
-            prefix(Str):
-            postfix(Str):
         """
         i = s.find(prefix)
         j = s.rfind(postfix)
@@ -729,11 +729,7 @@ class Strip:
             return s
         
     def reflux(self, s, prefix, postfix):
-        """ @meta extraargs 
-        Params:
-            prefix(Str):
-            postfix(Str):
-        """
+        """ @meta """
         return prefix + s + postfix
 
 

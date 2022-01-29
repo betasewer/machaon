@@ -494,7 +494,7 @@ class Path():
         return None
 
     def constructor(self, context, value):
-        """ @meta 
+        """ @meta context
         Params:
             Any:
         """
@@ -613,7 +613,7 @@ class TextPath:
         """
         context.root.open_by_text_editor(self._path.get(), self._line, self._column)
 
-    def constructor(self, context, value):
+    def constructor(self, value):
         """ @meta 
         Params:
             Path|Tuple[Path, Str]

@@ -12,8 +12,13 @@ from machaon.core.object import Object
 #
 #
 class TypeType():
+    """ @type [Type]
+    型そのものを表す。
+    ValueType:
+        machaon.core.typedecl.TypeProxy
+    """
     def constructor(self, context, value):
-        """ @meta 
+        """ @meta context
         Params:
             Str: 型名 / クラスの完全な名前(qualname)
         """
@@ -170,8 +175,10 @@ class TypeType():
     
 
 class NoneType():
-    """ PythonのNone型。 """
-    def constructor(self, _context, _s):
+    """ @type [None]
+    PythonのNone型。 
+    """
+    def constructor(self, _s):
         """ @meta 
         いかなる引数もNoneに変換する
         """
@@ -181,10 +188,13 @@ class NoneType():
         """ @meta """
         return "<None>"
 
-
 class BoolType():
-    """ PythonのBool型。 """
-    def constructor(self, _context, s):
+    """ @type [Bool]
+    PythonのBool型。 
+    ValueType:
+        bool
+    """
+    def constructor(self, s):
         """ @meta 
         Params:
             Any:
@@ -248,11 +258,17 @@ class BoolType():
 
 
 class FunctionType():
+    """ @type [Function]
+    1引数をとるメッセージ。
+    ValueType:
+        machaon.core.message.FunctionExpression
+    Params:
+        qualifier(Str): None|(seq)uential
+    """
     def constructor(self, context, s, qualifier=None):
-        """ @meta 
+        """ @meta context
         Params:
             Str:
-            qualifier(Str): None|(seq)uential
         """
         from machaon.core.message import parse_function, parse_sequential_function
         if qualifier is None:
@@ -287,7 +303,7 @@ class FunctionType():
         newtext = f.run(context.new_object(text), context).value
         app.clipboard_copy(newtext, silent=True)
         app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
-    
+
 
 #
 #
@@ -306,156 +322,39 @@ class NotFound(Exception):
 # ----------------------------------------------------------
 def fundamental_types():
     module = TypeModule()
-    typedef = module.definitions()
-    typedef.Type("""
-        オブジェクトの型。
-        """,
-        value_type=TypeProxy, 
-        describer="machaon.types.fundamental.TypeType", 
-    )
-    typedef.Function( # Message
-        """
-        1引数をとるメッセージ。
-        """,
-        value_type="machaon.core.message.FunctionExpression",
-        describer="machaon.types.fundamental.FunctionType",
-    )
-    typedef["None"](
-        """
-        None。
-        """,
-        value_type=type(None), 
-        describer="machaon.types.fundamental.NoneType",
-        bits=TYPE_NONETYPE,
-    )
-    typedef.Bool(
-        """
-        真偽値。
-        """,
-        value_type=bool, 
-        describer="machaon.types.fundamental.BoolType",
-    )
-    typedef.Str(
-        """
-        文字列。
-        """,
-        value_type=str, 
-        describer="machaon.types.string.StrType"
-    )
-    typedef.Int(
-        """
-        整数。
-        """,
-        value_type=int,
-        describer="machaon.types.numeric.IntType",
-    )
-    typedef.Float(
-        """
-        浮動小数点数。
-        """,
-        value_type=float, 
-        describer="machaon.types.numeric.FloatType",
-    )
-    typedef.Complex(
-        """
-        複素数。
-        """,
-        value_type=complex, 
-        describer="machaon.types.numeric.ComplexType",
-    )
-    typedef.Tuple(
-        """
-        任意の型のタプル。
-        """,
-        value_type="machaon.types.tuple.ObjectTuple",
-    )
-    typedef.Sheet(
-        """
-        同型の配列から作られる表。
-        """,
-        value_type="machaon.types.sheet.Sheet",
-    )
-    typedef.ObjectCollection(
-        """
-        辞書。
-        """,
-        value_type="machaon.core.object.ObjectCollection",
-        bits=TYPE_OBJCOLTYPE
-    )
-    typedef.Method(
-        """
-        メソッド。
-        """,
-        value_type="machaon.core.method.Method"
-    )
-    typedef.Context(
-        """
-        メソッドの呼び出しコンテキスト。
-        """,
-        value_type="machaon.core.invocation.InvocationContext"
-    )
-    typedef.Process(
-        """
-        メッセージを実行するプロセス。
-        """,
-        value_type="machaon.process.Process"
-    )
-    typedef.ProcessChamber(
-        """
-        プロセスのリスト。
-        """,
-        value_type="machaon.process.ProcessChamber",
-        describer="machaon.types.app.AppChamber"
-    )
-    typedef.Error( # Error
-        """
-        発生したエラー。
-        """,
-        value_type="machaon.types.stacktrace.ErrorObject"
-    )
-    typedef.TracebackObject(
-        """
-        トレースバック。
-        """,
-        value_type="machaon.types.stacktrace.TracebackObject"
-    )
-    typedef.FrameObject(
-        """
-        フレームオブジェクト。
-        """,
-        value_type="machaon.types.stacktrace.FrameObject"
-    )
-    typedef.Package(
-        """
-        パッケージ。
-        """,
-        value_type="machaon.package.package.Package",
-        describer="machaon.types.package.AppPackageType"
-    )
-    typedef.PyModule(
-        """
-        Pythonのモジュール。
-        """,
-        value_type="machaon.types.package.Module",
-    )
-    typedef.Stored(
-        """
-        外部ファイルのオブジェクトを操作する。
-        """,
-        value_type="machaon.core.persistence.StoredMessage",
-    )
-    typedef.RootObject(
-        """
-        アプリのインスタンス。
-        """,
-        value_type="machaon.types.app.RootObject"
-    )
-    typedef.AppTestObject(
-        """
-        アプリのテストインスタンス。
-        """,
-        value_type="machaon.types.app.AppTestObject"
-    )
+    for qualname in [
+        "machaon.types.fundamental.TypeType",       # Type
+        "machaon.types.fundamental.FunctionType",   # Function
+        "machaon.types.fundamental.BoolType",       # Bool
+        "machaon.types.string.StrType",             # Str
+        "machaon.types.numeric.IntType",            # Int
+        "machaon.types.numeric.FloatType",          # Float
+        "machaon.types.numeric.ComplexType",        # Complex
+        "machaon.types.tuple.ObjectTuple",          # Tuple
+        "machaon.types.sheet.Sheet",                # Sheet
+        "machaon.core.persistence.StoredMessage",   # Stored
+        "machaon.types.app.RootObject",             # RootObject
+        # エラー型
+        "machaon.core.method.Method",               # Method
+        "machaon.core.invocation.InvocationContext",# Context
+        "machaon.process.Process",                  # Process
+        "machaon.types.stacktrace.ErrorObject",     # Error
+        "machaon.types.stacktrace.TracebackObject", # TracebackObject
+        "machaon.types.stacktrace.FrameObject",     # FrameObject
+        "machaon.types.package.AppPackageType",     # Package
+        "machaon.types.package.Module",             # PyModule
+    ]:
+        module.load_definition(qualname)
+
+    # None
+    td = module.load_definition("machaon.types.fundamental.NoneType")
+    td.value_type = type(None)
+    td.bits |= TYPE_NONETYPE
+
+    # ObjectCollection
+    td = module.load_definition("machaon.core.object.ObjectCollection")
+    td.bits |= TYPE_OBJCOLTYPE
+
     return module
 
 

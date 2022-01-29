@@ -82,7 +82,7 @@ class BasicLoadFile():
         raise NotImplementedError()
     
     #
-    def constructor(self, context, v):
+    def constructor(self, v):
         """ @meta 
         Params:
             Path:
@@ -237,7 +237,7 @@ class InputStream(BasicStream):
         for l in self._stream:
             yield l
     
-    def constructor(self, _context, value):
+    def constructor(self, value):
         """ @meta """
         return InputStream(value)
     
@@ -255,7 +255,7 @@ class OutputStream(BasicStream):
         self._must_be_opened()
         return self._stream.write(v)
 
-    def constructor(self, _context, value):
+    def constructor(self, value):
         """ @meta """
         return OutputStream(value)
 
