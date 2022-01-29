@@ -43,12 +43,13 @@ def test_decl_parse():
 
     # サブタイプ
     equalparse("Int:Kanji", "__Sub[Int,Kanji]")
+    equalparse("Int:Zen+Neko[](a,b)+Kanji", "__Sub[Int,Zen,Neko[](a,b),Kanji]")
     equalparse(
         "Sheet[Int:Kanji, Str:Alpha]", 
         "Sheet[__Sub[Int,Kanji],__Sub[Str,Alpha]]")
     equalparse(
-        "Sheet[Function[](seq)|Int:Hex|None, Str:Alpha]", 
-        "Sheet[Union[Function[](seq),__Sub[Int,Hex],None],__Sub[Str,Alpha]]")
+        "Sheet[Function[](seq)|Int:Hex+Fax+Ilu|None, Str:Alpha]", 
+        "Sheet[Union[Function[](seq),__Sub[Int,Hex,Fax,Ilu],None],__Sub[Str,Alpha]]")
 
 
 @pytest.mark.xfail
@@ -106,11 +107,11 @@ def test_decl_check():
     assert t.check_value_type(bytes)
     assert not t.check_value_type(str)
 
-    t = instance("Float:Fraction")
+    cxt.type_module.load_definition("machaon.types.numeric.Hex", "Hex")
+    t = instance("Int:Hex")
     assert isinstance(t, SubType)
-    assert t.check_value_type(float)
-    assert not t.check_value_type(int)
-
+    assert t.check_value_type(int)
+    assert not t.check_value_type(float)
 
 #
 # PythonType
@@ -406,6 +407,13 @@ def test_int_subtype():
     assert isinstance(x, SubType)
     assert x.construct(cxt, "54") == 0o54
     assert x.stringify_value(0o43) == "0o43"
+    
+    x = cxt.instantiate_type("Int:Oct+Hex") # あまりいい例ではないが...
+    assert isinstance(x, SubType)
+    assert x.construct(cxt, "54") == 0o54
+    assert x.construct(cxt, "AB") == 0xAB # Hexで実行される
+    assert x.stringify_value(0o43) == "0o43"
+    assert x.stringify_value(0xAB) == oct(0xAB)
 
 
 

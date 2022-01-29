@@ -1,19 +1,17 @@
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
-import inspect
-
 from machaon.core.type import Type, TypeModule
 from machaon.core.typedecl import (
     PythonType, TypeProxy, 
-    parse_type_declaration, make_conversion_from_value_type
+    parse_type_declaration
 )
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
-from machaon.core.method import METHOD_INVOKEAS_BOUND_METHOD, METHOD_INVOKEAS_FUNCTION, Method, MethodParameter, MethodResult, instance_invokeas, make_method_from_value
+from machaon.core.method import MethodParameter, MethodResult
 from machaon.core.symbol import (
     BadTypename,
     normalize_method_target, normalize_method_name, 
     is_valid_object_bind_name, BadObjectBindName, full_qualified_name, 
-    SIGIL_DEFAULT_RESULT, SIGIL_SCOPE_RESOLUTION
+    SIGIL_DEFAULT_RESULT, SIGIL_SCOPE_RESOLUTION, BootModuleNames
 )
 
 #
@@ -705,9 +703,10 @@ def instant_context(subject=None):
         t.add_fundamental_types()
 
         from machaon.package.package import create_package
-        pkg = create_package("machaon.shell", "module:machaon.types.shell")
-        for x in pkg.load_type_definitions():
-            t.define(x)
+        for module in BootModuleNames:
+            pkg = create_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
+            for x in pkg.load_type_definitions():
+                t.define(x)
         
         _instant_context_types = t
 

@@ -119,6 +119,15 @@ class DocStringDeclaration:
     def create_parser(self, section_names): 
         return DocStringParser(self.rest, section_names, indented_with_head=False) # 宣言から切り離したのでインデントの考慮は必要ない
 
+    def get_first_alias(self):
+        if self.name is None:
+            if self.aliases:
+                return self.aliases[0]
+            else:
+                return None
+        else:
+            return self.name
+
 
 def parse_doc_declaration(obj, decltypes):
     if isinstance(obj, str):

@@ -24,6 +24,7 @@ def test_newobject_deduction():
     t = context.new_object(Path("/usr/local"))
     assert t.get_typename() == "Path"
 
+test_newobject_deduction()
 
 
 def test_newobject_conversion():

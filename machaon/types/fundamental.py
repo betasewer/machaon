@@ -38,9 +38,7 @@ class TypeType():
         '''
         if isinstance(type, PythonType):
             raise ValueError("既にロード済みです")
-        d = TypeDefinition(type.type)
-        if not d.load_declaration_docstring():
-            raise BadTypeDeclaration()
+        d = context.type_module.load_definition(type.type)
         return d.define(context.type_module) # 即座にロードする
 
     def new(self, type):
@@ -364,30 +362,6 @@ def fundamental_types():
         """,
         value_type=complex, 
         describer="machaon.types.numeric.ComplexType",
-    )
-    typedef.Datetime(
-        """
-        日付時刻。
-        """,
-        value_type="datetime.datetime", 
-        describer="machaon.types.dateandtime.DatetimeType",
-        bits=TYPE_USE_INSTANCE_METHOD
-    )
-    typedef.Date(
-        """
-        日付。
-        """,
-        value_type="datetime.date", 
-        describer="machaon.types.dateandtime.DateType",
-        bits=TYPE_USE_INSTANCE_METHOD
-    )
-    typedef.Time(
-        """
-        時刻。
-        """,
-        value_type="datetime.time", 
-        describer="machaon.types.dateandtime.TimeType",
-        bits=TYPE_USE_INSTANCE_METHOD
     )
     typedef.Tuple(
         """

@@ -339,6 +339,17 @@ class Type(TypeProxy):
             return
         self.invoke_meta_method(fn, value, app)
 
+    def reflux_value(self, value:Any):
+        """
+        コンストラクタを呼び出せる別の型の値に変換する。
+        実装メソッド:
+            reflux
+        """
+        fn = self._metamethods.get("reflux")
+        if fn is None:
+            return self.stringify_value(value) # 文字に変換する
+        return self.invoke_meta_method(fn, value)
+
     def invoke_meta_method(self, method, *args, **kwargs):
         """ 
         内部実装で使うメソッドを実行する
@@ -625,16 +636,14 @@ class TypeDefinition():
         if self._t is not None:
             return self._t
         
-        if self._decl is not None:
-            self.load_definition_docstring(self._decl)
+        #if self._decl is not None:
+        #    self.load_definition_docstring(self._decl)
     
-        describer = self.get_describer()
-        value_type = self.get_value_type()
-
+        self._resolve_value_type()
         self._t = typemodule.define(
-            describer, 
+            self.describer, 
             typename=self.typename, 
-            value_type=value_type,
+            value_type=self.value_type,
             doc=self.doc, 
             scope=self.scope, 
             bits=self.bits,
@@ -642,48 +651,11 @@ class TypeDefinition():
         )
         return self._t
     
-    def load_declaration_docstring(self, doc=None):
-        """
-        先頭の宣言のみを読み込み、型名を決める
-        """
-        if doc is None:
-            doc = self.get_describer().get_docstring()
-            if doc is None:
-                return False
-        
-        decl = parse_doc_declaration(doc, ("type",))
-        if decl is None:
-            return False
-        
-        if decl.name:
-            self.typename = decl.name
-        
-        # Mixin宣言はあらかじめ読み込む
-        if "mixin" in decl.props:
-            self.bits |= TYPE_MIXIN
-            parser = decl.create_parser(("MixinType",))
-            mixin = parser.get_value("MixinType")
-            if mixin is None:
-                raise ValueError("mixin対象を'MixinType'で指定してください")
-            self._sub_target = mixin
-
-        # Subtype宣言も
-        elif "subtype" in decl.props:
-            self.bits |= TYPE_SUBTYPE
-            parser = decl.create_parser(("BaseType",))
-            base = parser.get_value("BaseType")
-            if base is None:
-                raise ValueError("ベースクラスを'BaseType'で指定してください")
-            self._sub_target = base
-
-        self._decl = decl
-        return True
-    
-    def load_definition_docstring(self, decl):
+    def load_docstring(self, doc=None):
         """
         型定義の解析
         """
-        """ @type no-instance-method alias-name [aliases...]
+        """ @type trait use-instance-method subtype mixin [name aliases...]
         detailed description...
         .......................
 
@@ -694,13 +666,50 @@ class TypeDefinition():
             long: (mode ftype modtime size name)
             short: (ftype name)
             link: path
-        """
-        if "use-instance-method" in decl.props:
-            self.bits |= TYPE_USE_INSTANCE_METHOD
-        if "trait" in decl.props:
-            self.bits |= TYPE_TYPETRAIT_DESCRIBER
 
-        sections = decl.create_parser(("ValueType", "MemberAlias"))
+        BaseType:
+            <Typename> (For subtype)
+        """
+        if doc is None:
+            doc = self.get_describer().get_docstring()
+            if doc is None:
+                return False
+        
+        decl = parse_doc_declaration(doc, ("type",))
+        if decl is None:
+            return False
+        
+        # Mixin宣言はあらかじめ読み込む
+        if "mixin" in decl.props:
+            self.bits |= TYPE_MIXIN
+            parser = decl.create_parser(("MixinType",))
+            mixin = parser.get_value("MixinType")
+            if mixin is None:
+                raise ValueError("mixin対象を'MixinType'で指定してください")
+            self._sub_target = mixin.rstrip(":") # コロンがついていてもよしとする
+            return True
+
+        # Subtype宣言も
+        elif "subtype" in decl.props:
+            self.bits |= TYPE_SUBTYPE
+            parser = decl.create_parser(("BaseType",))
+            base = parser.get_value("BaseType")
+            if base is None:
+                raise ValueError("ベースクラスを'BaseType'で指定してください")
+            self._sub_target = base.rstrip(":") # コロンがついていてもよしとする
+
+        else:
+            if "use-instance-method" in decl.props:
+                self.bits |= TYPE_USE_INSTANCE_METHOD
+            if "trait" in decl.props:
+                self.bits |= TYPE_TYPETRAIT_DESCRIBER
+
+        decltypename = decl.get_first_alias()
+        if decltypename:
+            self.typename = decltypename
+        
+        # 定義部をパースする
+        sections = decl.create_parser(("ValueType", "MemberAlias", "BaseType", "MixinType"))
 
         document = ""
         document += sections.get_string("Document")
@@ -708,7 +717,8 @@ class TypeDefinition():
             self.doc = document.strip()
 
         valtypename = sections.get_value("ValueType")
-        self.value_type = valtypename
+        if valtypename:
+            self.value_type = valtypename.rstrip(":") # コロンがついていてもよしとする
         
         aliases = sections.get_lines("MemberAlias")
         for alias in aliases:
@@ -719,12 +729,8 @@ class TypeDefinition():
             if dest[0] == "(" and dest[-1] == ")":
                 row = dest[1:-1].split()
                 self.add_member_alias(name, row)
-    
-    def load_docstring(self, doc=None):
-        """ デバッグ用 """
-        if not self.load_declaration_docstring(doc):
-            raise BadMethodDeclaration()
-        self.load_definition_docstring(self._decl)
+
+        return True
 
 # ダミーの値型に使用
 class _SubtypeTrait:
@@ -942,6 +948,14 @@ class TypeModule():
     #
     def remove_scope(self, scope):
         raise NotImplementedError()
+
+    def load_definition(self, describer, classname=None) -> TypeDefinition:
+        if not isinstance(describer, (str, ClassDescriber)):
+            describer = ClassDescriber(describer)
+        td = TypeDefinition(describer, classname)
+        if not td.load_docstring():
+            raise TypeError("Fail to load declaration")
+        return self.define(td)
 
     #
     #

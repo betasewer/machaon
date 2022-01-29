@@ -1,5 +1,5 @@
 from machaon.core.invocation import TypeMethodInvocation, instant_context
-from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, PythonType
+from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType
 import pytest
 from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias, Type
 from machaon.core.importer import ClassDescriber, attribute_loader
@@ -25,32 +25,71 @@ class SomeValue:
         """
         return self.x * 2 + self.y * 2
 
+class SomeTrait:
+    """ @type trait [SomeValueX]
+    適当な値オブジェクトの型
+    ValueType:
+        complex
+    """
+    def imag(self, cx):
+        """ @method
+        imag
+        Returns:
+            Float:
+        """
+        return cx.imag
+        
+    def real(self, cx):
+        """ @method
+        real
+        Returns:
+            Float:
+        """
+        return cx.real
+
+    def constructor(self, context, value):
+        """ @meta """
+        return complex(value)
+
+
 # defineで登録
 def test_valuetype_define():
+    # defineではドキュメント文字列の解析はしない
     t = fundamental_type.define(SomeValue)
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
     assert t.doc == "<no document>"
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
+    assert t.is_same_value_type(SomeValue)
 
 # 宣言をドキュメント文字列で登録
 def test_valuetype_td_define():
-    td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue2")
-    assert td.load_declaration_docstring()
+    td = fundamental_type.load_definition(SomeValue)
+    assert td
     t = td.define(fundamental_type)
     assert t.typename == "SomeAlias" # 宣言が反映される
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト" # 宣言が反映される
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
     assert t.is_same_value_type(SomeValue)
+    
+    td = fundamental_type.load_definition(SomeTrait)
+    assert td
+    assert td.typename == "SomeValueX"
+    assert td.doc == "適当な値オブジェクトの型"
+    assert td.is_same_value_type(complex)
+    
+    t = td.define(fundamental_type)
+    assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE
+    assert t.get_value_type() is complex
+    assert t.get_conversion() == "SomeValueX"
 
 # 宣言を直接文字列で登録
 def test_valuetype_td_docstring_define():
     td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue")
-    td.load_docstring('''@type use-instance-method alias-name [BigEntity]
+    td.load_docstring('''@type use-instance-method [BigEntity]
     巨大なオブジェクト
     ''')
-    assert td._decl.rest == "    巨大なオブジェクト"
     t = td.define(fundamental_type)
     assert t.typename == "BigEntity"
     assert t.value_type is SomeValue

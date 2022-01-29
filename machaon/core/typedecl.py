@@ -1,10 +1,14 @@
+import enum
 from machaon.core.symbol import (
-    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
+    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR, SIGIL_SUBTYPE_UNION,
     BadTypename, full_qualified_name, PythonBuiltinTypenames
 )
 
 METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
 METHODS_BOUND_TYPE_INSTANCE = 2
+
+
+
 
 #
 # 型パラメータを与えられたインスタンス。
@@ -120,11 +124,7 @@ class TypeProxy:
             return value # 変換の必要なし
         ret = self.constructor(context, value)
         if not self.check_value_type(type(ret)):
-            raise TypeError("'{}.constructor'の返り値型'{}'は値型'{}'と互換性がありません".format(
-                self.get_conversion(), 
-                full_qualified_name(type(ret)),
-                full_qualified_name(self.get_value_type())
-            ))
+            raise ConstructorReturnTypeError(self, type(ret))
         return ret
 
     def construct_obj(self, context, value):
@@ -154,6 +154,9 @@ class TypeProxy:
         raise NotImplementedError()
 
     def pprint_value(self, app, value):
+        raise NotImplementedError()
+
+    def reflux_value(self, value):
         raise NotImplementedError()
     
     # 基本型の判定
@@ -225,6 +228,9 @@ class RedirectProxy(TypeProxy):
 
     def pprint_value(self, spirit, value):
         return self.redirect().pprint_value(spirit, value)
+    
+    def reflux_value(self, value):
+        return self.redirect().reflux_value(value)
     
     def is_none_type(self):
         return self.redirect().is_none_type()
@@ -394,6 +400,9 @@ class PythonType(DefaultProxy):
     def pprint_value(self, app, value):
         app.post("message", self.summarize_value(value))
 
+    def reflux_value(self, value):
+        raise ValueError("reflux実装はPythonTypeでは提供されません")
+
 
 class TypeAny(DefaultProxy):
     """
@@ -429,6 +438,11 @@ class TypeAny(DefaultProxy):
     def pprint_value(self, app, value):
         raise TypeAnyInstantiateError()
 
+    def reflux_value(self, value):
+        raise TypeAnyInstantiateError()
+    
+
+
 class TypeAnyInstantiateError(Exception):
     def __str__(self) -> str:
         return "Any type cannot be instantiated"
@@ -459,51 +473,74 @@ class TypeUnion(DefaultProxy):
                 return True
         return False
 
-    def match_value_type(self, valtype):
+    def select_value_type(self, valtype, *, fallback=False):
         for t in self.types:
             if t.check_value_type(valtype):
                 return t
-        return None
-    
+        if fallback:
+            return None
+        raise TypeError(valtype)
+
     def constructor(self, context, value):
         firsttype = self.types[0]
         return firsttype.constructor(context, value)
 
     def stringify_value(self, value):
-        t = self.match_value_type(type(value))
-        if t is None:
-            raise TypeError(type(value))
+        t = self.select_value_type(type(value))
         return t.stringify_value(value)
     
     def summarize_value(self, value):
-        t = self.match_value_type(type(value))
-        if t is None:
-            raise TypeError(type(value))
+        t = self.select_value_type(type(value))
         return t.summarize_value(value)
 
     def pprint_value(self, app, value):
-        t = self.match_value_type(type(value))
-        if t is None:
-            raise TypeError(type(value))
+        t = self.select_value_type(type(value))
         return t.pprint_value(app, value)
 
+    def reflux_value(self, value):
+        t = self.select_value_type(type(value))
+        return t.reflux_value(value)
+        
         
 class SubType(RedirectProxy):
     """
     サブタイプ型
     """
-    def __init__(self, basetype, metatype):
+    def __init__(self, basetype, metatype, *altmetatypes):
         super().__init__()
         self.basetype = basetype
         self.metatype = metatype
+        self.altmetatypes = altmetatypes
 
     def redirect(self):
         return self.basetype
+
+    def get_typename(self):
+        return self.basetype.get_typename()
+        
+    def get_conversion(self):
+        convs = [x.get_conversion() for x in (self.basetype, self.metatype, *self.altmetatypes)]
+        return "{}:{}".format(convs[0], "+".join(convs[1:]))
     
+    def construct(self, context, value):
+        """ オブジェクトを構築して値を返す """
+        # 値型と同一でもコンストラクタを呼び出す
+        ret = self.constructor(context, value)
+        if not self.check_value_type(type(ret)):
+            raise ConstructorReturnTypeError(self, type(ret))
+        return ret
+
     def constructor(self, context, value):
-        if self.check_value_type(type(value)) and not isinstance(value, str): # Strを除き、元の型なら変換を行わない
-            return value
-        return self.metatype.constructor(context, value)
+        ret = None
+        metas = [self.metatype, *self.altmetatypes] # 複数のコンストラクタを順番に試す
+        for i, meta in enumerate(metas):
+            try:
+                ret = meta.constructor(context, value)
+            except Exception as e:
+                if len(metas) <= (i+1): raise # 最後まで来たらエラー
+                continue
+            else:
+                return ret
 
     def stringify_value(self, value):
         return self.metatype.stringify_value(value)
@@ -514,6 +551,8 @@ class SubType(RedirectProxy):
     def pprint_value(self, app, value):
         return self.metatype.pprint_value(app, value)
 
+    def reflux_value(self, value):
+        return self.metatype.reflux_value(value)
     
 #
 def make_conversion_from_value_type(value_type):
@@ -532,17 +571,27 @@ def make_conversion_from_value_type(value_type):
 
 
 #
+# エラー
 #
-#
+class ConstructorReturnTypeError(Exception):
+    """ コンストラクタの返り値を検証する """
+    def __str__(self):
+        t, vt = self.args
+        return "'{}.constructor'の返り値型'{}'は値型'{}'と互換性がありません".format(
+            t.get_conversion(), 
+            full_qualified_name(vt),
+            full_qualified_name(t.get_value_type())
+        )
+
 class TypeConversionError(Exception):
+    """ 引数での型チェックの失敗 """
     def __init__(self, srctype, desttype):
         if not isinstance(srctype, type) or not isinstance(desttype, TypeProxy):
             raise TypeError("TypeConversionError(type, TypeProxy)")
         super().__init__(srctype, desttype)
 
     def __str__(self):
-        srctype = self.args[0]
-        desttype = self.args[1]
+        srctype, desttype = self.args
         return "'{}'型の引数に'{}'型の値を代入できません".format(desttype.get_typename(), full_qualified_name(srctype))
 
 #
@@ -612,9 +661,12 @@ class TypeDecl:
             if len(self.declargs) < 2:
                 raise ValueError("not enough type args for __Sub")
             baset = self.declargs[0].instance(context) # 基底型
-            subtd = context.get_subtype(baset.typename, self.declargs[1].typename)
-            subt = self.declargs[1]._instance_type(subtd, context, args)
-            return SubType(baset, subt)
+            subtypes = []
+            for decl in self.declargs[1:]:
+                td = context.get_subtype(baset.typename, decl.typename)
+                t = decl._instance_type(td, context, args)
+                subtypes.append(t)
+            return SubType(baset, *subtypes)
         elif SIGIL_PYMODULE_DOT in self.typename:
             # machaonで未定義のPythonの型
             ctorargs = [*self.ctorargs, *(args or [])]
@@ -689,26 +741,28 @@ def _typedecl_body(itr):
 
 def _typedecl_subtype(itr):
     # サブタイプの記述
-    subtypes = []
+    types = []
     while not itr.eos():
         expr = _typedecl_expr(itr)
-        subtypes.append(expr)
+        types.append(expr) 
         ch, pos = itr.advance()
         if itr.eos():
             break
         elif ch == SIGIL_SUBTYPE_SEPARATOR:
+            if len(types) > 1:
+                raise TypeDeclError(itr, "サブタイプは1つしか指定できません")
+            continue
+        elif ch == SIGIL_SUBTYPE_UNION:
             continue
         else:
             itr.back(pos)
             break
-    if len(subtypes)==1:
-        return subtypes[0]
-    elif not subtypes:
+    if len(types)==1:
+        return types[0]
+    elif not types:
         raise TypeDeclError(itr, "型がありません")
-    elif len(subtypes)==2:
-        return TypeDecl("__Sub", subtypes)
     else:
-        raise TypeDeclError(itr, "サブタイプは1つしか指定できません")
+        return TypeDecl("__Sub", types)
 
 def _typedecl_expr(itr):
     # 型名

@@ -959,7 +959,7 @@ class MetaMethod():
 
         # 引数
         for i, line in enumerate(sections.get_lines("Params")):
-            if i == 0:
+            if i == 0 and "(" not in line:
                 name = "value"
                 typename, doc, flags = parse_result_line(line.strip())
             else:

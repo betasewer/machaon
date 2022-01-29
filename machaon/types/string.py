@@ -1,5 +1,6 @@
 import re
 import string
+from turtle import pos
 
 class StrType():
     """ [fundamental] Pythonの文字列型。
@@ -648,3 +649,92 @@ class StrType():
         """
         spirit.clipboard_copy(string)
 
+#
+# サブタイプ
+#
+class RStrip:
+    """ @type subtype
+    固定の接尾辞を付す。
+    BaseType:
+        Str:
+    """
+    def constructor(self, context, s, postfix):
+        """ @meta extraargs 
+        Params:
+            s(str):
+            postfix(str):
+        """
+        i = s.rfind(postfix)
+        if i == -1:
+            return s
+        return s[:i]
+        
+    def reflux(self, context, s, postfix):
+        """ @meta extraargs 
+        Params:
+            s(Str):
+            postfix(Str):
+        """
+        return s + postfix
+
+
+class LStrip:
+    """ @type subtype
+    固定の接頭辞を付す。
+    BaseType:
+        Str:
+    """
+    def constructor(self, context, s, prefix):
+        """ @meta extraargs 
+        Params:
+            s(Str):
+            prefix(Str):
+        """
+        i = s.find(prefix)
+        if i == -1:
+            return s
+        return s[i+len(prefix):]
+
+    def reflux(self, s, prefix):
+        """ @meta extraargs 
+        Params:
+            prefix(Str):
+        """
+        return prefix + s
+
+class Strip:
+    """ @type subtype
+    前後に文字列を付す。
+    BaseType:
+        Str:
+    """
+    def constructor(self, context, s, prefix, postfix):
+        """ @meta extraargs 
+        Params:
+            s(Str):
+            prefix(Str):
+            postfix(Str):
+        """
+        i = s.find(prefix)
+        j = s.rfind(postfix)
+        if i == -1:
+            return s
+        if i != -1 and j != -1:
+            return s[i+len(prefix):j]
+        elif j == -1:
+            return s[i+len(prefix):]
+        elif i == -1:
+            return s[:j]
+        else:
+            return s
+        
+    def reflux(self, s, prefix, postfix):
+        """ @meta extraargs 
+        Params:
+            prefix(Str):
+            postfix(Str):
+        """
+        return prefix + s + postfix
+
+
+    

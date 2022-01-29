@@ -128,7 +128,7 @@ class PyBasicModuleLoader:
                 raise ValueError("Invalid module declaration: Using: [typename]:[modulename]")
             from machaon.core.type import TypeDefinition, BadTypeDeclaration
             d = TypeDefinition(value_type=modname.strip(), typename=typename.strip())
-            if not d.load_declaration_docstring():
+            if not d.load_docstring():
                 raise BadTypeDeclaration()
             self._usingtypes.append(d)
     
@@ -173,7 +173,7 @@ class PyBasicModuleLoader:
 
             from machaon.core.type import TypeDefinition
             d = TypeDefinition(describer, classname)
-            if not d.load_declaration_docstring(doc):
+            if not d.load_docstring(doc):
                 continue
 
             yield d

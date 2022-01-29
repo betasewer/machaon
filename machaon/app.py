@@ -12,6 +12,7 @@ from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
+from machaon.core.symbol import BootModuleNames
 from machaon.process import Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
@@ -72,9 +73,7 @@ class AppRoot:
         self.pkgmanager.add_to_import_path()
 
         # machaon.types以下のモジュールをロード
-        for module in (
-            "shell", "file"
-        ):
+        for module in BootModuleNames:
             self.add_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
 
         # ホットキーの監視を有効化する

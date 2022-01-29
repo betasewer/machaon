@@ -41,30 +41,6 @@ class IntType(NumericType):
         """
         return int(s, 0)
     
-    def hex(self, n):
-        """ @method
-        16進表記を得る。
-        Returns:
-            Str:
-        """
-        return hex(n)
-    
-    def oct(self, n):
-        """ @method
-        8進表記を得る。
-        Returns:
-            Str:
-        """
-        return oct(n)
-    
-    def bin(self, n):
-        """ @method
-        2進表記を得る。
-        Returns:
-            Str:
-        """
-        return bin(n)
-    
     def pow(self, n, exp):
         """ @method
         べき乗を計算する。
@@ -129,4 +105,49 @@ class ComplexType():
         """
         return c.conjugate()
 
-    
+#
+# サブタイプ
+#
+class Hex:
+    """ @type subtype
+    16進数に変換する。
+    BaseType:
+        Int
+    """
+    def constructor(self, context, v):
+        """ @meta """
+        return int(v, 16)
+
+    def stringify(self, v):
+        """ @meta """
+        return hex(v)
+
+class Oct:
+    """ @type subtype
+    8進数に変換する。
+    BaseType:
+        Int
+    """
+    def constructor(self, context, v):
+        """ @meta """
+        return int(v, 8)
+
+    def stringify(self, v):
+        """ @meta """
+        return oct(v)
+
+class Bin:
+    """ @type subtype
+    2進数に変換する。
+    BaseType:
+        Int
+    """
+    def constructor(self, context, v):
+        """ @meta """
+        return int(v, 2)
+
+    def stringify(self, v):
+        """ @meta """
+        return bin(v)
+
+

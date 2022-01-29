@@ -124,6 +124,7 @@ QUOTE_ENDPARENS = {
 # 型名
 SIGIL_PYMODULE_DOT = "."
 SIGIL_SUBTYPE_SEPARATOR = ":"
+SIGIL_SUBTYPE_UNION = "+"
 
 #
 # 
@@ -166,4 +167,11 @@ SUMMARY_ESCAPE_TRANS = str.maketrans({
     0x1F : "[US]",
     0x7F : "[DEL]",
 })
+
+#
+# 実行時に読み込まれるモジュール
+#
+BootModuleNames = (
+    "string", "numeric", "dateandtime", "shell", "file"
+)
 

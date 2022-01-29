@@ -29,8 +29,10 @@ def parse_time(s):
 #
 #
 class DatetimeType():
-    """ 日付と時刻 
-    datetime.datetime
+    """ @type trait [Datetime]
+    日付と時刻
+    ValueType:
+        datetime.datetime
     """
     def constructor(self, _context, s=None):
         """ @meta 
@@ -294,8 +296,10 @@ class DatetimeType():
 
     
 class DateType:
-    """ 日付型
-    datetime.date
+    """ @type trait [Date]
+    日付型
+    ValueType:
+        datetime.date
     """
     def constructor(self, _context, s):
         """ @meta """
@@ -423,8 +427,10 @@ class DateType:
 
     
 class TimeType:
-    """ 日付型
-    datetime.date
+    """ @type trait [Time]
+    時刻
+    ValueType:
+        datetime.time
     """
     def constructor(self, _context, s):
         """ @meta 
@@ -539,3 +545,118 @@ class TimeType:
             Str:
         """
         return d.strftime(format)
+
+# Date:
+# サブタイプ
+#
+class Formatted:
+    """ @type subtype
+    数字以外の任意の文字で区切られた日付表現。
+    BaseType:
+        Date:
+    """
+    def constructor(self, context, s):
+        """ @meta """
+        parts = [""]
+        for ch in s:
+            if ch.isdigit():
+                parts[-1] += ch
+            else:
+                parts.append("")
+        vs = [int(x) for x in parts if len(x)>0]
+        if len(vs)<3:
+            raise ValueError(s)
+        return datetime.date(vs[0], vs[1], vs[2])
+
+    def stringify(self, d):
+        """ @meta """
+        return d.strftime("%Y/%m/%d")
+
+class Date8:
+    """ @type subtype
+    YYYYMMDDな日付表現。
+    BaseType:
+        Date:
+    """
+    def constructor(self, context, s):
+        """ @meta """
+        if len(s) != 8:
+            raise ValueError(s)
+        y = s[0:4]
+        m = s[4:6]
+        d = s[6:]
+        return datetime.date(int(y), int(m), int(d))
+
+    def stringify(self, d):
+        """ @meta """
+        return d.strftime("%Y%m%d")
+    
+class Date4:
+    """ @type subtype
+    MMDDな今年の日付表現。
+    BaseType:
+        Date:
+    """
+    def constructor(self, context, s, year=None):
+        """ @meta extraargs """
+        if len(s) != 4:
+            raise ValueError(s)
+        if year is None:
+            y = datetime.datetime.today().year
+        else:
+            y = int(year)
+        m = int(s[0:2])
+        d = int(s[2:])
+        return datetime.date(y, m, d)
+
+    def stringify(self, d):
+        return d.strftime("%m%d")
+
+class Month:
+    """ @type subtype
+    今年のある月の1日を表す。 Intへのflow
+    BaseType:
+        Date:
+    """
+    def constructor(self, context, s, year=None, day=None):
+        """ @meta extraargs """
+        v = int(s)
+        if year is None:
+            y = datetime.datetime.today().year
+        else:
+            y = int(year)
+        if day is None:
+            d = 1
+        else:
+            d = int(day)
+        return datetime.date(y, v, d)
+
+    def reflux(self, context, d):
+        """ @meta """
+        return d.month
+
+class Day:
+    """ @type subtype
+    今月のある日を表す。 Intへのflow
+    BaseType:
+        Date:
+    """
+    def constructor(self, context, s, year=None, month=None):
+        """ @meta """
+        v = int(s)
+        if year is None:
+            y = datetime.datetime.today().year
+        else:
+            y = int(year)
+        if month is None:
+            m = datetime.datetime.today().month
+        else:
+            m = int(month)
+        return datetime.date(y, m, v)
+
+    def reflux(self, context, d):
+        """ @meta """
+        return d.day
+
+
+
