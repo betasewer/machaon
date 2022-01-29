@@ -135,7 +135,7 @@ class Hex:
 
     def stringify(self, v):
         """ @meta """
-        return hex(v)
+        return "{:x}".format(v)
 
 class Oct:
     """ @type subtype
@@ -149,7 +149,7 @@ class Oct:
 
     def stringify(self, v):
         """ @meta """
-        return oct(v)
+        return "{:o}".format(v)
 
 class Bin:
     """ @type subtype
@@ -163,6 +163,6 @@ class Bin:
 
     def stringify(self, v):
         """ @meta """
-        return bin(v)
+        return "{:b}".format(v)
 
 

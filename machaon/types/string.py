@@ -682,6 +682,8 @@ class LStrip:
     固定の接頭辞を付す。
     BaseType:
         Str:
+    Params:
+        prefix(Str):
     """
     def constructor(self, s, prefix):
         """ @meta
@@ -695,7 +697,7 @@ class LStrip:
         return s[i+len(prefix):]
 
     def reflux(self, s, prefix):
-        """ @meta extraargs 
+        """ @meta
         Params:
             prefix(Str):
         """

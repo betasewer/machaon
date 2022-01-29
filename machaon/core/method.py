@@ -1027,6 +1027,7 @@ meta_method_prototypes = (
     MetaMethod("stringify"),
     MetaMethod("summarize"),
     MetaMethod("pprint"),
+    MetaMethod("reflux"),
 )
 
 
