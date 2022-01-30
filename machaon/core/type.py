@@ -1,5 +1,4 @@
 from collections import defaultdict
-from locale import delocalize
 
 from typing import Any, Sequence, Union, Callable, ItemsView, Optional, Generator, DefaultDict
 from typing import List, Dict, Tuple
@@ -58,6 +57,8 @@ TYPE_LOADED                 = 0x1000
 TYPE_DELAY_LOAD_METHODS     = 0x2000
 TYPE_MIXIN                  = 0x10000
 TYPE_SUBTYPE                = 0x20000
+
+SUBTYPE_BASE_ANY = 23
 
 #
 #
@@ -355,7 +356,7 @@ class Type(TypeProxy):
         """
         fns = self.resolve_meta_method("reflux", None, value, typeinst)
         if fns is None:
-            return self.stringify_value(value) # 文字に変換する
+            return self.stringify_value(value, typeinst) # 文字に変換する
         return self.invoke_meta_method(*fns)
 
     def resolve_meta_method(self, name, context, value, typeinst, *moreargs):
@@ -674,7 +675,11 @@ class TypeDefinition():
             doc=self.doc,
             bits=self.bits
         )
-        self._t.load()
+        try:
+            self._t.load()
+        except Exception as e:
+            raise BadTypeDeclaration(self.typename) from e
+
         for name, row in self.memberaliases:
             self._t.add_member_alias(name, row)
         
@@ -884,10 +889,28 @@ class TypeModule():
         t = self.get(parenttypecode)
         if t is None:
             return None
-        td = self._subtype_rels[t.get_typename()].get(typename)
-        if td is None:
-            return None
-        return self._load_type(td)
+        
+        subt = self._find_subtype(t.get_typename(), typename)
+        if subt is None:
+            if parenttypecode != SUBTYPE_BASE_ANY: # 総称型対象のものを探す
+                return self._find_subtype(SUBTYPE_BASE_ANY, typename)
+            else:
+                return None
+        else:
+            return subt
+
+    def _find_subtype(self, basekey, typename):
+        td = self._subtype_rels[basekey].get(typename)
+        if td is not None:
+            return self._load_type(td)
+        
+        # 親モジュールを探索
+        for ancmodule in self._ancestors:
+            tt = ancmodule._find_subtype(basekey, typename)
+            if tt is not None:
+                return tt
+        
+        return None
         
     #
     # 値型に適合する型を取得する
@@ -973,7 +996,11 @@ class TypeModule():
             key = t.proto_define(self)
             if key is not None:
                 if isinstance(key, tuple):
-                    self._subtype_rels[key[0]][key[1]] = t
+                    base = key[0]
+                    if base == "Any":
+                        base = SUBTYPE_BASE_ANY
+                    sub = key[1]
+                    self._subtype_rels[base][sub] = t
                 else:
                     self._typelib[key].append(t)
         else:
