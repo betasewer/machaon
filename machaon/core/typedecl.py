@@ -664,7 +664,9 @@ class TypeDecl:
             else:
                 if ihead < len(ctorvalues):
                     ca = ct.construct(context, ctorvalues[ihead])
-                ctorargs.append(ca)
+                    ctorargs.append(ca)
+                else:
+                    break
                 ihead += 1
         
         if not typeargs and not ctorargs:

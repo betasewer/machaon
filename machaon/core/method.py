@@ -1009,7 +1009,10 @@ class MetaMethod():
                         if nthead < len(typeinst.constructor_args):
                             nta = typeinst.constructor_args[nthead]
                         else:
-                            break
+                            if tp.is_required():
+                                break
+                            else:
+                                nta = None
                         nthead += 1
                         args.append(nta)
         else:
