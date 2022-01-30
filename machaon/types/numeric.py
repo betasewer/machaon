@@ -1,4 +1,5 @@
 import math
+import locale
 
 #
 #
@@ -121,48 +122,116 @@ class ComplexType():
         return c.conjugate()
 
 #
+#
 # サブタイプ
 #
+#
+
+#
+# N進数
+#
+def zerofillformat(width, type):
+    if width is not None:
+        fmt = "0" + str(width)
+    else:
+        fmt = ""
+    return "{:" + fmt + type + "}"
+
 class Hex:
     """ @type subtype
     16進数に変換する。
     BaseType:
         Int
+    Params:
+        width?(int): 埋める幅
     """
-    def constructor(self, v):
+    def constructor(self, v, width):
         """ @meta """
         return int(v, 16)
 
-    def stringify(self, v):
+    def stringify(self, v, width):
         """ @meta """
-        return "{:x}".format(v)
+        return zerofillformat(width,"x").format(v)
 
 class Oct:
     """ @type subtype
     8進数に変換する。
     BaseType:
         Int
+    Params:
+        width?(int): 0で埋める幅
     """
-    def constructor(self, v):
+    def constructor(self, v, width):
         """ @meta """
         return int(v, 8)
 
-    def stringify(self, v):
+    def stringify(self, v, width):
         """ @meta """
-        return "{:o}".format(v)
+        return zerofillformat(width,"o").format(v)
 
 class Bin:
     """ @type subtype
     2進数に変換する。
     BaseType:
         Int
+    Params:
+        width?(int): 0で埋める幅
     """
-    def constructor(self, v):
+    def constructor(self, v, width):
         """ @meta """
         return int(v, 2)
 
-    def stringify(self, v):
+    def stringify(self, v, width):
         """ @meta """
-        return "{:b}".format(v)
+        return zerofillformat(width,"b").format(v)
 
+#
+# ロケール
+#
+class LocaleNumeric:
+    _set = False
+    
+    @classmethod
+    def _setlocale(cls):
+        if not cls._set:
+            locale.setlocale(locale.LC_ALL, '')
+            cls._set = True
+
+class LocaleInt(LocaleNumeric):
+    """ @type subtype [Locale] 
+    システムロケールの数値形で表現された整数。
+    BaseType:
+        Int:
+    Params:
+        nogrouping?(str): 
+    """
+    def constructor(self, s, nogrouping=None):
+        """ @meta """
+        LocaleInt._setlocale()
+        return locale.atoi(s)
+
+    def stringify(self, v, nogrouping=None):
+        """ @meta """
+        LocaleInt._setlocale()
+        return locale.format_string("%d", v, grouping=not bool(nogrouping))
+    
+class LocaleFloat(LocaleNumeric):
+    """ @type subtype [Locale] 
+    システムロケールの数値形で表現された浮動小数点数。
+    BaseType:
+        Float:
+    Params:
+        nogrouping?(str): 
+    """
+    def constructor(self, s, nogrouping=None):
+        """ @meta """
+        LocaleInt._setlocale()
+        return locale.atof(s)
+
+    def stringify(self, v, nogrouping=None):
+        """ @meta """
+        LocaleInt._setlocale()
+        return locale.format_string("%f", v, grouping=not bool(nogrouping))
+    
+    
 

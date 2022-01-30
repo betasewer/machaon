@@ -304,6 +304,25 @@ class FunctionType():
         app.clipboard_copy(newtext, silent=True)
         app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
 
+#
+#
+# ジェネリックなサブタイプ
+#
+#
+class Identity:
+    """ @type subtype 
+    元の値に変更を加えない。Flow用。
+    BaseType:
+        Any:
+    """
+    def constructor(self, value):
+        """ @meta """
+        return value
+    
+    def reflux(self, value):
+        """ @meta """
+        return value
+
 
 #
 #
@@ -332,8 +351,7 @@ def fundamental_types():
         "machaon.types.numeric.ComplexType",        # Complex
         "machaon.types.tuple.ObjectTuple",          # Tuple
         "machaon.types.sheet.Sheet",                # Sheet
-        "machaon.core.persistence.StoredMessage",   # Stored
-        "machaon.types.app.RootObject",             # RootObject
+        "machaon.types.fundamental.Identity",       # T:Identity
         # エラー型
         "machaon.core.method.Method",               # Method
         "machaon.core.invocation.InvocationContext",# Context
@@ -343,6 +361,9 @@ def fundamental_types():
         "machaon.types.stacktrace.FrameObject",     # FrameObject
         "machaon.types.package.AppPackageType",     # Package
         "machaon.types.package.Module",             # PyModule
+        # システム型
+        "machaon.core.persistence.StoredMessage",   # Stored
+        "machaon.types.app.RootObject",             # RootObject
     ]:
         module.load_definition(qualname)
 

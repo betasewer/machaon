@@ -22,7 +22,7 @@ class Flow:
             for i, ft in enumerate(self.functors):
                 value = ft.influx(value)
         except Exception as e:
-            raise FlowError(e, "influx", value, i, ft)
+            raise FlowError(e, "influx", value, i, ft) from e
         return value
     
     def reflux(self, value):
@@ -38,7 +38,7 @@ class Flow:
                 i = len(self.functors)-i-1
                 value = ft.reflux(value)
         except Exception as e:
-            raise FlowError(e, "reflux", value, i, ft)
+            raise FlowError(e, "reflux", value, i, ft) from e
         return value
 
     def influx_flow(self):

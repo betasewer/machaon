@@ -654,9 +654,9 @@ class StrType():
 #
 # サブタイプ
 #
-class RStrip:
+class Postfixed:
     """ @type subtype
-    固定の接尾辞を付す。
+    固定の接尾辞を付された文字列。
     BaseType:
         Str:
     Params:
@@ -668,8 +668,8 @@ class RStrip:
             Str:
         """
         i = s.rfind(postfix)
-        if i == -1:
-            return s
+        if i == -1 or i > (len(s) - len(postfix)):
+            raise ValueError("'{}'には接尾辞'{}'がありません".format(s, postfix))
         return s[:i]
         
     def reflux(self, s, postfix):
@@ -677,9 +677,9 @@ class RStrip:
         return s + postfix
 
 
-class LStrip:
+class Prefixed:
     """ @type subtype
-    固定の接頭辞を付す。
+    固定の接頭辞を付された文字列。
     BaseType:
         Str:
     Params:
@@ -688,24 +688,20 @@ class LStrip:
     def constructor(self, s, prefix):
         """ @meta
         Params:
-            s(Str):
-            prefix(Str):
+            Str:
         """
         i = s.find(prefix)
-        if i == -1:
-            return s
-        return s[i+len(prefix):]
+        if i != 0:
+            raise ValueError("'{}'には接頭辞'{}'がありません".format(s, prefix))
+        return s[len(prefix):]
 
     def reflux(self, s, prefix):
-        """ @meta
-        Params:
-            prefix(Str):
-        """
+        """ @meta """
         return prefix + s
 
-class Strip:
+class Enclosed:
     """ @type subtype
-    前後に文字列を付す。
+    前後に文字列を付された文字列。
     BaseType:
         Str:
     Params:
@@ -717,22 +713,30 @@ class Strip:
         Params:
             s(Str):
         """
-        i = s.find(prefix)
-        j = s.rfind(postfix)
-        if i == -1:
-            return s
-        if i != -1 and j != -1:
-            return s[i+len(prefix):j]
-        elif j == -1:
-            return s[i+len(prefix):]
-        elif i == -1:
-            return s[:j]
-        else:
-            return s
+        try:
+            rstrip = Postfixed.constructor(Postfixed, s, postfix)
+            strip = Prefixed.constructor(Prefixed, rstrip, prefix)
+        except Exception as e:
+            raise ValueError("'{}'は'{}'と'{}'で囲まれていません".format(s, prefix, postfix)) from e
+        return strip
         
     def reflux(self, s, prefix, postfix):
         """ @meta """
         return prefix + s + postfix
+
+
+class EnclosedRelax:
+    """ @type subtype alias
+    BaseType:
+        Str:
+    Alias:
+        Enclosed[]({prefix},{postfix}) + Postfixed[]({postfix}) + Prefixed[]({prefix}) + Identity
+    Params:
+        prefix(Str):
+        postfix(Str):
+    """
+
+    
 
 
     
