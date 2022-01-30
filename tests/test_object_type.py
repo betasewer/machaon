@@ -1,6 +1,7 @@
-from machaon.core.invocation import TypeMethodInvocation, instant_context
-from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType
 import pytest
+
+from machaon.core.invocation import TypeMethodInvocation, instant_context
+from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration
 from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias, Type
 from machaon.core.importer import ClassDescriber, attribute_loader
 from machaon.types.fundamental import fundamental_types
@@ -298,3 +299,45 @@ def test_typemodule_move():
     assert cxt.get_type("Second_Rabbit") is not None
     assert cxt.get_type("Second_Rabbit").typename == "Second-Rabbit"
 
+
+class AryType:
+    """ @type
+    引数をとる型
+    Params:
+        T(Type):
+        param1(int):
+        param2(int):
+    """
+    def __init__(self, value, p1, p2):
+        self.v = value
+        self.p1 = p1
+        self.p2 = p2
+
+    def constructor(self, value, T, p1, p2=None):
+        """ @meta """
+        return AryType(value, p1, p2)
+
+    def get(self):
+        return (self.v, self.p1, self.p2)
+
+
+def test_type_params():
+    cxt = instant_context()
+    t = cxt.type_module.load_definition(AryType).load_type()
+    
+    assert len(t.get_type_params()) == 3
+    assert t.get_type_params()[0].get_name() == "T"
+    assert t.get_type_params()[0].is_type()
+    assert t.get_type_params()[1].get_name() == "param1"
+    assert t.get_type_params()[1].get_typename() == "int"
+    assert t.get_type_params()[2].get_name() == "param2"
+    assert t.get_type_params()[2].get_typename() == "int"
+
+    decl = parse_type_declaration("AryType[](42)")
+    t = decl.instance(cxt)
+    assert len(t.type_args) == 0
+    assert len(t.constructor_args) == 1
+    assert t.constructor_args[0] == 42
+    v = t.construct(cxt, 111)
+
+    assert v.get() == (111, 42, None)

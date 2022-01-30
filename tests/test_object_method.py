@@ -129,11 +129,6 @@ def test_method_return_self():
 def test_meta_method():
     cxt = instant_context()
     t = cxt.type_module.load_definition(SomeValue).load_type()
-    assert len(t.get_type_params()) == 2
-    assert t.get_type_params()[0].get_name() == "T"
-    assert t.get_type_params()[0].is_type()
-    assert t.get_type_params()[1].get_name() == "param1"
-    assert t.get_type_params()[1].get_typename() == "int"
 
     v = t.instantiate(2).construct(cxt, 3)
     assert isinstance(v, SomeValue)
@@ -143,9 +138,6 @@ def test_meta_method():
 
     decl = parse_type_declaration("SomeValue[Str](42)")
     t = decl.instance(cxt)
-    assert len(t.type_args) == 1
-    assert len(t.constructor_args) == 1
-    assert t.constructor_args[0] == 42
     v = t.construct(cxt, 11)
     assert isinstance(v, SomeValue)
     assert v.x == 11

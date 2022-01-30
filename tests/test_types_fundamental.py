@@ -9,6 +9,7 @@ fundamental_type = fundamental_types()
 def run(fn):
     fn()
 
+@run
 def test_fundamental_basic():
     t = fundamental_type.find("Bool")
     assert t
@@ -39,6 +40,9 @@ def test_fundamental_basic():
     from machaon.core.object import ObjectCollection
     assert t.get_value_type() is ObjectCollection
     assert t.is_object_collection_type
+
+    t = fundamental_type.get_subtype("Float", "Identity")
+    assert t
 
 
 def test_fundamental_metamethod_resolve():
@@ -98,8 +102,6 @@ def test_method():
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
     assert regmatch.get_action_target() == "Str:reg-match"
-
-test_method()
 
 def test_function():
     cxt = instant_context()
