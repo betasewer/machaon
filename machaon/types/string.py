@@ -726,7 +726,7 @@ class Enclosed:
 
 
 class EnclosedRelax:
-    """ @type subtype alias
+    """ type subtype alias
     BaseType:
         Str:
     Alias:

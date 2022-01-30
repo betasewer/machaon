@@ -31,10 +31,10 @@ class LoadJson():
     def __init__(self):
         pass
 
-    def read(self, value):
+    def influx(self, value):
         return json.loads(value)
 
-    def write(self, value):
+    def reflux(self, value):
         return json.dumps(value, ensure_ascii=False)
         
     def influx_flow(self):
@@ -62,7 +62,7 @@ class RunMessage():
             fn = parse_sequential_function(fn, context)
         if n == "influx":
             self._in = fn
-        elif n == "re":
+        elif n == "reflux":
             self._re = fn
 
     def influx(self, value):

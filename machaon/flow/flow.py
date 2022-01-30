@@ -58,7 +58,7 @@ class Flow:
         """
         parts = []
         for i, fn in reversed(list(enumerate(self.functors))):
-            parts.append("[{}] {}".format(i, fn.influx_flow()))
+            parts.append("[{}] {}".format(i, fn.reflux_flow()))
         return parts
 
     def flow(self):
@@ -83,7 +83,10 @@ class Flow:
         Params:
             typename(str): 型名
         """
-        from machaon.flow.functor import ConstructType
+        # jsonで変換する
+        if typeconversion == "json":
+            return self.pipe_json()
+        # 型インターフェースまたはメソッドによって変換する
         t = context.instantiate_type(typeconversion)
         if t is None:
             raise ValueError("型'{}'は存在しません".format(typeconversion))
@@ -94,6 +97,7 @@ class Flow:
             msg = t.args[0] if t.args else None
             return self.pipe_message(context, None).message_reflux(context, msg)
         else:
+            from machaon.flow.functor import ConstructType
             return self.add_functor(ConstructType(context, t))
 
     def pipe_json(self):

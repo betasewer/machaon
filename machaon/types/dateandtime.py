@@ -549,7 +549,7 @@ class TimeType:
 # Date:
 # サブタイプ
 #
-class Formatted:
+class Auto:
     """ @type subtype
     数字以外の任意の文字で区切られた日付表現。
     BaseType:
