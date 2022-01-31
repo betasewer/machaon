@@ -545,10 +545,19 @@ class TimeType:
             Str:
         """
         return d.strftime(format)
-
+#
 # Date:
 # サブタイプ
 #
+def split_by_nondigit(s):
+    parts = [""]
+    for ch in s:
+        if ch.isdigit():
+            parts[-1] += ch
+        else:
+            parts.append("")
+    return parts
+
 class Auto:
     """ @type subtype
     数字以外の任意の文字で区切られた日付表現。
@@ -557,12 +566,7 @@ class Auto:
     """
     def constructor(self, s):
         """ @meta """
-        parts = [""]
-        for ch in s:
-            if ch.isdigit():
-                parts[-1] += ch
-            else:
-                parts.append("")
+        parts = split_by_nondigit(s)
         vs = [int(x) for x in parts if len(x)>0]
         if len(vs)<3:
             raise ValueError(s)
@@ -667,5 +671,30 @@ class Day:
         """ @meta noarg """
         return d.day
 
-
+class YearLowMonth:
+    """ @type subtype
+    西暦の下二桁と月の組み合わせ。
+    BaseType:
+        Date:
+    Params:
+        day?(int):
+    """
+    def constructor(self, s, day=None):
+        """ @meta """
+        parts = split_by_nondigit(s)
+        digits = [int(x) for x in parts]
+        if len(digits) < 2:
+            raise ValueError("年と月の区切りが不明です")
+        
+        y = digits[0]
+        m = digits[1]
+        if y < 50: # 1950 ~ 2049
+            y = 2000 + y
+        else:
+            y = 1900 + y
+        if day is not None:
+            d = day
+        else:
+            d = 1
+        return datetime.datetime(y, m, d)
 
