@@ -671,7 +671,7 @@ class Day:
         """ @meta noarg """
         return d.day
 
-class YearLowMonth:
+class YearLow_Month:
     """ @type subtype
     西暦の下二桁と月の組み合わせ。
     BaseType:
