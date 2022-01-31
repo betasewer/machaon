@@ -6,7 +6,7 @@ from machaon.package.package import Package, PackageManager
 
 
 class AppPackageType:
-    """ @type trait
+    """ @type trait [Package]
     プログラムパッケージを操作するための型。
     ValueType: 
         machaon.package.package.Package
@@ -402,6 +402,22 @@ class Module():
         for loader in walk_modules(d, self.name()):
             name = loader.get_name()
             yield name
+
+    def load_definition(self, context, name):
+        """@task nospirit context
+        属性を取得し、値がクラスであれば型定義として読み込む。
+        Params:
+            name(Str): 属性名
+        Returns:
+            Type: 読み込まれた型
+        """
+        m = self.mloader()
+        v = m.load_attr(name)
+        if not isinstance(v, type):
+            raise ValueError("'{}'はクラスではありません: {}".format(name, v))
+        d = context.type_module.load_definition(v)
+        return d.load_type() # 即座にロードする
+
 
 
 
