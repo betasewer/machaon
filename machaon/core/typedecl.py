@@ -1,4 +1,3 @@
-import enum
 from machaon.core.symbol import (
     SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR, SIGIL_SUBTYPE_UNION,
     BadTypename, full_qualified_name, PythonBuiltinTypenames
@@ -867,12 +866,21 @@ def _typedecl_ctorargs(itr):
             raise TypeDeclError(itr, "予期せぬ文字です")
     return args
 
+def is_typename_char(ch):
+    return ch.isidentifier()
+
+digits = "0123456789"
+def is_typename_continue_char(ch):
+    return is_typename_char(ch) or ch == SIGIL_SCOPE_RESOLUTION or ch == SIGIL_PYMODULE_DOT or ch in digits
+
 def _typedecl_name(itr):
     # Pythonの識別名で使える文字 + SIGIL_SCOPE_RESOLUTION + SIGIL_PYMODULE_DOT
     name = ""
     while not itr.eos():
         ch, pos = itr.advance()
-        if ch and ch.isidentifier() or ch == SIGIL_SCOPE_RESOLUTION or ch == SIGIL_PYMODULE_DOT:
+        if ch and len(name) == 0 and is_typename_char(ch):
+            name += ch
+        elif ch and len(name) > 0 and is_typename_continue_char(ch):
             name += ch
         else:
             itr.back(pos)

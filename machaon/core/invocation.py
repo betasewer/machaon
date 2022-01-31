@@ -1174,18 +1174,18 @@ class TypeConstructorInvocation(BasicInvocation):
     """
     型コンストラクタを呼び出す
     """
-    def __init__(self, typename, modifier):
+    def __init__(self, typeconversion, modifier):
         super().__init__(modifier)
-        self._typename = typename
+        self._typedecl = parse_type_declaration(typeconversion)
     
     def get_method_name(self):
-        return self._typename
+        return self._typedecl.to_string()
 
     def get_method_doc(self):
-        return "型'{}'のコンストラクタ".format(self._typename)
+        return "型'{}'のコンストラクタ".format(self._typedecl.to_string())
 
     def display(self):
-        return ("TypeConstructor", self._typename, self.modifier_name())
+        return ("TypeConstructor", self._typedecl.to_string(), self.modifier_name())
     
     def is_task(self):
         return False
@@ -1196,9 +1196,7 @@ class TypeConstructorInvocation(BasicInvocation):
     def prepare_invoke(self, context: InvocationContext, *argobjects):
         argobj, *_args = argobjects
         # 型の実装を取得する
-        t = context.select_type(self._typename)
-        if t is None:
-            raise BadTypename(self._typename)
+        t = self._typedecl.instance(context)
         # 変換コンストラクタの呼び出しを作成
         arg = resolve_object_value(argobj)
         return InvocationEntry(self, t.construct, (context, arg), {})
@@ -1216,8 +1214,7 @@ class TypeConstructorInvocation(BasicInvocation):
         return None
     
     def get_result_spec(self):
-        decl = parse_type_declaration(self._typename)
-        return MethodResult(decl)
+        return MethodResult(self._typedecl)
 
 
 class Bind1stInvocation(BasicInvocation):
