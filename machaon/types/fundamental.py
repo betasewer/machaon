@@ -35,17 +35,6 @@ class TypeType():
     #
     # メソッド
     #
-    def load(self, type, context):
-        '''@method context
-        値がクラスであれば型定義として読み込む。
-        Returns:
-            Type: 読み込まれた型
-        '''
-        if isinstance(type, PythonType):
-            raise ValueError("既にロード済みです")
-        d = context.type_module.load_definition(type.type)
-        return d.define(context.type_module) # 即座にロードする
-
     def new(self, type):
         '''@method
         引数無しでコンストラクタを実行する。

@@ -97,7 +97,7 @@ class Path():
     
     def extension(self):
         """ @method
-        拡張子
+        ドットを含む拡張子。
         Returns:
             Str:
         """
@@ -269,18 +269,24 @@ class Path():
         return Path(up)
     
     def with_name_format(self, format, *args):
-        """ 書式に基づいて名前を変更する。（内部利用）"""
-        head, basename = os.path.split(self._path)
-        newpath = os.path.join(head, format.format(basename, *args))
+        """ 
+        書式に基づいて名前を変更する。（内部利用）
+        {0}に元のnameが入る。
+        """
+        head, name = os.path.split(self._path)
+        newpath = os.path.join(head, format.format(name, *args))
         return Path(newpath)
     
     def with_basename_format(self, format, *args, ext=None):
-        """ 書式に基づいて拡張子を除く名前を変更する。（内部利用）"""
-        head, basename = os.path.split(self._path)
-        filename, fext = os.path.splitext(basename)
+        """ 
+        書式に基づいて拡張子を除く名前を変更する。（内部利用）
+        {0}に元のbasenameが入る。
+        """
+        head, name = os.path.split(self._path)
+        basename, fext = os.path.splitext(name)
         if ext is not None:
             fext = _normext(ext)
-        newpath = os.path.join(head, format.format(filename, *args) + fext)
+        newpath = os.path.join(head, format.format(basename, *args) + fext)
         return Path(newpath)
 
     def join(self, *paths):

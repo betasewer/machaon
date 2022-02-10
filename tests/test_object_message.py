@@ -149,6 +149,19 @@ def test_message_engine():
         "", TOKEN_ALL_BLOCK_END
     )
 
+    # 丸括弧の区別
+    assert reads("this a sacrifi(1991,Mito)es what he called (his soul)") == (
+        "this", TOKEN_TERM|TOKEN_FIRSTTERM, 
+        "sacrifi(1991,Mito)es", TOKEN_TERM, 
+        "what", TOKEN_TERM,
+        "he", TOKEN_TERM,
+        "called", TOKEN_TERM,
+        "", TOKEN_BLOCK_BEGIN,
+        "his", TOKEN_TERM,
+        "soul", TOKEN_TERM|TOKEN_BLOCK_END,
+        "", TOKEN_ALL_BLOCK_END
+    )
+
 #
 def test_generic_methods():
     # static method

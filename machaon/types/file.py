@@ -311,7 +311,7 @@ class TextFile(BasicContextFile):
         self._enc = encoding
     
     def text(self, size=None):
-        """ @method
+        """ @task
         テキストを丸ごと返す。
         Params:
             size(int): 取得する文字数
@@ -321,23 +321,35 @@ class TextFile(BasicContextFile):
         return self.loadfile(size)
 
     def write_text(self, text):
-        """ @method
+        """ @task
         テキストを書き込んで閉じる。
         Params:
             text(str): 書き込むテキスト
         Returns:
             Str:
         """
-        with self.read_stream():
+        with self.write_stream():
             self.stream.write(text)
 
     def lines(self):
-        """ @method
+        """ @task
         行を返す。
         Returns:
             Tuple[Str]:
         """
         return list(self.read_stream())
+
+    def write_lines(self, lines):
+        """ @task
+        行を書き込んで閉じる。
+        Params:
+            lines(Tuple[str]): 書き込む各行
+        Returns:
+            Str:
+        """
+        with self.write_stream():
+            for line in lines:
+                self.stream.write(line+"\n")
 
 
 #
