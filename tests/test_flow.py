@@ -50,3 +50,24 @@ def test_enclosure_try():
     assert f.reflux("あ") == "『あ』"
     assert f.reflux("『あ") == "『『あ』"
 
+
+def test_none_functor():
+    cxt = instant_context()
+    f = Flow()
+    f.pipe(cxt, "Int")
+    f.pipe_message(cxt, "@ * 10").message_reflux(cxt, "@ / 10 floor")
+    f.pipe_none(cxt, "blank")
+
+    assert f.influx("21") == 210
+    assert f.reflux(210) == "21"
+
+    assert f.influx("") == None
+    assert f.reflux(None) == ""
+
+    f = Flow()
+    f.pipe(cxt, "Int")
+    f.pipe_message(cxt, "@ * 10").message_reflux(cxt, "@ / 10 floor")
+    f.pipe_none(cxt, "blank")
+
+
+

@@ -85,3 +85,33 @@ class RunMessage():
             return "<identity>"
         return self._re.get_expression()
 
+
+class NoneMapValue():
+    def __init__(self, value):
+        self.value = value
+
+    def influx(self, value):
+        if value == self.value:
+            return None
+        return value
+
+    def reflux(self, value):
+        if value is None:
+            return self.value
+        return value
+
+    def influx_flow(self):
+        return repr(self.value)
+        
+    def reflux_flow(self):
+        return repr(self.value)
+    
+class NoneMapBlank(NoneMapValue):
+    def __init__(self):
+        super().__init__("")
+
+    def influx_flow(self):
+        return "blank"
+        
+    def reflux_flow(self):
+        return "blank"

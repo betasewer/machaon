@@ -1,6 +1,7 @@
 
 
-from machaon.core.message import parse_sequential_function
+
+from re import A
 
 
 class Flow:
@@ -9,6 +10,7 @@ class Flow:
     """
     def __init__(self):
         self.functors = []
+        self.none_functor = None
 
     def influx(self, value):
         """ @task
@@ -19,6 +21,8 @@ class Flow:
             Any: 最終データ
         """
         try:
+            if self.none_functor and self.none_functor.influx(value) is None: # 最初に入力値をチェックする
+                return None
             for i, ft in enumerate(self.functors):
                 value = ft.influx(value)
         except Exception as e:
@@ -34,6 +38,8 @@ class Flow:
             Any: 入力値
         """
         try:
+            if value is None and self.none_functor:
+                return self.none_functor.reflux(None) # 最初にデータをチェックする
             for i, ft in enumerate(reversed(self.functors)):
                 i = len(self.functors)-i-1
                 value = ft.reflux(value)
@@ -47,6 +53,8 @@ class Flow:
             Tuple:
         """
         parts = []
+        if self.none_functor:
+            parts.append("[None] {}".format(self.none_functor.influx_flow()))
         for i, fn in enumerate(self.functors):
             parts.append("[{}] {}".format(i, fn.influx_flow()))
         return parts
@@ -57,6 +65,8 @@ class Flow:
             Tuple:
         """
         parts = []
+        if self.none_functor:
+            parts.append("[None] {}".format(self.none_functor.reflux_flow()))
         for i, fn in reversed(list(enumerate(self.functors))):
             parts.append("[{}] {}".format(i, fn.reflux_flow()))
         return parts
@@ -77,16 +87,19 @@ class Flow:
         self.functors.append(fn)
         return self
 
-    def pipe(self, context, typeconversion):
+    def pipe(self, context, functor):
         """ @method context alias-name [>>]
         machaonの型インターフェースまたはメソッドによって変換する
         Params:
-            typename(str): 型名
+            functor(str): 型名
         """
         # jsonで変換する
-        if typeconversion == "json":
-            return self.pipe_json()
+        if functor == "json":
+            from machaon.flow.functor import LoadJson
+            return self.add_functor(LoadJson())
+
         # 型インターフェースまたはメソッドによって変換する
+        typeconversion = functor
         t = context.instantiate_type(typeconversion)
         if t is None:
             raise ValueError("型'{}'は存在しません".format(typeconversion))
@@ -100,15 +113,8 @@ class Flow:
             from machaon.flow.functor import ConstructType
             return self.add_functor(ConstructType(context, t))
 
-    def pipe_json(self):
-        """ @method alias-name [>>json]
-        JSONによって変換する。
-        """
-        from machaon.flow.functor import LoadJson
-        return self.add_functor(LoadJson())
-
     def pipe_message(self, context, block):
-        """ @method context alias-name [>>message]
+        """ @method context alias-name [>>message >>+]
         任意のメッセージをinfluxとして設定する。
         Params:
             block(Function[](seq)):
@@ -117,7 +123,7 @@ class Flow:
         return self.add_functor(RunMessage(block, context))
 
     def message_reflux(self, context, block):
-        """ @method context [m-reflux]
+        """ @method context [reflux+]
         任意のメッセージを直前のファンクタのrefluxとして設定する。
         Params:
             block(Function[](seq)):
@@ -128,6 +134,30 @@ class Flow:
         else:
             raise ValueError("直前のファンクタがRunMessageではありません")
         fn.set_flux(block, "reflux", context)
+        return self
+
+    def pipe_none(self, context, functor, arg=None):
+        """ @method context alias-name [none>>]
+        machaonの型インターフェースまたはメソッドによってNoneを変換する
+        Params:
+            functor(str): blank|zero|hyphen|value[a]
+            arg?(Any): 引数
+        """
+        from machaon.flow.functor import NoneMapValue, NoneMapBlank
+        if functor == "blank":
+            # 空白文字に変換する
+            self.none_functor = NoneMapBlank()
+        elif functor == "zero":
+            # ゼロに変換する
+            self.none_functor = NoneMapValue(0)
+        elif functor == "hyphen":
+            # ゼロに変換する
+            self.none_functor = NoneMapValue("―")
+        elif functor == "value":
+            # 任意の値
+            self.none_functor = NoneMapValue(arg)
+        else:
+            raise ValueError(functor)
         return self
 
     #
