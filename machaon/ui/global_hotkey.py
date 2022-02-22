@@ -55,7 +55,7 @@ class GlobalHotkey:
                 ret = fn.run(self.spi.get_last_context())
             except Exception as e:
                 from machaon.types.stacktrace import ErrorObject, verbose_display_traceback
-                self.spi.root.post_stray_message("error", ErrorObject(None, e).display_line())
+                self.spi.root.post_stray_message("error", ErrorObject(e).short_display())
                 self.spi.root.post_stray_message("message", verbose_display_traceback(e, 0xFFFFFF))
         return _handler
         

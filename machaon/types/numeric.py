@@ -78,11 +78,38 @@ class FloatType(NumericType):
         Params:
             exp(Float):
         Returns:
-            Int:
+            Float:
         """
         import math
         return math.pow(n, exp)
 
+    def floor(self, n):
+        """ @method
+        小数点以下を切り捨てる。
+        Returns:
+            Int:
+        """
+        import math
+        return math.floor(n)
+        
+    def ceil(self, n):
+        """ @method
+        小数点以下を切り上げる。
+        Returns:
+            Int:
+        """
+        import math
+        return math.ceil(n)
+
+    def round(self, n, d=None):
+        """ @method
+        任意の桁数で偶数に丸める。
+        Params:
+            d?(int): 桁数
+        Returns:
+            Float
+        """
+        return round(n, d)
 
 class ComplexType():
     """ @type trait [Complex]

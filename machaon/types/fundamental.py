@@ -230,8 +230,8 @@ class BoolType():
     # if
     #
     def if_true(self, b, context, if_, else_):
-        """ @method context [if]
-        文字列を評価し、真なら実行する。
+        """ @method context
+        文字列を評価し、真なら実行する。コンテキストを引き継ぐ。
         @ == 32 if-true: "nekkedo" "hekkeo"
         Params:
             if_(Function): true 節
@@ -311,6 +311,7 @@ class Identity:
     def reflux(self, value):
         """ @meta """
         return value
+
 
 
 #

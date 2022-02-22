@@ -57,7 +57,7 @@ def _default_result_object(context):
 
 def _new_process_error_object(context, error, objectType):
     from machaon.types.stacktrace import ErrorObject
-    return objectType(context.get_type("Error"), ErrorObject(context, error))
+    return objectType(context.get_type("Error"), ErrorObject(error, context=context))
 
 #
 #

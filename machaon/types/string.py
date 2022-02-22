@@ -650,6 +650,7 @@ class StrType():
         クリップボードに文字列をコピーする。
         """
         spirit.clipboard_copy(string)
+        
 
 #
 # サブタイプ

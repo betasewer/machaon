@@ -14,7 +14,7 @@ class ErrorObject():
     """ @type [Error]
     プロセスの実行時に起きたエラー。
     """
-    def __init__(self, context, error):
+    def __init__(self, error, *, context=None):
         self.error = error
         self.context = context
     
@@ -64,19 +64,63 @@ class ErrorObject():
         excep = self.get_error()
         return "".join(traceback.format_exception(type(excep), excep, excep.__traceback__))
     
-    def display_line(self):
+    def display_exception(self):
         """ @method 
-        一行でエラー内容を表示する。
+        一行で例外名のみを表示する。
         Returns:
             Str:
         """
         excep = self.get_error()
         return traceback.format_exception_only(type(excep), excep)[0]
+        
+    def short_display(self):
+        """ @method 
+        例外名と、最初と最後のフレームのみを表示する。
+        Returns:
+            Str:
+        """
+        excep1 = self.get_error()
+
+        lines = []
+        errlines = traceback.format_exception_only(type(excep1), excep1)
+        lines.extend([x.rstrip() for x in errlines])
+        
+        excep2 = self.cause().get_error()
+        if excep1 is excep2:
+            frames = traceback.extract_tb(excep1.__traceback__)
+            first = frames[0]
+            last = frames[-1]
+        else:
+            frames1 = traceback.extract_tb(excep1.__traceback__)
+            first = frames1[0]
+            frames2 = traceback.extract_tb(excep2.__traceback__)
+            last = frames2[-1]
+        
+        lines.extend([x.rstrip() for x in traceback.format_list([first])])
+        lines.append("    ...    ")
+        lines.extend([x.rstrip() for x in traceback.format_list([last])])
+        return "\n".join(lines)
     
+    def cause(self):
+        """ @method 
+        元のエラーを取得する。
+        Returns:
+            Error:
+        """
+        err = self.get_error()
+        while True: 
+            cause = err.__cause__
+            if cause is None:
+                break
+            err = cause
+        return ErrorObject(err, context=self.context)
+
     def parser_log(self, app):
         """ @task
         メッセージ解析器のログを表示する。
         """
+        if self.context is None:
+            raise ValueError("コンテキストが関連づけられていません")
         self.context.pprint_log_as_message(app)
 
     def constructor(self, context, value):
@@ -85,7 +129,7 @@ class ErrorObject():
         Params:
             builtins.Exception:
         """
-        return ErrorObject(context, value)
+        return ErrorObject(value, context=context)
     
     def stringify(self):
         """ @meta """
@@ -430,7 +474,7 @@ def display_this_traceback(tb, linewidth, showtype=None, level=None, printerror=
     # 例外の発生を表示する
     msg_excep = ""
     if printerror:
-        msg_excep = ErrorObject(None, tb.error()).display_line()
+        msg_excep = ErrorObject(tb.error()).display_line()
 
     indent = "  "
     lines = []
@@ -684,7 +728,7 @@ class FunctionInfo:
 
 def print_exception_verbose(exception, linewidth=0xFFFFFF):
     # デバッグ用
-    line = ErrorObject(None, exception).display_line()
+    line = ErrorObject(exception).display_line()
     print(line)
     
     print("スタックトレース：")

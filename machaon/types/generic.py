@@ -462,37 +462,31 @@ class GenericMethods:
         """
         return len(left)
 
-    def ift(self, left, context, right):
+    def truth_then(self, left, context, if_, else_):
         """ @method reciever-param context 
-        leftが真であればrightというメソッドを実行する。
+        leftを真理値として評価して真であればif_を、偽であればelse_を実行する。
         Arguments:
             left(Object): 
-            right(Str): メソッド表現
+            if_(Function):
+            else_(Function):
         Returns:
             Any:
         """
-        if left.test_truth():
-            from machaon.types.fundamental import FunctionType
-            fn = FunctionType.constructor(FunctionType(), context, "@ " + right)
-            return fn.run(left, context)
-        else:
-            return None
+        body = if_ if left.test_truth() else else_
+        return body.run(left, context)
 
-    def iff(self, left, context, right):
+    def falsy_then(self, left, context, if_, else_):
         """ @method reciever-param context 
-        leftが偽であればrightというメソッドを実行する。
+        leftを真理値として評価して偽であればif_を、真であればelse_を実行する。
         Arguments:
             left(Object): 
-            right(Str): メソッド表現
+            if_(Function):
+            else_(Function):
         Returns:
             Any:
         """
-        if not left.test_truth():
-            from machaon.types.fundamental import FunctionType
-            fn = FunctionType.constructor(FunctionType(), context, "@ " + right)
-            return fn.run(left, context)
-        else:
-            return None
+        body = if_ if not left.test_truth() else else_
+        return body.run(left, context)
         
     def test_then(self, left, context, cond, if_, else_):
         """ @method reciever-param context 
