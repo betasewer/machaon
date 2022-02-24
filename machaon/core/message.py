@@ -444,7 +444,10 @@ def extract_selector_modifiers(selector):
         else:
             break
         offset += 1
-    return selector[offset:], modbits
+    sel = selector[offset:]
+    if not sel:
+        return selector, modbits
+    return sel, modbits
 
 # メソッド
 def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:

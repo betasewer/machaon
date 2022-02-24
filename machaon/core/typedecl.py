@@ -517,11 +517,12 @@ class SubType(RedirectProxy):
     """
     サブタイプ型
     """
-    def __init__(self, basetype, metatype, *altmetatypes):
+    def __init__(self, basetype, metatype, *altmetatypes, identity=False):
         super().__init__()
         self.basetype = basetype
         self.metatype = metatype
         self.altmetatypes = altmetatypes
+        self.doidentity = identity
 
     def redirect(self):
         return self.basetype
@@ -546,11 +547,21 @@ class SubType(RedirectProxy):
     def constructor(self, context, value):
         ret = None
         metas = [self.metatype, *self.altmetatypes] # 複数のコンストラクタを順番に試す
-        for i, meta in enumerate(metas):
+        tryidentity = self.doidentity
+        imeta = 0
+        while True:
+            meta = metas[imeta]
             try:
                 ret = meta.constructor(context, value)
-            except Exception as e:
-                if len(metas) <= (i+1): raise # 最後まで来たらエラー
+            except Exception:
+                if len(metas) <= (imeta+1):
+                    if tryidentity:
+                        metas.append(self.basetype) # ベースタイプのコンストラクタを試す
+                        imeta += 1
+                        tryidentity = False
+                        continue
+                    raise # 最後まで来たらエラー
+                imeta += 1
                 continue
             else:
                 return ret
@@ -605,7 +616,7 @@ class TypeConversionError(Exception):
 
     def __str__(self):
         srctype, desttype = self.args
-        return "'{}'型の引数に'{}'型の値を代入できません".format(desttype.get_typename(), full_qualified_name(srctype))
+        return "'{}'型の引数に'{}'型の値を代入できません".format(desttype.get_conversion(), full_qualified_name(srctype))
 
 #
 # 型宣言
@@ -695,11 +706,15 @@ class TypeDecl:
                 raise ValueError("not enough type args for __Sub")
             baset = self.declargs[0].instance(context) # 基底型
             subtypes = []
+            identity = False
             for decl in self.declargs[1:]:
+                if decl.typename == "Identity":
+                    identity = True
+                    continue
                 td = context.get_subtype(baset.typename, decl.typename)
                 t = decl._instance_type(td, context, args)
                 subtypes.append(t)
-            return SubType(baset, *subtypes)
+            return SubType(baset, *subtypes, identity=identity)
         elif SIGIL_PYMODULE_DOT in self.typename:
             # machaonで未定義のPythonの型
             ctorargs = [*self.ctorargs, *(args or [])]

@@ -115,3 +115,4 @@ class NoneMapBlank(NoneMapValue):
         
     def reflux_flow(self):
         return "blank"
+

@@ -218,17 +218,34 @@ class ObjectCollection():
     #
     #
     def asdict(self, context):
-        """ @method context alias-name [=dict]
+        """ @method context alias-name [dict=]
         Pythonの辞書に変換する。
         Returns:
             Any:
         """
         d = {}
-        for name, ids in self._namemap.items():
-            id = ids[-1]
-            item = self._items[id]
+        for _name, ids in self._namemap.items():
+            item = self._items[ids[-1]]
             d[item.name] = item.value 
         return context.get_py_type(dict).new_object(d)
+    
+    def keys(self):
+        """ @method alias-name [keys=]
+        キーを列挙する。
+        Returns:
+            Tuple[str]:
+        """
+        for name, ids in self._namemap.items():
+            yield name
+            
+    def values(self):
+        """ @method alias-name [values=]
+        値を列挙する。
+        Returns:
+            Tuple[Any]:
+        """
+        for name, ids in self._namemap.items():
+            yield self._items[ids[-1]].value
 
     def constructor(self, context, value):
         """ @meta context """

@@ -482,6 +482,16 @@ class InvocationContext:
         """
         return self.get_last_exception() is not None
     
+    def push_extra_exception(self, exception):
+        """ 呼び出し以外の場所で起きた例外を保存する """
+        self._extra_exception = exception
+
+    def pop_exception(self):
+        """ コンテキストを使いまわす場合にエラーをクリアする """
+        excep = self.get_last_exception()
+        self._extra_exception = None
+        return excep
+
     def get_process(self):
         """ @method alias-name [process]
         紐づけられたプロセスを得る。
@@ -490,10 +500,6 @@ class InvocationContext:
         """
         return self.spirit.process
     
-    def push_extra_exception(self, exception):
-        """ 呼び出し以外の場所で起きた例外を保存する """
-        self._extra_exception = exception
-
     def _add_log(self, logcode, *args):
         """ 実行ログを追加する """
         self._log.append((logcode, *args))
@@ -669,7 +675,16 @@ class InvocationContext:
         ログを表示する。
         """ 
         self.pprint_log(lambda x: app.post("message", x))
-    
+
+    def display_log(self):
+        """ @method 
+        Returns:
+            Str:
+        """
+        lines = []
+        self.pprint_log(lambda x: lines.append(x))
+        return "\n".join(lines)
+
     def constructor(self, context, value):
         """ @meta context 
         """

@@ -153,7 +153,7 @@ class ErrorObject():
             excep = self.error
             title = ""
         
-        app.post("error", self.display_line())
+        app.post("error", self.display_exception())
 
         app.post("message-em", "スタックトレース{}：".format(title))
         msg = verbose_display_traceback(excep, app.get_ui_wrap_width(), "short")
@@ -474,7 +474,7 @@ def display_this_traceback(tb, linewidth, showtype=None, level=None, printerror=
     # 例外の発生を表示する
     msg_excep = ""
     if printerror:
-        msg_excep = ErrorObject(tb.error()).display_line()
+        msg_excep = ErrorObject(tb.error()).display_exception()
 
     indent = "  "
     lines = []
@@ -728,7 +728,7 @@ class FunctionInfo:
 
 def print_exception_verbose(exception, linewidth=0xFFFFFF):
     # デバッグ用
-    line = ErrorObject(exception).display_line()
+    line = ErrorObject(exception).display_exception()
     print(line)
     
     print("スタックトレース：")

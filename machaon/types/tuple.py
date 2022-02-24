@@ -225,6 +225,31 @@ class ObjectTuple():
         
         return cur
 
+    def all_(self, context, _app, predicate):
+        """ @task context alias-name [all]
+        すべての要素に関数を適用し、論理積をとる。
+        Params:
+            predicate(Function[](seq)): 述語関数
+        Returns:
+            Any: 結果
+        """
+        for o in self.objects:
+            if not predicate.run(o, context).test_truth():
+                return False
+        return True
+    
+    def any_(self, context, _app, predicate):
+        """ @task context alias-name [any]
+        すべての要素に関数を適用し、論理和をとる。
+        Params:
+            predicate(Function[](seq)): 述語関数
+        Returns:
+            Any: 結果
+        """
+        for o in self.objects:
+            if predicate.run(o, context).test_truth():
+                return True
+        return False
     
     #
     #

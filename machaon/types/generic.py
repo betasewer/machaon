@@ -199,6 +199,16 @@ class GenericMethods:
         """
         return left is not right
 
+    def is_none(self, left) -> bool:
+        """ @method reciever-param
+        Noneである。
+        Arguments:
+            left(Any): 
+        Returns:
+            Bool:
+        """
+        return left is None
+
     def truth(self, left) -> bool:
         """ @method reciever-param
         A が真か。
@@ -598,3 +608,10 @@ _GenericMethodsType = Type(
     value_type=GenericMethodValue
 )
 _GenericMethodsType.load(loadbits=TYPE_DELAY_LOAD_METHODS)
+
+
+#
+#
+# ジェネリックなサブタイプ
+#
+#

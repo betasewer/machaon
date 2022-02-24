@@ -421,7 +421,7 @@ class StrType():
         """ @method
         文字の両脇の空白を落とす。
         Params:
-            chars: 落とす文字の指定
+            chars?(str): 落とす文字の指定
         Returns:
             Str:
         """

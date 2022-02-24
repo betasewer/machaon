@@ -156,6 +156,9 @@ class Flow:
         elif functor == "value":
             # 任意の値
             self.none_functor = NoneMapValue(arg)
+        elif functor == "functor":
+            # 任意の値
+            self.none_functor = NoneMapValue(arg)
         else:
             raise ValueError(functor)
         return self
