@@ -9,7 +9,6 @@ fundamental_type = fundamental_types()
 def run(fn):
     fn()
 
-@run
 def test_fundamental_basic():
     t = fundamental_type.find("Bool")
     assert t
@@ -41,8 +40,6 @@ def test_fundamental_basic():
     assert t.get_value_type() is ObjectCollection
     assert t.is_object_collection_type
 
-    t = fundamental_type.get_subtype("Float", "Identity")
-    assert t
 
 
 def test_fundamental_metamethod_resolve():

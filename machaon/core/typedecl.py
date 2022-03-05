@@ -517,12 +517,13 @@ class SubType(RedirectProxy):
     """
     サブタイプ型
     """
-    def __init__(self, basetype, metatype, *altmetatypes, identity=False):
+    def __init__(self, basetype, *metatypes, identity=False):
         super().__init__()
         self.basetype = basetype
-        self.metatype = metatype
-        self.altmetatypes = altmetatypes
+        self.metatypes = metatypes
         self.doidentity = identity
+        if not self.doidentity and not self.metatypes:
+            raise ValueError("no metatypes")
 
     def redirect(self):
         return self.basetype
@@ -531,7 +532,7 @@ class SubType(RedirectProxy):
         return self.basetype.get_typename()
         
     def get_conversion(self):
-        convs = [x.get_conversion() for x in (self.basetype, self.metatype, *self.altmetatypes)]
+        convs = [x.get_conversion() for x in (self.basetype, *self.metatypes)]
         return "{}:{}".format(convs[0], "+".join(convs[1:]))
     
     def construct(self, context, value):
@@ -546,7 +547,7 @@ class SubType(RedirectProxy):
 
     def constructor(self, context, value):
         ret = None
-        metas = [self.metatype, *self.altmetatypes] # 複数のコンストラクタを順番に試す
+        metas =  [*self.metatypes] # 複数のコンストラクタを順番に試す
         tryidentity = self.doidentity
         imeta = 0
         while True:
@@ -566,17 +567,27 @@ class SubType(RedirectProxy):
             else:
                 return ret
 
+    @property
+    def meta(self):
+        if self.metatypes:
+            return self.metatypes[0]
+        else:
+            return self.basetype
+
     def stringify_value(self, value):
-        return self.metatype.stringify_value(value)
+        return self.meta.stringify_value(value)
     
     def summarize_value(self, value):
-        return self.metatype.summarize_value(value)
+        return self.meta.summarize_value(value)
 
     def pprint_value(self, app, value):
-        return self.metatype.pprint_value(app, value)
+        return self.meta.pprint_value(app, value)
 
     def reflux_value(self, value):
-        return self.metatype.reflux_value(value)
+        if self.metatypes:
+            return self.meta.reflux_value(value)
+        elif self.doidentity:
+            return value
     
 #
 def make_conversion_from_value_type(value_type):

@@ -346,7 +346,11 @@ class Type(TypeProxy):
             s = self.stringify_value(value)
             app.post("message", s)
             return
-        self.invoke_meta_method(*fns)
+        try:
+            self.invoke_meta_method(*fns)
+        except Exception as e:
+            app.post("error", "オブジェクトの表示中にエラーが発生:")
+            app.post("message", e)
 
     def reflux_value(self, value:Any, typeinst=None):
         """
