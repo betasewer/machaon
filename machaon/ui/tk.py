@@ -292,9 +292,7 @@ class tkLauncher(Launcher):
         
         # ボタン等
         self.btnpanel = self.addframe(self.frame)
-        #btnunredo = addframe(btnpanel)
-        #btnunredo.pack(side=tk.TOP, fill=tk.X, pady=pady)
-        # ----------------------        
+        
         lefties = [
             #addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog),
             #addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
@@ -304,8 +302,8 @@ class tkLauncher(Launcher):
 
         righties = [
             self.addbutton(self.btnpanel, text=u"停止", command=lambda:self.break_chamber_process(), width=4),
-            self.addbutton(self.btnpanel, text=u"▲", command=lambda:self.scroll_page(-1), width=4),
-            self.addbutton(self.btnpanel, text=u"▼", command=lambda:self.scroll_page(1), width=4),
+            self.addbutton(self.btnpanel, text=u"▲", command=lambda:self.on_commandline_up(), width=4),
+            self.addbutton(self.btnpanel, text=u"▼", command=lambda:self.on_commandline_down(), width=4),
             self.addcheckbox(self.btnpanel, text=u"末尾に追従", variable=self.does_stick_bottom, onvalue=True, offvalue=False),
             self.addcheckbox(self.btnpanel, text=u"折り返し", variable=self.does_overflow_wrap, onvalue=True, offvalue=False)
         ]
