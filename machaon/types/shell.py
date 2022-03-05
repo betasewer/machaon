@@ -448,6 +448,16 @@ class Path():
         pa = [self.normpath, *params]
         run_command_capturing(app, pa)
 
+    def do_external(self, context, app):
+        """ @task context [doex do-ex]
+        メッセージを記述したファイルのパスとして評価し、実行して返す。
+        Returns:
+            Object: 返り値
+        """
+        o = context.new_object(self, type="Stored")
+        ret = o.value.do(context, app)  
+        return ret
+
     def start(self, operation=None):
         """ @method [open]
         ファイル・フォルダをデフォルトの方法で開く。

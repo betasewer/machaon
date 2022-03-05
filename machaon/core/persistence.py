@@ -1,7 +1,6 @@
 import os
 from machaon.types.shell import Path
 from machaon.types.file import TextFile
-from machaon.core.object import Object
 from machaon.core.message import run_function_print_step, run_function
 
 def get_persistent_path(root, name):
@@ -41,6 +40,8 @@ class StoredMessage():
     外部ファイルに記述されたメッセージ。
     """
     def __init__(self, path, name=None):
+        if not isinstance(path, Path):
+            path = Path(path)
         self.path = path
         self.name = name
         self._buf = []
@@ -49,7 +50,7 @@ class StoredMessage():
         """ @method alias-name [path]
         ファイルパス
         Returns:
-            Str:
+            Path:
         """
         return self.path
     
@@ -67,7 +68,7 @@ class StoredMessage():
         Returns:
             bool:
         """
-        return os.path.isfile(self.path)
+        return self.path.isfile()
         
     def message(self):
         """ @method
@@ -80,7 +81,7 @@ class StoredMessage():
                 return " ".join(self._buf)
             else:
                 raise ValueError("ファイルが存在しません")
-        f = TextFile(Path(self.path))
+        f = TextFile(self.path)
         return f.text()
 
     def recall(self, context, context_index):
@@ -109,11 +110,10 @@ class StoredMessage():
             raise ValueError("record, recallで保存するメッセージを追加してください")
         if self.exists():
             raise ValueError("すでにファイルが存在します")
-        f = TextFile(Path(self.path), encoding="utf-8")
-        with f.write_stream():
+        with TextFile(self.path, encoding="utf-8").write_stream() as fo:
             for line in self._buf[:-1]:
-                f.stream.write(line + ' . \n')
-            f.stream.write(self._buf[-1])
+                fo.stream.write(line + ' . \n')
+            fo.stream.write(self._buf[-1])
         self._buf.clear()
 
     def do(self, context, app=None, *, subject=None):
@@ -157,10 +157,9 @@ class StoredMessage():
     def constructor(self, context, value):
         """ @meta context """
         # 外部ファイルのパスを得る
-        from machaon.types.shell import Path
         if isinstance(value, str):
-            path = get_persistent_path(context.root, value)
-            name, _ = os.path.splitext(os.path.split(path)[1])
+            path = Path(get_persistent_path(context.root, value))
+            name = path.basename()
         elif isinstance(value, Path):
             path = value
             name = None
