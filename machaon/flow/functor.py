@@ -116,3 +116,29 @@ class NoneMapBlank(NoneMapValue):
     def reflux_flow(self):
         return "blank"
 
+
+class OrFlow():
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+    def influx(self, value):
+        try:
+            return self.left.influx(value)
+        except:
+            pass
+        return self.right.influx(value)
+
+    def reflux(self, value):
+        try:
+            return self.left.reflux(value)
+        except:
+            pass
+        return self.right.reflux(value)
+    
+    def influx_flow(self):
+        return self.left.influx_flow() + "|" + self.right.influx_flow()
+        
+    def reflux_flow(self):
+        return self.left.reflux_flow() + "|" + self.right.reflux_flow()
+    

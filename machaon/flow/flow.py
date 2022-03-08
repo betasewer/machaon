@@ -1,9 +1,4 @@
 
-
-
-from re import A
-
-
 class Flow:
     """ @type
     データの変換の流れを定義する。
@@ -162,6 +157,30 @@ class Flow:
         else:
             raise ValueError(functor)
         return self
+
+    def pipe_or(self, context, functor):
+        """ @method context alias-name [|]
+        machaonの型インターフェースまたはメソッドによって変換する
+        Params:
+            functor(str): 型名
+        """
+        self.pipe(context, functor)
+        functor2 = self.functors.pop()
+        functor1 = self.functors.pop()
+        from machaon.flow.functor import OrFlow
+        return self.add_functor(OrFlow(functor1, functor2))
+
+    def pipe_message_or(self, context, block):
+        """ @method context alias-name [|message |+]
+        任意のメッセージをinfluxとして設定する。
+        Params:
+            block(Function[](seq)):
+        """
+        self.pipe_message(context, block)
+        functor2 = self.functors.pop()
+        functor1 = self.functors.pop()
+        from machaon.flow.functor import OrFlow
+        return self.add_functor(OrFlow(functor1, functor2))
 
     #
     # 文字列
