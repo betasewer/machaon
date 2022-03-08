@@ -223,7 +223,7 @@ INVOCATION_FLAG_INHERIT_REMBIT_SHIFT = 32
 #
 #
 class InvocationContext:
-    """ @type
+    """ @type [Context]
     メソッドの呼び出しコンテキスト。
     """
     def __init__(self, *, input_objects, type_module, spirit=None, subject=None, flags=0, parent=None):
