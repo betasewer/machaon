@@ -71,6 +71,7 @@ operators = {
     "?" : "pretty",
     "as" : "convertas",
     "=>" : "bind",
+    "/+" : "tuplepush",
 }
 
 #
@@ -579,6 +580,21 @@ class GenericMethods:
         """
         context.bind_object(right, left)
         return left
+        
+    def tuplepush(self, left, context, right):
+        """ @method reciever-param context
+        タプルに追加する。
+        Arguments:
+            left(Object): タプルもしくは要素
+            right(Object): 追加する要素
+        Returns:
+            Any: 左辺オブジェクト
+        """
+        from machaon.types.tuple import ObjectTuple
+        if left.get_typename() == "Tuple":
+            return ObjectTuple(left.value.objects + [right])
+        else:
+            return ObjectTuple([left, right])
     
     def pyinvoke(self, selfarg, context, symbol, *args):
         """ @method reciever-param context
