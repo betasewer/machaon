@@ -354,7 +354,7 @@ def module_name_from_path(path, basepath, basename=None):
 def get_first_package_path(module, spec):
     if spec.has_location:
         return spec.origin
-    if module and module.__path__:
+    if module and getattr(module, "__path__", None) is not None:
         # 名前空間パッケージの場合、最初のパスのみを得る
         return next(iter(module.__path__), None)
     return None

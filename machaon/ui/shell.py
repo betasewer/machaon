@@ -1,100 +1,223 @@
 ﻿#!/usr/bin/env python3
 # coding: utf-8
 import os
+import sys
 from machaon.cui import reencode, collapse_text
 
-#
-#
-#
-class ShellUI():
-    def __init__(self, encoding, textwidth=None, maxlinecount=None):
-        self.encoding = encoding
-        self.preftextwidth = textwidth
-        self.maxlinecount = maxlinecount
-        self.app = None
+from machaon.ui.basic import Launcher
 
-    def init_with_app(self, app):
-        self.app = app
-
-    def message_handler(self, msg):    
-        text = self.printing_text(msg.text, collapse=False)
-        if msg.tag=="error":
-            text = "!!!{}".format(text)
-        elif msg.tag=="warn":
-            text = "?..{}".format(text)
-            
-        nobreak = msg.argument("nobreak", False)
-        self.printer(text, nobreak=nobreak)
-
-    def printing_text(self, s, collapse=False):
-        if not isinstance(s, str):
-            s = str(s)
-        if collapse:
-            s = collapse_text(s, self.preftextwidth)
-        if self.encoding is None:
-            return s
+def isatty():
+    import platform
+    if hasattr(sys.stderr, "isatty") and sys.stderr.isatty():
+        if platform.system()=='Windows':
+            return False
         else:
-            return reencode(s, self.encoding, "replace")
-    
-    def check_textwidth(self, count):
-        if self.preftextwidth is None:
             return True
-        return count <= self.preftextwidth
-    
-    def check_linecount(self, count):
-        if self.maxlinecount is None:
-            return True
-        return count <= self.maxlinecount
-    
-    def printer(self, text, **options):
-        end = "\n"
-        if options.get("nobreak", False):
-            end = ""
-        print(text, end=end)
-        
-    def clear(self):
-        os.system('clear')
-        
-    def get_input(self, instr=None):
-        if instr is None:
-            instr = ">> "
-        else:
-            instr += " >> "
-        return input(instr)
-        
-    def run_mainloop(self):
-        loop = True
-        while loop:
-            nextcmd = self.launcher.pop_next_command()
-            if nextcmd is None:
-                nextcmd = self.get_input()
-            
-            if not nextcmd:
-                if self.launcher.command_exit("--ask") is ExitApp:
-                    break
-                else:
-                    continue
+    else:
+        return False
 
-            ret = self.app.exec_command(nextcmd, threading=False)
-            if ret is ExitApp:
-                break
-    
-    def on_exit_process(self, process):
-        self.printer("")
-    
-    def on_exit(self):
-        pass
-            
-#
-#
-#
-class WinShellUI(ShellUI):
+class AnsiCodeComposer:
     def __init__(self):
-        super().__init__(encoding="cp932", textwidth=67, maxlinecount=200)
+        self._codes = None
+
+    @property
+    def codes(self):
+        if self._codes is None:
+            self._codes = {
+                # 文字色
+                "BLACK"     : "\33[30m",
+                "RED"       : "\33[31m",
+                "GREEN"     : "\33[32m",
+                "YELLOW"    : "\33[33m", 
+                "BLUE"      : "\33[34m", 
+                "MAZENTA"   : "\33[35m", 
+                "CYAN"      : "\33[36m", 
+                "WHITE"     : "\33[37m", 
+                "GRAY"      : "\33[90m",
+                "XRED"      : "\33[91m",
+                "XGREEN"    : "\33[92m",
+                "XYELLOW"   : "\33[93m", 
+                "XBLUE"     : "\33[94m", 
+                "XMAZENTA"  : "\33[95m", 
+                "XCYAN"     : "\33[96m", 
+                "XWHITE"    : "\33[97m", 
+                "ENDCOL"    : "\33[0m",
+                # 編集
+                "DELLINE"   : "\33[2K",
+            }
+        return self._codes
+
+    def colortext(self, code, text):
+        return self.codes[code] + text + self.codes["ENDCOL"]
+
+    def colorize(self, tag, text):
+        if tag == "error":
+            text = self.colortext("XRED", text)
+        elif tag == "warn":
+            text = self.colortext("YELLOW", text)
+        elif tag == "input":
+            text = self.colortext("XGREEN", text)
+        elif tag == "message-em":
+            text = self.colortext("XYELLOW", text)
+        elif tag == "hyperlink":
+            text = self.colortext("CYAN", text)
+        else:
+            pass
+        return text
+
+    def deleteline(self, count):
+        return "\33[{}M".format(count)
+
+ansicodes = AnsiCodeComposer()
+
+
+#
+#
+#
+class ShellLauncher(Launcher):
+    def __init__(self, encoding, width, maxlinecount=None, useansi=False):
+        super().__init__()
+        self.encoding = encoding
+        self.wrap_width = width 
+        self.maxlinecount = maxlinecount
+        self._loop = True
+        self._last_process_end = False
+        self._useansi = useansi
+
+    def printer(self, tag, text, end):
+        if self._useansi:
+            text = ansicodes.colorize(tag, text)
+        else:
+            if tag == "error":
+                text = "!!≪error≫" + text
+            elif tag == "warn":
+                text = "!!≪warn≫" + text
+        print(text, end=end)
+
+    def use_ansi(self, b):
+        self._useansi = b
+
+    def init_screen(self):
+        if isatty():
+            self._useansi = True
+
+    def insert_screen_text(self, tag, text, *, nobreak=False, **kwargs):
+        if self.encoding is not None:
+            text = reencode(text, self.encoding, "replace")
+        
+        if nobreak:
+            end = ""
+        else:
+            end = None
+        
+        self.printer(tag, text, end=end)
+    
+    def delete_screen_text(self, lineno, count):
+        if not self._useansi:
+            return
+        if lineno == -1:
+            text = ansicodes.deleteline(count)
+            print(text, end="")
+        else:
+            raise NotImplementedError()
+
+    def replace_screen_text(self, text):
+        pass
+    
+    def save_screen_text(self):
+        pass
+    
+    def drop_screen_text(self, process_ids):
+        pass
+
+    def insert_screen_setview(self, rows, columns, dataid, context):
+        print("\t".join(columns))
+        print("---------------------------")
+        for _index, row in rows:
+            print("\t".join(row))
+
+    def add_chamber_menu(self, chamber):
+        pass
+
+    def update_chamber_menu(self, *, active=None, ceased=None):
+        pass
+    
+    def remove_chamber_menu(self, chamber):
+        pass
+        
+    def get_input_text(self, pop=False):
+        return input()
+    
+    #
+    # 表示ハンドラ
+    #
+    def post_on_exec_process(self, process, exectime):
+        """ プロセス実行開始時 """
+        pass # 何も表示しない
+    
+    def post_on_success_process(self, process, ret, spirit):
+        """ プロセスの正常終了時 """
+        index = process.get_index()
+        if ret.is_pretty():
+            ret.pprint(spirit) # 詳細表示を行う
+        process.post("input", " [{}]".format(index), nobreak=True)
+        process.post("message", " -> {} [{}]".format(ret.summarize(), ret.get_typename()))
+
+    def post_on_interrupt_process(self, process):
+        """ プロセス中断時 """
+        process.post("message-em", "中断しました")
+    
+    def post_on_error_process(self, process, excep):
+        """ プロセスの異常終了時 """
+        index = process.get_index()
+        process.post("input", " [{}]".format(index), nobreak=True)
+        process.post("error", " -> {}".format(excep.summarize()))
+
+    def post_on_end_process(self, process):
+        """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
+        # 次回入力へのプロンプト
+        process.post("message-em", self.get_input_prompt(), nobreak=True) 
+        # 入力待ちになる
+        self._last_process_end = True
+
+    def run_mainloop(self):
+        while self._loop:
+            self.update_chamber_messages(None)
+
+            if self._last_process_end and self.chambers.get_active().is_messages_consumed():
+                self._last_process_end = False
+                if not self.execute_input_text():
+                    self._last_process_end = True
+
+    def on_exit(self):
+        self._loop = False
+
+#
+#
+#
+class WinCmdShell(ShellLauncher):
+    def __init__(self, args):
+        super().__init__(
+            encoding="cp932", 
+            width=67, 
+            maxlinecount=200,
+            useansi=args.get("ansi", False)
+        )
 
     def clear(self):
         os.system('cls')
 
+class GenericShell(ShellLauncher):
+    def __init__(self, args):
+        super().__init__(
+            encoding     = args.get("encoding", "utf-8"), 
+            width        = args.get("width", 67), 
+            maxlinecount = args.get("maxlinecount", 200),
+            useansi      = args.get("ansi", False)
+        )
+
+    def clear(self):
+        os.system('clear')
 
 # 環境で自動判別する
 # def ShellApp():

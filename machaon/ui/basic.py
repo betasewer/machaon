@@ -78,10 +78,8 @@ system_message_tags = {
 class Launcher():
     wrap_width = 0xFFFFFF
 
-    def __init__(self, title="", geometry=None):
+    def __init__(self):
         self.app = None
-        self.screen_title = title or "Machaon Terminal"
-        self.screen_geo = geometry or (900,400)
         self.theme = None
         self.history = InputHistory()
         self.keymap = self.new_keymap()
@@ -100,9 +98,6 @@ class Launcher():
     def init_screen(self):
         pass
 
-    def install_startup_message(self):
-        raise NotImplementedError()
-    
     def prettyformat(self, value):
         pp = pprint.PrettyPrinter(width=type(self).wrap_width)
         return pp.pformat(value)
@@ -165,7 +160,7 @@ class Launcher():
             process = self.chambers.get_active().get_process(procid) if procid is not None else None
             if process:
                 context = process.get_last_invocation_context()
-                error = ErrorObject(context, e)
+                error = ErrorObject(e, context=context)
                 error.pprint(context.spirit)
                 # ただちにメッセージを取得し処理する
                 for msg in process.handle_post_message():
@@ -227,19 +222,28 @@ class Launcher():
         spirit.custom_message("input", inputtext)
         return inputtext
     
-    # コマンド欄を実行する
     def execute_input_text(self):
+        """ 
+        コマンド欄を実行する
+        Returns:
+            bool: プロセスが開始したか
+        """
         message = self.get_input_text(pop=True) # メッセージを取得
         cha = self.chambers.get_active()
         if cha is not None and cha.is_waiting_input():
             # 入力を完了する
             cha.finish_input(message)
+            return False
+        
         else:
             # メッセージを実行する
-            self.app.eval_object_message(message)
-        # 入力履歴に追加する
-        self.history.push(message)
-        self.history.select_last()
+            if not self.app.eval_object_message(message):
+                return False
+        
+            # 入力履歴に追加する
+            self.history.push(message)
+            self.history.select_last()
+            return True
 
     # コマンド欄を復元する
     def rollback_input_text(self):
@@ -392,33 +396,23 @@ class Launcher():
     #    
     def post_on_exec_process(self, process, exectime):
         """ プロセス実行開始時 """
-        id = process.get_index()
-        process.post("message-em", "[{:04}] ".format(id), nobreak=True, beg_of_process=id)
-        timestamp = exectime.strftime("%Y-%m-%d|%H:%M.%S")
-        process.post("message", "[{}] ".format(timestamp), nobreak=True)
-        process.post("input", process.message.source)
+        raise NotImplementedError()
     
     def post_on_success_process(self, process, ret, spirit):
         """ プロセスの正常終了時 """
-        if ret.is_pretty():
-            # 詳細表示を行う
-            ret.pprint(spirit)
-        else:
-            process.post("message", " -> {} [{}]".format(ret.summarize(), ret.get_typename()))
+        raise NotImplementedError()
 
     def post_on_interrupt_process(self, process):
         """ プロセス中断時 """
-        process.post("message-em", "中断しました")
+        raise NotImplementedError()
     
     def post_on_error_process(self, process, excep):
         """ プロセスの異常終了時 """
-        process.post("error", " -> {}".format(excep.summarize()))
+        raise NotImplementedError()
 
     def post_on_end_process(self, process):
         """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
-        procid = process.get_index()
-        process.post("message", "", end_of_process=procid) # プロセス識別用のタグをつけた改行を1つ入れる
-        process.post("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
+        raise NotImplementedError()
     
     def on_exit(self):
         """ アプリ終了時 """
@@ -440,7 +434,7 @@ class Launcher():
         return self.keymap
 
     def new_keymap(self):
-        raise NotImplementedError()
+        return KeybindMap()
 
     #
     #
@@ -728,4 +722,3 @@ class ScreenCanvas():
 
     def text(self, *, coord=None, text=None, color=None):
         return self.add_graph("text", coord=coord, text=text, color=color)
-

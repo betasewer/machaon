@@ -41,16 +41,9 @@ class AppRoot:
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
         # 初期化内容を設定する
-        # UI
-        if isinstance(ui, str):
-            if ui == "tk":
-                from machaon.ui.tk import tkLauncher
-                ui = tkLauncher(**uiargs)
-            else:
-                raise ValueError("不明なUIタイプです")
-        elif ui is None:
-            print("UI will not be shown") # TODO: shell uiを設定する
-        self.ui = ui
+        # UIを設定する
+        from machaon.ui import new_launcher
+        self.ui = new_launcher(ui, **uiargs)
 
         # パス
         if basic_dir is None:
@@ -324,11 +317,11 @@ class AppRoot:
     #
     def eval_object_message(self, message: str):        
         if not message:
-            return
+            return False
         elif message == "exit":
             # 終了コマンド
             self.exit()
-            return
+            return False
         
         atnewchm = False
 
@@ -339,7 +332,7 @@ class AppRoot:
             message = message[1:].lstrip()
         
         if not message:
-            return
+            return False
 
         # 実行
         process = self.processhive.new_process(message)
@@ -351,7 +344,9 @@ class AppRoot:
         else:
             chamber = self.processhive.get_active()
             if chamber.add(process) is None:
-                return # 他のプロセスが実行中
+                return False # 他のプロセスが実行中
+
+        return True
         
         
     # プロセスをスレッドで実行しアクティブにする

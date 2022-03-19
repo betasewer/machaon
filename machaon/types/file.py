@@ -298,7 +298,7 @@ class TextFile(BasicContextFile):
         """ @method
         文字エンコーディング形式を取得する。
         Returns:
-            encoding(Str):
+            Str:
         """
         return self._enc
     
@@ -311,17 +311,17 @@ class TextFile(BasicContextFile):
         self._enc = encoding
     
     def text(self, size=None):
-        """ @task
+        """ @task nospirit
         テキストを丸ごと返す。
         Params:
-            size(int): 取得する文字数
+            size?(int): 取得する文字数
         Returns:
             Str:
         """
         return self.loadfile(size)
 
     def write_text(self, text):
-        """ @task
+        """ @task nospirit
         テキストを書き込んで閉じる。
         Params:
             text(str): 書き込むテキスト
@@ -332,7 +332,7 @@ class TextFile(BasicContextFile):
             self.stream.write(text)
 
     def lines(self):
-        """ @task
+        """ @task nospirit
         行を返す。
         Returns:
             Tuple[Str]:
@@ -340,7 +340,7 @@ class TextFile(BasicContextFile):
         return list(self.read_stream())
 
     def write_lines(self, lines):
-        """ @task
+        """ @task nospirit
         行を書き込んで閉じる。
         Params:
             lines(Tuple[str]): 書き込む各行

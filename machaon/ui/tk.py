@@ -169,8 +169,12 @@ TK_UPDATE_RATE = 10
 class tkLauncher(Launcher):
     wrap_width = 144
 
-    def __init__(self, title="", geometry=(850,550)):
-        super().__init__(title, geometry)
+    def __init__(self, args):
+        super().__init__()
+        # args
+        self.screen_title = args.get("title", "Machaon Terminal")
+        self.screen_geo = args.get("geometry", (850, 550))
+
         # GUI
         self.root = tkinter.Tk() #
         self.rootframe = None    #
@@ -831,6 +835,40 @@ class tkLauncher(Launcher):
             lastchm = self.chambers.get_active()
             chm = self.chambers.select(chmindex, activate=True)
             self.flip_chamber(chm, lastchm)
+
+    #
+    # 表示ハンドラ
+    #
+    def post_on_exec_process(self, process, exectime):
+        """ プロセス実行開始時 """
+        id = process.get_index()
+        process.post("message-em", "[{:04}] ".format(id), nobreak=True, beg_of_process=id)
+        timestamp = exectime.strftime("%Y-%m-%d|%H:%M.%S")
+        process.post("message", "[{}] ".format(timestamp), nobreak=True)
+        process.post("input", process.message.source)
+    
+    def post_on_success_process(self, process, ret, spirit):
+        """ プロセスの正常終了時 """
+        if ret.is_pretty():
+            # 詳細表示を行う
+            ret.pprint(spirit)
+        else:
+            process.post("message", " -> {} [{}]".format(ret.summarize(), ret.get_typename()))
+
+    def post_on_interrupt_process(self, process):
+        """ プロセス中断時 """
+        process.post("message-em", "中断しました")
+    
+    def post_on_error_process(self, process, excep):
+        """ プロセスの異常終了時 """
+        process.post("error", " -> {}".format(excep.summarize()))
+
+    def post_on_end_process(self, process):
+        """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
+        procid = process.get_index()
+        process.post("message", "", end_of_process=procid) # プロセス識別用のタグをつけた改行を1つ入れる
+        process.post("message-em", self.get_input_prompt(), nobreak=True) # 次回入力へのプロンプト
+    
 
     #
     # 入力欄

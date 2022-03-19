@@ -51,5 +51,3 @@ def draganddrop():
     """
     return _import_platform_module("dnd")
 
-
-    

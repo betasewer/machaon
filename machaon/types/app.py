@@ -104,6 +104,9 @@ class RootObject:
         '''
         return self.context.spirit
 
+    #
+    # UI
+    #
     def _clear_processes(self, app, pred):
         ''' プロセスの実行結果とプロセス自体を削除する。 '''
         chm = self.context.root.chambers().get_active()
@@ -177,7 +180,20 @@ class RootObject:
             for k, v in msg.args.items():
                 lines.append("{}={}".format(k, v))
             app.post("message", "\n".join(lines) + "\n")
+
+    def use_ansi(self, b=True):
+        """ @method
+        出力でANSIエスケープシーケンスを使用する。
+        Params:
+            b?(bool):
+        """
+        ui = self.context.root.get_ui()
+        if hasattr(ui, "use_ansi"):
+            ui.use_ansi(b)
         
+    #
+    #
+    #
     def deploy(self, app, path):
         ''' @task
         machaonディレクトリを配置する。
@@ -246,13 +262,43 @@ class RootObject:
         """ @meta """
         return "<root>"
     
-    def testobj(self, app):
-        """ @method spirit
-        様々なテストを実装するオブジェクトを返す。
-        Returns:
-            Any:
+    def test_colors(self, app, text="サンプルテキスト"):
+        """ @task
+        テキストの色をテストする。
+        Params:
+            text?(str): 
         """
-        return AppTestObject(app)
+        app.post("message", text)
+        app.post("message-em", "[強調]" + text)
+        app.post("input", "[入力]" + text)
+        app.post("hyperlink", "[リンク]" + text)
+        app.post("warn", "[注意]" + text)
+        app.post("error", "[エラー発生]" + text)
+    
+    def test_progress(self, app):
+        """@task
+        プログレスバーをテストする。
+        """
+        app.start_progress_display(total=50)
+        for _ in range(50):
+            app.interruption_point(progress=1, wait=1)
+        app.finish_progress_display(total=50)
+
+    def test_graphic(self, app):
+        """ @task
+        図形を描画する。
+        """
+        app.post("canvas", app.new_canvas("cv1", width=200, height=400)
+            .rectangle_frame(coord=(2,2,100,200), color="#00FF00")
+            .rectangle_frame(coord=(50,50,200,250), color="#FF0000", dash=",")
+            .rectangle_frame(coord=(10,100,90,300), color="#0000FF")
+        )
+        app.post("canvas", app.new_canvas("cv2", width=200, height=400)
+            .oval(coord=(10,10,200,400), color="#004444")
+            .rectangle(coord=(2,2,100,200), color="#00FF00")
+            .rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
+            .rectangle(coord=(10,100,90,300), color="#0000FF")
+        )
 
 #
 #
