@@ -6,8 +6,6 @@ import sys
 import dis
 import traceback
 
-from attr import has
-
 from machaon.core.message import InternalMessageError
 from machaon.cui import collapse_text, composit_text
 from machaon.core.symbol import full_qualified_name
