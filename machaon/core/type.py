@@ -629,19 +629,20 @@ class TypeDefinition():
     def get_loaded(self):
         return self._t
 
+    def is_subtype(self):
+        return self.bits & TYPE_SUBTYPE > 0
+
+    def is_mixin(self):
+        return self.bits & TYPE_MIXIN > 0
+
+    def get_sub_target(self):
+        return self._sub_target
+
     def proto_define(self, typemodule):
         """ 型を登録する時点での処理 
         Returns:
             Str: 登録名. Noneなら登録しない
         """
-        if self.bits & TYPE_MIXIN:
-            # Mixin型は直ちにロードを行う（この時点で対象型がロード済みの必要あり）
-            target = typemodule.find(self._sub_target)
-            if target is None:
-                raise ValueError("Mixin対象の型'{}'がモジュールに見つかりません".format(self._sub_target))
-            target.mixin_load(self.get_describer())
-            return None # 登録しない
-
         # 以下、型名が必要
         if self.typename is None:
             if self.describer.get_classname() is not None:
@@ -657,8 +658,6 @@ class TypeDefinition():
             # Subtype型を登録する（この時点で対象型はロードされていなくてもよい）
             self.bits |= TYPE_TYPETRAIT_DESCRIBER
             self.value_type = _SubtypeTrait # 代入しておかないと補完されてエラーになる
-            base = self._sub_target
-            return (base, self.typename)
 
         # 型名を登録する
         return self.typename
@@ -806,14 +805,20 @@ class TypeModule():
         self._typelib: DefaultDict[str, List[Type]] = defaultdict(list)
         self._ancestors: List[TypeModule] = [] 
         self._subtype_rels: DefaultDict[str, Dict[str, Type]] = defaultdict(dict)
+        self._regmixin: DefaultDict[str, List[TypeDefinition]] = defaultdict(list)
     
-    def _load_type(self, t: Union[Type, TypeDefinition]):
+    def _load_type(self, t: Union[Type, TypeDefinition]) -> Type:
         if isinstance(t, TypeDefinition):
-            return t.load_type()
+            ti = t.load_type()
         else:
-            return t
+            ti = t
+        if len(self._regmixin[t.typename]) > 0:
+            for mx in self._regmixin[t.typename]:
+                ti.mixin_load(mx.get_describer())
+            self._regmixin[t.typename].clear()
+        return ti
     
-    def _select_by_scope(self, typename, scope):
+    def _select_by_scope(self, typename:str, scope:str) -> Optional[Type]:
         t = None
         for t in self._typelib[typename]:
             if t.is_scope(scope):
@@ -824,9 +829,8 @@ class TypeModule():
         return None
 
     #
-    def exists(self, typename: str) -> bool:
-        return typename in self._typelib
-    
+    #
+    #
     def find(self, typename: str, *, scope=None) -> Optional[Type]:
         # 自分自身の定義を探索
         if typename in self._typelib:
@@ -841,6 +845,9 @@ class TypeModule():
 
         # 見つからなかった
         return None
+    
+    def exists(self, typename: str) -> bool:
+        return typename in self._typelib
     
     #
     # 型を取得する
@@ -997,16 +1004,24 @@ class TypeModule():
                 raise TypeError("No typename is set: {}".format(describer))
             self._typelib[key].append(t)
         elif isinstance(t, TypeDefinition):
-            key = t.proto_define(self)
-            if key is not None:
-                if isinstance(key, tuple):
-                    base = key[0]
+            if t.is_mixin():
+                # mixinを登録するか読み込む
+                basename = t.get_sub_target()
+                target = self.find(basename)
+                if target is None:
+                    self._regmixin[basename].append(t)
+                else:
+                    target.mixin_load(t.get_describer())
+            else:
+                # 定義を型名に紐づけて配置する
+                typename = t.proto_define(self)
+                if t.is_subtype():
+                    base = t.get_sub_target()
                     if base == "Any":
                         base = SUBTYPE_BASE_ANY
-                    sub = key[1]
-                    self._subtype_rels[base][sub] = t
+                    self._subtype_rels[base][typename] = t
                 else:
-                    self._typelib[key].append(t)
+                    self._typelib[typename].append(t)
         else:
             raise TypeError("Unknown result value of TypeModule.define: {}".format(t))
 

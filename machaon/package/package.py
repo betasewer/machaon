@@ -1,5 +1,4 @@
-from threading import local
-from machaon.core.type import TypeDefinition
+
 import os
 import shutil
 import sys
@@ -10,6 +9,7 @@ import importlib
 import traceback
 from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
+from machaon.core.type import TypeDefinition
 from machaon.core.importer import module_loader, walk_modules, module_name_from_path, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
@@ -678,6 +678,10 @@ def _read_pip_dist_info(directory, pkg_name):
         if not os.path.isfile(p):
             continue
         
+        def _readfilelines(p):
+            with open(p, "r", encoding="utf-8") as fi:
+                yield from fi
+            
         namedata = None
         for l in _readfilelines(p):
             key, _, value = [x.strip() for x in l.partition(":")]
@@ -712,10 +716,23 @@ def canonicalize_package_name(name):
 class PipDistInfoFolderNotFound(Exception):
     pass
 
+
 #
-def _readfilelines(p):
-    with open(p, "r", encoding="utf-8") as fi:
-        for l in fi:
-            yield l
+#
+#
+"""
+{
+    package_name : str
+    types : [
+        {
+            typename :
+
+        }
+
+    ]
+
+}
+
+"""
 
 

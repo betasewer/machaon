@@ -78,14 +78,7 @@ class PyBasicModuleLoader:
         return loaded
     
     def load_package_directories(self):
-        mod = self.module
-        if getattr(mod, "__path__", None) is not None:
-            for path in mod.__path__:
-                yield path
-        elif getattr(mod, "__file__", None) is not None:
-            yield os.path.dirname(mod.__file__)
-        else:
-            raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
+        raise NotImplementedError()
     
     def load_module_declaration(self, doc=None):
         """ ソースコードの構文木からモジュールのドキュメント文字列を取り出し、解析する 
@@ -241,6 +234,18 @@ class PyModuleLoader(PyBasicModuleLoader):
         if spec is None:
             raise ValueError("モジュールが見つかりません")
         return get_first_package_path(self._m, spec)
+
+    def load_package_directories(self):
+        spec = importlib.util.find_spec(self.module_name)
+        if spec is None:
+            raise ValueError("モジュールが見つかりません")
+        if spec.submodule_search_locations is not None:
+            for path in spec.submodule_search_locations:
+                yield path
+        elif spec.has_location:
+            yield os.path.dirname(spec.origin)
+        else:
+            raise ValueError("ModuleSpecにsubmodule_search_locations, origin属性が無く、ディレクトリを特定できません")
     
     def __str__(self) -> str:
         return self.module_name
@@ -259,11 +264,16 @@ class PyModuleFileLoader(PyBasicModuleLoader):
         return self.module_name
     
     def load_module(self):
-        spec = importlib.util.spec_from_file_location(self.module_name, self._path)
-        if spec is None:
-            raise FileNotFoundError(self._path)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        import sys
+        if self.module_name in sys.modules:
+            # 既に読み込み済みならそちらを優先する
+            mod = sys.modules[self.module_name]
+        else:
+            spec = importlib.util.spec_from_file_location(self.module_name, self._path)
+            if spec is None:
+                raise FileNotFoundError(self._path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
         return mod
 
     def load_filepath(self):
@@ -286,6 +296,15 @@ class PyModuleInstance(PyBasicModuleLoader):
     def load_filepath(self):
         return get_first_package_path(self._m, self._m.__spec__)
 
+    def load_package_directories(self):
+        if getattr(self._m, "__path__", None) is not None:
+            for path in self._m.__path__:
+                yield path
+        elif getattr(self._m, "__file__", None) is not None:
+            yield os.path.dirname(self._m.__file__)
+        else:
+            raise ValueError("__path__, __file__属性が無く、ディレクトリを特定できません")
+    
     def __str__(self) -> str:
         return "{} ({})".format(self._m.__name__, self.load_filepath())
 
@@ -331,7 +350,7 @@ def walk_modules(path, package_name=None):
                 continue
             filepath = os.path.join(dirpath, filename)
             qual_name = module_name_from_path(filepath, path, package_name)
-            yield PyModuleLoader(qual_name)
+            yield PyModuleFileLoader(qual_name, filepath)
 
 
 def module_name_from_path(path, basepath, basename=None):
