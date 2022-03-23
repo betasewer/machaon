@@ -284,6 +284,9 @@ class InvocationContext:
         return level
     
     def set_flags(self, flags, inherit_set=False, inherit_remove=False):
+        if isinstance(flags, str):
+            flags = globals().get("INVOCATION_FLAG_" + flags)
+
         if inherit_remove:
             # 以降の継承コンテキストで削除されるフラグをセット
             self.invocation_flags |= (flags << INVOCATION_FLAG_INHERIT_REMBIT_SHIFT)
@@ -294,6 +297,9 @@ class InvocationContext:
             self.invocation_flags |= flags
     
     def remove_flags(self, flags):
+        if isinstance(flags, str):
+            flags = globals().get("INVOCATION_FLAG_" + flags)
+        
         self.invocation_flags &= ~flags
 
     def is_set_print_step(self) -> bool:
