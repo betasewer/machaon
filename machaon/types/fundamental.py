@@ -116,7 +116,7 @@ class TypeType():
         Returns:
             Str:
         '''
-        return type.get_typename()
+        return type.get_typename()  
     
     def doc(self, type):
         ''' @method

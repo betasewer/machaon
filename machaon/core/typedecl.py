@@ -146,6 +146,10 @@ class TypeProxy:
             else:
                 return object_type(self, value)
 
+    def rebind_constructor(self, args):
+        """ コンストラクタ引数を新たに束縛しなおしたインスタンスを作成する """
+        raise NotImplementedError()
+
     def stringify_value(self, value):
         raise NotImplementedError()
     
@@ -726,8 +730,8 @@ class TypeDecl:
                 t = decl._instance_type(td, context, args)
                 subtypes.append(t)
             return SubType(baset, *subtypes, identity=identity)
-        elif SIGIL_PYMODULE_DOT in self.typename:
-            # machaonで未定義のPythonの型
+        elif SIGIL_PYMODULE_DOT in self.typename: 
+            # machaonで未定義のPythonの型: ビルトイン型はbuiltins.***でアクセス
             ctorargs = [*self.ctorargs, *(args or [])]
             return PythonType.load_from_name(self.typename, ctorargs)
         else:
@@ -749,6 +753,7 @@ class TypeDeclError(Exception):
         pos = itr.current_preview()
         return "型宣言の構文エラー（{}）: {}".format(self.args[1], pos)
 
+
 def parse_type_declaration(decl):
     """ 型宣言をパースする
     Params:
@@ -756,12 +761,9 @@ def parse_type_declaration(decl):
     Returns:
         TypeDecl:
     """
-    itr = _typedecl_Iterator(decl)
-    decl = _typedecl_body(itr)
-    if not itr.eos():
-        itr.advance()
-        raise TypeDeclError(itr, "以降を解釈できません")
-    return decl
+    if not decl:
+        raise BadTypename("<emtpy string>")    
+    return _parse_typedecl(decl)
 
 #
 # 型宣言パーサコンビネータ 
@@ -778,6 +780,15 @@ def parse_type_declaration(decl):
 # <name> ::= ([a-z] | [A-Z] | [0-9] | '_' | '/' | '.')+
 # <ctorvalue> ::= [^,\[\]\(\)\|]+  
 #
+def _parse_typedecl(decl):
+    """ 開始地点 """
+    itr = _typedecl_Iterator(decl)
+    decl = _typedecl_body(itr)
+    if not itr.eos():
+        itr.advance()
+        raise TypeDeclError(itr, "以降を解釈できません")
+    return decl
+
 def _typedecl_body(itr):
     union = []
     while not itr.eos():

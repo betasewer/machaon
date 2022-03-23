@@ -1,16 +1,20 @@
+from asyncio import selector_events
+from cmath import exp
+from re import A
 from typing import Any
 
 import ast
 from itertools import zip_longest
 
 from machaon.core.symbol import (
-    PythonBuiltinTypenames, normalize_method_name, BadTypename,
+    PythonBuiltinTypenames, normalize_method_name, BadTypename, display_bitflag,
     SIGIL_OBJECT_ID,
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
     SIGIL_SCOPE_RESOLUTION,
     SIGIL_DEFAULT_RESULT,
-    SIGIL_END_OF_KEYWORDS,
+    SIGIL_TRAILING_ARGS,
+    SIGIL_TRAILING_ARGS_END,
     SIGIL_DISCARD_MESSAGE,
     SIGIL_TYPE_INDICATOR,
     QUOTE_ENDPARENS
@@ -75,7 +79,7 @@ class Message:
         self.reciever = None # Object
         self.selector = None # Invocation
         self.args = args or []   # List[Object]
-        self._argwaiting = False
+        self._argtrailing = False
         if reciever:
             self.set_reciever(reciever)
         if selector:
@@ -99,8 +103,8 @@ class Message:
             raise TypeError()
         self.args.append(arg)
     
-    def start_keyword_args(self):
-        self._argwaiting = True
+    def start_trailing_args(self):
+        self._argtrailing = True
     
     def is_reciever_specified(self):
         return self.reciever is not None
@@ -122,7 +126,7 @@ class Message:
         return (
             self.is_reciever_specified() 
             and self.is_selector_specified() 
-            and (self.is_max_arg_specified() if self._argwaiting else self.is_min_arg_specified())
+            and (self.is_max_arg_specified() if self._argtrailing else self.is_min_arg_specified())
         )
     
     def is_selector_parameter_consumer(self):
@@ -162,12 +166,15 @@ class Message:
         if not self.is_reciever_specified():
             # レシーバが無い場合はエラー
             raise BadExpressionError("レシーバがありません：{}".format(self.sexpr()))
+        
         if not self.is_selector_specified():
             # セレクタが無い場合はレシーバを返すセレクタを補う
             self.selector = select_method("=")
+        
         if not self.is_min_arg_specified():
+            # 引数が足りない場合
             if len(self.args) > 0:   
-                # 引数がゼロ以上あり足りない場合はエラー         
+                # 引数がゼロ以上あり、足りない場合はエラー         
                 spec = self.get_next_parameter_spec()
                 raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), self.get_method_syntax(context)))
             else:
@@ -175,7 +182,7 @@ class Message:
                 self.reciever = self.selector
                 self.selector = select_method("=")
 
-        self._argwaiting = False
+        self._argtrailing = False
     
     def eval(self, evalcontext):
         """ 
@@ -368,6 +375,17 @@ class ObjectRef(BasicRef):
             raise BadExpressionError("オブジェクト'{}'は存在しません".format(self._ident))
         return obj
 
+class SelectorResolver():
+    """ セレクタを解決する """
+    def __init__(self, selector):
+        self.selector = selector
+
+    def resolve(self, evalcontext, reciever):
+        if isinstance(reciever, BasicRef):
+            reciever = reciever.pick_object(evalcontext)
+        return select_method(self.selector, reciever.type, reciever=reciever.value)
+
+
 #
 # リテラル
 #
@@ -419,6 +437,11 @@ def value_to_obj(context, value):
     if typename not in PythonBuiltinTypenames.literals:
         raise BadExpressionError("Unsupported literal type: {}".format(typename))
     return Object(context.get_type(typename), value)
+
+def is_arg_trailing_selector(selector):
+    if selector.endswith(SIGIL_TRAILING_ARGS):
+        return True
+    return False
 
 #
 _sel_modifiers = (
@@ -542,44 +565,23 @@ TOKEN_STRING = 0x10
 TOKEN_ARGUMENT = 0x20
 TOKEN_FIRSTTERM = 0x40
 
-EXPECT_NOTHING = 0
-EXPECT_RECIEVER = 0x10
-EXPECT_SELECTOR = 0x20
-EXPECT_ARGUMENT = 0x40
+#  - 要素の種類
+TERM_TYPE_MASK     = 0xF0
+TERM_TYPE_RECIEVER = 0x10
+TERM_TYPE_SELECTOR = 0x20
+TERM_TYPE_ARGUMENT = 0x40
 
-# 組み立てられたコード
-#  - 文の構造
-TERM_AST_MASK = 0xFF
-TERM_NOTHING = 0
-TERM_LAST_BLOCK_RECIEVER = 3
-TERM_LAST_BLOCK_SELECTOR = 4
-TERM_LAST_BLOCK_ARG = 5
-TERM_NEW_BLOCK_AS_LAST_RECIEVER = 6
-TERM_NEW_BLOCK_AS_LAST_ARG = 7
-TERM_NEW_BLOCK_ISOLATED = 8
-TERM_NEW_BLOCK_RECIEVER = 9
-TERM_NEW_BLOCK_SELECTOR = 10
-#  - 生成される値の種類
-TERM_OBJ_MASK = 0xFF00
-TERM_OBJ_REF_NAME = 0x0100
-TERM_OBJ_STRING = 0x0300
-TERM_OBJ_RECIEVER = 0x0400
-TERM_OBJ_SELECTOR = 0x0500
-TERM_OBJ_LAMBDA_ARG = 0x0600
-TERM_OBJ_LAMBDA_ARG_MEMBER = 0x0700
-TERM_OBJ_LITERAL = 0x0800
-TERM_OBJ_NOTHING = 0x0A00
-TERM_OBJ_TYPE = 0x0B00
-TERM_OBJ_SPECIFIED_TYPE = 0x0C00
-TERM_OBJ_REF_ROOT_MEMBER = 0x0D00
-TERM_OBJ_TUPLE = 0x0E00
-#  - アクションの指示
-TERM_INSTR_MASK = 0xFF0000
-TERM_START_KEYWORD_ARGS = 0x010000
-TERM_END_LAST_BLOCK = 0x020000
-TERM_END_ALL_BLOCK = 0x040000
-TERM_BEGIN_NEW_BLOCK = 0x080000
-TERM_DISCARD_LAST_BLOCK_MESSAGE = 0x100000
+EXPECT_NOTHING = 0
+EXPECT_RECIEVER = TERM_TYPE_RECIEVER
+EXPECT_SELECTOR = TERM_TYPE_SELECTOR
+EXPECT_ARGUMENT = TERM_TYPE_ARGUMENT
+
+# 内部コード関数に渡す引数の指定
+_INTLCODE_AST_ADDER = 1
+_INTLCODE_ARG = 2
+_INTLCODE_WITH_CONTEXT = _INTLCODE_ARG
+_INTLCODE_WITH_EVALCONTEXT = 4
+_INTLCODE_WITH_CONTEXT_EVALCONTEXT = _INTLCODE_WITH_CONTEXT | _INTLCODE_WITH_EVALCONTEXT
 
 #
 #
@@ -649,6 +651,90 @@ class MessageTokenBuffer():
         self.quote_beg = None
         self.quote_end = None
         return True
+
+#
+#
+#
+class InternalEngineCode():
+    def __init__(self):
+        self.arg_code = None
+        self.ast_codes = []
+
+    def set_arg(self, c, *args):
+        self.arg_code = (c, args, _INTLCODE_ARG|getattr(c, "argspec", 0))
+
+    def set_ast(self, c, *args):
+        self.ast_codes.insert(0, (c, args, _INTLCODE_AST_ADDER))
+
+    def add_ast(self, c, *args):
+        self.ast_codes.append((c, args, getattr(c, "argspec", 0)))
+
+    def run(self, evalcontext):
+        """ コードを実行する """
+        argobjs = []
+        def _callargs(args, aspec):
+            if aspec == 0:
+                return args
+            elif aspec == _INTLCODE_AST_ADDER:
+                return [*args, evalcontext, *argobjs]
+            elif aspec == _INTLCODE_WITH_CONTEXT:
+                return [evalcontext.context, *args]
+            elif aspec == _INTLCODE_WITH_CONTEXT_EVALCONTEXT:
+                return [evalcontext.context, evalcontext, *args]
+            elif aspec == _INTLCODE_WITH_EVALCONTEXT:
+                return [evalcontext, *args]
+
+        # 引数オブジェクトを構築する
+        if self.arg_code is not None:
+            (c, a, aspec) = self.arg_code
+            ret = c(*_callargs(a, aspec))
+            if isinstance(ret, tuple):
+                argobjs.extend(ret)
+            else:
+                argobjs.append(ret)
+
+        # 構文を組み立てる
+        for (c, a, aspec) in self.ast_codes:
+            c(*_callargs(a, aspec))
+
+    def instructions(self):
+        """ 命令の内容を表示する """
+        if self.arg_code is not None:
+            (c, a, _aspec) = self.arg_code
+            arginstr = c.__name__
+            argvals = a
+        else:
+            arginstr = None
+            argvals = None
+
+        i = 0
+        for c, options, _aspec in self.ast_codes:
+            if i == 0: # ADDER
+                if options:
+                    a = options[0]
+                    if a == TERM_TYPE_RECIEVER:
+                        a = "reciever"
+                    elif a == TERM_TYPE_SELECTOR:
+                        a = "selector"
+                    elif a == TERM_TYPE_ARGUMENT:
+                        a = "argument"
+                    options = (a, *options[1:])
+                yield (c.__name__, options, arginstr, argvals)
+            else:
+                yield (c.__name__, options, None, None)
+            i += 1
+
+    def display_instructions(self):
+        """ 文字列にまとめて返す """
+        ls = []
+        for instrname, options, arginstrname, argvals in self.instructions():
+            if arginstrname is None:
+                line = "{:18}({})".format(instrname, ",".join(options))
+            else:
+                line = "{:18}({}) | {:18} {}".format(instrname, ",".join(options), arginstrname, ",".join(argvals))
+            ls.append(line)
+        return "\n".join(ls)
+
 
 #
 #
@@ -767,18 +853,16 @@ class MessageEngine():
             return self._readings[-1]
 
     # 
-    def build_message(self, reading, token: str, tokentype: int):
+    def compile_code(self, reading, token: str, tokentype: int):
         """
-        構文を組み立てる
+        トークンから内部コードを生成する
         Params:
             reading(Optional[Message]): 読んでいる途中のメッセージオブジェクト
             token(str): 文字列
             tokentype(int): 文字列の意味(TOKEN_XXX)
         Returns:
-            tuple[int, Any...]: 還元された命令コードと任意個の引数
+            InternalEngineCode: 還元された命令コードと引数のセット
         """
-        tokenbits = 0
-
         #
         # 直前のトークンから次に来るべきトークンの意味を決定する
         #
@@ -792,45 +876,42 @@ class MessageEngine():
         elif not reading.is_max_arg_specified():
             expect = EXPECT_ARGUMENT
 
+        #
+        code = InternalEngineCode()
+
         # ブロック終了指示
         if tokentype & TOKEN_BLOCK_END:
-            tokenbits |= TERM_END_LAST_BLOCK
+            code.add_ast(self.ast_POP_BLOCK)
         elif tokentype & TOKEN_ALL_BLOCK_END:
-            tokenbits |= TERM_END_ALL_BLOCK
+            code.add_ast(self.ast_POP_ALL_BLOCKS)
 
         # エスケープされた文字列
         isstringtoken = tokentype & TOKEN_STRING > 0
 
         # 明示的ブロック開始指示
         if tokentype & TOKEN_BLOCK_BEGIN:
-            if expect == EXPECT_SELECTOR:
-                raise BadExpressionError("メッセージはセレクタになりません")
-
-            tokenbits |= (TERM_OBJ_NOTHING | TERM_BEGIN_NEW_BLOCK)
-            if expect == EXPECT_RECIEVER:
-                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, )
-
-            if expect == EXPECT_ARGUMENT:
-                return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, )
-
-            if expect == EXPECT_NOTHING: 
-                return (tokenbits | TERM_NEW_BLOCK_ISOLATED, )
+            code.set_ast(self.ast_ADD_ELEMENT_AS_NEW_BLOCK, expect)
+            code.add_ast(self.ast_PUSH_BLOCK)
+            # セレクタの場合はメッセージ完成後に即座に評価する必要がある
+            return code
 
         # 特殊な記号
         if not isstringtoken:
             # 引数リストの終わり
-            if token == SIGIL_END_OF_KEYWORDS:
+            if token == SIGIL_TRAILING_ARGS_END:
                 if expect == EXPECT_ARGUMENT:
-                    return (tokenbits | TERM_OBJ_NOTHING | TERM_END_LAST_BLOCK, )
+                    code.add_ast(self.ast_POP_BLOCK)
+                    return code
             # メッセージの連鎖をリセットする
             if token == SIGIL_DISCARD_MESSAGE:
                 if expect == EXPECT_NOTHING:
-                    return (tokenbits | TERM_OBJ_NOTHING | TERM_DISCARD_LAST_BLOCK_MESSAGE, )
+                    code.add_ast(self.ast_DISCARD_LAST_BLOCK_MESSAGE)
+                    return code
                 raise BadExpressionError("メッセージの要素が足りません")
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:
-            return (tokenbits | TERM_OBJ_NOTHING, )
+            return code
 
         #
         # 以下、メッセージの要素として解析
@@ -841,253 +922,117 @@ class MessageEngine():
             if expect == EXPECT_SELECTOR:
                 raise BadExpressionError("セレクタが必要です") 
 
-            def new_block_bits(memberid):
-                if expect == EXPECT_ARGUMENT:
-                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_ARG, memberid)
-                elif expect == EXPECT_RECIEVER:
-                    return (tokenbits | TERM_NEW_BLOCK_AS_LAST_RECIEVER, memberid)                
-                elif expect == EXPECT_NOTHING:
-                    return (tokenbits | TERM_NEW_BLOCK_RECIEVER, memberid)
+            def new_block_bits(c):
+                if expect == EXPECT_NOTHING:
+                    c.set_ast(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_RECIEVER)
                 else:
-                    raise ValueError("")
+                    c.set_ast(self.ast_ADD_ELEMENT_AS_NEW_BLOCK, expect)
+                return c
 
             objid = token[1:]
             if not objid: 
                 # 無名関数の引数オブジェクト
-                tokenbits |= TERM_OBJ_LAMBDA_ARG
+                code.set_arg(self.arg_LAMBDA_ARG_MEMBER, "")
             
             elif SIGIL_OBJECT_LAMBDA_MEMBER in objid:
                 # 引数オブジェクトのメンバ参照
-                tokenbits |= TERM_OBJ_LAMBDA_ARG_MEMBER
                 objid, _, memberid = token.partition(SIGIL_OBJECT_LAMBDA_MEMBER)
                 if not memberid:
                     raise BadExpressionError("'{}'のあとにセレクタが必要です".format(SIGIL_OBJECT_LAMBDA_MEMBER))
+                code.set_arg(self.arg_LAMBDA_ARG_MEMBER, memberid)
 
-                return new_block_bits(memberid)
+                return new_block_bits(code)
                 
             elif objid[0] == SIGIL_OBJECT_ROOT_MEMBER:
                 # ルートオブジェクトの参照
-                tokenbits |= TERM_OBJ_REF_ROOT_MEMBER
                 memberid = token[2:]
                 if memberid:
                     # メンバ参照
-                    return new_block_bits(memberid)
+                    code.set_arg(self.arg_ROOT_MEMBER, memberid)
                 else:
-                    # オブジェクト自体を参照
-                    objid = ""
+                    # ルートオブジェクト自体を参照
+                    code.set_arg(self.arg_ROOT_MEMBER, "")
+                return new_block_bits(code)
                 
             elif objid.isdigit():
                 # 数値名称のオブジェクト
                 objid = str(int(objid)) # 数値表現を正規化
-                tokenbits |= TERM_OBJ_REF_NAME
+                code.set_arg(self.arg_REF_NAME, objid)
             
             else:
                 # 通常の名称のオブジェクト
-                tokenbits |= TERM_OBJ_REF_NAME
+                code.set_arg(self.arg_REF_NAME, objid)
 
-            if expect == EXPECT_ARGUMENT:
-                return (tokenbits | TERM_LAST_BLOCK_ARG, objid) # 前のメッセージの引数になる
-            
-            if expect == EXPECT_RECIEVER:
-                return (tokenbits | TERM_LAST_BLOCK_RECIEVER, objid) # 新しいメッセージのレシーバになる
-            
             if expect == EXPECT_NOTHING:
-                return (tokenbits | TERM_NEW_BLOCK_RECIEVER, objid) # 新しいメッセージのレシーバになる
+                code.set_ast(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_RECIEVER) # 新しいメッセージのレシーバになる
+            else:
+                code.set_ast(self.ast_ADD_LAST_BLOCK_ELEMENT, expect) # 前のメッセージの要素になる
+            return code
 
         # 何も印のない文字列
         #  => メソッドかリテラルか、文脈で判断
         if expect == EXPECT_SELECTOR and reading:
-            tokenbits |= TERM_OBJ_SELECTOR
-            return (tokenbits | TERM_LAST_BLOCK_SELECTOR, token) # 前のメッセージのセレクタになる
+            if is_arg_trailing_selector(token):
+                code.add_ast(self.ast_START_TRAILING_ARGS)
+                token = token[:-1]
+            code.set_arg(self.arg_SELECTOR_VALUE, token)
+            code.set_ast(self.ast_ADD_LAST_BLOCK_ELEMENT, expect) # 前のメッセージのセレクタになる
+            return code
 
         if expect == EXPECT_ARGUMENT:           
             # メソッドの型要求に従って解釈する 
             spec = reading.get_next_parameter_spec()
             typename = spec.typename if spec else None
             if typename == "Type":
-                tokenbits |= TERM_OBJ_TYPE
+                code.set_arg(self.arg_TYPE, token)
             elif typename == "Tuple":
-                tokenbits |= TERM_OBJ_TUPLE
+                code.set_arg(self.arg_TUPLE, token)
             elif spec.is_type_unspecified():
                 if isstringtoken:
-                    tokenbits |= TERM_OBJ_STRING
+                    code.set_arg(self.arg_STRING, token)
                 else:
-                    tokenbits |= TERM_OBJ_LITERAL
+                    code.set_arg(self.arg_LITERAL, token)
             else:
-                tokenbits |= TERM_OBJ_SPECIFIED_TYPE
-            return (tokenbits | TERM_LAST_BLOCK_ARG, token, spec) # 前のメッセージの引数になる
+                code.set_arg(self.arg_TYPED_VALUE, token, spec)            
+            # 前のメッセージの引数になる
+            code.set_ast(self.ast_ADD_LAST_BLOCK_ELEMENT, expect) 
+            return code
 
         if expect == EXPECT_RECIEVER:
             if isstringtoken:
-                tokenbits |= TERM_OBJ_STRING
+                code.set_arg(self.arg_STRING, token)
             else:
-                tokenbits |= TERM_OBJ_RECIEVER
-            return (tokenbits | TERM_LAST_BLOCK_RECIEVER, token) 
+                code.set_arg(self.arg_RECIEVER_VALUE, token)
+            code.set_ast(self.ast_ADD_LAST_BLOCK_ELEMENT, expect)
+            return code
 
         if expect == EXPECT_NOTHING:
             if tokentype & TOKEN_FIRSTTERM:
-                # メッセージの先頭のみ、レシーバオブジェクトのリテラルとする
+                # メッセージの先頭のみ、レシーバオブジェクトのリテラルとする token
                 if isstringtoken:
-                    tokenbits |= TERM_OBJ_STRING
+                    code.set_arg(self.arg_STRING, token)
                 else:
-                    tokenbits |= TERM_OBJ_RECIEVER
-                return (tokenbits | TERM_NEW_BLOCK_RECIEVER, token) 
+                    code.set_arg(self.arg_RECIEVER_VALUE, token)
+                code.set_ast(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_RECIEVER)
+                return code
             else:
                 # 先行するメッセージの返り値をレシーバとするセレクタとする
-                tokenbits |= TERM_OBJ_SELECTOR
-                return (tokenbits | TERM_NEW_BLOCK_SELECTOR, token)
+                if is_arg_trailing_selector(token):
+                    code.add_ast(self.ast_START_TRAILING_ARGS)
+                    token = token[:-1]
+                code.set_arg(self.arg_SELECTOR_VALUE, token)
+                code.set_ast(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_SELECTOR)
+                return code
         
         raise BadExpressionError("Could not parse")
 
-    def reduce_step(self, code, values, evalcontext):
+
+    def complete_messages(self):
         """
-        構文木を組みたてつつ、完成したところからどんどん実行
-        Params:
-            code(int): 命令コード
-            values(Tuple[Any...]): 命令の任意個の引数
-            evalcontext(EvalContext):
+        完成した構文木を返す
         Yields:
             Message:
         """
-        astcode = code & TERM_AST_MASK
-        astinstr = code & TERM_INSTR_MASK
-        objcode = code & TERM_OBJ_MASK
-
-        # 文字列や値をオブジェクトに変換
-        objs = () 
-        context = evalcontext.context
-
-        obj = None
-        if objcode == TERM_OBJ_REF_NAME:
-            obj = ObjectRef(values[0])
-
-        elif objcode == TERM_OBJ_STRING:
-            obj = context.new_object(values[0], type="Str")
-
-        elif objcode == TERM_OBJ_TYPE:
-            typeexpr = values[0]
-            obj = select_type(context, typeexpr)
-
-        elif objcode == TERM_OBJ_SPECIFIED_TYPE:
-            val = values[0]
-            spec = values[1]
-            type = spec.get_typedecl().instance(context)
-            obj = type.construct_obj(context, val)
-
-        elif objcode == TERM_OBJ_TUPLE:
-            elems = values[0].split() # 文字列を空白で区切る
-            obj = context.get_type("Tuple").construct_obj(context, elems)
-
-        elif objcode == TERM_OBJ_LITERAL:
-            obj = select_literal(context, values[0])
-
-        elif objcode == TERM_OBJ_RECIEVER:
-            obj = select_reciever(context, values[0])
-
-        elif objcode == TERM_OBJ_SELECTOR:
-            selector = values[0]
-            if selector.endswith(":"):
-                astinstr |= TERM_START_KEYWORD_ARGS
-                obj = selector[:-1]
-            else:
-                obj = selector
-
-        elif objcode == TERM_OBJ_LAMBDA_ARG:
-            obj = SubjectRef()
-
-        elif objcode == TERM_OBJ_LAMBDA_ARG_MEMBER:
-            reciever = SubjectRef()
-            value = reciever.pick_object(evalcontext)
-            selector = select_method(values[0], value.type, reciever=value.value)
-            objs = (reciever, selector)
-
-        elif objcode == TERM_OBJ_REF_ROOT_MEMBER:
-            rt = context.get_type("RootObject")
-            rv = rt.value_type(context)
-            root = rt.new_object(rv)
-            member_id = values[0]
-            if member_id:
-                selector = select_method(values[0], root.type, reciever=root.value)
-                objs = (root, selector)
-            else:
-                objs = (root,)
-
-        elif objcode == TERM_OBJ_NOTHING:
-            pass
-
-        else:
-            raise BadExpressionError("不明な生成コードに遭遇：{}".format(objcode))
-
-        if obj is not None: objs = (obj,)
-
-        # メッセージを構築する
-        if astcode == TERM_LAST_BLOCK_RECIEVER:
-            self._readings[-1].set_reciever(objs[0])
-
-        elif astcode == TERM_LAST_BLOCK_SELECTOR:
-            reciever = self._readings[-1].reciever
-            if isinstance(reciever, BasicRef):
-                reciever = reciever.pick_object(evalcontext)
-            selector = select_method(objs[0], reciever.type, reciever=reciever.value)
-            self._readings[-1].set_selector(selector)
-
-        elif astcode == TERM_LAST_BLOCK_ARG:
-            self._readings[-1].add_arg(objs[0])
-
-        elif astcode == TERM_NEW_BLOCK_AS_LAST_RECIEVER:
-            self._readings[-1].set_reciever(ResultStackRef())
-            new_msg = Message(*objs)
-            self._readings.append(new_msg)
-
-        elif astcode == TERM_NEW_BLOCK_AS_LAST_ARG:
-            self._readings[-1].add_arg(ResultStackRef())
-            new_msg = Message(*objs)
-            self._readings.append(new_msg)
-
-        elif astcode == TERM_NEW_BLOCK_ISOLATED:
-            new_msg = Message()
-            self._readings.append(new_msg)
-
-        elif astcode == TERM_NEW_BLOCK_RECIEVER:
-            new_msg = Message(*objs)
-            self._readings.append(new_msg)
-
-        elif astcode == TERM_NEW_BLOCK_SELECTOR:
-            reciever = ResultStackRef()
-            value = reciever.pick_object(evalcontext) # ローカルオブジェクトを一つ消費
-            selector = select_method(objs[0], value.type, reciever=value.value)
-            new_msg = Message(reciever, selector)
-            self._readings.append(new_msg)
-        
-        #
-        if astinstr & TERM_START_KEYWORD_ARGS:            
-            self._readings[-1].start_keyword_args()
-
-        if astinstr & TERM_BEGIN_NEW_BLOCK:
-            newpos = len(self._readings)-1 # 上でメッセージを追加済み
-            self._curblockstack.append(newpos) # 新しいブロックの番号を記録する
-
-        if astinstr & TERM_END_LAST_BLOCK:
-            if self._curblockstack:
-                top = self._curblockstack[-1]
-            else:
-                top = 0
-            for i, msg in enumerate(reversed(self._readings)):
-                j = len(self._readings) - i - 1
-                if j < top:
-                    break 
-                msg.conclude(context)
-            if self._curblockstack:
-                self._curblockstack.pop()
-
-        if astinstr & TERM_END_ALL_BLOCK:
-            for msg in self._readings:
-                msg.conclude(context)
-            self._curblockstack.clear()
-        
-        if astinstr & TERM_DISCARD_LAST_BLOCK_MESSAGE:
-            self.buffer.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
-        
         # 完成したメッセージをキューから取り出す
         completed = 0
         index = len(self._readings)-1
@@ -1106,22 +1051,174 @@ class MessageEngine():
         if completed>0:
             del self._readings[-completed:]
 
+
+    #
+    #  メッセージを構築する
+    #
+    def ast_ADD_LAST_BLOCK_ELEMENT(self, ttpcode, evalcontext, obj, *a):
+        """ """
+        if ttpcode == TERM_TYPE_RECIEVER:
+            self._readings[-1].set_reciever(obj)
+
+        elif ttpcode == TERM_TYPE_SELECTOR:
+            reciever = self._readings[-1].reciever
+            selector = obj.resolve(evalcontext, reciever)
+            self._readings[-1].set_selector(selector)
+
+        elif ttpcode == TERM_TYPE_ARGUMENT:
+            self._readings[-1].add_arg(obj)
+
+    def ast_ADD_ELEMENT_AS_NEW_BLOCK(self, ttpcode, _evalcontext, *objs):
+        """ """
+        if ttpcode == TERM_TYPE_RECIEVER:
+            self._readings[-1].set_reciever(ResultStackRef())
+
+        elif ttpcode == TERM_TYPE_SELECTOR:
+            self._readings[-1].set_selector(ResultStackRef()) # TODO
+        
+        elif ttpcode == TERM_TYPE_ARGUMENT:
+            self._readings[-1].add_arg(ResultStackRef())
+        
+        new_msg = Message(*objs)
+        self._readings.append(new_msg)
+
+    def ast_ADD_ISOLATE_ELEMENT(self, ttpcode, evalcontext, *objs):
+        """ """
+        if ttpcode == TERM_TYPE_RECIEVER:
+            new_msg = Message(*objs)
+            self._readings.append(new_msg)
+
+        elif ttpcode == TERM_TYPE_SELECTOR:
+            reciever = ResultStackRef()
+            selector = objs[0].resolve(evalcontext, reciever)
+            new_msg = Message(reciever, selector)
+            self._readings.append(new_msg)
+
+        else:
+            raise ValueError("???")
+            
+    ast_ADD_LAST_BLOCK_ELEMENT.argspec = _INTLCODE_AST_ADDER
+    ast_ADD_ELEMENT_AS_NEW_BLOCK.argspec = _INTLCODE_AST_ADDER
+    ast_ADD_ISOLATE_ELEMENT.argspec = _INTLCODE_AST_ADDER
+        
+    def ast_START_TRAILING_ARGS(self): 
+        """  """
+        self._readings[-1].start_trailing_args()
+
+    def ast_PUSH_BLOCK(self):
+        """  """
+        newpos = len(self._readings)-1 # 上でメッセージを追加済み
+        self._curblockstack.append(newpos) # 新しいブロックの番号を記録する
+
+    def ast_POP_BLOCK(self, context):
+        """  """
+        if self._curblockstack:
+            top = self._curblockstack[-1]
+        else:
+            top = 0
+        for i, msg in enumerate(reversed(self._readings)):
+            j = len(self._readings) - i - 1
+            if j < top:
+                break 
+            msg.conclude(context)
+        if self._curblockstack:
+            self._curblockstack.pop()
+
+    def ast_POP_ALL_BLOCKS(self, context):
+        """ """
+        for msg in self._readings:
+            msg.conclude(context)
+        self._curblockstack.clear()
+        
+    ast_POP_BLOCK.argspec = _INTLCODE_WITH_CONTEXT
+    ast_POP_ALL_BLOCKS.argspec = _INTLCODE_WITH_CONTEXT
+
+    def ast_DISCARD_LAST_BLOCK_MESSAGE(self):
+        """ """
+        self.buffer.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
+
+    #
+    #  引数を構築する
+    #
+    def arg_REF_NAME(self, context, name):
+        """ """
+        return ObjectRef(name)
+
+    def arg_STRING(self, context, value):
+        """ """
+        return context.new_object(value, type="Str")
+
+    def arg_TYPE(self, context, typeexpr):
+        """ """
+        return select_type(context, typeexpr)
+
+    def arg_TUPLE(self, context, value):
+        """ """
+        elems = value.split() # 文字列を空白で区切る
+        return context.get_type("Tuple").construct_obj(context, elems)
+
+    def arg_LITERAL(self, context, value):
+        """ """
+        return select_literal(context, value)
+
+    def arg_TYPED_VALUE(self, context, value, spec):
+        """ """
+        type = spec.get_typedecl().instance(context)
+        return type.construct_obj(context, value)
+
+    def arg_RECIEVER_VALUE(self, context, value):
+        """ """
+        return select_reciever(context, value)
+
+    def arg_SELECTOR_VALUE(self, context, selector):
+        """ """
+        return SelectorResolver(selector)
+
+    def arg_LAMBDA_ARG_MEMBER(self, context, evalcontext, name):
+        """ """
+        reciever = SubjectRef()
+        if name:
+            value = reciever.pick_object(evalcontext)
+            selector = select_method(name, value.type, reciever=value.value)
+            return (reciever, selector)
+        else:
+            return (reciever, )
+        
+    arg_LAMBDA_ARG_MEMBER.argspec = _INTLCODE_WITH_EVALCONTEXT
+
+    def arg_ROOT_MEMBER(self, context, member_id):
+        """ """
+        rt = context.get_type("RootObject")
+        rv = rt.value_type(context)
+        root = rt.new_object(rv)
+        if member_id:
+            selector = select_method(member_id, root.type, reciever=root.value)
+            return (root, selector)
+        else:
+            return (root, )
+    
+    #
+    #
+    #
     def produce_message_1st(self, evalcontext):
         """ コードから構文を組み立てつつ随時実行 """
         self._msgs = []
         for token, tokentype in self.read_token(self.source):
             reading = self.current_reading_message()
-            code, *values = self.build_message(reading, token, tokentype)
-            if code is None:
+            intlcode = self.compile_code(reading, token, tokentype)
+            if intlcode is None:
                 break
-
-            evalcontext.context.log(LOG_MESSAGE_CODE, ConstantLog(code), *values)
+            evalcontext.context.log(LOG_MESSAGE_CODE, intlcode)
 
             # これから評価するメッセージ式の文字列を排出
             yield self._lastread.strip()
             self._lastread = ""
 
-            for msg in self.reduce_step(code, values, evalcontext):
+            # 内部コードを実行する 
+            intlcode.run(evalcontext)
+
+            # メッセージを組み立てる
+            for msg in self.complete_messages():
                 yield msg # 組み立てたメッセージを排出
                 self._msgs.append(msg)
     
@@ -1216,7 +1313,7 @@ class MessageEngine():
         for step in self.runner(subcontext, cache=cache):
             yield step
         yield self.finish(subcontext, raiseerror=context.is_set_raise_error()) # Objectを返す
-        
+    
     def run_print_step(self, subject, context, *, cache=False):
         """ 実行過程を表示する """
         app = context.spirit
@@ -1235,50 +1332,6 @@ class MessageEngine():
         else:
             return self.run(subject, context, cache=cache)
 
-
-#
-# ログ表示用に定数名を出力する
-#
-class ConstantLog():
-    def __init__(self, code):
-        self._code = code
-
-    @property    
-    def code(self):
-        return self._code
-    
-    def as_tokentype_flags(self) -> str:
-        return _view_bitflag("TOKEN_", self._code)
-    
-    def as_term_flags(self) -> str:
-        astcode = self._code & TERM_AST_MASK
-        instrcode = self._code & TERM_INSTR_MASK
-        objcode = self._code & TERM_OBJ_MASK
-        codename = _view_constant("TERM_", astcode)
-        codename += "+" + _view_constant("TERM_", objcode)
-        if instrcode:
-            codename += "+" + _view_bitflag("TERM_", instrcode)
-        return codename
-
-def _view_constant(prefix, code):
-    """ 定数 """
-    for k, v in globals().items():
-        if k.startswith(prefix) and v==code:
-            return k
-    else:
-        return "<定数=0x{:0X}（{}***）の名前は不明です>".format(code, prefix)
-
-def _view_bitflag(prefix, code):
-    """ 重なったビットフラグ """
-    c = code
-    n = []
-    for k, v in globals().items():
-        if k.startswith(prefix) and v & c and v != TERM_INSTR_MASK:
-            n.append(k)
-            c = (c & ~v)
-    if c!=0:
-        n.append("0x{0X}".format(c))
-    return "+".join(n)
 
 #
 # api

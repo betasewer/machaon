@@ -745,10 +745,10 @@ class MethodParameter():
         name = self.name
         if self.is_variable():
             name = "*" + name
-        line = "Param '{}' [{}]".format(name, self.typename)
+        line = "param '{}' [{}]".format(name, self.typename)
         if self.default:
-            line = line + "= {}".format(self.default)
-        return line
+            line = line + " = {}".format(self.default)
+        return "<{}>".format(line)
     
     @property
     def typename(self):

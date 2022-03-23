@@ -87,7 +87,7 @@ def test_decl_instance():
     assert d.get_conversion() == "Sheet[Int](@, length)"
 
 
-def test_decl_check():
+def test_decl_syntax_check():
     cxt = instant_context()
     def instance(expr):
         decl = parse_type_declaration(expr)
@@ -104,6 +104,11 @@ def test_decl_check():
     assert t.check_value_type(str)
     assert not t.check_value_type(float)
     
+    # 小文字のmachaonの型
+    t = instance("str")
+    assert isinstance(t, Type)
+    assert t.get_value_type() is str
+    
     t = instance("builtins.bytes")
     assert isinstance(t, PythonType)
     assert t.check_value_type(bytes)
@@ -114,6 +119,7 @@ def test_decl_check():
     assert isinstance(t, SubType)
     assert t.check_value_type(int)
     assert not t.check_value_type(float)
+
 
 #
 # PythonType

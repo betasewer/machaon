@@ -270,19 +270,6 @@ class InvocationContext:
         cxt.disable_log()
         return cxt
 
-    def get_depth(self):
-        """@method
-        継承の深さを計算する
-        Returns:
-            Int: 1で始まる深さの数値
-        """
-        level = 1
-        p = self.parent
-        while p:
-            level += 1
-            p = p.parent
-        return level
-    
     def set_flags(self, flags, inherit_set=False, inherit_remove=False):
         if isinstance(flags, str):
             flags = globals().get("INVOCATION_FLAG_" + flags)
@@ -530,13 +517,9 @@ class InvocationContext:
                 title = "message"
                 line = source
             elif code == LOG_MESSAGE_CODE:
-                ccode, *values = args
-                if len(values)>0:
-                    term, *values = values
-                else:
-                    term = " "
+                ccode = args[0]
                 title = "term"
-                line = "{} -> {}".format(term, ", ".join([ccode.as_term_flags()] + [str(x) for x in values]))
+                line = ccode.display_instructions()
             elif code == LOG_MESSAGE_EVAL_BEGIN:
                 invindex = args[0]
                 title = "evaluating"
@@ -583,7 +566,7 @@ class InvocationContext:
         raise ValueError("実行ログに記録がありません")
     
     def get_invocations(self):
-        """ @method alias-name [all-invocation]
+        """ @method alias-name [invocations invs]
         呼び出された関数のリスト。
         Returns:
             Sheet[ObjectCollection](message-expression, result):
@@ -597,7 +580,7 @@ class InvocationContext:
         return vals
     
     def get_errors(self, _app):
-        """ @task alias-name [all-error]
+        """ @task alias-name [errors]
         サブコンテキストも含めたすべてのエラーを表示する。
         Returns:
             Sheet[ObjectCollection](context-id, message-expression, error):
@@ -628,6 +611,23 @@ class InvocationContext:
 
         return errors
 
+    def get_instructions(self):
+        """ @method alias-name [instructions instrs]
+        コンパイルされた内部命令
+        Returns:
+            Sheet[ObjectCollection](instruction, options, arg-instruction, arg-values):
+        """
+        for code, *values in self._log:
+            if code == LOG_MESSAGE_CODE:
+                c = values[0]
+                for instrname, options, ainstrname, argvalues in c.instructions():
+                    yield {
+                        "instruction" : instrname,
+                        "options" : options,
+                        "arg-instruction" : ainstrname,
+                        "arg-values" : argvalues,
+                    }
+
     def get_subcontext(self, index):
         """ @method alias-name [sub-context sub]
         呼び出しの中でネストしたコンテキストを取得する。
@@ -653,7 +653,7 @@ class InvocationContext:
         return subcxt
     
     def get_subcontext_list(self):
-        """ @method alias-name [all-sub-context all-sub]
+        """ @method alias-name [sub-contexts subs]
         サブコンテキストの一覧。
         Returns:
             Sheet[Context](is-failed, message, last-result):
@@ -664,6 +664,19 @@ class InvocationContext:
             subcxt = values[1]
             rets.append(subcxt)
         return rets
+    
+    def get_depth(self):
+        """@method
+        サブコンテクストとしての深さを計算する
+        Returns:
+            Int: 1で始まる深さの数値
+        """
+        level = 1
+        p = self.parent
+        while p:
+            level += 1
+            p = p.parent
+        return level
     
     def get_last_result(self):
         """ @method alias-name [last-result]
@@ -1223,13 +1236,13 @@ class TypeConstructorInvocation(BasicInvocation):
         return InvocationEntry(self, t.construct, (context, arg), {})
     
     def get_action(self):
-        raise ValueError("型変換関数は取得できません")
+        raise ValueError("型変換関数の実体は取得できません")
     
     def get_max_arity(self):
-        return 0
+        return 0xFFFF # 不明: 取得できないこともないか
 
     def get_min_arity(self):
-        return 0
+        return 0 # 後ろに続く引数はデフォルトでゼロ
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         return None

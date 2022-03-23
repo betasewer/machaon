@@ -19,6 +19,8 @@ def parse_test(parser, context, lhs, rhs):
             spi = TempSpirit()
             lhs.pprint(spi)
             spi.printout()
+            print("--- instructions ----------------")
+            print(put_instructions(context))
             return False
         lhs = lhs.value
 
@@ -30,6 +32,8 @@ def parse_test(parser, context, lhs, rhs):
             spi = TempSpirit()
             error.pprint(spi)
             spi.printout()
+            print("--- instructions ----------------")
+            print(put_instructions(context))
         return False
     
     return True
@@ -51,6 +55,17 @@ def ptest(s, rhs):
     parser = MessageEngine(s)
     lhso = parser.run_here(context)
     assert parse_test(parser, context, lhso.value, rhs)
+
+def pinstr(s):
+    context = test_context(silent=True)
+    parser = MessageEngine(s)
+    parser.run_here(context)
+    return put_instructions(context, "; ")
+
+def put_instructions(cxt, sep='\n'):
+    f1 = "{instruction} {options}"
+    f2 = "{instruction} {options} > {arg-instruction} {arg-values}"
+    return sep.join(f1.format(**d) if d["arg-instruction"] is None else f2.format(**d) for d in cxt.get_instructions())
 
 def run(f):
     f()
@@ -165,6 +180,11 @@ def test_message_engine():
     """
 
 #
+def test_minimum():
+    p = pinstr("11 add 22")
+    ptest("11 add 22", 33)
+
+#
 def test_generic_methods():
     # static method
     ptest("1 add 2", 3)
@@ -204,6 +224,11 @@ def test_string_literals():
     ptest("--/0x32/ as Int", 0x32)
     ptest("--/0x7F/ as Int", 0x7F)
     ptest("--/3+5j/ as Complex", 3+5j)
+
+def test_constructor():
+    ptest("1 Int", 1)
+    ptest("1 Int + (2 Int)", 3)
+    ptest("10 Int + ((20 Int) Float)", 30.0)
 
 def test_object_ref():
     # object ref

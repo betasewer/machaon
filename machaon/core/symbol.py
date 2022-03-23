@@ -107,7 +107,8 @@ SIGIL_OBJECT_ID = "@"
 SIGIL_OBJECT_LAMBDA_MEMBER = "."
 SIGIL_OBJECT_ROOT_MEMBER = "@"
 SIGIL_SCOPE_RESOLUTION = "/"
-SIGIL_END_OF_KEYWORDS = ";"
+SIGIL_TRAILING_ARGS = ":"
+SIGIL_TRAILING_ARGS_END = ";"
 SIGIL_DISCARD_MESSAGE = "."
 SIGIL_DEFAULT_RESULT = "-"
 SIGIL_TYPE_INDICATOR = "::"
@@ -175,3 +176,23 @@ BootModuleNames = (
     "string", "numeric", "dateandtime", "shell", "file"
 )
 
+#
+# ビットフラグ
+#
+def display_bitflag(dictionary, prefix, code):
+    """ 
+    ビットフラグを変数名で表示する
+    Params:
+        dictionary(Dict[int,Any]): 辞書。globalsを渡す
+        prefix(str): 変数名のprefix
+        code(int): フラグの値
+    """
+    names = []
+    c = code
+    for k, v in dictionary.items():
+        if k.startswith(prefix) and v & c:
+            names.append(k)
+            c = (c & ~v)
+    if c != 0:
+        names.append("0x{0X}".format(c))
+    return names

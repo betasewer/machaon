@@ -111,12 +111,15 @@ def test_create_no_mod(objectdesk):
     assert view.count() == 3
     assert len(view.get_current_columns()) == 1
     assert view.get_current_columns()[0].get_name() == "name"
+    assert view.get_current_columns()[0].stringify(objectdesk, objectdesk.new_object("ken")) == "ken"
 
     assert view.rows_to_string_table(objectdesk) == [(0, ["ken"]), (1, ["yuuji"]), (2, ["kokons"])]
     view.select(1)
     assert view.selection_index() == 1
     assert values(view.row_values(0)) == ["ken"]
     assert values(view.row_values(view.selection_index())) == ["yuuji"]
+
+pytest.main(["-k", "create_no_mod"])
 
 
 def test_expand_view(objectdesk):
