@@ -6,11 +6,10 @@ import tempfile
 import configparser
 import re
 import importlib
-import traceback
 from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
 from machaon.core.type import TypeDefinition
-from machaon.core.importer import module_loader, walk_modules, module_name_from_path, PyBasicModuleLoader
+from machaon.core.importer import module_loader, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
 from machaon.package.archive import BasicArchive
@@ -165,29 +164,16 @@ class Package():
             raise PackageLoadError(type(e).__name__, e)
         
         # docstringを解析する
-        self._extra_reqs = initial_module.get_extra_requirements()
-        modules: List[PyBasicModuleLoader] = []
-        modules.extend(initial_module.get_package_submodules())
+        self._extra_reqs = initial_module.get_package_extra_requirements()
 
         # サブモジュールのロード
+        modules: List[PyBasicModuleLoader] = []
         if self._type == PACKAGE_TYPE_MODULES:
-            if not modules:
-                # 全てのサブモジュールを走査する
-                basepkg = initial_module.module_name
-                for pkgpath in initial_module.load_package_directories(): # 開始モジュールのディレクトリから下降する
-                    # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
-                    skip_names = []
-                    for fr in traceback.extract_stack():
-                        fname = os.path.normpath(fr.filename)
-                        if fname.startswith(pkgpath):
-                            relname = module_name_from_path(fname, pkgpath, basepkg)
-                            skip_names.append(relname)
-                    
-                    for loader in walk_modules(pkgpath, basepkg):
-                        if loader.module_name in skip_names:
-                            continue 
-                        modules.append(loader)
-
+            defmods = initial_module.get_package_defmodule_loaders()
+            if defmods:
+                modules = defmods
+            else:
+                modules = initial_module.get_all_submodule_loaders()
         elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
             modules = [initial_module]
 

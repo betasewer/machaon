@@ -50,11 +50,11 @@ class AppPackageType:
                 errors = []
                 if package.is_load_failed():
                     errcnt = len(package.get_load_errors())
-                    errors.append("{}件のモジュールのロードエラー".format(errcnt))
+                    errors.append("{}件のエラー".format(errcnt))
                 
                 errexmodules = sum([1 for b in package.check_required_modules_ready().values() if not b])
                 if errexmodules > 0:
-                    errors.append("{}件の追加依存パッケージのロードエラー".format(errexmodules))
+                    errors.append("追加依存パッケージが{}個足りません".format(errexmodules))
 
                 if not errors:
                     return "準備完了"

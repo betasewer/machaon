@@ -4,6 +4,7 @@ import importlib.util
 import builtins
 import os
 import ast
+import traceback
 
 from machaon.core.docstring import parse_doc_declaration
 from machaon.core.symbol import full_qualified_name
@@ -45,7 +46,7 @@ class PyBasicModuleLoader:
     def __init__(self, m=None): # モジュールのインスタンスを受ける
         self._m = m
         self._requires = []
-        self._pkg_submods = []
+        self._defmodules = []
         self._usingtypes = []
     
     @property
@@ -100,18 +101,23 @@ class PyBasicModuleLoader:
         
         pser = decl.create_parser((
             "Extra-Requirements Extra-Req",
-            "Submodules",
+            "TypedefModules DefModules",
             "Using",
         ))
         # 追加の依存するmachaonパッケージ名
-        requires = [x.strip() for x in pser.get_string("Extra-Requirements").split(",")]
-        self._requires = requires
+        self._requires = []
+        for name in pser.get_string("Extra-Requirements").split(","):
+            package_name = name.strip()
+            if package_name:
+                self._requires.append(package_name)
         
         # パッケージで、型定義が含まれるモジュールを明示する
-        self._pkg_submods = []
-        for line in pser.get_lines("Submodules"):
-            m = module_loader(line)
-            self._pkg_submods.append(m)
+        self._defmodules = []
+        for line in pser.get_lines("TypedefModules"):
+            module_name = line.strip()
+            if module_name:
+                m = module_loader(module_name)
+                self._defmodules.append(m)
 
         # 参照する外部のmachaon型
         self._usingtypes = []
@@ -125,11 +131,11 @@ class PyBasicModuleLoader:
                 raise BadTypeDeclaration()
             self._usingtypes.append(d)
     
-    def get_extra_requirements(self):
+    def get_package_extra_requirements(self):
         return self._requires
 
-    def get_package_submodules(self):
-        return self._pkg_submods
+    def get_package_defmodule_loaders(self):
+        return self._defmodules
     
     def scan_type_definitions(self):
         """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す
@@ -208,14 +214,39 @@ class PyBasicModuleLoader:
                 "error" : err
             }
 
+    def get_all_submodule_loaders(self):
+        """ 全てのサブモジュールのローダーを作成する
+        Returns:
+            List[PyBasicModuleLoader]:
+        """
+        modules = []
+        basepkg = self.module_name
+        for pkgpath in self.load_package_directories(): # 開始モジュールのディレクトリから下降する
+            # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
+            skip_names = []
+            for fr in traceback.extract_stack():
+                fname = os.path.normpath(fr.filename)
+                if fname.startswith(pkgpath):
+                    relname = module_name_from_path(fname, pkgpath, basepkg)
+                    skip_names.append(relname)
+            
+            # サブモジュールを取得する
+            for loader in walk_modules(pkgpath, basepkg):
+                if loader.module_name in skip_names:
+                    continue 
+                modules.append(loader)
+
+        return modules
+
 
 class PyModuleLoader(PyBasicModuleLoader):
     """
     配置されたモジュールからロードする
     """
-    def __init__(self, module):
+    def __init__(self, module, filepath=None):
         super().__init__()
         self.module_name = module
+        self.filepath = filepath
     
     def get_name(self):
         return self.module_name
@@ -230,6 +261,8 @@ class PyModuleLoader(PyBasicModuleLoader):
         return mod
     
     def load_filepath(self):
+        if self.filepath is not None:
+            return self.filepath
         spec = importlib.util.find_spec(self.module_name)
         if spec is None:
             raise ValueError("モジュールが見つかりません")
@@ -264,16 +297,11 @@ class PyModuleFileLoader(PyBasicModuleLoader):
         return self.module_name
     
     def load_module(self):
-        import sys
-        if self.module_name in sys.modules:
-            # 既に読み込み済みならそちらを優先する
-            mod = sys.modules[self.module_name]
-        else:
-            spec = importlib.util.spec_from_file_location(self.module_name, self._path)
-            if spec is None:
-                raise FileNotFoundError(self._path)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+        spec = importlib.util.spec_from_file_location(self.module_name, self._path)
+        if spec is None:
+            raise FileNotFoundError(self._path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
         return mod
 
     def load_filepath(self):
@@ -350,7 +378,7 @@ def walk_modules(path, package_name=None):
                 continue
             filepath = os.path.join(dirpath, filename)
             qual_name = module_name_from_path(filepath, path, package_name)
-            yield PyModuleFileLoader(qual_name, filepath)
+            yield PyModuleLoader(qual_name, filepath) # FileModuleLoaderを使うと、import文で読み込んだ同一モジュールとは別のインスタンスになってしまう
 
 
 def module_name_from_path(path, basepath, basename=None):
