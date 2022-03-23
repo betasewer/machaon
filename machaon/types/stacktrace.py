@@ -142,12 +142,13 @@ class ErrorObject():
     
     def stringify(self):
         """ @meta """
+        p, lno = self.lasttraceback().location()
         if isinstance(self.error, InternalMessageError):
-            error = self.error.error
-            return "文法エラー：{}[{}]".format(str(error), self.get_error_typename())
+            error = self.cause().get_error()
+            return "文法エラー：{}[{}] ({}, {})".format(str(error), self.get_error_typename(), p, lno)
         else:
-            error = self.error
-            return "実行エラー：{}[{}]".format(str(error), self.get_error_typename())
+            error = self.cause().get_error()
+            return "実行エラー：{}[{}] ({}, {})".format(str(error), self.get_error_typename(), p, lno)
 
     def summarize(self):
         """ @meta """
@@ -156,12 +157,11 @@ class ErrorObject():
     def pprint(self, app):
         """ @meta """
         if isinstance(self.error, InternalMessageError):
-            excep = self.error.error
             title = "（内部エラー）"
         else:
-            excep = self.error
             title = ""
         
+        excep = self.cause().get_error()
         app.post("error", self.display_exception())
 
         app.post("message-em", "スタックトレース{}：".format(title))
@@ -207,7 +207,7 @@ class TracebackObject():
             TracebackObject:
         """
         if level is None:
-            tb = None
+            tb = self._tb
             for _, tb, _ in self.walk(): pass
             return tb
         else:

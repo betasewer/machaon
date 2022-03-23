@@ -1,4 +1,6 @@
+from unicodedata import name
 import pytest
+from collections import namedtuple
 
 from machaon.core.invocation import instant_context
 from machaon.flow.flow import Flow
@@ -50,12 +52,25 @@ def test_enclosure_try():
     assert f.reflux("あ") == "『あ』"
     assert f.reflux("『あ") == "『『あ』"
 
+    
+def test_tupleflow_functor():
+    from machaon.types.shell import Path
+    from machaon.flow.flow import TupleFlow
+
+    cxt = instant_context()
+    f = Flow()
+    f.pipe(cxt, "Path")
+    f.pipe(cxt, TupleFlow("path"))
+
+    assert f.influx("C:/root") == ["C:/root"]
+    assert f.reflux(["C:/root"]) == "C:/root"
+
 
 def test_none_functor():
     cxt = instant_context()
     f = Flow()
     f.pipe(cxt, "Int")
-    f.pipe_message(cxt, "@ * 10").message_reflux(cxt, "@ / 10 floor")
+    f.pipe(cxt, ["@ * 10", "@ / 10 floor"])
     f.pipe_none(cxt, "blank")
 
     assert f.influx("21") == 210
@@ -66,7 +81,7 @@ def test_none_functor():
 
     f = Flow()
     f.pipe(cxt, "Int")
-    f.pipe_message(cxt, "@ * 10").message_reflux(cxt, "@ / 10 floor")
+    f.pipe(cxt, ["@ * 10", "@ / 10 floor"])
     f.pipe_none(cxt, "blank")
 
 

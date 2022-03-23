@@ -15,6 +15,8 @@ class ConstructType():
         return self._type.construct(self._context, value)
 
     def reflux(self, value):
+        if isinstance(value, _ConstructorArgs):
+            value = value.constructor(self._type.get_value_type())
         return self._type.reflux_value(value)
     
     def influx_flow(self):
@@ -22,6 +24,51 @@ class ConstructType():
         
     def reflux_flow(self):
         return "{} reflux".format(self._type.get_conversion())
+
+    def __str__(self):
+        return "<ConstructType {}>".format(self._type.get_conversion())
+
+
+class _ConstructorArgs:
+    """ 引数オブジェクト """
+    def __init__(self, args):
+        self.args = args
+
+    def constructor(self, value_type):
+        return value_type(*self.args)
+
+
+class DecomposeToTuple():
+    """
+    オブジェクトをリストへと分解する。
+    """
+    def __init__(self, members):
+        self._members = members
+
+    def influx(self, value):
+        """ オブジェクトからリストへと分解 """
+        arr = []
+        for membername in self._members:
+            if membername.startswith("."):
+                value = getattr(value, membername[1:])
+            else:
+                member = getattr(value, membername)
+                value = member()
+            arr.append(value)
+        return arr
+
+    def reflux(self, value):
+        """ リストからConstructTypeなどに作用する引数オブジェクトを作る """
+        return _ConstructorArgs(value)
+    
+    def influx_flow(self):
+        return "[{}] decompose".format(" ".join(self._members))
+        
+    def reflux_flow(self):
+        return "[{}] compose".format(" ".join(self._members))
+
+    def __str__(self):
+        return "<DecomposeToTuple [{}]>".format(" ".join(self._members))
 
 
 class LoadJson():
@@ -43,16 +90,20 @@ class LoadJson():
     def reflux_flow(self):
         return "json dumps"
 
+    def __str__(self):
+        return "<LoadJson>"
 
 class RunMessage():
     """
     任意のメッセージを実行する。
     """
-    def __init__(self, fn, context=None):
+    def __init__(self, fn, context=None, fn2=None):
         self._in = None
         self._re = None
         if fn is not None:
             self.set_flux(fn, "influx", context)
+        if fn2 is not None:
+            self.set_flux(fn2, "reflux", context)
 
     def set_flux(self, fn, n, context=None):
         """ 後から設定する """
@@ -85,6 +136,8 @@ class RunMessage():
             return "<identity>"
         return self._re.get_expression()
 
+    def __str__(self):
+        return "<RunMessage {} |<||>| {}>".format(self._in.get_expression(), self._re.get_expression())
 
 class NoneMapValue():
     def __init__(self, value):

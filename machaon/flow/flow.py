@@ -8,7 +8,7 @@ class Flow:
         self.none_functor = None
 
     def influx(self, value):
-        """ @task
+        """ @task nospirit
         入力値からデータへと変換する。
         Params:
             value(Any): 入力値
@@ -25,7 +25,7 @@ class Flow:
         return value
     
     def reflux(self, value):
-        """ @task
+        """ @task nospirit
         データから入力値へと逆の変換をする。
         Params:
             value(Any): データ
@@ -88,49 +88,48 @@ class Flow:
         Params:
             functor(str): 型名
         """
-        # jsonで変換する
-        if functor == "json":
-            from machaon.flow.functor import LoadJson
-            return self.add_functor(LoadJson())
+        # TupleFlow
+        if isinstance(functor, TupleFlow):
+            from machaon.flow.functor import DecomposeToTuple
+            return self.add_functor(DecomposeToTuple(functor.members))
 
-        # 型インターフェースまたはメソッドによって変換する
-        typeconversion = functor
-        t = context.instantiate_type(typeconversion)
-        if t is None:
-            raise ValueError("型'{}'は存在しません".format(typeconversion))
-        if t.get_value_type() is Influx:
-            msg = t.args[0] if t.args else None
-            return self.pipe_message(context, msg)
-        elif t.get_value_type() is Reflux:
-            msg = t.args[0] if t.args else None
-            return self.pipe_message(context, None).message_reflux(context, msg)
-        else:
+        if isinstance(functor, str):
+            # jsonで変換する
+            if functor == "json":
+                from machaon.flow.functor import LoadJson
+                return self.add_functor(LoadJson())
+
+            # 型インターフェースまたはメソッドによって変換する
+            typeconversion = functor
+            t = context.instantiate_type(typeconversion)
+            if t is None:
+                raise ValueError("型'{}'は存在しません".format(typeconversion))
+
             from machaon.flow.functor import ConstructType
             return self.add_functor(ConstructType(context, t))
 
-    def pipe_message(self, context, block):
-        """ @method context alias-name [>>message >>+]
-        任意のメッセージをinfluxとして設定する。
-        Params:
-            block(Function[](seq)):
-        """
-        from machaon.flow.functor import RunMessage
-        return self.add_functor(RunMessage(block, context))
+        elif len(functor) == 2:
+            # message flow
+            influx = functor[0]
+            reflux = functor[1]
+            from machaon.flow.functor import RunMessage
+            return self.add_functor(RunMessage(influx, context, reflux))
 
-    def message_reflux(self, context, block):
-        """ @method context [reflux+]
-        任意のメッセージを直前のファンクタのrefluxとして設定する。
-        Params:
-            block(Function[](seq)):
-        """
-        from machaon.flow.functor import RunMessage
-        if self.functors and isinstance(self.functors[-1], RunMessage):
-            fn = self.functors[-1]
         else:
-            raise ValueError("直前のファンクタがRunMessageではありません")
-        fn.set_flux(block, "reflux", context)
-        return self
+            raise TypeError(functor)
 
+    def pipe_or(self, context, functor):
+        """ @method context alias-name [|]
+        machaonの型インターフェースまたはメソッドによって変換する
+        Params:
+            functor(str): 型名
+        """
+        self.pipe(context, functor)
+        functor2 = self.functors.pop()
+        functor1 = self.functors.pop()
+        from machaon.flow.functor import OrFlow
+        return self.add_functor(OrFlow(functor1, functor2))
+    
     def pipe_none(self, context, functor, arg=None):
         """ @method context alias-name [none>>]
         machaonの型インターフェースまたはメソッドによってNoneを変換する
@@ -151,36 +150,10 @@ class Flow:
         elif functor == "value":
             # 任意の値
             self.none_functor = NoneMapValue(arg)
-        elif functor == "functor":
-            # 任意の値
-            self.none_functor = NoneMapValue(arg)
         else:
             raise ValueError(functor)
         return self
 
-    def pipe_or(self, context, functor):
-        """ @method context alias-name [|]
-        machaonの型インターフェースまたはメソッドによって変換する
-        Params:
-            functor(str): 型名
-        """
-        self.pipe(context, functor)
-        functor2 = self.functors.pop()
-        functor1 = self.functors.pop()
-        from machaon.flow.functor import OrFlow
-        return self.add_functor(OrFlow(functor1, functor2))
-
-    def pipe_message_or(self, context, block):
-        """ @method context alias-name [|message |+]
-        任意のメッセージをinfluxとして設定する。
-        Params:
-            block(Function[](seq)):
-        """
-        self.pipe_message(context, block)
-        functor2 = self.functors.pop()
-        functor1 = self.functors.pop()
-        from machaon.flow.functor import OrFlow
-        return self.add_functor(OrFlow(functor1, functor2))
 
     #
     # 文字列
@@ -221,15 +194,16 @@ class FlowError(Exception):
 #
 # Flow.pipeで使用できるダミーの型
 #
-class Influx():
+class TupleFlow():
     """ @type
-    Flowの入力処理を定義する。
+    オブジェクトをタプルに変換する。
     """
-    pass
+    def __init__(self, *members):
+        self.members = members
 
-class Reflux():
-    """ @type
-    Flowの出力処理を定義する。
-    """
-    pass
-    
+    def constructor(self, value):
+        """ @meta
+        Params:
+            Tuple:    
+        """
+        return TupleFlow(*value) # DecomposeToTupleが実際の処理を行う

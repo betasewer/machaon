@@ -558,8 +558,8 @@ def split_by_nondigit(s):
             parts.append("")
     return parts
 
-class Auto:
-    """ @type subtype
+class DateSeparated:
+    """ @type subtype [Sep]
     数字以外の任意の文字で区切られた日付表現。
     BaseType:
         Date:

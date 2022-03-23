@@ -68,6 +68,7 @@ class AppRoot:
         # machaon.types以下のモジュールをロード
         for module in BootModuleNames:
             self.add_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
+        self.add_package("machaon.flow", "module:machaon.flow.flow")
 
         # ホットキーの監視を有効化する
         if GlobalHotkey.available:

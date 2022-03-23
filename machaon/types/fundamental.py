@@ -322,15 +322,15 @@ def fundamental_types():
         "machaon.types.tuple.ObjectTuple",          # Tuple
         "machaon.types.sheet.Sheet",                # Sheet
         # エラー型
-        "machaon.core.method.Method",               # Method
-        "machaon.core.invocation.InvocationContext",# Context
-        "machaon.process.Process",                  # Process
         "machaon.types.stacktrace.ErrorObject",     # Error
         "machaon.types.stacktrace.TracebackObject", # TracebackObject
         "machaon.types.stacktrace.FrameObject",     # FrameObject
-        "machaon.types.package.AppPackageType",     # Package
+        "machaon.core.invocation.InvocationContext",# Context
+        "machaon.process.Process",                  # Process
         "machaon.types.package.Module",             # PyModule
         # システム型
+        "machaon.core.method.Method",               # Method
+        "machaon.types.package.AppPackageType",     # Package
         "machaon.core.persistence.StoredMessage",   # Stored
         "machaon.types.app.RootObject",             # RootObject
     ]:
