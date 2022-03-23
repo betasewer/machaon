@@ -88,6 +88,15 @@ class RootObject:
         '''
         return list(self.context.root.enum_packages())
     
+    def startup_errors(self):
+        ''' @method
+        パッケージ読み込みのエラーを取得する。
+        Returns:
+            Sheet[Error]: エラーリスト
+        '''
+        for pkg in self.context.root.enum_packages():
+            yield from pkg.get_load_errors()
+    
     def context_(self):
         ''' @method alias-name [context]
         現在の呼び出しコンテキストを取得する。

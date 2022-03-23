@@ -55,19 +55,31 @@ class Object():
         return Object(self.type, copy(self.value))
     
     def stringify(self) -> str:
-        return self.type.stringify_value(self.value)
+        try:
+            return self.type.stringify_value(self.value)
+        except Exception as e:
+            return _error_string(e, "stringify")
 
     def summarize(self) -> str:
-        return self.type.summarize_value(self.value)
+        try:
+            return self.type.summarize_value(self.value)
+        except Exception as e:
+            return _error_string(e, "summarize")
 
     def pprint(self, spirit=None, *, printer=None):
+        def _pprinter(spi):
+            try:
+                self.type.pprint_value(spi, self.value)
+            except Exception as e:
+                spi.post("error", _error_string(e, "pprint"))
+
         if spirit is None:
             from machaon.process import TempSpirit
             spirit = TempSpirit()
-            self.type.pprint_value(spirit, self.value)
+            _pprinter(spirit)
             spirit.printout(printer=printer)
         else:
-            self.type.pprint_value(spirit, self.value)
+            _pprinter(spirit)
     
     def to_pretty(self):
         return PrettyObject(self.type, self.value)
@@ -88,6 +100,12 @@ class Object():
         if self.is_error():
             raise self.value.error
         return self.value
+
+#
+def _error_string(e, method):
+    from machaon.types.stacktrace import ErrorObject
+    ev = ErrorObject(e)
+    return "[metamethod '{}' でエラーが発生]\n  {}".format(method, ev.stringify())
 
 #
 class PrettyObject(Object):

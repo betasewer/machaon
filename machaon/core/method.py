@@ -953,7 +953,7 @@ class MetaMethod():
         params = sections.get_lines("Params")
         if params:
             if self.target != "constructor":
-                raise ValueError("constructor以外のメタメソッドで引数を定義することはできません")
+                raise ValueError("メタメソッド'{}'で引数を定義することはできません".format(self.target))
 
             firstline = params[0]
             findend = (lambda x: None if x == -1 else x)(firstline.find(":"))
