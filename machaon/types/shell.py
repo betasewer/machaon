@@ -347,19 +347,18 @@ class Path():
         """ @task context
         ファイルを再帰的に検索する。
         Params:
-            predicate(Function): 述語関数
-            depth(int): 探索する階層の限界
+            predicate(Function[](seq)): 述語関数
+            depth?(int): 探索する階層の限界
         Returns:
             Sheet[Path](name, extension, modtime, size):
         """
+        predicate.set_subject_type("Path")
         basedir = self.dir().path()
         for dirpath, dirname, filenames in os.walk(basedir):
             for filename in filenames:
                 filepath = os.path.join(basedir, dirpath, filename)
-                path = context.new_object(filepath, type="Path")
-                if predicate.run_function(path, context).test_truth():
-                    return path
-        raise NotFound()
+                if predicate(filepath):
+                    yield filepath
     
     def makedirs(self):
         """ @method
