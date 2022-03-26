@@ -1,4 +1,5 @@
 from select import select
+from tkinter import N
 from typing import Tuple
 
 #
@@ -86,21 +87,36 @@ class BadObjectBindName(Exception):
     pass
 
 #
-def full_qualified_name(t):
+def get_module_attr(t):
     if hasattr(t, "__module__"):
         mod = t.__module__
-    else:
-        mod = None
+        if mod != len.__module__:
+            return mod
+    return None
+
+def get_name_attr(t):
     if hasattr(t, "__qualname__"):
-        n = t.__qualname__
+        return t.__qualname__
     elif hasattr(t, "__name__"):
-        n = t.__name__
+        return t.__name__
     else:
         raise ValueError("No __qualname__ or __name__ property")
-    if mod is None or mod == len.__module__:
+
+def full_qualified_name(t):
+    n = get_name_attr(t)
+    mod = get_module_attr(t)
+    if mod is None:
         return n
     else:
         return mod + "." + n
+
+def disp_qualified_name(t):
+    n = get_name_attr(t)
+    mod = get_module_attr(t)
+    if mod is None:
+        return n
+    else:
+        return "{0}:{1}".format(n, mod)
 
 
 # メッセージで用いられる記号

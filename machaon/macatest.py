@@ -23,21 +23,21 @@ def parse_test(parser, context, lhs, rhs, tester=None):
     if not tester(lhs, rhs):
         print("Assertion is failed: {}(({}) => {}, {})".format(tester.__name__, parser.source, lhs, rhs))
         print("")
+        print("--- instructions ----------------")
+        print(put_instructions(context))
         if context.is_failed():
             error = context.new_invocation_error_object()
             spi = TempSpirit()
             error.pprint(spi)
             spi.printout()
-            print("--- instructions ----------------")
-            print(put_instructions(context))
         return False
     
     return True
 
 def put_instructions(cxt, sep='\n'):
     f1 = "{instruction} {options}"
-    f2 = "{instruction} {options} > {arg-instruction} {arg-values}"
-    return sep.join(f1.format(**d) if d["arg-instruction"] is None else f2.format(**d) for d in cxt.get_instructions())
+    f2 = "{instruction} {options} > {args}"
+    return sep.join(f1.format(**d) if d["args"] is None else f2.format(**d) for d in cxt.get_instructions())
 
 def run(f):
     f()

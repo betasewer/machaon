@@ -143,14 +143,20 @@ class Message:
             return self.reciever.get_lastvalue()
         else:
             return self.reciever
+
+    def _refs(self):
+        return [x for x in (self.reciever, self.selector, *self.args) if isinstance(x, BasicRef)]
     
     def reset_ref(self):
-        for elem in (self.reciever, self.selector, *self.args):
-            if isinstance(elem, BasicRef):
-                elem.reset()
+        for ref in self._refs():
+            ref.reset()
 
     def check_concluded(self, evalcontext):
         """ メッセージがすでに完成しているか """
+        urefcount = len([x for x in self._refs() if not x.is_resolved()])
+        if evalcontext.locals.count() < urefcount:
+            return False
+
         if not self.is_reciever_specified():
             return False
         
@@ -199,7 +205,8 @@ class Message:
         if isinstance(sel, BasicInvocation):
             return True
         if isinstance(sel, BasicRef):
-            sel = sel.pick_object(evalcontext)
+            obj = sel.pick_object(evalcontext)
+            sel = ObjectSelectorResolver(obj)
         if isinstance(sel, SelectorResolver):
             sel = sel.resolve(evalcontext, self.reciever)
         self.selector = sel
@@ -263,7 +270,9 @@ class Message:
             if isinstance(item, Object):
                 exprs.append("<{} {}>".format(item.get_typename(), item.value_debug_str()))
             elif isinstance(item, BasicRef):
-                exprs.append("<#Ref: {}>".format(item.get_lastvalue()))
+                exprs.append("<#{}: {}>".format(type(item).__name__, item.get_lastvalue()))
+            elif isinstance(item, SelectorResolver):
+                exprs.append("<selector {}>".format(item.selector))
             else:
                 exprs.append(str(item))
 
@@ -323,6 +332,9 @@ class LocalStack:
     def __init__(self):
         self.local_objects = [] 
 
+    def count(self):
+        return len(self.local_objects)
+
     def push_local_object(self, obj):
         """
         Params:
@@ -379,6 +391,9 @@ class BasicRef:
     def reset(self):
         self._lastvalue = None
 
+    def is_resolved(self):
+        raise NotImplementedError()
+
 class ResultStackRef(BasicRef):
     """ スタックにおかれた計算結果への参照 """
     def do_pick(self, evalcontext):
@@ -387,6 +402,9 @@ class ResultStackRef(BasicRef):
             raise BadExpressionError("ローカルスタックを参照しましたが、値がありません")
         evalcontext.locals.pop_local_object()
         return value
+        
+    def is_resolved(self):
+        return self.get_lastvalue() is not None
     
 class SubjectRef(BasicRef):
     """ 引数オブジェクトへの参照 """
@@ -395,6 +413,9 @@ class SubjectRef(BasicRef):
         if subject is None:
             raise BadExpressionError("無名関数の引数を参照しましたが、与えられていません")
         return subject
+
+    def is_resolved(self):
+        return True
 
 class ObjectRef(BasicRef):
     """ 任意のオブジェクトへの参照 """
@@ -408,6 +429,9 @@ class ObjectRef(BasicRef):
             raise BadExpressionError("オブジェクト'{}'は存在しません".format(self._ident))
         return obj
 
+    def is_resolved(self):
+        return True
+
 class SelectorResolver():
     """ セレクタを解決する """
     def __init__(self, selector):
@@ -417,6 +441,13 @@ class SelectorResolver():
         if isinstance(reciever, BasicRef):
             reciever = reciever.pick_object(evalcontext)
         return select_method(self.selector, reciever.type, reciever=reciever.value)
+
+class ObjectSelectorResolver(SelectorResolver):
+    """ 文字列ではないセレクタ名を解決する """
+    def resolve(self, evalcontext, reciever):
+        if isinstance(reciever, BasicRef):
+            reciever = reciever.pick_object(evalcontext)
+        return select_method_by_object(self.selector, reciever.type, reciever=reciever.value)
 
 
 #
@@ -471,7 +502,6 @@ def value_to_obj(context, value):
         raise BadExpressionError("Unsupported literal type: {}".format(typename))
     return Object(context.get_type(typename), value)
 
-
 # メソッド
 def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
     # モディファイアを分離する
@@ -488,12 +518,11 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
-            inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
-            return Bind1stInvocation(inv, int(name), "Int", modbits)
+            return select_index_method(int(name), typetraits, reciever, modbits)
 
     # 大文字のメソッドは型変換コンストラクタ
     if name[0].isupper():
-        return TypeConstructorInvocation(name, modbits)
+        return select_type_constructor(name, modbits)
 
     # 型メソッド
     using_type_method = typetraits is not None
@@ -522,6 +551,29 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     
     # インスタンスメソッド
     return InstanceMethodInvocation(name, modifier=modbits)
+
+
+def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
+    tn = obj.get_typename()
+    v = obj.value
+
+    if tn == "Int" or tn == "Float":
+        return select_index_method(int(v), typetraits, reciever, modbits)
+    elif tn == "Type":
+        return select_type_constructor(v, modbits)
+    elif tn == "Str": 
+       return select_method(v, typetraits, reciever=reciever, modbits=modbits)
+    else:
+        raise BadExpressionError("'{}'はメソッドセレクタとして無効です:Int|Float|Type|Strが有効です".format(obj))
+
+
+def select_index_method(value, typetraits, reciever, modbits):
+    inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
+    return Bind1stInvocation(inv, value, "Int", modbits)
+
+def select_type_constructor(name, modbits):
+    return TypeConstructorInvocation(name, modbits)
+
 
 #
 # 
@@ -670,13 +722,15 @@ class MessageTokenBuffer():
             return False
         return True
 
-    def token(self, tokentype):
-        string = self.lastflush
-        self.lastflush = ""
+    def token(self, tokentype, string=None):
+        if string is None:
+            string = self.lastflush
+            self.lastflush = ""
         
-        if self.firstterm and (tokentype & TOKEN_TERM): 
+        if self.firstterm: 
             tokentype |= TOKEN_FIRSTTERM
-            self.firstterm = False
+            if tokentype & TOKEN_TERM:
+                self.firstterm = False
         
         return (string, tokentype)
     
@@ -763,13 +817,13 @@ def _ast_ARG(fn):
 
 class InternalEngineCode():
     def __init__(self):
-        self.arg_code = None
+        self.arg_codes = []
         self.ast_codes = []
 
     def add(self, c, *args):
         entry = (c, args, c.argspec, c.rank)
         if c.rank == _INTLCODE_ARG:
-            self.arg_code = entry
+            self.arg_codes.append(entry)
         else:
             self.ast_codes.append(entry)
 
@@ -778,8 +832,7 @@ class InternalEngineCode():
         argobjs = []
 
         # 引数オブジェクトを構築する
-        if self.arg_code is not None:
-            (c, a, aspec, _) = self.arg_code
+        for (c, a, aspec, _) in self.arg_codes:
             ret = c(*aspec(evalcontext, argobjs), *a)
             if isinstance(ret, tuple):
                 argobjs.extend(ret)
@@ -792,13 +845,8 @@ class InternalEngineCode():
 
     def instructions(self):
         """ 命令の内容を表示する """
-        if self.arg_code is not None:
-            (c, a, _aspec, _) = self.arg_code
-            arginstr = c.__name__
-            argvals = a
-        else:
-            arginstr = None
-            argvals = None
+        
+        args = [(x[0].__name__, x[1]) for x in self.arg_codes]
 
         i = 0
         for c, options, _aspec, _rank in sorted(self.ast_codes, key=lambda x:x[3]):
@@ -812,19 +860,20 @@ class InternalEngineCode():
                     elif a == TERM_TYPE_ARGUMENT:
                         a = "argument"
                     options = (a, *options[1:])
-                yield (c.__name__, options, arginstr, argvals)
+                yield (c.__name__, options, args)
             else:
-                yield (c.__name__, options, None, None)
+                yield (c.__name__, options, None)
             i += 1
 
     def display_instructions(self):
         """ 文字列にまとめて返す """
         ls = []
-        for instrname, options, arginstrname, argvals in self.instructions():
-            if arginstrname is None:
+        for instrname, options, args in self.instructions():
+            if args is None:
                 line = "{:18}({})".format(instrname, ",".join(options))
             else:
-                line = "{:18}({}) | {:18} {}".format(instrname, ",".join(options), arginstrname, ",".join(argvals))
+                p = ", ".join(["{}({})".format(x,",".join([str(w) for w in y])) for x,y in args])
+                line = "{:18}({}) | {}".format(instrname, ",".join(options), p)
             ls.append(line)
         return ls
 
@@ -873,7 +922,7 @@ class MessageEngine():
                 elif ch == "(":
                     if buffer.flush(): 
                         yield buffer.token(TOKEN_TERM)
-                    yield ("", TOKEN_BLOCK_BEGIN)
+                    yield buffer.token(TOKEN_BLOCK_BEGIN, "")
                     paren_count += 1
                 elif ch == ")":
                     if buffer.flush():
@@ -983,9 +1032,18 @@ class MessageEngine():
 
         # 明示的ブロック開始指示
         if tokentype & TOKEN_BLOCK_BEGIN:
-            code.add(self.ast_ADD_ELEMENT_AS_NEW_BLOCK, expect)
+            if expect == EXPECT_NOTHING:
+                if tokentype & TOKEN_FIRSTTERM:
+                    # レシーバのメッセージとする
+                    code.add(self.ast_ADD_NEW_MESSAGE)
+                else:
+                    # 先行する値をレシーバとするセレクタのメッセージとする
+                    code.add(self.arg_STACK_REF)
+                    code.add(self.ast_ADD_TWIN_NEW_MESSAGE)
+            else:
+                # 前のメッセージの要素とする
+                code.add(self.ast_ADD_ELEMENT_AS_NEW_MESSAGE, expect)
             code.add(self.ast_PUSH_BLOCK)
-            # セレクタの場合はメッセージ完成後に即座に評価する必要がある
             return code
 
         # 特殊な記号
@@ -1017,9 +1075,9 @@ class MessageEngine():
 
             def new_block_bits(c):
                 if expect == EXPECT_NOTHING:
-                    c.add(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_RECIEVER)
+                    c.add(self.ast_ADD_NEW_MESSAGE)
                 else:
-                    c.add(self.ast_ADD_ELEMENT_AS_NEW_BLOCK, expect)
+                    c.add(self.ast_ADD_ELEMENT_AS_NEW_MESSAGE, expect)
                 return c
 
             objid = token[1:]
@@ -1057,16 +1115,16 @@ class MessageEngine():
                 code.add(self.arg_REF_NAME, objid)
 
             if expect == EXPECT_NOTHING:
-                code.add(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_RECIEVER) # 新しいメッセージのレシーバになる
+                code.add(self.ast_ADD_NEW_MESSAGE) # 新しいメッセージのレシーバになる
             else:
-                code.add(self.ast_ADD_LAST_BLOCK_ELEMENT, expect) # 前のメッセージの要素になる
+                code.add(self.ast_ADD_ELEMENT_TO_LAST_MESSAGE, expect) # 前のメッセージの要素になる
             return code
 
         # 何も印のない文字列
         #  => メソッドかリテラルか、文脈で判断
         if expect == EXPECT_SELECTOR and reading:
             self._add_selector_code(code, token)
-            code.add(self.ast_ADD_LAST_BLOCK_ELEMENT, expect) # 前のメッセージのセレクタになる
+            code.add(self.ast_ADD_ELEMENT_TO_LAST_MESSAGE, expect) # 前のメッセージのセレクタになる
             return code
 
         if expect == EXPECT_ARGUMENT:           
@@ -1085,7 +1143,7 @@ class MessageEngine():
             else:
                 code.add(self.arg_TYPED_VALUE, token, spec)            
             # 前のメッセージの引数になる
-            code.add(self.ast_ADD_LAST_BLOCK_ELEMENT, expect) 
+            code.add(self.ast_ADD_ELEMENT_TO_LAST_MESSAGE, expect) 
             return code
 
         if expect == EXPECT_RECIEVER:
@@ -1093,7 +1151,7 @@ class MessageEngine():
                 code.add(self.arg_STRING, token)
             else:
                 code.add(self.arg_RECIEVER_VALUE, token)
-            code.add(self.ast_ADD_LAST_BLOCK_ELEMENT, expect)
+            code.add(self.ast_ADD_ELEMENT_TO_LAST_MESSAGE, expect)
             return code
 
         if expect == EXPECT_NOTHING:
@@ -1103,12 +1161,13 @@ class MessageEngine():
                     code.add(self.arg_STRING, token)
                 else:
                     code.add(self.arg_RECIEVER_VALUE, token)
-                code.add(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_RECIEVER)
+                code.add(self.ast_ADD_NEW_MESSAGE)
                 return code
             else:
                 # 先行するメッセージの返り値をレシーバとするセレクタとする
+                code.add(self.arg_STACK_REF)
                 self._add_selector_code(code, token)
-                code.add(self.ast_ADD_ISOLATE_ELEMENT, TERM_TYPE_SELECTOR)
+                code.add(self.ast_ADD_NEW_MESSAGE)
                 return code
         
         raise BadExpressionError("Could not parse")
@@ -1153,7 +1212,7 @@ class MessageEngine():
     #  メッセージを構築する
     #
     @_ast_ADDER
-    def ast_ADD_LAST_BLOCK_ELEMENT(self, objs, ttpcode):
+    def ast_ADD_ELEMENT_TO_LAST_MESSAGE(self, objs, ttpcode):
         """ """
         obj = objs[0]
 
@@ -1167,13 +1226,13 @@ class MessageEngine():
             self._readings[-1].add_arg(obj)
 
     @_ast_ADDER
-    def ast_ADD_ELEMENT_AS_NEW_BLOCK(self, objs, ttpcode):
+    def ast_ADD_ELEMENT_AS_NEW_MESSAGE(self, objs, ttpcode):
         """ """
         if ttpcode == TERM_TYPE_RECIEVER:
             self._readings[-1].set_reciever(ResultStackRef())
 
         elif ttpcode == TERM_TYPE_SELECTOR:
-            self._readings[-1].set_selector(ResultStackRef()) # TODO
+            self._readings[-1].set_selector(ResultStackRef())
         
         elif ttpcode == TERM_TYPE_ARGUMENT:
             self._readings[-1].add_arg(ResultStackRef())
@@ -1182,18 +1241,19 @@ class MessageEngine():
         self._readings.append(new_msg)
 
     @_ast_ADDER
-    def ast_ADD_ISOLATE_ELEMENT(self, objs, ttpcode):
+    def ast_ADD_NEW_MESSAGE(self, objs):
         """ """
-        if ttpcode == TERM_TYPE_RECIEVER:
-            new_msg = Message(*objs)
-            self._readings.append(new_msg)
+        new_msg = Message(*objs)
+        self._readings.append(new_msg)
 
-        elif ttpcode == TERM_TYPE_SELECTOR:
-            new_msg = Message(ResultStackRef(), objs[0])
-            self._readings.append(new_msg)
-
-        else:
-            raise ValueError("???")
+    @_ast_ADDER
+    def ast_ADD_TWIN_NEW_MESSAGE(self, objs):
+        """ """
+        new_msg = Message(*objs, ResultStackRef()) # 最後の要素が次のメッセージ
+        self._readings.append(new_msg)
+        # 空のメッセージを追加する
+        new_msg = Message()
+        self._readings.append(new_msg)
 
     @_ast_BLOCK
     def ast_PUSH_BLOCK(self, _evalcontext):
@@ -1286,6 +1346,11 @@ class MessageEngine():
         return SelectorResolver(selector)
 
     @_ast_ARG
+    def arg_STACK_REF(self, context):
+        """ """
+        return ResultStackRef()
+
+    @_ast_ARG
     def arg_LAMBDA_ARG_MEMBER(self, context, name=None):
         """ """
         reciever = SubjectRef()
@@ -1373,16 +1438,20 @@ class MessageEngine():
 
         context.log(LOG_MESSAGE_END)
     
-    def finish(self, locals, *, raiseerror=False) -> Object:
+    def finish(self) -> Object:
         """ 結果を取得し、スタックをクリアする """
+        context = self._lastevalcxt.context
+        
+        if self._readings and not context.is_failed():
+            raise BadExpressionError("Unconcluded messages remain: " + self._readings) # 成功したのにメッセージが余っている
+        self._readings.clear()
+
         returns = self._lastevalcxt.locals.clear_local_objects() # 返り値はローカルスタックに置かれている
         if not returns:
             raise BadExpressionError("At least 1 result must be returned, but none on stack")
         ret = returns[-1]
-
-        self._readings.clear()
     
-        if raiseerror and ret.is_error(): # エラーを伝播する
+        if context.is_set_raise_error() and ret.is_error(): # エラーを伝播する
             raise ret.value.error
 
         return ret
@@ -1406,20 +1475,20 @@ class MessageEngine():
             subcontext = context 
         for _ in self.runner(subcontext, cache=cache):
             pass
-        return self.finish(subcontext, raiseerror=context.is_set_raise_error())
+        return self.finish()
 
     def run_here(self, context, *, cache=False) -> Object:
         """ 現在のコンテキストでメッセージを実行 """
         for _ in self.runner(context, cache=cache):
             pass
-        return self.finish(context, raiseerror=context.is_set_raise_error())
+        return self.finish()
 
     def run_step(self, subject, context, *, cache=False):
         """ 実行するたびにメッセージを返す """
         subcontext = self.start_subcontext(subject, context)
         for step in self.runner(subcontext, cache=cache):
             yield step
-        yield self.finish(subcontext, raiseerror=context.is_set_raise_error()) # Objectを返す
+        yield self.finish() # Objectを返す
     
     def run_print_step(self, subject, context, *, cache=False):
         """ 実行過程を表示する """

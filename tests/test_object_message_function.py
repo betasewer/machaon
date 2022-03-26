@@ -8,7 +8,7 @@ from machaon.core.message import (
 from machaon.process import TempSpirit
 from machaon.types.fundamental import fundamental_types
 
-from .macatester import parse_test
+from machaon.macatest import parse_test, run
 
 fundamental_type = fundamental_types()
 

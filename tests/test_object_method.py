@@ -130,7 +130,7 @@ def test_meta_method():
     cxt = instant_context()
     t = cxt.type_module.load_definition(SomeValue).load_type()
 
-    v = t.instantiate(2).construct(cxt, 3)
+    v = t.instantiate(cxt, [], [2]).construct(cxt, 3)
     assert isinstance(v, SomeValue)
     assert v.x == 3
     assert v.y == 6

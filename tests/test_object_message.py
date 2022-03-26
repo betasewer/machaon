@@ -2,7 +2,7 @@ from machaon.core.invocation import INVOCATION_FLAG_RAISE_ERROR, InvocationConte
 import pytest
 import re
 
-from .macatester import parse_test, put_instructions
+from machaon.macatest import parse_test, put_instructions, run
 
 from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, SequentialMessageExpression, parse_function, parse_sequential_function, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_types
@@ -21,10 +21,11 @@ def test_context(*, silent=False):
     return cxt
 
 def ptest(s, rhs, *, q=None):
-    context = test_context()
+    context = test_context(silent=True)
     parser = MessageEngine(s)
     lhso = parser.run_here(context)
     assert parse_test(parser, context, lhso.value, rhs, q)
+    return put_instructions(context, "; ")
 
 def pinstr(s):
     context = test_context(silent=True)
@@ -215,4 +216,25 @@ def test_root_message():
     from machaon.types.app import RootObject
     ptest("@@ =", RootObject, q=type_equals)
     ptest("@@context", InvocationContext, q=type_equals)   
+
+#
+def test_message_as_selector():
+    # 1引数のセレクタ
+    ptest("4 (sq + rt)", 2)
+    ptest("abc (1 + 1)", "c")
+    ptest("1234 ('Str' Type)", "1234")
+
+    # セレクタが続く
+    l = ptest("'450' ('Int' Type) * 2", 900)
+
+    # 2引数のセレクタ：引数が続く
+    l = ptest("4 (mu + l) 5", 20)
+
+def test_message_as_selector_multi_blocks():
+    # ブロックが2つ続く
+    l = ptest("(2 (mu + l) 5) ('Str' Type)", "10")
+    l = ptest("(2 (mu + l) 5) ('Str' Type) * 3", "101010")
+
+    # ブロックが3つ以上続く
+    l = ptest("(10 (ad + d) 2) ('Str' Type) (mu + l) (10 / 5 floor)", "1212")
 

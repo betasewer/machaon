@@ -3,7 +3,7 @@ from collections import OrderedDict, defaultdict
 from copy import copy
 
 from machaon.core.typedecl import PythonType, TypeProxy
-from machaon.core.symbol import normalize_typename, full_qualified_name
+from machaon.core.symbol import normalize_typename, full_qualified_name, disp_qualified_name
 
 # imported from...
 # desktop
@@ -39,9 +39,9 @@ class Object():
         else:
             ds = str(v)
         if isinstance(self.type, PythonType):
-            return "{}({})".format(ds, full_qualified_name(t))
+            return "{}({})".format(ds, disp_qualified_name(t))
         elif not self.type.check_value_type(t):
-            return "{}(!!{})".format(ds, full_qualified_name(t))
+            return "{}(!!{})".format(ds, disp_qualified_name(t))
         else:
             return ds
     

@@ -124,7 +124,7 @@ class ErrorObject():
             err = cause
         return ErrorObject(err, context=self.context)
 
-    def parser_log(self, app):
+    def log(self, app):
         """ @task
         メッセージ解析器のログを表示する。
         """
@@ -169,10 +169,10 @@ class ErrorObject():
         app.post("message", msg + "\n")
 
         app.post("message-em", "詳細情報は次のメソッドで：".format(title))
-        app.post("message", "parser-log")
-        app.post("message", "traceback [level]")
-        app.post("message", "traceback [level] vars")
-        app.post("message", "traceback [level] showall")
+        app.post("message", "log")
+        app.post("message", "tb [level]")
+        app.post("message", "tb [level] var [varname]")
+        app.post("message", "tb [level] showall")
 
 
 #

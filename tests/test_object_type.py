@@ -320,7 +320,6 @@ class AryType:
     def get(self):
         return (self.v, self.p1, self.p2)
 
-
 def test_type_params():
     cxt = instant_context()
     t = cxt.type_module.load_definition(AryType).load_type()

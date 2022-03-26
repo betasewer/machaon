@@ -1,6 +1,6 @@
 from machaon.core.symbol import (
     SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR, SIGIL_SUBTYPE_UNION,
-    BadTypename, full_qualified_name, PythonBuiltinTypenames
+    BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
 )
 
 METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
@@ -400,7 +400,7 @@ class PythonType(DefaultProxy):
         return self.type(value, *self.ctorargs)
 
     def stringify_value(self, value):
-        tn = full_qualified_name(type(value))
+        tn = disp_qualified_name(type(value))
         if type(value).__repr__ is object.__repr__:
             return "<{} id={:0X}>".format(tn, id(value))
         else:
@@ -408,7 +408,7 @@ class PythonType(DefaultProxy):
     
     def summarize_value(self, value):
         if type(value).__str__ is object.__str__:
-            return "<{} object>".format(full_qualified_name(type(value)))
+            return "<{} object>".format(disp_qualified_name(type(value)))
         else:
             return str(value)
 
@@ -644,7 +644,7 @@ class TypeDecl:
         self.ctorargs = ctorargs or []
     
     def __str__(self):
-        return self.display()
+        return self.to_string()
     
     def to_string(self):
         """ 型宣言を復元する 
@@ -672,32 +672,8 @@ class TypeDecl:
 
     def _instance_type(self, typedef, context, args=None) -> TypeProxy:
         """ Typeから型のインスタンスを作る """
-        # 型引数を作成
-        typeargs = [x.instance(context) for x in self.declargs]
-        # 非型引数を作成
-        ctorvalues = [*self.ctorargs, *(args or [])]
-        ctorargs = []
-        ihead = 0
-        for tp in typedef.get_type_params():
-            if tp.is_type():
-                continue
-            ct = tp.get_typedecl().instance(context)
-            if tp.is_variable():
-                cas = [ct.construct(context, x) for x in ctorvalues[ihead:]]
-                ctorargs.extend(cas)
-                ihead = -1
-            else:
-                if ihead < len(ctorvalues):
-                    ca = ct.construct(context, ctorvalues[ihead])
-                    ctorargs.append(ca)
-                else:
-                    break
-                ihead += 1
-        
-        if not typeargs and not ctorargs:
-            return typedef
-        else:
-            return TypeInstance(typedef, typeargs, ctorargs)
+        ctorargs = [*self.ctorargs, *(args or [])]
+        return typedef.instantiate(context, self.declargs, ctorargs)
     
     def instance(self, context, args=None) -> TypeProxy:
         """
@@ -744,6 +720,19 @@ class TypeDecl:
             return self._instance_type(td, context, args)
 
 
+class TypeInstanceDecl(TypeDecl):
+    """ 型インスタンスを保持し、TypeDeclと同じ振る舞いをする """
+    def __init__(self, inst):
+        super().__init__()
+        self.inst = inst
+    
+    def to_string(self):
+        return self.inst.get_conversion()
+
+    def instance(self, context, args=None) -> TypeProxy:
+        return self.inst
+
+
 class TypeDeclError(Exception):
     def __init__(self, itr, err) -> None:
         super().__init__(itr, err)
@@ -761,6 +750,8 @@ def parse_type_declaration(decl):
     Returns:
         TypeDecl:
     """
+    if isinstance(decl, TypeProxy):
+        return TypeInstanceDecl(decl)
     if not decl:
         raise BadTypename("<emtpy string>")    
     return _parse_typedecl(decl)

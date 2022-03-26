@@ -2,7 +2,7 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.typedecl import (
-    PythonType, TypeProxy, 
+    PythonType, TypeDecl, TypeProxy, 
     parse_type_declaration
 )
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
@@ -513,7 +513,7 @@ class InvocationContext:
             
             elif code == LOG_MESSAGE_CODE:
                 ccode = args[0]
-                printer(" instructions:")
+                printer(" instruction:")
                 for line in ccode.display_instructions():
                     printer("  {}".format(line))
 
@@ -616,12 +616,11 @@ class InvocationContext:
         for code, *values in self._log:
             if code == LOG_MESSAGE_CODE:
                 c = values[0]
-                for instrname, options, ainstrname, argvalues in c.instructions():
+                for instrname, options, args in c.instructions():
                     yield {
                         "instruction" : instrname,
                         "options" : options,
-                        "arg-instruction" : ainstrname,
-                        "arg-values" : argvalues,
+                        "args" : args,
                     }
 
     def get_subcontext(self, index):
@@ -1186,16 +1185,16 @@ class TypeConstructorInvocation(BasicInvocation):
     """
     def __init__(self, typeconversion, modifier=None):
         super().__init__(modifier)
-        self._typedecl = parse_type_declaration(typeconversion)
-    
+        self._type = parse_type_declaration(typeconversion)
+
     def get_method_name(self):
-        return self._typedecl.to_string()
+        return self._type.to_string()
 
     def get_method_doc(self):
-        return "型'{}'のコンストラクタ".format(self._typedecl.to_string())
+        return "型'{}'のコンストラクタ".format(self._type.to_string())
 
     def display(self):
-        return ("TypeConstructor", self._typedecl.to_string(), self.modifier_name())
+        return ("TypeConstructor", self._type.to_string(), self.modifier_name())
     
     def is_task(self):
         return False
@@ -1204,9 +1203,9 @@ class TypeConstructorInvocation(BasicInvocation):
         return False
 
     def prepare_invoke(self, context: InvocationContext, *argobjects):
-        argobj, *_args = argobjects
+        argobj, *args = argobjects
         # 型の実装を取得する
-        t = self._typedecl.instance(context)
+        t = self._type.instance(context, args)
         # 変換コンストラクタの呼び出しを作成
         arg = resolve_object_value(argobj)
         return InvocationEntry(self, t.construct, (context, arg), {})
@@ -1215,7 +1214,7 @@ class TypeConstructorInvocation(BasicInvocation):
         raise ValueError("型変換関数の実体は取得できません")
     
     def get_max_arity(self):
-        return 0xFFFF # 不明: 取得できないこともないか
+        return 0xFFFF # 不明: 取得できないことはないが、インスタンス化が必要
 
     def get_min_arity(self):
         return 0 # 後ろに続く引数はデフォルトでゼロ
@@ -1224,7 +1223,7 @@ class TypeConstructorInvocation(BasicInvocation):
         return None
     
     def get_result_spec(self):
-        return MethodResult(self._typedecl)
+        return MethodResult(self._type)
 
 
 class Bind1stInvocation(BasicInvocation):

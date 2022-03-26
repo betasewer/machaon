@@ -86,7 +86,7 @@ class Process:
     # メッセージ実行後のフロー
     def on_finish_process(self, context):
         # 返り値をオブジェクトとして配置する
-        ret = self.message.finish(context)
+        ret = self.message.finish()
         context.push_object(str(self.index), ret)
         
         # 実行時に発生した例外を確認する

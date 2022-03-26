@@ -139,6 +139,35 @@ class Type(TypeProxy):
         t._params = self._params.copy()
         t._mixin = self._mixin.copy()
         return t
+
+    def instantiate(self, context, typeargs, valueargs):
+        """ 型引数を束縛したインスタンスを生成する """
+        # 型引数を作成
+        typeargs = [x.instance(context) for x in typeargs]
+
+        # 非型引数を作成
+        ctorargs = []
+        ihead = 0
+        for tp in self._params:
+            if tp.is_type():
+                continue
+            ct = tp.get_typedecl().instance(context)
+            if tp.is_variable():
+                cas = [ct.construct(context, x) for x in valueargs[ihead:]]
+                ctorargs.extend(cas)
+                ihead = -1
+            else:
+                if ihead < len(valueargs):
+                    ca = ct.construct(context, valueargs[ihead])
+                    ctorargs.append(ca)
+                else:
+                    break
+                ihead += 1
+        
+        if not typeargs and not ctorargs:
+            return self # 引数がなければそのまま
+        else:
+            return TypeInstance(self, typeargs, ctorargs)
     
     #
     #
@@ -151,10 +180,6 @@ class Type(TypeProxy):
 
     def check_value_type(self, valtype):
         return issubclass(valtype, self.value_type)
-
-    def instantiate(self, *args):
-        # 型変換は行われない
-        return TypeInstance(self, ctorargs=args)
 
     def get_type_params(self):
         return self._params
@@ -329,8 +354,8 @@ class Type(TypeProxy):
             if not isinstance(s, str):
                 s = repr(s) # オブジェクトに想定されない値が入っている
             s = summary_escape(s)
-            if len(s) > 50:
-                return s[0:30] + "..." + s[-20:]
+            if len(s) > 100:
+                return s[0:50] + "..." + s[-47:]
             else:
                 return s
         return self.invoke_meta_method(*fns)
