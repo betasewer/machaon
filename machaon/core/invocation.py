@@ -8,10 +8,10 @@ from machaon.core.typedecl import (
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
 from machaon.core.method import MethodParameter, MethodResult
 from machaon.core.symbol import (
-    BadTypename,
+    BadTypename, 
     normalize_method_target, normalize_method_name, 
-    is_valid_object_bind_name, BadObjectBindName, full_qualified_name, 
-    SIGIL_DEFAULT_RESULT, SIGIL_SCOPE_RESOLUTION, BootModuleNames
+    is_valid_object_bind_name, BadObjectBindName, full_qualified_name, BootModuleNames,
+    SIGIL_SCOPE_RESOLUTION,
 )
 
 #
@@ -52,9 +52,6 @@ class RedirectUnresolvedInvocation(Exception):
 
 INVOCATION_RETURN_RECIEVER = "<reciever>"
 
-def _default_result_object(context):
-    return context.get_type("Str").new_object(SIGIL_DEFAULT_RESULT)
-
 def _new_process_error_object(context, error, objectType):
     from machaon.types.stacktrace import ErrorObject
     return objectType(context.get_type("Error"), ErrorObject(error, context=context))
@@ -77,9 +74,9 @@ class InvocationEntry():
         
         if self.invocation:
             mod = self.invocation.modifier
-            if mod & INVOCATION_REVERSE_ARGS:
+            if "REVERSE_ARGS" in mod:
                 # 引数逆転
-                self.args = reversed(self.args)
+                self.args = list(reversed(self.args))
     
     def clone(self):
         inv = InvocationEntry(self.invocation, self.action, self.args, self.kwargs, exception=self.exception)
@@ -172,13 +169,10 @@ class InvocationEntry():
 
         # Noneが返された
         if retval is None:
-            if self.invocation.modifier & INVOCATION_DEFAULT_RESULT:
-                return _default_result_object(context)
-            else:
-                return objectType(context.get_type("None"), None) # そのままNoneを返す
+            return objectType(context.get_type("None"), None) # そのままNoneを返す
         
         # NEGATEモディファイアを適用            
-        if self.invocation.modifier & INVOCATION_NEGATE_RESULT:
+        if "NEGATE_RESULT" in self.invocation.modifier:
             retval = not retval
         
         # 返り値型に値が適合しない場合は、型変換を行う
@@ -207,7 +201,7 @@ LOG_RUN_FUNCTION = 11
 def instant_return_test(context, value, typename):
     """ メソッド返り値テスト用 """
     from machaon.core.method import MethodResult
-    inv = BasicInvocation(0)
+    inv = BasicInvocation()
     entry = InvocationEntry(inv, None, (), {})
     decl = parse_type_declaration(typename)
     return entry.result_object(context, value=value, spec=MethodResult(decl))
@@ -513,24 +507,29 @@ class InvocationContext:
         subindex = None
         for code, *args in self._log:
             if code == LOG_MESSAGE_BEGIN:
-                source = args[0]
-                title = "message"
-                line = source
+                message = args[0]
+                printer(" start:")
+                printer("  {}".format(message))
+            
             elif code == LOG_MESSAGE_CODE:
                 ccode = args[0]
-                title = "term"
-                line = ccode.display_instructions()
+                printer(" instructions:")
+                for line in ccode.display_instructions():
+                    printer("  {}".format(line))
+
             elif code == LOG_MESSAGE_EVAL_BEGIN:
                 invindex = args[0]
-                title = "evaluating"
-                line = self.invocations[invindex].message.sexpr()
+                printer(" evaluated message:")
+                printer("  {}".format(self.invocations[invindex].message.sexpr()))
+
             elif code == LOG_MESSAGE_EVAL_END:
                 invindex = args[0]
-                title = "return"
-                line = str(self.invocations[invindex].result)
+                printer(" return value:")
+                printer("  {}".format(self.invocations[invindex].result))
+            
             elif code == LOG_MESSAGE_END:
-                title = "end-of-message"
-                line = ""
+                printer(" reached end")
+            
             elif code == LOG_RUN_FUNCTION:
                 if subindex is None: subindex = 0
                 subindex += 1
@@ -538,9 +537,6 @@ class InvocationContext:
             else:
                 raise ValueError("不明なログコード:"+",".join([code,*args]))
             
-            pad = 16-len(title)
-            printer(" {}:{}{}".format(title, pad*" ", line))
-
         if subindex is not None:
             title = "sub-contexts"
             if subindex > 1:
@@ -761,13 +757,6 @@ def instant_context(subject=None):
 # メソッドの実行
 #
 #
-INVOCATION_NEGATE_RESULT       = 0x001
-INVOCATION_REVERSE_ARGS        = 0x002
-INVOCATION_DELEGATED_RECIEVER  = 0x004
-INVOCATION_BASE_RECIEVER       = 0x008
-INVOCATION_SHOW_HELP           = 0x010
-INVOCATION_DEFAULT_RESULT      = 0x020
-
 def resolve_object_value(obj, spec=None):
     if spec and spec.is_object():
         return obj
@@ -786,14 +775,10 @@ def check_argument_value_type(context, spec, value):
 #
 #
 class BasicInvocation():
-    MOD_NEGATE_RESULT = INVOCATION_NEGATE_RESULT
-    MOD_REVERSE_ARGS = INVOCATION_REVERSE_ARGS
-    MOD_BASE_RECIEVER = INVOCATION_BASE_RECIEVER
-    MOD_SHOW_HELP = INVOCATION_SHOW_HELP
-    MOD_DEFAULT_RESULT = INVOCATION_DEFAULT_RESULT
-
-    def __init__(self, modifier):
-        self.modifier = modifier
+    def __init__(self, modifier=None):
+        self.modifier = modifier or set()
+        if isinstance(modifier, int):
+            raise TypeError("int modifier here, TO BE REMOVED")
     
     def set_modifier(self, modifier):
         self.modifier = modifier
@@ -817,16 +802,7 @@ class BasicInvocation():
 
     def modifier_name(self, straight=False):
         m = []
-        if self.modifier & INVOCATION_REVERSE_ARGS:
-            m.append("reverse-args")
-        if self.modifier & INVOCATION_NEGATE_RESULT:
-            m.append("negate")
-        if self.modifier & INVOCATION_BASE_RECIEVER:
-            m.append("basic")
-        if self.modifier & INVOCATION_DEFAULT_RESULT:
-            m.append("default")
-        if self.modifier & INVOCATION_SHOW_HELP:
-            m.append("help")
+        m.extend(x.lower().replace("_","-") for x in self.modifier)
         if not m and straight:
             m.append("straight")
         return " ".join(m)
@@ -869,7 +845,7 @@ class TypeMethodInvocation(BasicInvocation):
     """
     型に定義されたメソッドを呼び出す 
     """
-    def __init__(self, type, method, modifier=0):
+    def __init__(self, type, method, modifier=None):
         super().__init__(modifier)
         self.type = type
         self.method = method
@@ -1008,7 +984,7 @@ class InstanceMethodInvocation(BasicInvocation):
     """
     インスタンスに紐づいたメソッドを呼び出す
     """
-    def __init__(self, attrname, modifier=0, minarg=0, maxarg=0xFFFF):
+    def __init__(self, attrname, modifier=None, minarg=0, maxarg=0xFFFF):
         super().__init__(modifier)
         self.attrname = normalize_method_target(attrname)
         self.minarg = minarg
@@ -1064,7 +1040,7 @@ class FunctionInvocation(BasicInvocation):
     """
     インスタンスに紐づかない関数を呼び出す
     """
-    def __init__(self, function, modifier=0, minarg=0, maxarg=0xFFFF):
+    def __init__(self, function, modifier=None, minarg=0, maxarg=0xFFFF):
         super().__init__(modifier)
         self.fn = function
         self.minarg = minarg
@@ -1101,7 +1077,7 @@ class ObjectMemberInvocation(RedirectorInvocation):
     """
     ObjectCollectionのアイテムに対する呼び出し
     """
-    def __init__(self, name, modifier=0):
+    def __init__(self, name, modifier=None):
         super().__init__(modifier)
         self.name = name
     
@@ -1131,15 +1107,15 @@ class ObjectMemberInvocation(RedirectorInvocation):
 
         from machaon.core.message import select_method
         delg = collection.get_delegation()
-        if delg is not None and not (self.modifier & INVOCATION_BASE_RECIEVER):
+        if delg is not None and not ("BASIC_RECIEVER" in self.modifier):
             # delegate先オブジェクトのメンバを暗黙的に参照する
             self._resolved = select_method(self.name, delg.type, reciever=delg.value, modbits=self.modifier)
-            self.modifier |= INVOCATION_DELEGATED_RECIEVER
+            self.modifier.add("DELEGATE_RECIEVER")
         else:
             # ジェネリックなメソッドを参照する
             self._resolved = select_method(self.name, modbits=self.modifier)
             if isinstance(self._resolved, InstanceMethodInvocation): # ObjectCollectionのインスタンスメソッドは使用しない
-                self._resolved = TypeConstructorInvocation("None", 0) # Noneを返し、エラーにはしない
+                self._resolved = TypeConstructorInvocation("None") # Noneを返し、エラーにはしない
         
         self.must_be_resolved()
 
@@ -1150,7 +1126,7 @@ class ObjectMemberInvocation(RedirectorInvocation):
         self.resolve(colarg.value)
 
         # 呼び出しエントリを作成する
-        if self.modifier & INVOCATION_DELEGATED_RECIEVER:        
+        if "DELEGATE_RECIEVER" in self.modifier:        
             delg = colarg.value.get_delegation()
             if delg is None:
                 raise BadObjectMemberInvocation()
@@ -1163,7 +1139,7 @@ class ObjectMemberGetterInvocation(BasicInvocation):
     """
     ObjectCollectionのアイテムを取得する
     """
-    def __init__(self, name, typename, modifier=0):
+    def __init__(self, name, typename, modifier=None):
         super().__init__(modifier)
         self.typename = typename
         self.name = name
@@ -1208,7 +1184,7 @@ class TypeConstructorInvocation(BasicInvocation):
     """
     型コンストラクタを呼び出す
     """
-    def __init__(self, typeconversion, modifier):
+    def __init__(self, typeconversion, modifier=None):
         super().__init__(modifier)
         self._typedecl = parse_type_declaration(typeconversion)
     
@@ -1255,7 +1231,7 @@ class Bind1stInvocation(BasicInvocation):
     """
     第1引数を固定して呼び出す
     """
-    def __init__(self, method, arg, argtype, modifier=0):
+    def __init__(self, method, arg, argtype, modifier=None):
         super().__init__(modifier)
         self._method = method # TypeMethodInvocation
         self._arg = arg # Object

@@ -26,7 +26,7 @@ def test_modified_select():
 
     tm = select_method("!reg-search", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "Str:reg-search", "negate")
+    assert tm.display() == ("TypeMethod", "Str:reg-search", "negate-result")
 
     gm = select_method("~in", StrType)
     assert gm
@@ -34,7 +34,11 @@ def test_modified_select():
 
     gm = select_method("`=", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:identical", "basic")
+    assert gm.display() == ("TypeMethod", "GenericMethods:identical", "basic-reciever")
+    
+    gm = select_method("join?", StrType)
+    assert gm
+    assert gm.display() == ("TypeMethod", "Str:join", "show-help")
 
 
 def test_pytype_method_select():
@@ -67,7 +71,7 @@ def test_objcol_select():
     # メソッドの移譲
     dm = select_method("startswith", ColType, reciever=col)
     assert dm
-    assert dm.display() == ("ObjectMember", "startswith", "")
+    assert dm.display() == ("ObjectMember", "startswith", "delegate-reciever")
 
     # delegate無し
     col.set_delegation(None)

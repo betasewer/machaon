@@ -26,7 +26,7 @@ def test_desktop():
 def test_object_new():
     desk = ObjectCollection()
 
-    o = desk.new("obj-new", Int, 128)
+    o = desk.new("obj-new", 128, Int)
     assert o.name == "obj-new"
     assert o.value == 128
     assert o.type == Int

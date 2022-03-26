@@ -166,21 +166,20 @@ class ObjectCollection():
         return None
 
     # オブジェクトを新規作成
-    def new(self, name: str, type: TypeProxy, value: Any) -> ObjectCollectionItem:
-        if not isinstance(type, TypeProxy):
-            raise TypeError()
-        o = Object(type, value)
-        return self.push(name, o)
-
     def push(self, name: str, obj: Object) -> ObjectCollectionItem:
         # オブジェクトを追加
         if not isinstance(obj, Object):
-            raise TypeError()
+            raise TypeError("obj")
         newident = len(self._items)
         item = ObjectCollectionItem(newident, name, obj)
         self._items[newident] = item
         self._namemap[name].append(newident)
         return item
+
+    def new(self, name:str, value: Any, type: Any) -> ObjectCollectionItem:
+        if not isinstance(type, TypeProxy):
+            raise TypeError("type")
+        return self.push(name, type.new_object(value))
     
     def store(self, name: str, obj: Object) -> ObjectCollectionItem:
         # オブジェクトを代入

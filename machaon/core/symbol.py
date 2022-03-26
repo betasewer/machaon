@@ -1,3 +1,4 @@
+from select import select
 from typing import Tuple
 
 #
@@ -107,10 +108,17 @@ SIGIL_OBJECT_ID = "@"
 SIGIL_OBJECT_LAMBDA_MEMBER = "."
 SIGIL_OBJECT_ROOT_MEMBER = "@"
 SIGIL_SCOPE_RESOLUTION = "/"
-SIGIL_TRAILING_ARGS = ":"
-SIGIL_TRAILING_ARGS_END = ";"
+
+SIGIL_SELECTOR_NEGATE_RESULT        = "!"
+SIGIL_SELECTOR_REVERSE_ARGS         = "~"
+SIGIL_SELECTOR_BASIC_RECIEVER       = "`"
+SIGIL_SELECTOR_TRAILING_ARGS        = ":"
+SIGIL_SELECTOR_CONSUME_ARGS         = ":>"
+SIGIL_SELECTOR_SHOW_HELP            = "?"
+
+SIGIL_END_TRAILING_ARGS = ";"
 SIGIL_DISCARD_MESSAGE = "."
-SIGIL_DEFAULT_RESULT = "-"
+
 SIGIL_TYPE_INDICATOR = "::"
 QUOTE_ENDPARENS = {
     "[" : "]",
@@ -121,6 +129,7 @@ QUOTE_ENDPARENS = {
     "【" : "】",
     "《" : "》",
 }
+
 
 # 型名
 SIGIL_PYMODULE_DOT = "."

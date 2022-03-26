@@ -642,7 +642,7 @@ class Method():
         self.target = "<loaded from dict>"
         self.flags |= METHOD_LOADED
 
-    def make_invocation(self, mods=0, type=None):
+    def make_invocation(self, mods=None, type=None):
         """ 適した呼び出しオブジェクトを作成する """
         if self.flags & METHOD_INVOKEAS_BOUND_METHOD or self.flags & METHOD_INVOKEAS_PROPERTY:
             if not isinstance(self._action, InstanceBoundAction):

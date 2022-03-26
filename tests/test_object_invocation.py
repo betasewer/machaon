@@ -9,7 +9,6 @@ from machaon.core.invocation import (
 from machaon.core.object import ObjectCollection, Object
 from machaon.types.fundamental import fundamental_types
 from machaon.core.type import full_qualified_name
-from machaon.core.method import Method, MethodParameter, MethodResult
 
 fundamental_type = fundamental_types()
 
@@ -35,7 +34,7 @@ def test_function():
     assert get_first_result(ent)
     assert get_first_result(ent).value == plus2mul(2,3)
 
-    inv = FunctionInvocation(divide, modifier=BasicInvocation.MOD_REVERSE_ARGS)
+    inv = FunctionInvocation(divide, modifier={"REVERSE_ARGS"})
     ent = InvocationEntry(inv, inv.get_action(), (4,2), {})
     ent.invoke(cxt)
     assert get_first_result(ent)
@@ -132,8 +131,8 @@ def test_objectref():
     assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
     assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "Str"
 
-    # generic method (明示的にCollectionを参照する)
-    inv = ObjectMemberInvocation("=", BasicInvocation.MOD_BASE_RECIEVER)
+    # generic method (BASIC_RECIEVERで明示的にCollectionを参照する)
+    inv = ObjectMemberInvocation("=", {"BASIC_RECIEVER"})
     assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
     assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"
 
