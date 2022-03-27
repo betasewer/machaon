@@ -72,19 +72,31 @@ def test_decl_fail_3():
 #
 def test_decl_instance():
     cxt = instant_context()
+
+    # 引数なし
     assert parse_("Int").instance(cxt) is cxt.get_type("Int")
     assert isinstance(cxt.get_type("Sheet"), Type)
-    assert isinstance(parse_("Sheet").instance(cxt), Type) # 引数なし
+    assert isinstance(parse_("Sheet").instance(cxt), TypeInstance) # Anyが束縛される
     
+    # declで束縛
     d = parse_("Sheet[Int](@, length)").instance(cxt)
     assert isinstance(d, TypeInstance)
     assert d is not cxt.get_type("Sheet")
     assert d.get_typedef() is cxt.get_type("Sheet")
-    assert d.typeargs[0] is cxt.get_type("Int")
-    assert d.ctorargs[0] == "@"
-    assert d.ctorargs[1] == "length"
+    assert len(d.args) == 3
+    assert d.args[0] is cxt.get_type("Int")
+    assert d.args[1] == "@"
+    assert d.args[2] == "length"
     assert d.get_typename() == "Sheet"
-    assert d.get_conversion() == "Sheet[Int](@, length)"
+    assert d.get_conversion() == "Sheet: Int @ length"
+    
+    # declとinstanceで束縛
+    d = parse_("Sheet[Int]").instance(cxt, ["length", "@"])
+    assert len(d.args) == 3
+    assert d.args[0] is cxt.get_type("Int")
+    assert d.args[1] == "length"
+    assert d.args[2] == "@"
+    assert d.get_conversion() == "Sheet: Int length @" 
 
 
 def test_decl_syntax_check():

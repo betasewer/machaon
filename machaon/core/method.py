@@ -8,9 +8,13 @@ from typing import (
 import types
 import inspect
 
+from machaon.core.object import Object
 from machaon.core.symbol import normalize_method_target, normalize_method_name
 from machaon.core.docstring import parse_doc_declaration
-from machaon.core.typedecl import TypeDecl, parse_type_declaration, TypeConversionError, make_conversion_from_value_type
+from machaon.core.typedecl import (
+    TypeDecl, parse_type_declaration, TypeConversionError, 
+    make_conversion_from_value_type
+)
 
 # imported from...
 # type
@@ -90,6 +94,9 @@ class BadMetaMethod(Exception):
 class MethodParameterNoDefault:
     pass
 
+class MethodParameterDefault:
+    pass
+
 #
 #
 #
@@ -97,7 +104,7 @@ class Method():
     """ @type
     メソッド定義。
     """
-    def __init__(self, name = None, target = None, doc = "", flags = 0, mixin = None):
+    def __init__(self, name = None, target = None, doc = "", flags = 0, mixin = None, *, params = None, result = None):
         self.name: str = name
         self.doc: str = doc
 
@@ -106,8 +113,8 @@ class Method():
         self.flags = flags
 
         self._action = None
-        self.params = []    # List[MethodParameter]
-        self.result = None  # Optional[MethodResult]
+        self.params: List[MethodParameter] = params or []    # List[MethodParameter]
+        self.result: Optional[MethodResult] = result          # Optional[MethodResult]
 
     def check_valid(self):
         if self.name is None:
@@ -303,15 +310,49 @@ class Method():
             if index == -1:
                 return self.params[0]
             index = index + 1
-        if index<0 or len(self.params)<=index:
-            return None
-        return self.params[index]
+        if 0 <= index:
+            if len(self.params) <= index:
+                if self.params and self.params[-1].is_variable():
+                    return self.params[-1]
+                else:
+                    return None
+            return self.params[index]
+        return None
     
     def get_param_count(self):
-        """ 仮引数の数 """
+        """ 仮引数の数: 可変長引数はカウントしない """
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
         return len(self.params)
+
+    def make_argument_row(self, context, argobjs, *, construct=False):
+        """ 
+        実引数の列を生成する。
+        reciever-paramは含まれない
+        Returns:
+            List[Object]:
+        """
+        args: List[Tuple[MethodParameter, Any]] = []
+        ihead = 0
+        for i, tp in enumerate(self.params):
+            if self.has_reciever_param() and i == 0:
+                continue
+            elif tp.is_variable():
+                args.extend((tp, x) for x in argobjs[ihead:])
+                ihead = -1
+            else:
+                if ihead < len(argobjs):
+                    args.append((tp, argobjs[ihead]))
+                else:
+                    break
+                ihead += 1        
+        
+        argvalues = []
+        for tp, valueo in args:
+            avalue = tp.make_argument_value(context, valueo, construct=construct)
+            argvalues.append(avalue)
+
+        return argvalues
 
     # 返り値宣言を追加
     def add_result(self, 
@@ -734,7 +775,7 @@ class Method():
 #
 #
 class MethodParameter():
-    def __init__(self, name, typedecl, doc, default=None, flags=0):
+    def __init__(self, name, typedecl=None, doc="", default=None, flags=0):
         self.name = name
         self.doc = doc
         self.default = default
@@ -791,6 +832,63 @@ class MethodParameter():
     
     def get_typedecl(self):
         return self.typedecl
+        
+    def make_argument_value(self, context, obj, typeinst=None, *, construct=False):
+        """ オブジェクトから値を取り出し型を検査する """
+        if isinstance(obj, Object):
+            construct = False
+        
+        if self.is_object():
+            if construct:
+                return context.new_object(obj)
+            else:
+                return obj
+        elif self.is_type_uninstantiable():
+            if construct:
+                raise ValueError("cannot be constructed")
+            else:
+                return obj.value
+        else:
+            if construct:
+                usedefault = obj is MethodParameterDefault
+            else:
+                usedefault = obj.value is MethodParameterDefault
+            if usedefault and not self.is_required():
+                return self.default
+            
+            t = typeinst or self.get_typedecl().instance(context)
+            if construct:
+                try:
+                    value = t.construct(context, obj)
+                except Exception as e:
+                    raise ArgumentTypeError(self, obj, str(e)) from e
+            else:
+                value = obj.value
+            
+            if not t.check_value_type(type(value)):
+                raise ArgumentTypeError(self, value)
+
+            return value
+
+
+class ArgumentTypeError(Exception):
+    def __init__(self, spec, value, cause=None):
+        super().__init__()
+        self.spec = spec
+        self.value = value
+        self.cause = cause
+    
+    def __str__(self):
+        if hasattr(self.spec, "name"):
+            spec = "引数'{}'の型'{}'".format(self.spec.name, self.spec.typename)
+        else:
+            spec = "型'{}'".format(self.spec.typename)
+        value = repr(self.value)
+        s = "{}は{}に適合しません".format(value, spec)
+        if self.cause:
+            s += "\n型変換エラー: {}".format(self.cause)
+        return s
+
 
 #
 #
@@ -933,6 +1031,9 @@ class MetaMethod():
     
     def has_no_extra_params(self):
         return (self.flags & METHOD_META_NOEXTRAPARAMS) > 0
+
+    def get_param(self):
+        return self._ctorparam
     
     def load_from_docstring(self, decl):
         """
@@ -967,7 +1068,7 @@ class MetaMethod():
             p = MethodParameter(name, typedecl, doc, flags=flags)
             self._ctorparam = p
 
-    def prepare_invoke_args(self, context, typeparams, value, typeinst, *moreargs):
+    def prepare_invoke_args(self, context, typeparams, value, typeargs, *moreargs):
         """ メソッド実行時に渡す引数を準備する """        
         # コンストラクタ引数の型をチェックする
         if self._ctorparam and context is not None:
@@ -987,34 +1088,8 @@ class MetaMethod():
             return args
 
         # 引数を集める
-        if typeinst:
-            thead = 0
-            nthead = 0
-            for tp in typeparams:
-                if tp.is_type():
-                    # 型引数
-                    if thead < len(typeinst.type_args):
-                        ta = typeinst.type_args[thead]
-                    else:
-                        ta = None
-                    thead += 1
-                    args.append(ta)
-                else:
-                    # 非型引数
-                    if tp.is_variable():
-                        ntas = typeinst.constructor_args[nthead:]
-                        args.extend(ntas)
-                        nthead = -1
-                    else:
-                        if nthead < len(typeinst.constructor_args):
-                            nta = typeinst.constructor_args[nthead]
-                        else:
-                            if tp.is_required():
-                                break
-                            else:
-                                nta = None
-                        nthead += 1
-                        args.append(nta)
+        if typeargs:
+            args.extend(typeargs)
         else:
             # デフォルト型引数をセット
             for tp in typeparams:

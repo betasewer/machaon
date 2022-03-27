@@ -148,7 +148,10 @@ class TypeProxy:
 
     def rebind_constructor(self, args):
         """ コンストラクタ引数を新たに束縛しなおしたインスタンスを作成する """
-        raise NotImplementedError()
+        t = self.get_typedef()
+        if t is None:
+            raise ValueError("No typedef is available")
+        return TypeInstance(t, args)
 
     def stringify_value(self, value):
         raise NotImplementedError()
@@ -279,11 +282,10 @@ class TypeInstance(RedirectProxy):
     """
     引数を含むインスタンス
     """
-    def __init__(self, type, typeargs=None, ctorargs=None):
+    def __init__(self, type, args=None):
         self.type = type
-        self.typeargs = typeargs or [] # TypeInstance
-        self.ctorargs = ctorargs or []
-    
+        self._args = args or []
+
     def get_typedef(self):
         return self.type
 
@@ -299,16 +301,17 @@ class TypeInstance(RedirectProxy):
     def get_conversion(self):
         n = ""
         n += self.type.typename
-        if self.typeargs:
-            n += "["
-            n += ", ".join([x.get_conversion() for x in self.typeargs])
-            n += "]"
-        if self.ctorargs:
-            if not self.typeargs:
-                n += "[]"
-            n += "("
-            n += ", ".join(self.ctorargs)
-            n += ")"
+        if self.args:
+            strs = []
+            for a in self.args:
+                if isinstance(a, TypeProxy):
+                    x = a.get_conversion()
+                    if " " in x:
+                        x = "({})".format(x)
+                else:
+                    x = str(a)
+                strs.append(x)
+            n += ": " + " ".join(strs)
         return n
 
     def constructor(self, context, value):
@@ -327,16 +330,8 @@ class TypeInstance(RedirectProxy):
         return self.type.reflux_value(value, self)
 
     @property
-    def type_args(self):
-        return self.typeargs
-    
-    @property
-    def constructor_args(self):
-        return self.ctorargs
-    
-    @property
     def args(self):
-        return [*self.typeargs, *self.ctorargs]
+        return self._args
 
 
 class PythonType(DefaultProxy):
@@ -670,10 +665,45 @@ class TypeDecl:
             elems += ")"
         return elems
 
-    def _instance_type(self, typedef, context, args=None) -> TypeProxy:
+    def instance_type(self, typedef, context, args=None) -> TypeProxy:
         """ Typeから型のインスタンスを作る """
-        ctorargs = [*self.ctorargs, *(args or [])]
-        return typedef.instantiate(context, self.declargs, ctorargs)
+        def construct_args(params, typeargs, valueargs):
+            i, j = 0, 0
+            for tp in params:
+                if tp.is_type():
+                    if i < len(typeargs):
+                        yield typeargs[i].instance(context)
+                    elif tp.is_required():
+                        raise ValueError("必須の型引数'{}'が指定されていません".format(tp.name))
+                    else:
+                        from machaon.core.method import MethodParameterDefault
+                        yield MethodParameterDefault
+                    i += 1
+                elif tp.is_variable():
+                    yield from valueargs[j:]
+                    j += len(valueargs)-j
+                else:
+                    if j < len(valueargs):
+                        yield valueargs[j]
+                    j += 1
+        
+        params = typedef.get_type_params()
+        if args:
+            if self.declargs:
+                argvals = construct_args(params, self.declargs, args) # 非型変数のみの置き換え
+            else:
+                argvals = iter(args) # 丸ごと置き換え
+        else:
+            argvals = construct_args(params, self.declargs, self.ctorargs)
+            
+        from machaon.core.method import Method
+        method = Method(params=params)
+        if method.get_param_count() > 0:
+            argvals = method.make_argument_row(context, list(argvals), construct=True)
+            if argvals:
+                return TypeInstance(typedef, argvals)
+        
+        return typedef # 引数がなければそのまま
     
     def instance(self, context, args=None) -> TypeProxy:
         """
@@ -703,7 +733,7 @@ class TypeDecl:
                     identity = True
                     continue
                 td = context.get_subtype(baset.typename, decl.typename)
-                t = decl._instance_type(td, context, args)
+                t = decl.instance_type(td, context)
                 subtypes.append(t)
             return SubType(baset, *subtypes, identity=identity)
         elif SIGIL_PYMODULE_DOT in self.typename: 
@@ -717,7 +747,19 @@ class TypeDecl:
             td = context.select_type(typename)
             if td is None:
                 raise BadTypename(typename)
-            return self._instance_type(td, context, args)
+            return self.instance_type(td, context, args)
+
+    def instantiate_constructor_method(self, type):
+        """ 引数を再束縛するシグニチャを提供する """
+        t = type.get_typedef()
+        if t is None:
+            raise ValueError("Type, TypeInstance以外の引数束縛には対応しません")
+        if self.declargs:
+            ps = [x for x in t.get_type_params() if not x.is_type()] # 非型変数のみ
+        else:
+            ps = t.get_type_params()
+        from machaon.core.method import Method
+        return Method(params=ps)
 
 
 class TypeInstanceDecl(TypeDecl):
@@ -725,13 +767,18 @@ class TypeInstanceDecl(TypeDecl):
     def __init__(self, inst):
         super().__init__()
         self.inst = inst
-    
+
     def to_string(self):
         return self.inst.get_conversion()
 
     def instance(self, context, args=None) -> TypeProxy:
         return self.inst
 
+    def instantiate_constructor_method(self, type):
+        """ 束縛を行わない """
+        from machaon.core.method import Method
+        return Method(params=[])
+    
 
 class TypeDeclError(Exception):
     def __init__(self, itr, err) -> None:

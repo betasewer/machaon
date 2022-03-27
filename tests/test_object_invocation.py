@@ -3,7 +3,7 @@ import re
 from machaon.core.invocation import (
     InvocationEntry, BasicInvocation, TypeMethodInvocation, 
     InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
-    Bind1stInvocation, 
+    Bind1stInvocation, TypeConstructorInvocation,
     instant_context
 )
 from machaon.core.object import ObjectCollection, Object
@@ -148,5 +148,57 @@ def test_bind1st():
     arg = cxt.new_object("aiueo", type="str")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() is True
 
+from machaon.macatest import run
+
+@run
+def test_type_constructor():
+    cxt = instant_context()
+
+    # 引数なし
+    inv = TypeConstructorInvocation("Complex")
+    arg = cxt.new_object("1+3j", type="str")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction() == 1+3j
+
+    inv = TypeConstructorInvocation("Int")
+    arg = cxt.new_object("456", type="str")
+    assert inv.prepare_invoke(cxt, arg)._invokeaction() == 456
+    
+    inv = TypeConstructorInvocation("Sheet")
+    arg1 = cxt.new_object(["0","1","2"], type="Tuple")
+    sht = inv.prepare_invoke(cxt, arg1)._invokeaction()
+    assert [x.value for x in sht.row_values(0)] == ["0"]
+
+    # 引数あり + TypeDecl + 引数で指定
+    inv = TypeConstructorInvocation("Sheet")
+    arg1 = cxt.new_object(["1","2","3"], type="Tuple")
+    arg2 = cxt.new_object("Int", type="Type")
+    arg3 = cxt.new_object("positive")
+    arg4 = cxt.new_object("negative")
+    sht = inv.prepare_invoke(cxt, arg1, arg2, arg3, arg4)._invokeaction()
+    assert [x.value for x in sht.row_values(0)] == [1, -1]
+    assert sht.get_current_column_names() == ["positive", "negative"]
+
+    # 引数あり + TypeDecl + TypeDeclで指定
+    inv = TypeConstructorInvocation("Sheet[Int](positive,negative)")
+    arg1 = cxt.new_object(["4","5","6"], type="Tuple")
+    sht = inv.prepare_invoke(cxt, arg1)._invokeaction()
+    assert sht.get_current_column_names() == ["positive", "negative"]
+    assert [x.value for x in sht.row_values(0)] == [4, -4]
+
+    # 引数あり + TypeDecl + 引数とTypeDeclの両方で指定
+    inv = TypeConstructorInvocation("Sheet[Int](positive)")
+    arg1 = cxt.new_object(["7","8","9"], type="Tuple")
+    arg2 = cxt.new_object("negative")
+    sht = inv.prepare_invoke(cxt, arg1, arg2)._invokeaction()
+    assert [x.value for x in sht.row_values(0)] == [-7]
+    assert sht.get_current_column_names() == ["negative"]
+
+    # 引数あり + TypeInstanceで指定
+    t = cxt.instantiate_type("Sheet", "Int", "positive", "negative")
+    inv = TypeConstructorInvocation(t)
+    arg1 = cxt.new_object(["11","12","13"], type="Tuple")
+    sht = inv.prepare_invoke(cxt, arg1)._invokeaction()
+    assert [x.value for x in sht.row_values(2)] == [13, -13]
+    assert sht.get_current_column_names() == ["positive", "negative"]
 
 

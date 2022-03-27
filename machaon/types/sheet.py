@@ -358,7 +358,7 @@ class Sheet():
         """ @method
         ある行をタプルで得る。
         Params:
-            index(Str): 行番号
+            index(Int): 行番号
         Returns:
             Tuple:
         """
@@ -781,7 +781,7 @@ class Sheet():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, itemtype, *column_names):
+    def constructor(self, context, value, itemtype=None, *column_names):
         """ @meta context
         Params:
             Any: イテラブル型

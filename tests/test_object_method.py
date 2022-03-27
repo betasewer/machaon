@@ -130,11 +130,34 @@ def test_meta_method():
     cxt = instant_context()
     t = cxt.type_module.load_definition(SomeValue).load_type()
 
-    v = t.instantiate(cxt, [], [2]).construct(cxt, 3)
+    p = t.get_constructor_param()
+    assert p is not None
+    assert p.get_typename() == "int"
+
+    ps = t.get_type_params()
+    assert len(ps) == 2
+    assert ps[0].get_typename() == "Type"
+    assert ps[1].get_typename() == "int"
+
+    ti = t.instantiate(cxt, ["Any", 2])
+    assert len(ti.args) == 2
+    assert ti.args[0].get_typename() == "Any"
+    assert ti.args[1] == 2
+
+    meta = ti.get_typedef().get_meta_method("constructor")
+    cargs = meta.prepare_invoke_args(cxt, ti.get_typedef().get_type_params(), 999, ti.args)
+    assert len(cargs) == 3
+    assert cargs[0] == 999
+    assert cargs[1].get_typename() == "Any"
+    assert cargs[2] == 2
+
+    from machaon.core.typedecl import TypeAny
+
+    v = ti.construct(cxt, 3)
     assert isinstance(v, SomeValue)
     assert v.x == 3
     assert v.y == 6
-    assert v.itemtype is None
+    assert isinstance(v.itemtype, TypeAny)
 
     decl = parse_type_declaration("SomeValue[Str](42)")
     t = decl.instance(cxt)

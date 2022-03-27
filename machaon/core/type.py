@@ -2,6 +2,7 @@ from collections import defaultdict
 
 from typing import Any, Sequence, Union, Callable, ItemsView, Optional, Generator, DefaultDict
 from typing import List, Dict, Tuple
+from machaon.core.object import Object
 
 from machaon.core.symbol import (
     BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, 
@@ -14,7 +15,7 @@ from machaon.core.typedecl import (
     METHODS_BOUND_TYPE_INSTANCE
 )
 from machaon.core.method import (
-    BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, 
+    METHOD_HAS_RECIEVER_PARAM, PARAMETER_REQUIRED, BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, 
     make_method_from_dict, make_method_prototype, meta_method_prototypes, 
     Method, MetaMethod, MethodParameter,
     parse_type_declaration, parse_result_line, parse_parameter_line, 
@@ -140,35 +141,10 @@ class Type(TypeProxy):
         t._mixin = self._mixin.copy()
         return t
 
-    def instantiate(self, context, typeargs, valueargs):
-        """ 型引数を束縛したインスタンスを生成する """
-        # 型引数を作成
-        typeargs = [x.instance(context) for x in typeargs]
+    def instantiate(self, context, args):
+        """ 型引数を型変換し、束縛したインスタンスを生成する """
+        return TypeDecl().instance_type(self, context, args)
 
-        # 非型引数を作成
-        ctorargs = []
-        ihead = 0
-        for tp in self._params:
-            if tp.is_type():
-                continue
-            ct = tp.get_typedecl().instance(context)
-            if tp.is_variable():
-                cas = [ct.construct(context, x) for x in valueargs[ihead:]]
-                ctorargs.extend(cas)
-                ihead = -1
-            else:
-                if ihead < len(valueargs):
-                    ca = ct.construct(context, valueargs[ihead])
-                    ctorargs.append(ca)
-                else:
-                    break
-                ihead += 1
-        
-        if not typeargs and not ctorargs:
-            return self # 引数がなければそのまま
-        else:
-            return TypeInstance(self, typeargs, ctorargs)
-    
     #
     #
     #
@@ -181,9 +157,15 @@ class Type(TypeProxy):
     def check_value_type(self, valtype):
         return issubclass(valtype, self.value_type)
 
+    def get_constructor_param(self):
+        meta = self._metamethods.get("constructor")
+        if meta:
+            return meta.get_param()
+        return None
+
     def get_type_params(self):
         return self._params
-    
+
     #
     def is_none_type(self):
         return self.flags & TYPE_NONETYPE > 0
@@ -388,12 +370,17 @@ class Type(TypeProxy):
             return self.stringify_value(value, typeinst) # 文字に変換する
         return self.invoke_meta_method(*fns)
 
+    def get_meta_method(self, name):
+        """ メタメソッドの定義を取得する """
+        return self._metamethods.get(name)
+
     def resolve_meta_method(self, name, context, value, typeinst, *moreargs):
         """ メソッドと引数の並びを解決する """
         fn = self._metamethods.get(name)
         if fn is None:
             return None
-        args = fn.prepare_invoke_args(context, self._params, value, typeinst, *moreargs)
+        typeargs = typeinst.args if typeinst else []
+        args = fn.prepare_invoke_args(context, self._params, value, typeargs, *moreargs)
         return (fn, *args)
 
     def invoke_meta_method(self, method, *args, **kwargs):
@@ -786,6 +773,7 @@ class TypeDefinition():
         for line in sections.get_lines("Params"):
             typename, name, doc, flags = parse_parameter_line(line.strip())
             typedecl = parse_type_declaration(typename)
+            flags &= ~PARAMETER_REQUIRED # 全てオプショナル引数にする
             p = MethodParameter(name, typedecl, doc, flags=flags)
             self.params.append(p)
 

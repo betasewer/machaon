@@ -1,11 +1,14 @@
 from machaon.core.invocation import INVOCATION_FLAG_RAISE_ERROR, InvocationContext, _new_process_error_object
 import pytest
 import re
+from machaon.core.typedecl import TypeProxy
 
 from machaon.macatest import parse_test, put_instructions, run
 
 from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, SequentialMessageExpression, parse_function, parse_sequential_function, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_types
+from machaon.core.typedecl import parse_type_declaration
+
 fundamental_type = fundamental_types()
 
 def test_context(*, silent=False):
@@ -21,7 +24,7 @@ def test_context(*, silent=False):
     return cxt
 
 def ptest(s, rhs, *, q=None):
-    context = test_context(silent=True)
+    context = test_context(silent=False)
     parser = MessageEngine(s)
     lhso = parser.run_here(context)
     assert parse_test(parser, context, lhso.value, rhs, q)
@@ -188,10 +191,31 @@ def test_string_literals():
     ptest("--/0x7F/ as Int", 0x7F)
     ptest("--/3+5j/ as Complex", 3+5j)
 
+#@run
 def test_constructor():
     ptest("1 Int", 1)
     ptest("1 Int + (2 Int)", 3)
     ptest("10 Int + ((20 Int) Float)", 30.0)
+
+    # 引数あり
+    def deep_equals(l, r):
+        if len(l) != len(r):
+            return False
+        for ll, rr in zip(l, r):
+           if ll != rr:
+               return False
+        return True
+
+    ptest("1 /+ 2 /+ 3 Sheet: Int positive negative ; row_values 1", [2,-2], q=deep_equals)
+
+    # ブロック型
+    def type_equals(l, r):
+        if not isinstance(l,TypeProxy):
+            return False
+        return l.get_conversion() == r
+
+    ptest("Sheet: Int positive negative", "Sheet: Int positive negative", q=type_equals)
+
 
 def test_object_ref():
     # object ref

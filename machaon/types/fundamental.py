@@ -56,6 +56,16 @@ class TypeType():
         value = type.construct(context, s)
         return Object(type, value)
 
+    def instance(self, type, context, *args):
+        """ @method context
+        型引数を束縛した型インスタンスを作成する。
+        Params:
+            *args(Any):
+        Returns:
+            Type:
+        """
+        return type.get_typedef().instantiate(context, args)
+
     def help(self, typ, context, value=None):
         """ @method context
         型の説明、メソッド一覧を表示する。

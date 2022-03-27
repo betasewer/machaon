@@ -333,10 +333,15 @@ def test_type_params():
     assert t.get_type_params()[2].get_typename() == "int"
 
     decl = parse_type_declaration("AryType[](42)")
+    assert len(decl.declargs) == 0
+    assert len(decl.ctorargs) == 1
+
+    from machaon.core.typedecl import TypeAny
+
     t = decl.instance(cxt)
-    assert len(t.type_args) == 0
-    assert len(t.constructor_args) == 1
-    assert t.constructor_args[0] == 42
+    assert len(t.args) == 2
+    assert t.args[0] is None
+    assert t.args[1] == 42
     v = t.construct(cxt, 111)
 
     assert v.get() == (111, 42, None)

@@ -232,7 +232,7 @@ def test_message_sequential_function():
             "operator" : "Str",
         })
     
-    assert fn.memberspecs["values"].get_conversion() == "Tuple[Int]"
+    assert fn.memberspecs["values"].get_conversion() == "Tuple: Int"
     assert fn.memberspecs["operator"].get_conversion() == "Str"
     r = fn({"values" : [7,8,9], "operator" : "+"})
     assert isinstance(r, int)

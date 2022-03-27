@@ -4,6 +4,7 @@ import ast
 from itertools import zip_longest
 
 from machaon.core.symbol import (
+    BadTypename,
     PythonBuiltinTypenames,
     SIGIL_OBJECT_ID,
     SIGIL_OBJECT_LAMBDA_MEMBER,
@@ -97,9 +98,6 @@ class Message:
         if arg is None:
             raise TypeError()
         self.args.append(arg)
-    
-    def start_trailing_args(self):
-        self._argtrailing = True
     
     def is_reciever_specified(self):
         return self.reciever is not None
@@ -209,6 +207,10 @@ class Message:
             sel = ObjectSelectorResolver(obj)
         if isinstance(sel, SelectorResolver):
             sel = sel.resolve(evalcontext, self.reciever)
+
+        if "TRAILING_ARGS" in sel.modifier:
+            self._argtrailing = True
+
         self.selector = sel
         
         return True
@@ -460,8 +462,9 @@ def select_type(context, typeexpr):
     Returns:
         Optional[Object]:
     """
-    tt = context.select_type(typeexpr)
-    if tt is None:
+    try:
+        tt = context.instantiate_type(typeexpr)
+    except BadTypename:
         return None
     return context.get_type("Type").new_object(tt)
 
@@ -477,24 +480,6 @@ def select_literal(context, literal):
     except Exception:
         value = literal
     return value_to_obj(context, value)
-
-def select_reciever(context, expression):
-    """ 型もしくは基本型の値 
-    Params:
-        expression(str):
-    Returns:
-        Object:
-    """
-    # 型名の可能性
-    if expression and expression[0].isupper():
-        ot = select_type(context, expression)
-        if ot:
-            if ot.value.is_none_type():
-                return context.get_type("None").new_object(None) # Noneの型はレシーバの文脈ではNoneの値にする
-            return ot
-
-    # リテラルだった
-    return select_literal(context, expression)
 
 def value_to_obj(context, value):
     typename = type(value).__name__
@@ -1174,8 +1159,6 @@ class MessageEngine():
 
     def _add_selector_code(self, code, selector_token):
         selector = AffixedSelector(selector_token)
-        if selector.has("TRAILING_ARGS"):
-            code.add(self.ast_START_TRAILING_ARGS)
         if selector.has("SHOW_HELP"):
             code.add(self.ast_SET_AS_SELECTOR_RETURNER)
         code.add(self.arg_SELECTOR_VALUE, selector)
@@ -1214,16 +1197,23 @@ class MessageEngine():
     @_ast_ADDER
     def ast_ADD_ELEMENT_TO_LAST_MESSAGE(self, objs, ttpcode):
         """ """
-        obj = objs[0]
-
         if ttpcode == TERM_TYPE_RECIEVER:
-            self._readings[-1].set_reciever(obj)
-
+            i = 0
         elif ttpcode == TERM_TYPE_SELECTOR:
-            self._readings[-1].set_selector(obj)
-
+            i = 1
         elif ttpcode == TERM_TYPE_ARGUMENT:
-            self._readings[-1].add_arg(obj)
+            i = 2
+        else:
+            i = 0
+
+        for obj in objs:
+            if i == 0:
+                self._readings[-1].set_reciever(obj)
+            elif i == 1:
+                self._readings[-1].set_selector(obj)
+            elif i > 1:
+                self._readings[-1].add_arg(obj)
+            i += 1
 
     @_ast_ADDER
     def ast_ADD_ELEMENT_AS_NEW_MESSAGE(self, objs, ttpcode):
@@ -1284,11 +1274,6 @@ class MessageEngine():
         self._curblockstack.clear()
 
     @_ast
-    def ast_START_TRAILING_ARGS(self): 
-        """  """
-        self._readings[-1].start_trailing_args()
-
-    @_ast
     def ast_DISCARD_LAST_BLOCK_MESSAGE(self):
         """ """
         self.buffer.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
@@ -1336,9 +1321,19 @@ class MessageEngine():
         return type.construct_obj(context, value)
 
     @_ast_ARG
-    def arg_RECIEVER_VALUE(self, context, value):
+    def arg_RECIEVER_VALUE(self, context, reciever):
         """ """
-        return select_reciever(context, value)
+        if reciever and reciever[0].isupper():
+            if reciever.endswith(SIGIL_SELECTOR_TRAILING_ARGS):
+                tt = select_type(context, reciever[:-1])
+                if tt:
+                    return (tt, SelectorResolver("instance"+SIGIL_SELECTOR_TRAILING_ARGS))
+            else:
+                tt = select_type(context, reciever)
+                if tt:
+                    return (tt,)
+            
+        return (select_literal(context, reciever),)
 
     @_ast_ARG
     def arg_SELECTOR_VALUE(self, context, selector):

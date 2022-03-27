@@ -2,11 +2,11 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.typedecl import (
-    PythonType, TypeDecl, TypeProxy, 
+    PythonType, TypeDecl, TypeInstanceDecl, TypeProxy, 
     parse_type_declaration
 )
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
-from machaon.core.method import MethodParameter, MethodResult
+from machaon.core.method import MethodParameter, MethodResult, Method
 from machaon.core.symbol import (
     BadTypename, 
     normalize_method_target, normalize_method_name, 
@@ -17,20 +17,6 @@ from machaon.core.symbol import (
 #
 # 
 #
-class ArgumentTypeError(Exception):
-    def __init__(self, spec, value):
-        super().__init__()
-        self.spec = spec
-        self.value = value
-    
-    def __str__(self):
-        if hasattr(self.spec, "name"):
-            spec = "引数'{}'の型'{}'".format(self.spec.name, self.spec.typename)
-        else:
-            spec = "型'{}'".format(self.spec.typename)
-        value = repr(self.value)
-        return "{}は{}に適合しません".format(value, spec)
-
 class BadInstanceMethodInvocation(Exception):
     def __init__(self, valuetype, name):
         super().__init__(valuetype, name)
@@ -762,13 +748,11 @@ def resolve_object_value(obj, spec=None):
     else:
         return obj.value
 
-def check_argument_value_type(context, spec, value):
-    if spec is None:
-        return True
-    if spec.is_type_uninstantiable():
-        return True
-    t = spec.get_typedecl().instance(context)
-    return t.check_value_type(type(value))
+def parameter_spec(t, i):
+    spec = t.get_parameter_spec(i)
+    if spec is not None:
+        return spec
+    return MethodParameter("param")
 
 #
 #
@@ -805,7 +789,7 @@ class BasicInvocation():
         if not m and straight:
             m.append("straight")
         return " ".join(m)
-    
+
     def _prepare(self, context: InvocationContext, *argvalues) -> InvocationEntry:
         """ デバッグ用: ただちに呼び出しエントリを構築する """
         args = [context.new_object(x) for x in argvalues]
@@ -883,12 +867,9 @@ class TypeMethodInvocation(BasicInvocation):
             args.append(self.method.make_type_instance(self.type))
 
         # インスタンスを渡す
-        selfspec = self.get_parameter_spec(-1)
-        selfvalue = resolve_object_value(selfobj, selfspec)
-        if not check_argument_value_type(context, selfspec, selfvalue):
-            raise ArgumentTypeError(selfspec, selfvalue)
-        args.append(selfvalue)
-    
+        selfspec = parameter_spec(self, -1)
+        args.append(selfspec.make_argument_value(context, selfobj))
+
         if self.method.is_context_bound():
             # コンテクストを渡す
             args.append(context)
@@ -898,12 +879,7 @@ class TypeMethodInvocation(BasicInvocation):
             args.append(context.get_spirit())
         
         # 引数オブジェクトを整理する
-        for i, argobj in enumerate(argobjs):
-            argspec = self.get_parameter_spec(i)
-            argvalue = resolve_object_value(argobj, argspec)
-            if not check_argument_value_type(context, argspec, argvalue):
-                raise ArgumentTypeError(argspec, argvalue)
-            args.append(argvalue)
+        args.extend(self.method.make_argument_row(context, argobjs))
         
         action = self.method.get_action()
         return InvocationEntry(self, action, args, {})   
@@ -925,12 +901,11 @@ class TypeMethodInvocation(BasicInvocation):
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         if index == -1:
-            p = self.method.get_param(-1)
+            return self.method.get_param(-1)
         elif self.is_parameter_consumer():
-            p = self.method.params[-1]
+            return self.method.params[-1]
         else:
-            p = self.method.get_param(index)
-        return p
+            return self.method.get_param(index)
 
 
 class RedirectorInvocation(BasicInvocation):
@@ -1205,7 +1180,7 @@ class TypeConstructorInvocation(BasicInvocation):
     def prepare_invoke(self, context: InvocationContext, *argobjects):
         argobj, *args = argobjects
         # 型の実装を取得する
-        t = self._type.instance(context, args)
+        t = self._type.instance(context, [x.value for x in args]) # Objectをはがし、引数の型変換を行う
         # 変換コンストラクタの呼び出しを作成
         arg = resolve_object_value(argobj)
         return InvocationEntry(self, t.construct, (context, arg), {})
@@ -1214,13 +1189,17 @@ class TypeConstructorInvocation(BasicInvocation):
         raise ValueError("型変換関数の実体は取得できません")
     
     def get_max_arity(self):
-        return 0xFFFF # 不明: 取得できないことはないが、インスタンス化が必要
+        return 0xFFFF # インスタンス化が必要
 
     def get_min_arity(self):
         return 0 # 後ろに続く引数はデフォルトでゼロ
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
-        return None
+        if isinstance(self._type, TypeInstanceDecl):
+            mth = Method(params=self._type.get_type_params())
+            return mth.get_param(index)
+        else:
+            return None
     
     def get_result_spec(self):
         return MethodResult(self._type)
