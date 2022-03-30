@@ -1,4 +1,5 @@
 from json import load
+from re import sub
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
 from machaon.core.type import Type, TypeModule
@@ -1010,7 +1011,10 @@ class FunctionInvocation(BasicInvocation):
     """
     def __init__(self, function, modifier=None, minarg=0, maxarg=0xFFFF):
         super().__init__(modifier)
-        self.fn = function
+        if callable(function):
+            self.fn = function
+        else:
+            self.fn = _GetProperty(function, "<unnamed>")
         self.minarg = minarg
         self.maxarg = maxarg
 
@@ -1024,7 +1028,7 @@ class FunctionInvocation(BasicInvocation):
         name = full_qualified_name(self.fn)
         return ("Function", name, self.modifier_name())
     
-    def prepare_invoke(self, invocations, *argobjects):
+    def prepare_invoke(self, context, *argobjects):
         args = [resolve_object_value(x) for x in argobjects] # そのまま実行
         return InvocationEntry(self, self.fn, args, {})
     
@@ -1036,6 +1040,43 @@ class FunctionInvocation(BasicInvocation):
 
     def get_min_arity(self):
         return self.minarg
+        
+    def get_result_spec(self):
+        return MethodResult() # 値から推定する
+
+
+class MessageInvocation(BasicInvocation):
+    """
+    メッセージ関数を呼び出す
+    """
+    def __init__(self, message, modifier=None):
+        super().__init__(modifier)
+        self.msg = message
+
+    def get_method_name(self):
+        return '({})'.format(self.msg.get_expression())
+    
+    def get_method_doc(self):
+        return '({})'.format(self.msg.get_expression())
+    
+    def display(self):
+        return ("Message", self.msg.get_expression(), self.modifier_name())
+    
+    def prepare_invoke(self, context, *argobjects):
+        subject, *_a = argobjects
+        args = [context, subject]
+        return InvocationEntry(self, self.get_action(), args, {})
+    
+    def get_action(self):
+        def _run(context, subj):
+            return self.msg.run(subj, context)
+        return _run
+
+    def get_max_arity(self):
+        return 0
+
+    def get_min_arity(self):
+        return 0
         
     def get_result_spec(self):
         return MethodResult() # 値から推定する

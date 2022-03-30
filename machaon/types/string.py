@@ -574,8 +574,25 @@ class StrType():
             Object: 返り値
         """
         from machaon.core.message import run_function
-        r = run_function(s, subject, context, raiseerror=True)
-        return r
+        return run_function(s, subject, context, raiseerror=True)
+
+    def fn(self, s):
+        """ @method
+        文字列を関数として返す。
+        Returns:
+            Function:
+        """
+        from machaon.core.message import parse_function
+        return parse_function(s)
+    
+    def seqfn(self, s):
+        """ @method
+        文字列を関数として返す。
+        Returns:
+            Function:
+        """
+        from machaon.core.message import parse_sequential_function
+        return parse_sequential_function(s)
     
     def do_external(self, s, context, app):
         """ @task context [doex do-ex]
@@ -613,22 +630,16 @@ class StrType():
         
         return eval(body, glob, {})
     
-    def call_python(self, expr, _app, *params):
-        """ @task alias-name [call]
-        Pythonの関数または定数を評価する。
-        Params:
-            *params(Any): 引数
+    def load_python(self, expr):
+        """ @method alias-name [load]
+        Pythonの関数または定数をロードする。
         Returns:
             Any:
         """
         from machaon.core.importer import attribute_loader
+        from machaon.core.invocation import FunctionInvocation
         loader = attribute_loader(expr)
-        value = loader()
-        if callable(value):
-            return value(*params)
-        else:
-            # 引数は無視される
-            return value
+        return FunctionInvocation(loader())
     
     def run_command(self, string, app, *params):
         """ @task

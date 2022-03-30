@@ -29,6 +29,7 @@ from machaon.core.invocation import (
     BasicInvocation,
     TypeMethodInvocation,
     InstanceMethodInvocation,
+    MessageInvocation,
     ObjectMemberInvocation,
     TypeConstructorInvocation,
     Bind1stInvocation,
@@ -547,9 +548,13 @@ def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None
     elif tn == "Type":
         return select_type_constructor(v, modbits)
     elif tn == "Str": 
-       return select_method(v, typetraits, reciever=reciever, modbits=modbits)
+        return select_method(v, typetraits, reciever=reciever, modbits=modbits)
+    elif tn == "Function":
+        return MessageInvocation(v)
+    elif isinstance(v, BasicInvocation):
+        return v
     else:
-        raise BadExpressionError("'{}'はメソッドセレクタとして無効です:Int|Float|Type|Strが有効です".format(obj))
+        raise BadExpressionError("'{}'はメソッドセレクタとして無効な型です".format(obj))
 
 
 def select_index_method(value, typetraits, reciever, modbits):
