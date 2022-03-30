@@ -4,7 +4,9 @@ from collections import namedtuple
 
 from machaon.core.invocation import instant_context
 from machaon.flow.flow import Flow
+from machaon.macatest import run
 
+@run
 def test_flow():
     cxt = instant_context()
     f = Flow()

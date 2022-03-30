@@ -1,8 +1,9 @@
 from machaon.core.object import Object
 from machaon.process import TempSpirit
+from machaon.core.message import MessageEngine
 
 
-def parse_test(parser, context, lhs, rhs, tester=None):
+def message_test(source, context, lhs, rhs, tester=None):
     if isinstance(lhs, Object):
         if lhs.is_error():
             print("Error occurred on the left side:")
@@ -21,7 +22,7 @@ def parse_test(parser, context, lhs, rhs, tester=None):
         tester = equals
 
     if not tester(lhs, rhs):
-        print("Assertion is failed: {}(({}) => {}, {})".format(tester.__name__, parser.source, lhs, rhs))
+        print("Assertion is failed: {}(({}) => {}, {})".format(tester.__name__, source, lhs, rhs))
         print("")
         print("--- instructions ----------------")
         print(put_instructions(context))
@@ -42,3 +43,13 @@ def put_instructions(cxt, sep='\n'):
 def run(f):
     f()
 
+def parse_test(context, s, rhs, *, q=None):
+    parser = MessageEngine(s)
+    lhso = parser.run_here(context)
+    assert message_test(s, context, lhso.value, rhs, q)
+    return put_instructions(context, "; ")
+
+def parse_instr(context, s):
+    parser = MessageEngine(s)
+    parser.run_here(context)
+    return put_instructions(context, "; ")

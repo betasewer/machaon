@@ -148,9 +148,7 @@ def test_bind1st():
     arg = cxt.new_object("aiueo", type="str")
     assert inv.prepare_invoke(cxt, arg)._invokeaction() is True
 
-from machaon.macatest import run
 
-@run
 def test_type_constructor():
     cxt = instant_context()
 

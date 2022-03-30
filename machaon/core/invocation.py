@@ -1,3 +1,4 @@
+from json import load
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
 from machaon.core.type import Type, TypeModule
@@ -10,7 +11,7 @@ from machaon.core.method import MethodParameter, MethodResult, Method
 from machaon.core.symbol import (
     BadTypename, 
     normalize_method_target, normalize_method_name, 
-    is_valid_object_bind_name, BadObjectBindName, full_qualified_name, BootModuleNames,
+    is_valid_object_bind_name, BadObjectBindName, full_qualified_name,
     SIGIL_SCOPE_RESOLUTION,
 )
 
@@ -350,9 +351,9 @@ class InvocationContext:
             return t
         return PythonType(value_type)
 
-    def define_type(self, typecode, *, scope=None) -> Type:
+    def define_type(self, typecode) -> Type:
         """ 型を定義する """
-        return self.type_module.define(typecode, scope=scope)
+        return self.type_module.define(typecode)
 
     def define_temp_type(self, describer: Any) -> Type:
         """ 新しい型を作成するが、モジュールに登録しない """
@@ -716,15 +717,8 @@ def instant_context(subject=None):
     global _instant_context_types
     if _instant_context_types is None:
         t = TypeModule()
-        t.add_fundamental_types()
-
-        from machaon.package.package import create_package
-        for module in BootModuleNames:
-            pkg = create_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
-            pkg.scope = None
-            for x in pkg.load_type_definitions():
-                t.define(x)
-        
+        t.add_fundamentals()
+        t.add_default_modules()        
         _instant_context_types = t
 
     from machaon.process import TempSpirit

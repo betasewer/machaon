@@ -8,7 +8,7 @@ import re
 import importlib
 from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
-from machaon.core.type import TypeDefinition
+from machaon.core.type import Type, TypeModule
 from machaon.core.importer import module_loader, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
@@ -179,8 +179,11 @@ class Package():
 
         return modules
     
-    def load_type_definitions(self) -> Iterator[TypeDefinition]:
+    def load_type_module(self) -> TypeModule:
         """ モジュールにあるすべての型定義クラスを得る """
+        typemod = TypeModule()
+        self.reset_loading()
+
         try:
             modules = self.load_module_loaders()
         except Exception as e:
@@ -192,22 +195,21 @@ class Package():
         if not modules:
             return self._loadfail("モジュールを1つも読み込めませんでした")
 
-        typecount = 0
         for modloader in modules:
             try:
                 for typedef in modloader.scan_type_definitions():
-                    if self.scope:
-                        typedef.scope = self.scope
-                    yield typedef
-                    typecount += 1
+                    typemod.define(typedef)
             except Exception as e:
                 self._loadfail(PackageModuleLoadError(e, str(modloader)))
                 continue
             self._modules.append(modloader)
         
-        if typecount == 0:
+        if typemod.count() == 0:
             self._loadfail(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
     
+        self.finish_loading()
+        return typemod
+
     def get_module_count(self):
         """ ロードされたモジュールの数を返す """
         if not self.once_loaded():

@@ -2,11 +2,10 @@ import pytest
 
 from machaon.core.invocation import TypeMethodInvocation, instant_context
 from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration
-from machaon.core.type import TypeDefinition, TypeModule, TypeMemberAlias, Type
+from machaon.core.type import CORE_SCOPE, TypeDefinition, TypeModule, TypeMemberAlias, Type
 from machaon.core.importer import ClassDescriber, attribute_loader
 from machaon.types.fundamental import fundamental_types
 
-fundamental_type = fundamental_types()
 
 def run(fn): fn()
 
@@ -56,6 +55,7 @@ class SomeTrait:
 # defineで登録
 def test_valuetype_define():
     # defineではドキュメント文字列の解析はしない
+    fundamental_type = fundamental_types()
     t = fundamental_type.define(SomeValue)
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
@@ -65,6 +65,7 @@ def test_valuetype_define():
 
 # 宣言をドキュメント文字列で登録
 def test_valuetype_td_define():
+    fundamental_type = fundamental_types()
     td = fundamental_type.load_definition(SomeValue)
     assert td
     t = td.load_type()
@@ -157,31 +158,34 @@ class SpecStrType:
 
 # defineで登録
 def test_scoped_define():
-    types = TypeModule()
+    newtypes = TypeModule()
 
     assert not hasattr(SpecStrType, "Type_typename")
-    spec_str_t = types.define(SpecStrType, typename="Str", scope="spec")
+    spec_str_t = newtypes.define(SpecStrType, typename="Str")
     assert spec_str_t is not None
-    assert spec_str_t.is_scope("spec")
     assert spec_str_t.typename == "Str"
     assert spec_str_t.get_value_type() is SpecStrType
-    assert spec_str_t.get_describer_qualname() == "tests.test_object_type.SpecStrType"
-    assert getattr(SpecStrType, "Type_typename") == "Str/spec"
+    assert getattr(SpecStrType, "Type_typename") == "Str"
     assert spec_str_t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
     assert not spec_str_t.is_selectable_instance_method()
 
-    str_t = types.define(fundamental_type.get("Str"))
+    types = TypeModule()
+    types.add_fundamentals()
+    types.add_scope("spec", newtypes)
+    str_t = types.get("Str", scope=CORE_SCOPE)
+    assert str_t.get_describer_qualname() == "machaon.types.string.StrType"
     assert types.get("Str", scope="spec") is spec_str_t
     assert types.get("Str") is str_t
 
     # enum
     typelist = list(types.enum())
-    assert len(typelist) == 2
-    assert typelist[0] is spec_str_t # 追加順で取り出される
-    assert typelist[1] is str_t
+    assert len(typelist) == types.get_scope(CORE_SCOPE).count() + 1
+    assert typelist[-1][1] is spec_str_t # スコープの追加順で取り出される
+
 
 # 値から型を推定
 def test_deduce():
+    fundamental_type = fundamental_types()
     # fundamental types
     assert fundamental_type.deduce(int) is fundamental_type.get("Int")
     assert fundamental_type.deduce(str) is fundamental_type.get("Str")
@@ -192,7 +196,7 @@ def test_deduce():
 
     # defined type
     types = TypeModule()
-    spec_str_t = types.define(SpecStrType, scope="spec")
+    spec_str_t = types.define(SpecStrType)
     str_t = types.define(fundamental_type.get("Str"))
     assert types.deduce(str) is str_t
     assert types.deduce(SpecStrType) is spec_str_t
@@ -209,7 +213,7 @@ def test_deduce():
 # defineで登録
 def test_method():
     types = TypeModule()
-    t = types.define(SpecStrType, scope="spec")
+    t = types.define(SpecStrType)
 
     t.select_method("zeros") # ロードのために必要
     m = t.get_method("zeros")
@@ -229,7 +233,7 @@ def test_method():
 # defineで登録
 def test_method_alias():
     types = TypeModule()
-    t = types.define(SpecStrType, scope="spec")
+    t = types.define(SpecStrType)
 
     t.add_member_alias("ge_ak", "get_aknom")
     t.add_member_alias("g", "get_aknom")
@@ -254,7 +258,7 @@ def test_method_return_deduce():
     cxt = instant_context()
 
     types = TypeModule()
-    t = types.define(SpecStrType, scope="spec")
+    t = types.define(SpecStrType)
 
     m1 = t.select_method("get-path")
     assert m1.get_result().get_typedecl().instance(cxt).get_typename() == "Any"
@@ -276,17 +280,23 @@ class Dummy_Rabbit():
         cls.describe_count += 1
     
 def test_typemodule_get():
+    fundamental_type = fundamental_types()
     fundamental_type.define(Dummy_Rabbit, typename="Dummy-Rabbit")
     assert fundamental_type.get("Dummy_Rabbit").typename == "Dummy-Rabbit"
     assert fundamental_type.get(Dummy_Rabbit).typename == "Dummy-Rabbit"
     assert Dummy_Rabbit.describe_count == 1
+    Dummy_Rabbit.describe_count = 0
 
 def test_typemodule_move():
+    fundamental_type = fundamental_types()
+    fundamental_type.define(Dummy_Rabbit, typename="Dummy-Rabbit")
+    assert Dummy_Rabbit.describe_count == 1
+
     new_typeset = TypeModule()
     new_typeset.define(typename="AltString")
     new_typeset.define(Dummy_Rabbit, typename="Second-Rabbit")
 
-    fundamental_type.add_ancestor(new_typeset)
+    fundamental_type.add_scope(None, new_typeset)
     
     cxt = instant_context()
     cxt.type_module = fundamental_type

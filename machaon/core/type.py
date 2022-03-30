@@ -1,4 +1,5 @@
 from collections import defaultdict
+from email.mime import base
 
 from typing import Any, Sequence, Union, Callable, ItemsView, Optional, Generator, DefaultDict
 from typing import List, Dict, Tuple
@@ -42,6 +43,10 @@ class BadMemberDeclaration(Exception):
 class BadMethodDelegation(Exception):
     pass
 
+# 型定義モジュールのエラー 
+class TypeModuleError(Exception):
+    pass
+
 # サポートされない
 class UnsupportedMethod(Exception):
     pass
@@ -59,18 +64,18 @@ TYPE_DELAY_LOAD_METHODS     = 0x2000
 TYPE_MIXIN                  = 0x10000
 TYPE_SUBTYPE                = 0x20000
 
-SUBTYPE_BASE_ANY = 23
+SUBTYPE_BASE_ANY = 1
 
 #
 #
 #
 class Type(TypeProxy):
-    def __init__(self, describer=None, name=None, value_type=None, scope=None, params=None, *, doc="", bits=0):
+    def __init__(self, describer=None, name=None, value_type=None, params=None, *, doc="", bits=0):
         self.typename: str = normalize_typename(name) if name else None
         self.doc: str = doc
         self.flags = bits
         self.value_type: Callable = value_type
-        self.scope: Optional[str] = scope
+        self.scope: Optional[TypeModule] = None
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
@@ -84,20 +89,17 @@ class Type(TypeProxy):
     def get_typename(self):
         return self.typename
     
+    def get_scoped_typename(self):
+        return get_scoped_typename(self.typename, self.scope.scopename if self.scope else None)
+
     def get_conversion(self):
-        if self.scope:
-            return self.typename + SIGIL_SCOPE_RESOLUTION + self.scope
-        else:
-            return self.typename
+        return self.get_scoped_typename()
         
     def get_value_type(self):
         return self.value_type
     
-    def get_scoped_typename(self):
-        if self.scope:
-            return self.typename + SIGIL_SCOPE_RESOLUTION + self.scope
-        else:
-            return self.typename
+    def get_value_type_qualname(self):
+        return full_qualified_name(self.value_type)
     
     def get_describer(self, mixin=None):
         if mixin is not None:
@@ -108,7 +110,7 @@ class Type(TypeProxy):
     def get_describer_qualname(self, mixin=None):
         describer = self.get_describer(mixin)
         if isinstance(describer, dict):
-            return str(describer)
+            return None
         else:
             return describer.get_full_qualname()
 
@@ -119,9 +121,6 @@ class Type(TypeProxy):
     def is_loaded(self):
         return self.flags & TYPE_LOADED > 0
     
-    def is_scope(self, scope):
-        return self.scope == scope
-
     def is_same_value_type(self, vt):
         # TypeModule.deduceで使用
         return self.value_type is vt
@@ -413,7 +412,6 @@ class Type(TypeProxy):
         describer = None,
         typename = None,
         value_type = None, 
-        scope = None, 
         doc = None, 
         bits = 0
     ):
@@ -423,8 +421,6 @@ class Type(TypeProxy):
             self.typename = typename
         if value_type is not None:
             self.value_type = value_type
-        if scope is not None:
-            self.scope = scope
         if doc is not None:
             self.doc = doc
         if bits:
@@ -455,6 +451,8 @@ class Type(TypeProxy):
         if self.value_type is None:
             if isinstance(describer, ClassDescriber):
                 self.value_type = describer.klass
+            else:
+                raise BadTypeDeclaration("no value_type is specified")
 
         # typename
         if not self.typename:
@@ -503,6 +501,9 @@ class Type(TypeProxy):
             self.load_methods_from_describer(describer, mixinkey=index)
             # 追加の記述メソッドを呼び出す
             describer.do_describe_object(self) # type: ignore
+
+    def mixins(self):
+        return self._mixin
 
     def load_methods_from_describer(self, describer, mixinkey=None):
         # クラス属性による記述
@@ -554,7 +555,6 @@ class TypeDefinition():
         typename: str = None, 
         value_type = None, 
         doc = "", 
-        scope = None, 
         bits = 0,
         # 直接設定可能
         mixinto = None,
@@ -584,7 +584,6 @@ class TypeDefinition():
         self.doc = doc
         if self.doc:
             self.doc = self.doc.strip()
-        self.scope = scope
         self.bits = bits
         self.params = [] # 型パラメータ
         self.memberaliases = [] 
@@ -597,12 +596,8 @@ class TypeDefinition():
         if subtypeof is not None:
             self.bits |= TYPE_SUBTYPE
             self._sub_target = subtypeof
-    
-    def get_scoped_typename(self):
-        if self.scope:
-            return self.typename + SIGIL_SCOPE_RESOLUTION + self.scope
-        else:
-            return self.typename
+        
+        self._mixins = [] # Mixinされるクラス
     
     def is_loaded(self):
         return self._t is not None
@@ -620,6 +615,14 @@ class TypeDefinition():
         self._resolve_value_type()
         return self.value_type
 
+    def get_value_type_qualname(self):
+        if self.value_type is None:
+            return self.describer.get_full_qualname()
+        elif isinstance(self.value_type, str):
+            return self.value_type
+        else:
+            raise ValueError("Cannot resolve value_type qualname")
+
     def get_describer(self):
         return self.describer
 
@@ -635,9 +638,6 @@ class TypeDefinition():
         else:
             return self.value_type is vt
 
-    def is_scope(self, scope):
-        return self.scope == scope
-    
     def get_loaded(self):
         return self._t
 
@@ -685,7 +685,6 @@ class TypeDefinition():
             self.describer, 
             name=self.typename,
             value_type=self.value_type,
-            scope=self.scope, 
             params=self.params,
             doc=self.doc,
             bits=self.bits
@@ -697,8 +696,17 @@ class TypeDefinition():
 
         for name, row in self.memberaliases:
             self._t.add_member_alias(name, row)
-        
+
+        for mx in self._mixins:
+            self._t.mixin_load(mx)
+
         return self._t
+
+    def mixin_load(self, describer):
+        if self._t is not None:
+            self._t.mixin_load(describer)
+        else:
+            self._mixins.append(describer)
     
     def load_docstring(self, doc=None):
         """
@@ -811,67 +819,117 @@ class TypeMemberAlias:
         return isinstance(self.dest, list)
 
 #
+CORE_SCOPE = ""
+TYPECODE_TYPENAME = 1
+TYPECODE_VALUETYPE = 2
+
+#
 # 型取得インターフェース
 #
 class TypeModule():
     def __init__(self):
-        self._typelib: DefaultDict[str, List[Type]] = defaultdict(list)
-        self._ancestors: List[TypeModule] = [] 
-        self._subtype_rels: DefaultDict[str, Dict[str, Type]] = defaultdict(dict)
-        self._regmixin: DefaultDict[str, List[TypeDefinition]] = defaultdict(list)
+        self.scopename = None
+        self.parent = None
+        self._lib_typename: Dict[str, Type] = {}
+        self._lib_describer: Dict[str, str] = {}
+        self._lib_valuetype: Dict[str, str] = {}
+        self._subtype_rels: Dict[str, Dict[str, Type]] = {}
+        self._loading_mixins: Dict[str, List[TypeDefinition]] = {}
+        #
+        self._children: Dict[str, TypeModule] = {} 
+
+    #
+    @property
+    def root(self):
+        if self.parent is None:
+            return self
+        else:
+            return self.parent
+
+    def count(self):
+        """ このモジュールにある型定義の数を返す
+        Returns:
+            Int:
+        """
+        return len(self._lib_typename)
     
+    #
     def _load_type(self, t: Union[Type, TypeDefinition]) -> Type:
+        """ 型定義をロードする """
         if isinstance(t, TypeDefinition):
             ti = t.load_type()
         else:
             ti = t
-        if len(self._regmixin[t.typename]) > 0:
-            for mx in self._regmixin[t.typename]:
-                ti.mixin_load(mx.get_describer())
-            self._regmixin[t.typename].clear()
         return ti
     
-    def _select_by_scope(self, typename:str, scope:str) -> Optional[Type]:
-        t = None
-        for t in self._typelib[typename]:
-            if t.is_scope(scope):
-                return t
+    def _select(self, value:str, code:int, *, noload=False) -> Optional[Type]:
+        """ このライブラリから型定義を取り出す """
+        libt = None
+        if code == TYPECODE_TYPENAME:
+            libt = self._lib_typename.get(value)
+        elif code == TYPECODE_VALUETYPE:
+            tn = self._lib_valuetype.get(value)
+            if tn is not None:
+                libt = self._lib_typename[tn]
+        if libt is None:
+            return None
+        if noload:
+            return libt
         else:
-            if scope is None:
-                return t
+            return self._load_type(libt)
+
+    def _select_scoped(self, scopename, typename):
+        """ スコープから型を検索する """
+        scope = self.get_scope(scopename)
+        if scope is not None:
+            target = scope._select(typename, TYPECODE_TYPENAME, noload=True)
+            if target is not None:
+                return target
         return None
 
-    #
-    #
-    #
-    def find(self, typename: str, *, scope=None) -> Optional[Type]:
-        # 自分自身の定義を探索
-        if typename in self._typelib:
-            t = self._select_by_scope(typename, scope)
-            return self._load_type(t) # 遅延されたロードを行なう
-        
-        # 親モジュールを探索
-        for ancmodule in self._ancestors:
-            tt = ancmodule.find(typename, scope=scope)
-            if tt is not None:
-                return tt
 
-        # 見つからなかった
-        return None
-    
-    def exists(self, typename: str) -> bool:
-        return typename in self._typelib
-    
     #
     # 型を取得する
     #
+    def find(self, typename: str, *, code=TYPECODE_TYPENAME, scope=None) -> Optional[Type]:
+        """ 定義を探索する 
+        Params:
+            typename(str): 型名
+            code?(int): 検索対象
+            scope?(str): スコープ名
+        Returns:
+            Optional[Type]:
+        """
+        t = None
+        if scope is None:
+            # 自分自身を探索する
+            t = self._select(typename, code)
+            if t is not None:
+                return t
+
+            # すべての子モジュールを探索
+            for ch in self._children.values():
+                t = ch.find(typename, code=code)
+                if t is not None:
+                    return t
+        else:
+            # 特定のモジュールを探索
+            mod = self.get_scope(scope)
+            if mod is None:
+                raise TypeModuleError("スコープ'{}'は子モジュールのなかに見つかりません".format(scope))
+            return mod._select(typename, code)
+    
     def get(self, typecode: Any, *, scope=None) -> Optional[TypeProxy]:
+        """ 色々なデータから定義を探索する 
+        Params:
+            typecode(Any): str=型名 | Type=型定義そのもの | <class>=型の値型
+            scope?(str): スコープ名
+        Returns:
+            Optional[Type]:
+        """
         if isinstance(typecode, TypeProxy):
             return typecode
 
-        if self._typelib is None:
-            raise ValueError("No type library set up")
-        
         t = None
         if isinstance(typecode, str):
             typename = normalize_typename(typecode)
@@ -886,63 +944,46 @@ class TypeModule():
                 thisscope = None
                 typename = tn
             t = self.find(typename, scope=thisscope)
-        
+        elif isinstance(typecode, type):
+            t = self.find(full_qualified_name(t), code=TYPECODE_VALUETYPE, scope=scope)
+        else:
+            raise TypeError("未対応のtypecodeです: {}".format(typecode))
+
         if t is None:
             return None
 
         return t
 
-    # すべての型を取得する
-    def enum(self, fallback=True) -> Generator[Type, None, None]:
-        for ancs in self._ancestors:
-            for t in ancs.enum():
-                yield t
-
-        for _, ts in self._typelib.items():
-            for t in ts:
+    def enum(self, *, geterror=False) -> Generator[Type, None, None]:
+        """ すべての型をロードし、取得する
+        Params:
+            geterror(bool): 発生したエラーを取得する
+        """
+        for name, t in self._lib_typename.items():
+            if geterror:
                 try:
-                    yield self._load_type(t)
+                    yield name, self._load_type(t), None
                 except Exception as e:
-                    if fallback:
-                        pass
-                    else:
-                        raise e
-
-    # サブタイプを取得する
-    def get_subtype(self, parenttypecode: Any, typename: str):
-        t = self.get(parenttypecode)
-        if t is None:
-            return None
-        
-        subt = self._find_subtype(t.get_typename(), typename)
-        if subt is None:
-            if parenttypecode != SUBTYPE_BASE_ANY: # 総称型対象のものを探す
-                return self._find_subtype(SUBTYPE_BASE_ANY, typename)
+                    from machaon.types.stacktrace import ErrorObject
+                    yield name, None, ErrorObject(e)
             else:
-                return None
-        else:
-            return subt
+                yield name, self._load_type(t)
+        
+        for chi in self._children.values():
+            yield from chi.enum(geterror=geterror)
 
-    def _find_subtype(self, basekey, typename):
-        td = self._subtype_rels[basekey].get(typename)
-        if td is not None:
-            return self._load_type(td)
-        
-        # 親モジュールを探索
-        for ancmodule in self._ancestors:
-            tt = ancmodule._find_subtype(basekey, typename)
-            if tt is not None:
-                return tt
-        
-        return None
-        
-    #
-    # 値型に適合する型を取得する
-    #    
+
     def deduce(self, value_type) -> Optional[TypeProxy]:
+        """ 値型に適合する型を取得する
+        Params:
+            value_type(type):
+        Returns:
+            Optional[TypeProxy]: 
+        """
         if not isinstance(value_type, type):
             raise TypeError("value_type must be type instance, not value")
 
+        # ビルトイン型に対応する
         if hasattr(value_type, "__name__"): 
             typename = value_type.__name__
             if typename in PythonBuiltinTypenames.literals: # 基本型
@@ -952,26 +993,80 @@ class TypeModule():
             elif typename in PythonBuiltinTypenames.iterables: # イテラブル型
                 return self.get("Tuple")
         
-        t = self.get(value_type)
-        if t:
+        # 値型で検索する
+        t = self.find(full_qualified_name(value_type), code=TYPECODE_VALUETYPE)
+        if t is not None:
             return t
-
-        for ts in self._typelib.values(): # 型を比較する
-            for t in ts:
-                if t.is_same_value_type(value_type):
-                    try:
-                        return self._load_type(t)
-                    except:
-                        continue # モジュールの読み込みエラーが起きても続行
-        
-        # 親モジュールを探索
-        for ancmodule in self._ancestors:
-            tt = ancmodule.deduce(value_type)
-            if tt is not None:
-                return tt
 
         # 見つからなかった
         return None
+
+    #
+    # サブタイプを取得する
+    #
+    def _select_subtype(self, basekey, typename):
+        """ このモジュールで型名とサブタイプ名の関係を解決する 
+        Params:
+            basekey(str): 元の型名
+            typename(str): サブタイプ名
+        Returns:
+            Optional[TypeProxy]
+        """
+        bag = self._subtype_rels.get(basekey)
+        if bag is not None:
+            td = self._subtype_rels[basekey].get(typename)
+            if td is not None:
+                return self._load_type(td)
+        return None
+        
+    def find_subtype(self, basekey, typename, scope=None):
+        """ findと同様にサブタイプを探索する
+        Params:
+            basekey(str): 元の型名
+            typename(str): サブタイプ名
+            scope?(str): スコープ名
+        Returns:
+            Optional[TypeProxy]
+        """
+        if scope is None:
+            # 自分自身の定義を探索
+            t = self._select_subtype(basekey, typename)
+            if t is not None:
+                return t
+
+            # 子モジュールをすべて探索
+            for ch in self._children.values():
+                tt = ch.find_subtype(basekey, typename)
+                if tt is not None:
+                    return tt
+        else:
+            # 特定のモジュールを探索
+            if scope not in self._children:
+                raise TypeModuleError("スコープ'{}'は子モジュールのなかに見つかりません".format(scope))
+            mod = self._children[scope]
+            return mod._select_subtype(basekey, typename)
+    
+    def get_subtype(self, basetypecode: Any, typename: str, *, scope=None):
+        """ サブタイプを探索する
+        Params:
+            basetypecode(Any): getで使用できるすべての値
+            typename(str): サブタイプ名
+            scope?(str): スコープ名
+        Returns:
+            Optional[TypeProxy]
+        """
+        basetype = self.get(basetypecode, scope=scope)
+        if basetype is None:
+            return None
+        
+        subtype = self.find_subtype(basetype.get_typename(), typename, scope=scope)
+        if subtype is None:
+            # 総称型のものを探す
+            if basetypecode == SUBTYPE_BASE_ANY: 
+                return None
+            subtype = self.find_subtype(SUBTYPE_BASE_ANY, typename, scope=scope)
+
+        return subtype
 
     #
     # 型を定義する
@@ -982,14 +1077,13 @@ class TypeModule():
         typename = None, 
         value_type = None,
         doc = "",
-        scope = None,
         bits = 0
     ) -> Type:
         # 登録処理
         t: Any = None # 型オブジェクトのインスタンス
         if describer is None:
             # 実質文字列型
-            t = Type({})
+            t = Type({"ValueType":str})
         elif isinstance(describer, TypeDefinition):
             t = describer
         elif isinstance(describer, Type):
@@ -1004,63 +1098,201 @@ class TypeModule():
             td = TypeDefinition(describer)
             t = Type(describer, name=td.proto_define(self))
         else:
-            raise TypeError("TypeModule.defineは'{}'による型定義に対応していません：".format(type(describer).__name__))
+            raise TypeModuleError("TypeModule.defineは'{}'による型定義に対応していません：".format(type(describer).__name__))
         
         if isinstance(t, Type):
             # 定義をロードする
             t.describe(
                 typename=typename, value_type=value_type, 
-                doc=doc, scope=scope, bits=bits
+                doc=doc, bits=bits
             ).load()
             key = t.get_typename()
             if key is None:
-                raise TypeError("No typename is set: {}".format(describer))
-            self._typelib[key].append(t)
+                raise TypeModuleError("No typename is set: {}".format(describer))
+
+            self._add_type(key, t)
         elif isinstance(t, TypeDefinition):
             if t.is_mixin():
                 # mixinを登録するか読み込む
-                basename = t.get_sub_target()
-                target = self.find(basename)
-                if target is None:
-                    self._regmixin[basename].append(t)
-                else:
-                    target.mixin_load(t.get_describer())
+                basename, basescope = parse_scoped_typename(t.get_sub_target())
+                self._load_mixin(basename, basescope, t, reserve=True)
             else:
                 # 定義を型名に紐づけて配置する
                 typename = t.proto_define(self)
                 if t.is_subtype():
-                    base = t.get_sub_target()
-                    if base == "Any":
-                        base = SUBTYPE_BASE_ANY
-                    self._subtype_rels[base][typename] = t
+                    basename, basescope = parse_scoped_typename(t.get_sub_target())
+                    self._add_subtype(basename, typename, t)
                 else:
-                    self._typelib[typename].append(t)
+                    self._add_type(typename, t)
         else:
-            raise TypeError("Unknown result value of TypeModule.define: {}".format(t))
+            raise TypeModuleError("Unknown result value of TypeModule.define: {}".format(t))
 
         return t
-    
-    #
-    def remove_scope(self, scope):
-        raise NotImplementedError()
 
+    def _add_type(self, typename, type):
+        """ 型をモジュールに追加する """
+        describername = type.get_describer_qualname()
+        valuetypename = type.get_value_type_qualname()
+
+        # 型名の辞書をチェックする
+        if typename in self._lib_typename:
+            dest = self._lib_typename[typename]
+            if dest.get_describer_qualname() == describername:
+                return # 同じものが登録済み
+            else:
+                o = dest.get_describer_qualname()
+                n = describername
+                raise TypeModuleError("型'{}'はこのモジュールに既に存在します\n  旧= {}\n  新= {}".format(typename, o, n))
+        
+        # デスクライバクラスをチェックする
+        if describername is not None:
+            if describername in self._lib_describer:
+                return # 登録済み
+
+        self._lib_typename[typename] = type
+        self._lib_describer[describername] = typename
+
+        # 値型は最初に登録されたものを優先する
+        if valuetypename not in self._lib_valuetype:
+            self._lib_valuetype[valuetypename] = typename
+
+        # スコープモジュールを登録する
+        type.scope = self
+
+        # 予約済みのmixinロードを実行する
+        self._load_reserved_mixin(typename, self.scopename, type)
+
+        return type
+
+    def _add_subtype(self, basename, typename, t):
+        """ サブタイプ定義を追加する """
+        if basename == "Any":
+            basename = SUBTYPE_BASE_ANY
+        base = self._subtype_rels.setdefault(basename, {})
+        base[typename] = t
+        
     def load_definition(self, describer, classname=None) -> TypeDefinition:
+        """ ただちに型定義をロードする """
         if not isinstance(describer, (str, ClassDescriber)):
             describer = ClassDescriber(describer)
         td = TypeDefinition(describer, classname)
         if not td.load_docstring():
-            raise TypeError("Fail to load declaration")
+            raise TypeModuleError("Fail to load declaration")
         return self.define(td)
 
+    def _load_mixin(self, basename, basescope, t, *, reserve=False):
+        """ mixin定義を追加する """
+        basescope = basescope or CORE_SCOPE
+        target = self._select_scoped(basescope, basename)
+        if target is not None:
+            # 定義を追加、もしくは追加を予約する
+            target.mixin_load(t.get_describer())
+            return
+
+        # 型やスコープの定義がまだ無かった
+        # トップレベルのモジュールで予約する
+        if reserve:
+            li = self.root._loading_mixins.setdefault((basename, basescope), [])
+            li.append(t)
+
+    def _load_reserved_mixin(self, typename, scopename, target):
+        """  """
+        mi = self.root._loading_mixins.get((typename, scopename))
+        if mi:
+            for mt in mi:
+                target.mixin_load(mt.get_describer())
+            mi.clear()
+
+    def _load_reserved_mixin_all(self):
+        """  """
+        for (name, scope), mts in self._loading_mixins.items():
+            target = self._select_scoped(scope, name)
+            if target is None:
+                continue
+            for mt in mts:
+                target.mixin_load(mt.get_describer())
+            mts.clear()
+
     #
+    # 子モジュールを操作する
     #
-    #
-    def add_ancestor(self, other): # type: (TypeModule) -> None
-        self._ancestors.append(other)
+    def get_scope(self, scopename):
+        """ 取得する
+        Returns:
+            TypeModule:
+        """
+        return self._children.get(scopename)
+
+    def add_scope(self, scopename, other):
+        """ 追加する 
+        Params:
+            scopename(str): 
+            other(TypeModule):
+        """
+        return self.update_scope(scopename, other, addonly=True)
     
-    def add_fundamental_types(self):
+    def update_scope(self, scopename, other, *, addonly=False):
+        """ 追加する 
+        Params:
+            scopename(str): 
+            other(TypeModule):
+        """
+        if scopename in self._children:
+            if addonly:
+                raise TypeModuleError("スコープ'{}'はこのモジュールに既に存在します".format(scopename)) 
+            self._children[scopename].update(other)
+        else:
+            self.set_parent(other, scopename)
+            self._children[scopename] = other
+        
+    def add_fundamentals(self):
+        """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
-        self.add_ancestor(fundamental_types())
+        self.add_scope(CORE_SCOPE, fundamental_types())
+    
+    def add_default_modules(self):
+        """ 標準モジュールの型を追加する """
+        from machaon.core.symbol import DefaultModuleNames
+        from machaon.package.package import create_package
+        for module in DefaultModuleNames:
+            pkg = create_package("module-{}".format(module), "module:machaon.{}".format(module))
+            mod = pkg.load_type_module()
+            self.update_scope(CORE_SCOPE, mod)
+
+    def remove_scope(self, scope):
+        """ 削除する 
+        Params:
+            scope(str):
+        """
+        if scope in self._children:
+            del self._children[scope]
+        else:
+            raise TypeModuleError("スコープ'{}'はこのモジュールに見つかりません".format(scope))
+
+    def set_parent(self, other, scopename):
+        """ 親モジュールを設定する """
+        other.parent = self
+        other.scopename = scopename
+        # mixinを引き継ぎ、解決する
+        self._loading_mixins.update(other._loading_mixins)
+        other._loading_mixins.clear()
+        self._load_reserved_mixin_all()
+
+    def update(self, other):
+        """ 
+        二つのモジュールを一つに結合する。
+        新モジュールの値が優先される
+        Params:
+            other(TypeModule):
+        """
+        other.scopename = self.scopename
+        other.parent = self.parent
+        self._lib_typename.update(other._lib_typename)
+        self._lib_describer.update(other._lib_describer)
+        self._lib_valuetype.update(other._lib_valuetype)
+        self._subtype_rels.update(other._subtype_rels)
+        self._loading_mixins.update(other._loading_mixins)
+        self._children.update(other._children)
 
     # 型登録の構文を提供
     class DefinitionSyntax():
@@ -1084,3 +1316,18 @@ class TypeModule():
     # 遅延登録
     def definitions(self):
         return self.DefinitionSyntax(self)
+
+
+def parse_scoped_typename(name):
+    n, sep, s = name.partition(SIGIL_SCOPE_RESOLUTION)
+    if sep:
+        return n, s
+    else:
+        return name, None
+
+def get_scoped_typename(name, scope=None):
+    if scope is not None:
+        return name + SIGIL_SCOPE_RESOLUTION + scope
+    else:
+        return name
+    

@@ -12,14 +12,15 @@ from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type import TypeModule
-from machaon.core.symbol import BootModuleNames
 from machaon.process import Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 from machaon.ui.global_hotkey import GlobalHotkey
 
-
+#
+#
+#
 class AppRoot:
     """
     アプリのUI、設定情報、グローバルなオブジェクトの辞書を保持する
@@ -65,10 +66,8 @@ class AppRoot:
         self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
         self.pkgmanager.add_to_import_path()
 
-        # machaon.types以下のモジュールをロード
-        for module in BootModuleNames:
-            self.add_package("machaon.{}".format(module), "module:machaon.types.{}".format(module))
-        self.add_package("machaon.flow", "module:machaon.flow.flow")
+        # 標準モジュールをロードする
+        self.typemodule.add_default_modules()
 
         # ホットキーの監視を有効化する
         if GlobalHotkey.available:
@@ -212,10 +211,8 @@ class AppRoot:
         if not force and package.is_load_succeeded():
             return True
         
-        package.reset_loading()
-        for typedef in package.load_type_definitions():
-            self.typemodule.define(typedef)
-        package.finish_loading()
+        mod = package.load_type_module()
+        self.typemodule.add_scope(package.scope, mod)
 
         return package.is_load_succeeded()
     
@@ -290,7 +287,7 @@ class AppRoot:
         chm.post_chamber_message("eval-message-seq", messages=startupmsgs, chamber=chm)
 
         # 基本型を先に登録：初期化処理メッセージを解読するために必要
-        self.typemodule.add_fundamental_types() 
+        self.typemodule.add_fundamentals() 
 
         # メインループ
         self.ui.run_mainloop()

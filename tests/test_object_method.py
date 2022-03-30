@@ -197,6 +197,7 @@ def test_load_from_dict():
     cxt = instant_context()
     Dog = cxt.define_type({
         "Typename" : "Dog",
+        "ValueType" : str, # ダミー型
         "Methods" : [{
             "Name" : "name",
             "Returns" : { "Typename" : "Str" },

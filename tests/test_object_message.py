@@ -3,7 +3,7 @@ import pytest
 import re
 from machaon.core.typedecl import TypeProxy
 
-from machaon.macatest import parse_test, put_instructions, run
+from machaon.macatest import parse_test, put_instructions, run, parse_instr
 
 from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, SequentialMessageExpression, parse_function, parse_sequential_function, run_function, MessageEngine
 from machaon.types.fundamental import fundamental_types
@@ -25,16 +25,11 @@ def test_context(*, silent=False):
 
 def ptest(s, rhs, *, q=None):
     context = test_context(silent=False)
-    parser = MessageEngine(s)
-    lhso = parser.run_here(context)
-    assert parse_test(parser, context, lhso.value, rhs, q)
-    return put_instructions(context, "; ")
+    return parse_test(context, s, rhs, q=q)
 
 def pinstr(s):
     context = test_context(silent=True)
-    parser = MessageEngine(s)
-    parser.run_here(context)
-    return put_instructions(context, "; ")
+    return parse_instr(context, s)
 
 
 #-----------------------------------------------------------------------

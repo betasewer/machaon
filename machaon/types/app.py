@@ -36,12 +36,13 @@ class RootObject:
         spirit.post('message', "Welcome to")
         spirit.post('message-em', logo)
 
-        self.context.root.boot_core(spirit)
+        spirit.post("message", "言語エンジンを準備します")
+        self.root.boot_core(spirit)
 
         spirit.post("message", "パッケージをロードします")
-        for pkg in self.context.root.enum_packages():
+        for pkg in self.root.enum_packages():
             spirit.post("message", "{}".format(pkg.name), nobreak=True)
-            self.context.root.load_pkg(pkg)
+            self.root.load_pkg(pkg)
             status = AppPackageType.status(AppPackageType(), pkg, spirit)
             spirit.post("message", " -> {}".format(status))
         
@@ -54,14 +55,21 @@ class RootObject:
         使用可能な型を列挙する。
         Params:
         Returns:
-            Sheet[Type](name, scope, doc): 型のリスト
+            Sheet[ObjectCollection](name, doc, type): 型のリスト
         '''
-        types = []
         with spirit.progress_display():
-            for t in self.context.type_module.enum():
+            for name, t, error in self.context.type_module.enum(geterror=True):
                 spirit.interruption_point(progress=1)
-                types.append(t)
-        return types
+                entry = {
+                    "name" : name,
+                }
+                if error is not None:
+                    entry["doc"] = "!!!" + error.summarize()
+                    entry["type"] = error
+                else:
+                    entry["doc"] = t.doc
+                    entry["type"] = t
+                yield entry
     
     def vars(self):
         '''@method
@@ -78,7 +86,7 @@ class RootObject:
             Sheet[Str]: 名前のリスト
         '''
         from machaon.core.persistence import enum_persistent_names
-        return enum_persistent_names(self.context.root)
+        return enum_persistent_names(self.root)
 
     def packages(self):
         ''' @method
@@ -86,7 +94,7 @@ class RootObject:
         Returns:
             Sheet[Package](name, source, scope, status): パッケージリスト
         '''
-        return list(self.context.root.enum_packages())
+        return list(self.root.enum_packages())
     
     def startup_errors(self):
         ''' @method
@@ -94,7 +102,7 @@ class RootObject:
         Returns:
             Sheet[Error]: エラーリスト
         '''
-        for pkg in self.context.root.enum_packages():
+        for pkg in self.root.enum_packages():
             yield from pkg.get_load_errors()
     
     def context_(self):
@@ -118,7 +126,7 @@ class RootObject:
     #
     def _clear_processes(self, app, pred):
         ''' プロセスの実行結果とプロセス自体を削除する。 '''
-        chm = self.context.root.chambers().get_active()
+        chm = self.root.chambers().get_active()
         pids = chm.drop_processes(pred=pred)
         app.get_ui().drop_screen_text(pids)
         
@@ -132,7 +140,7 @@ class RootObject:
         ''' @method spirit [cl]
         直前のプロセスを除いてすべてを削除する。
         '''
-        chm = self.context.root.chambers().get_active()
+        chm = self.root.chambers().get_active()
         index = chm.last_process.get_index()
         def is_lastpr(pr):
             return pr.get_index() != index
@@ -173,7 +181,7 @@ class RootObject:
         Params:
                 path(Path): 出力ファイル名
         """
-        t = self.context.root.get_ui().get_screen_texts()
+        t = self.root.get_ui().get_screen_texts()
         with open(path.get(), "w", encoding="utf-8") as fo:
             fo.write(t)
         
@@ -181,7 +189,7 @@ class RootObject:
         """ @task
         アクティブなチャンバーの処理が済んだメッセージを詳細な形式で表示する。
         """
-        chm = self.context.root.chambers().get_active()
+        chm = self.root.chambers().get_active()
         for msg in chm.get_handled_messages():
             lines = []
             lines.append('"{}"'.format(msg.text))
@@ -196,7 +204,7 @@ class RootObject:
         Params:
             b?(bool):
         """
-        ui = self.context.root.get_ui()
+        ui = self.root.get_ui()
         if hasattr(ui, "use_ansi"):
             ui.use_ansi(b)
         
@@ -218,7 +226,7 @@ class RootObject:
             path(Path): 新たにmachaonが配備されるディレクトリ
         '''
         from machaon.types.shell import Path
-        transfer_deployed_directory(app, Path(self.context.root.get_basic_dir()), path)
+        transfer_deployed_directory(app, Path(self.root.get_basic_dir()), path)
     
     def machaon_update(self, context, app):
         ''' @task context
@@ -264,7 +272,7 @@ class RootObject:
         すべてのパッケージに更新を適用する。
         '''
         apppkg = AppPackageType()
-        for pkg in self.context.root.enum_packages():
+        for pkg in self.root.enum_packages():
             apppkg.update(pkg, context, app)
 
     def stringify(self):
@@ -308,56 +316,6 @@ class RootObject:
             .rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
             .rectangle(coord=(10,100,90,300), color="#0000FF")
         )
-
-#
-#
-#
-class AppTestObject:
-    """ さまざまなテストを提供する。 """
-    def __init__(self, app):
-        self.app = app
-    
-    def colors(self, text="サンプルテキスト"):
-        """
-        テキストの色。
-        Params:
-            text(str): 
-        """
-        app = self.app
-        app.post("message", text)
-        app.post("message-em", "【強調】" + text)
-        app.post("input", "【入力】" + text)
-        app.post("hyperlink", "【リンク】" + text)
-        app.post("warn", "【注意】" + text)
-        app.post("error", "【エラー発生】" + text)
-    
-    def progress(self):
-        """
-        プログレスバーを表示。
-        """
-        app = self.app
-        app.start_progress_display(total=50)
-        for _ in range(50):
-            app.interruption_point(progress=1, wait=1)
-        app.finish_progress_display(total=50)
-
-    def graphic(self):
-        """
-        図形を描画する。
-        """
-        app = self.app
-        app.post("canvas", app.new_canvas("cv1", width=200, height=400)
-            .rectangle_frame(coord=(2,2,100,200), color="#00FF00")
-            .rectangle_frame(coord=(50,50,200,250), color="#FF0000", dash=",")
-            .rectangle_frame(coord=(10,100,90,300), color="#0000FF")
-        )
-        app.post("canvas", app.new_canvas("cv2", width=200, height=400)
-            .oval(coord=(10,10,200,400), color="#004444")
-            .rectangle(coord=(2,2,100,200), color="#00FF00")
-            .rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
-            .rectangle(coord=(10,100,90,300), color="#0000FF")
-        )
-
 
 """
 

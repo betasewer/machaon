@@ -197,8 +197,10 @@ SUMMARY_ESCAPE_TRANS = str.maketrans({
 #
 # 実行時に読み込まれるモジュール
 #
-BootModuleNames = (
-    "string", "numeric", "dateandtime", "shell", "file"
+DefaultModuleNames = (
+    "types.string", "types.numeric", "types.dateandtime", 
+    "types.shell", "types.file",
+    "flow.flow"
 )
 
 #

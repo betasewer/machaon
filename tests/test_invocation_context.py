@@ -1,5 +1,5 @@
 from machaon.core.invocation import InvocationContext, instant_context
-
+from machaon.macatest import run
 
 def test_newobject_deduction():
     context = instant_context()

@@ -1,6 +1,6 @@
 
 from machaon.core.type import (
-    BadTypeDeclaration, TypeModule, TypeDefinition, 
+    CORE_SCOPE, BadTypeDeclaration, TypeModule, TypeDefinition, 
     TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 )
 from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration

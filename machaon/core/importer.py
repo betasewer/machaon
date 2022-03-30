@@ -194,7 +194,7 @@ class PyBasicModuleLoader:
         err = None
         try:
             for typedef in self.scan_type_definitions():
-                typename = typedef.get_scoped_typename()
+                typename = typedef.get_typename()
                 qualname = typedef.get_describer_qualname()
                 yield {
                     "typename" : typename,

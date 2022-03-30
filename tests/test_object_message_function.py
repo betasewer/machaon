@@ -8,7 +8,7 @@ from machaon.core.message import (
 from machaon.process import TempSpirit
 from machaon.types.fundamental import fundamental_types
 
-from machaon.macatest import parse_test, run
+from machaon.macatest import parse_test, put_instructions, run, parse_instr, message_test
 
 fundamental_type = fundamental_types()
 
@@ -43,10 +43,11 @@ def test_parse_function():
             returned.pprint(spi)
             spi.printout()
         
-        assert parse_test(engine, context, returned.get_typename(), "Function")
+        assert message_test(s, context, returned.get_typename(), "Function")
 
         fundamental_type.define({
             "Typename" : "Dog",
+            "ValueType" : str,
             "Methods" : [{
                 "Name" : "name",
                 "Returns" : { "Typename" : "Str" },
@@ -71,11 +72,11 @@ def test_parse_function():
         fn = returned.value
 
         lhso = fn.run(subj, subcontext)
-        assert parse_test(fn, subcontext, lhso, rhs[0])
+        assert message_test(fn.get_expression(), subcontext, lhso, rhs[0])
         
         # 再入
         lhso = fn.run(subj, subcontext)
-        assert parse_test(fn, subcontext, lhso, rhs[0])
+        assert message_test(fn.get_expression(), subcontext, lhso, rhs[0])
 
     lucky = {}
     ltest("Function ctor -> @ name == lucky", lucky, True)

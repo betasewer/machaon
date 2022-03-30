@@ -45,7 +45,7 @@ def employees_sheet(objectdesk, args, columns):
 @pytest.fixture
 def objectdesk():
     typemod = TypeModule()
-    typemod.add_fundamental_types()
+    typemod.add_fundamentals()
     typemod.define(Employee, typename="Employee")
     desk = InvocationContext(input_objects=ObjectCollection(), type_module=typemod)
     return desk
