@@ -157,12 +157,10 @@ class ComplexType():
 #
 # N進数
 #
-def zerofillformat(width, type):
-    if width is not None:
-        fmt = "0" + str(width)
-    else:
-        fmt = ""
-    return "{:" + fmt + type + "}"
+def formatstr(fmt, type):
+    if fmt[-1].lower() != type:
+        fmt += type
+    return "{:" + fmt + "}"
 
 class Hex:
     """ @type subtype
@@ -170,15 +168,15 @@ class Hex:
     BaseType:
         Int
     Params:
-        width?(int): 埋める幅
+        format?(str): 書式指定
     """
-    def constructor(self, v, width):
+    def constructor(self, v, fmt=None):
         """ @meta """
         return int(v, 16)
 
-    def stringify(self, v, width):
+    def stringify(self, v, fmt="X"):
         """ @meta """
-        return zerofillformat(width,"x").format(v)
+        return formatstr(fmt,"x").format(v)
 
 class Oct:
     """ @type subtype
@@ -186,15 +184,15 @@ class Oct:
     BaseType:
         Int
     Params:
-        width?(int): 0で埋める幅
+        format?(str): 書式指定
     """
-    def constructor(self, v, width):
+    def constructor(self, v, fmt=None):
         """ @meta """
         return int(v, 8)
 
-    def stringify(self, v, width):
+    def stringify(self, v, fmt="o"):
         """ @meta """
-        return zerofillformat(width,"o").format(v)
+        return formatstr(fmt,"o").format(v)
 
 class Bin:
     """ @type subtype
@@ -202,15 +200,15 @@ class Bin:
     BaseType:
         Int
     Params:
-        width?(int): 0で埋める幅
+        format?(str): 書式指定
     """
-    def constructor(self, v, width):
+    def constructor(self, v, fmt=None):
         """ @meta """
         return int(v, 2)
 
-    def stringify(self, v, width):
+    def stringify(self, v, fmt="b"):
         """ @meta """
-        return zerofillformat(width,"b").format(v)
+        return formatstr(fmt,"b").format(v)
 
 #
 # ロケール

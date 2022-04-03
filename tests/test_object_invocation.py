@@ -77,7 +77,7 @@ def test_objectref():
     assert inv.get_min_arity() == 0
     assert inv.get_max_arity() == 0
     assert inv.get_parameter_spec(0) is None
-    assert inv.get_result_spec().get_typename() == "Str"
+    assert inv._resolved.typename == "Str"
     
     inv = ObjectMemberInvocation("trumpet")
     assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ラッパ"
@@ -107,7 +107,7 @@ def test_objectref():
     assert inv.get_min_arity() == 0
     assert inv.get_max_arity() == 0
     assert inv.get_parameter_spec(0) is None
-    assert inv.get_result_spec().get_typename() == "Any"
+    assert inv._resolved.get_method().get_result().get_typename() == "Any"
 
     # unary instance method
     #inv = ObjectMemberInvocation("iskanji")
@@ -124,7 +124,7 @@ def test_objectref():
     assert isinstance(inv._resolved, TypeMethodInvocation)
     assert inv.get_min_arity() == 1
     assert inv.get_max_arity() == 1
-    assert inv.get_result_spec().get_typename() == "bool"
+    assert inv._resolved.get_method().get_result().get_typename() == "bool"
 
     # generic method (移譲先のオブジェクトを参照する)
     inv = ObjectMemberInvocation("=")
@@ -199,4 +199,29 @@ def test_type_constructor():
     assert [x.value for x in sht.row_values(2)] == [13, -13]
     assert sht.get_current_column_names() == ["positive", "negative"]
 
+    # サブタイプ
+    t = cxt.instantiate_type("Int:Hex", "010")
+    inv = TypeConstructorInvocation(t)
+    arg1 = cxt.new_object("98ABCDEF")
+    s = inv.prepare_invoke(cxt, arg1)._invokeaction()
+    assert s == 0x98ABCDEF
 
+from machaon.macatest import run
+
+def test_type_inv_entry_result_type():
+    cxt = instant_context()
+
+    # 実行時の型引数がついた型を正しく返す
+    t = cxt.instantiate_type("Sheet")
+    inv = TypeConstructorInvocation(t)
+    arg1 = cxt.new_object(["11","12","13"], type="Tuple")
+    arg2 = cxt.new_object("Int", type="Type")
+    arg3 = cxt.new_object("positive")
+    arg4 = cxt.new_object("negative")
+    entry = inv.prepare_invoke(cxt, arg1, arg2, arg3, arg4)
+    ret = entry.invoke(cxt)
+
+    assert ret.value.get_current_column_names() == ["positive", "negative"]
+    assert [x.value for x in ret.value.row_values(2)] == [13, -13]
+    
+    assert ret.get_conversion() == "Sheet: Int positive negative" # 型引数が保存されている

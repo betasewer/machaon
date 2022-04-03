@@ -140,12 +140,12 @@ def test_meta_method():
     assert ps[1].get_typename() == "int"
 
     ti = t.instantiate(cxt, ["Any", 2])
-    assert len(ti.args) == 2
-    assert ti.args[0].get_typename() == "Any"
-    assert ti.args[1] == 2
+    assert len(ti.get_args()) == 2
+    assert ti.get_args()[0].get_typename() == "Any"
+    assert ti.get_args()[1] == 2
 
     meta = ti.get_typedef().get_meta_method("constructor")
-    cargs = meta.prepare_invoke_args(cxt, ti.get_typedef().get_type_params(), 999, ti.args)
+    cargs = meta.prepare_invoke_args(cxt, ti.get_typedef().get_type_params(), 999, ti.get_args())
     assert len(cargs) == 3
     assert cargs[0] == 999
     assert cargs[1].get_typename() == "Any"

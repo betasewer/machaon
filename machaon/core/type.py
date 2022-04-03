@@ -1,5 +1,4 @@
 from collections import defaultdict
-from email.mime import base
 
 from typing import Any, Sequence, Union, Callable, ItemsView, Optional, Generator, DefaultDict
 from typing import List, Dict, Tuple
@@ -11,7 +10,7 @@ from machaon.core.symbol import (
     SIGIL_SCOPE_RESOLUTION
 )
 from machaon.core.typedecl import (
-    TypeProxy, TypeInstance, TypeDecl,
+    TypeAny, TypeProxy, TypeInstance, TypeDecl,
     METHODS_BOUND_TYPE_TRAIT_INSTANCE,
     METHODS_BOUND_TYPE_INSTANCE
 )
@@ -70,12 +69,12 @@ SUBTYPE_BASE_ANY = 1
 #
 #
 class Type(TypeProxy):
-    def __init__(self, describer=None, name=None, value_type=None, params=None, *, doc="", bits=0):
+    def __init__(self, describer=None, name=None, value_type=None, params=None, *, doc="", scope=None, bits=0):
         self.typename: str = normalize_typename(name) if name else None
         self.doc: str = doc
         self.flags = bits
         self.value_type: Callable = value_type
-        self.scope: Optional[TypeModule] = None
+        self.scope: Optional[TypeModule] = scope
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
         self._describer = describer
@@ -93,7 +92,11 @@ class Type(TypeProxy):
         return get_scoped_typename(self.typename, self.scope.scopename if self.scope else None)
 
     def get_conversion(self):
-        return self.get_scoped_typename()
+        if self.scope and self.scope.scopename:
+            return self.get_scoped_typename()
+        else:
+            return self.get_typename()
+
         
     def get_value_type(self):
         return self.value_type
@@ -157,10 +160,8 @@ class Type(TypeProxy):
         return issubclass(valtype, self.value_type)
 
     def get_constructor_param(self):
-        meta = self._metamethods.get("constructor")
-        if meta:
-            return meta.get_param()
-        return None
+        meta = self.get_meta_method("constructor")
+        return meta.get_param()
 
     def get_type_params(self):
         return self._params
@@ -297,89 +298,17 @@ class Type(TypeProxy):
     #
     # 特殊メソッド
     #
-    def constructor(self, context, value, typeinst=None):
-        """ 
-        コンストラクタ。
-        実装メソッド:
-            constructor
-        """
-        fns = self.resolve_meta_method("constructor", context, value, typeinst)
-        if fns is None:
-            # 定義が無い場合、単純に生成する
-            return self.value_type(value)
-        
-        return self.invoke_meta_method(*fns)
-    
-    def stringify_value(self, value, typeinst=None) -> str:
-        """ 
-        値を文字列に変換する。
-        実装メソッド:
-            stringify
-        """
-        fns = self.resolve_meta_method("stringify", None, value, typeinst)
-        if fns is None:
-            # デフォルト動作
-            return str(value)
-        
-        return self.invoke_meta_method(*fns)
-
-    def summarize_value(self, value, typeinst=None):
-        """ 
-        値を短い文字列に変換する。
-        実装メソッド:
-            summarize
-        """
-        fns = self.resolve_meta_method("summarize", None, value, typeinst)
-        if fns is None:
-            s = self.stringify_value(value)
-            if not isinstance(s, str):
-                s = repr(s) # オブジェクトに想定されない値が入っている
-            s = summary_escape(s)
-            if len(s) > 100:
-                return s[0:50] + "..." + s[-47:]
-            else:
-                return s
-        return self.invoke_meta_method(*fns)
-
-    def pprint_value(self, app, value, typeinst=None):
-        """ 
-        値を画面に表示する。
-        実装メソッド:
-            pprint
-        """
-        fns = self.resolve_meta_method("pprint", None, value, typeinst, app)
-        if fns is None:
-            s = self.stringify_value(value)
-            app.post("message", s)
-            return
-        try:
-            self.invoke_meta_method(*fns)
-        except Exception as e:
-            app.post("error", "オブジェクトの表示中にエラーが発生:")
-            app.post("message", e)
-
-    def reflux_value(self, value:Any, typeinst=None):
-        """
-        コンストラクタを呼び出せる別の型の値に変換する。
-        実装メソッド:
-            reflux
-        """
-        fns = self.resolve_meta_method("reflux", None, value, typeinst)
-        if fns is None:
-            return self.stringify_value(value, typeinst) # 文字に変換する
-        return self.invoke_meta_method(*fns)
-
     def get_meta_method(self, name):
         """ メタメソッドの定義を取得する """
-        return self._metamethods.get(name)
-
-    def resolve_meta_method(self, name, context, value, typeinst, *moreargs):
-        """ メソッドと引数の並びを解決する """
         fn = self._metamethods.get(name)
         if fn is None:
-            return None
-        typeargs = typeinst.args if typeinst else []
-        args = fn.prepare_invoke_args(context, self._params, value, typeargs, *moreargs)
+            fn = meta_method_prototypes[name]
+        return fn
+
+    def resolve_meta_method(self, name, context, value, typeargs, *moreargs):
+        """ メソッドと引数の並びを解決する """
+        fn = self.get_meta_method(name)
+        args = fn.prepare_invoke_args(context, self._params, value, typeargs or [], *moreargs)
         return (fn, *args)
 
     def invoke_meta_method(self, method, *args, **kwargs):
@@ -392,19 +321,105 @@ class Type(TypeProxy):
         Returns:
             Any: 実行したメソッドの返り値
         """
-        if method.is_type_bound():
-            args = (self, *args)
+        fn = self.delegate_method(method.get_action_target())
+        if fn is None:
+            fn = getattr(self, "default_"+method.get_action_target())
         else:
-            bt = self.get_methods_bound_type()
-            if bt == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
+            # メタメソッドの指定によって引数を調整する
+            if method.is_type_bound():
                 args = (self, *args)
+            else:
+                bt = self.get_methods_bound_type()
+                if bt == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
+                    args = (self, *args)
 
-        fn = self.delegate_method(method.get_action_target(), fallback=False)
         try:
             return fn(*args, **kwargs)
         except Exception as e:
             raise BadMetaMethod(e, self, method) from e
 
+    def constructor(self, context, value, args=None):
+        """ 
+        コンストラクタ。
+        実装メソッド:
+            constructor
+        """
+        fns = self.resolve_meta_method("constructor", context, value, args)
+        return self.invoke_meta_method(*fns)
+
+    def stringify_value(self, value, args=None) -> str:
+        """ 
+        値を文字列に変換する。
+        実装メソッド:
+            stringify
+        """
+        fns = self.resolve_meta_method("stringify", None, value, args)
+        s = self.invoke_meta_method(*fns)
+        if not isinstance(s, str):
+            raise TypeError("stringifyの返り値が文字列ではありません:{}".format(s))
+        return s
+
+    def summarize_value(self, value, args=None):
+        """ 
+        値を短い文字列に変換する。
+        実装メソッド:
+            summarize
+        """
+        fns = self.resolve_meta_method("summarize", None, value, args)
+        s = self.invoke_meta_method(*fns)
+        if not isinstance(s, str):
+            raise TypeError("summarizeの返り値が文字列ではありません:{}".format(s))
+        return s
+
+    def pprint_value(self, app, value, args=None):
+        """ 
+        値を画面に表示する。
+        実装メソッド:
+            pprint
+        """
+        fns = self.resolve_meta_method("pprint", None, value, args, app)
+        try:
+            self.invoke_meta_method(*fns)
+        except Exception as e:
+            app.post("error", "オブジェクトの表示中にエラーが発生:")
+            app.post("message", e)
+
+    def reflux_value(self, value, args=None):
+        """
+        コンストラクタを呼び出せる別の型の値に変換する。
+        実装メソッド:
+            reflux
+        """
+        fns = self.resolve_meta_method("reflux", None, value, args)
+        return self.invoke_meta_method(*fns)
+
+    # デフォルト定義
+    def default_constructor(self, value, *args):
+        """ 定義が無い場合、単純に生成する """
+        return self.value_type(value, *args)
+    
+    def default_stringify(self, value, *_args):
+        """ 定義が無い場合、単純に文字にする """
+        return str(value)
+    
+    def default_summarize(self, value, *args):
+        """ stringifyに流し、縮める """
+        s = self.stringify_value(value, args)
+        s = summary_escape(s)
+        if len(s) > 100:
+            return s[0:50] + "..." + s[-47:]
+        else:
+            return s
+    
+    def default_pprint(self, app, value, *args):
+        """ stringifyに流す """
+        s = self.stringify_value(value, args)
+        app.post("message", s)
+
+    def default_reflux(self, value, *args):
+        """ stringifyに流す """
+        return self.stringify_value(value, args)
+    
     #
     # 型定義構文用のメソッド
     #
@@ -516,7 +531,7 @@ class Type(TypeProxy):
             for aliasname in aliasnames:
                 self.add_member_alias(aliasname, method.name)
         
-        for meth in meta_method_prototypes:
+        for meth in meta_method_prototypes.values():
             name = meth.get_action_target()
             attr = describer.get_attribute(name)
             if attr is None:
@@ -587,6 +602,8 @@ class TypeDefinition():
         self.bits = bits
         self.params = [] # 型パラメータ
         self.memberaliases = [] 
+        self.scope = None
+
         self._t = None
 
         self._sub_target = None # Mixin, Subtypeのターゲット
@@ -669,7 +686,7 @@ class TypeDefinition():
         if self.bits & TYPE_SUBTYPE:
             # Subtype型を登録する（この時点で対象型はロードされていなくてもよい）
             self.bits |= TYPE_TYPETRAIT_DESCRIBER
-            self.value_type = _SubtypeTrait # 代入しておかないと補完されてエラーになる
+            self.value_type = _SubtypeBaseValueType # 代入しておかないと補完されてエラーになる
 
         # 型名を登録する
         return self.typename
@@ -687,6 +704,7 @@ class TypeDefinition():
             value_type=self.value_type,
             params=self.params,
             doc=self.doc,
+            scope=self.scope,
             bits=self.bits
         )
         try:
@@ -781,8 +799,15 @@ class TypeDefinition():
         for line in sections.get_lines("Params"):
             typename, name, doc, flags = parse_parameter_line(line.strip())
             typedecl = parse_type_declaration(typename)
-            flags &= ~PARAMETER_REQUIRED # 全てオプショナル引数にする
-            p = MethodParameter(name, typedecl, doc, flags=flags)
+
+            # 全てオプショナル引数にする
+            flags &= ~PARAMETER_REQUIRED 
+            if typename == "Type":
+                default = TypeAny() # 型引数のデフォルトはAny
+            else:
+                default = None
+
+            p = MethodParameter(name, typedecl, doc, default, flags)
             self.params.append(p)
 
         aliases = sections.get_lines("MemberAlias")
@@ -798,7 +823,7 @@ class TypeDefinition():
         return True
 
 # ダミーの値型に使用
-class _SubtypeTrait:
+class _SubtypeBaseValueType:
     pass
 
 
@@ -954,12 +979,8 @@ class TypeModule():
 
         return t
 
-    def enum(self, *, geterror=False) -> Generator[Type, None, None]:
-        """ すべての型をロードし、取得する
-        Params:
-            geterror(bool): 発生したエラーを取得する
-        """
-        for name, t in self._lib_typename.items():
+    def _enum_types(self, lib, geterror):
+        for name, t in lib.items():
             if geterror:
                 try:
                     yield name, self._load_type(t), None
@@ -968,10 +989,16 @@ class TypeModule():
                     yield name, None, ErrorObject(e)
             else:
                 yield name, self._load_type(t)
+
+    def enum(self, *, geterror=False) -> Generator[Type, None, None]:
+        """ すべての型をロードし、取得する
+        Params:
+            geterror(bool): 発生したエラーを取得する
+        """
+        yield from self._enum_types(self._lib_typename, geterror)
         
         for chi in self._children.values():
             yield from chi.enum(geterror=geterror)
-
 
     def deduce(self, value_type) -> Optional[TypeProxy]:
         """ 値型に適合する型を取得する
@@ -1067,6 +1094,46 @@ class TypeModule():
             subtype = self.find_subtype(SUBTYPE_BASE_ANY, typename, scope=scope)
 
         return subtype
+
+    def enum_subtypes_of(self, basetypecode, *, scope=None, geterror=False):
+        """ ある型のすべてのサブタイプをロードし、取得する
+        Params:
+            geterror(bool): 発生したエラーを取得する
+        Yields:
+            Tuple[Str, Str, Type, Error]: scopename, typename, type, error
+        """
+        basetype = self.get(basetypecode, scope=scope)
+        if basetype is None:
+            return None
+        basekey = basetype.get_typename()
+
+        # 子モジュールを全て探索する
+        def _enum(mod):
+            types = mod._subtype_rels.get(basekey, {})
+            for name, t, err in self._enum_types(types, geterror):
+                yield (mod.scopename, "{}:{}".format(basekey,name), t, err)
+                
+            for ch in mod._children.values():
+                yield from _enum(ch)
+        
+        yield from _enum(self)
+
+    def enum_all_subtypes(self, *, geterror=False):
+        """ 全てのサブタイプを取得する。 
+        Yields:
+            Tuple[Str, Str, Type, Error]: scopename, typename, type, error
+        """
+        def _enum(mod):
+            for base, types in mod._subtype_rels.items():
+                for name, t, err in self._enum_types(types, geterror):
+                    yield (mod.scopename, "{}:{}".format(base,name), t, err)
+                
+            for ch in mod._children.values():
+                yield from _enum(ch)
+
+        yield from _enum(self)
+
+
 
     #
     # 型を定義する

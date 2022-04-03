@@ -1,10 +1,12 @@
+from email import message
 from json import load
 from re import sub
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
+from unittest import result
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.typedecl import (
-    PythonType, TypeDecl, TypeInstanceDecl, TypeProxy, 
+    PythonType, TypeAny, TypeDecl, TypeInstanceDecl, TypeProxy, 
     parse_type_declaration
 )
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
@@ -51,12 +53,13 @@ class InvocationEntry():
     """
     関数の呼び出し引数と返り値。
     """
-    def __init__(self, invocation, action, args, kwargs, *, exception=None):
+    def __init__(self, invocation, action, args, kwargs, result_spec=None, *, exception=None):
         self.invocation = invocation
         self.action = action
         self.args = args
         self.kwargs = kwargs
         self.result = EMPTY_OBJECT
+        self.result_spec = result_spec or MethodResult()
         self.exception = exception
         self.message = None
         
@@ -116,14 +119,10 @@ class InvocationEntry():
         self.result = self.result_object(context, value=result)
         return self.result
 
-    def result_spec(self):
-        return self.invocation.get_result_spec()
-
-    def result_object(self, context, *, value, spec=None, objectType=None) -> Object:
+    def result_object(self, context, *, value, objectType=None) -> Object:
         """ 返り値をオブジェクトに変換する """
-        isobject = isinstance(value, Object)
         if objectType is None:
-            if isobject:
+            if isinstance(value, Object):
                 objectType = type(value)
             else:
                 objectType = Object
@@ -131,43 +130,19 @@ class InvocationEntry():
         # エラーが発生した
         if self.exception:
             return _new_process_error_object(context, self.exception, objectType)
+    
+        # NEGATEモディファイアを適用       
+        modnegate = "NEGATE_RESULT" in self.invocation.modifier
 
-        # 型を決める
-        if isinstance(value, Object):
-            rettype = value.type
-            retval = value.value
-        else:
-            retval = value
-            retspec = spec or self.result_spec()
-            if retspec is None:
-                raise ValueError("result_spec must be specified as MethodResult instance")
-            
-            if retspec.is_return_self():
-                # レシーバオブジェクトを返す
-                reciever = self.message.get_reciever_value()
-                if isinstance(reciever, Object):
-                    return objectType(reciever.type, reciever.value)
-                else:
-                    rettype = retspec.get_typedecl().instance(context)
-                    return objectType(rettype, reciever)
-            elif retspec.is_type_to_be_deduced():
-                rettype = context.deduce_type(retval) # 型を値から推定する
-            else:
-                rettype = retspec.get_typedecl().instance(context)
-
-        # Noneが返された
-        if retval is None:
-            return objectType(context.get_type("None"), None) # そのままNoneを返す
-        
-        # NEGATEモディファイアを適用            
-        if "NEGATE_RESULT" in self.invocation.modifier:
-            retval = not retval
-        
-        # 返り値型に値が適合しない場合は、型変換を行う
-        if not rettype.check_value_type(type(retval)):
-            retval = rettype.construct(context, retval)
-        
-        return objectType(rettype, retval)
+        # 型を決めて値を返す
+        try:
+            rettype, retval = self.result_spec.make_result_value(context, value, 
+                message=self.message, negate=modnegate
+            )
+            return objectType(rettype, retval)
+        except Exception as e:
+            self.exception = e
+            return _new_process_error_object(context, e, objectType)
 
     def is_failed(self):
         if self.exception:
@@ -190,9 +165,9 @@ def instant_return_test(context, value, typename):
     """ メソッド返り値テスト用 """
     from machaon.core.method import MethodResult
     inv = BasicInvocation()
-    entry = InvocationEntry(inv, None, (), {})
     decl = parse_type_declaration(typename)
-    return entry.result_object(context, value=value, spec=MethodResult(decl))
+    entry = InvocationEntry(inv, None, (), {}, MethodResult(decl))
+    return entry.result_object(context, value=value)
 
 
 INVOCATION_FLAG_PRINT_STEP     = 0x0001
@@ -382,11 +357,11 @@ class InvocationContext:
             type(Any): 型を示す値（型名、型クラス、型インスタンス）
             conversion(str): 値の変換方法を示す文字列
         """
-        if type:
+        if type and not isinstance(type, TypeAny):
             t = self.select_type(type)
             if t is None:
-                if isinstance(value, str):
-                    raise BadTypename(value)
+                if isinstance(type, str):
+                    raise BadTypename(type)
                 else:
                     t = self.define_type(type) # 無ければ定義して返す 
             if value is None and not args:
@@ -800,9 +775,6 @@ class BasicInvocation():
     def prepare_invoke(self, context: InvocationContext, *args) -> InvocationEntry:
         raise NotImplementedError()
     
-    def get_result_spec(self):
-        return MethodResult() # 値から推定する
-
     def is_task(self):
         return False
     
@@ -877,13 +849,11 @@ class TypeMethodInvocation(BasicInvocation):
         args.extend(self.method.make_argument_row(context, argobjs))
         
         action = self.method.get_action()
-        return InvocationEntry(self, action, args, {})   
+        result_spec = self.method.get_result()
+        return InvocationEntry(self, action, args, {}, result_spec)   
     
     def get_action(self):
         return self.method.get_action()
-    
-    def get_result_spec(self):
-        return self.method.get_result()
 
     def get_max_arity(self):
         cnt = self.method.get_acceptable_argument_max()
@@ -927,10 +897,6 @@ class RedirectorInvocation(BasicInvocation):
         self.must_be_resolved()
         return self._resolved.get_action()
     
-    def get_result_spec(self):
-        self.must_be_resolved()
-        return self._resolved.get_result_spec()
-
     def get_max_arity(self):
         self.must_be_resolved()
         return self._resolved.get_max_arity()
@@ -1040,9 +1006,6 @@ class FunctionInvocation(BasicInvocation):
 
     def get_min_arity(self):
         return self.minarg
-        
-    def get_result_spec(self):
-        return MethodResult() # 値から推定する
 
 
 class MessageInvocation(BasicInvocation):
@@ -1077,9 +1040,6 @@ class MessageInvocation(BasicInvocation):
 
     def get_min_arity(self):
         return 0
-        
-    def get_result_spec(self):
-        return MethodResult() # 値から推定する
 
 
 class ObjectMemberInvocation(RedirectorInvocation):
@@ -1162,10 +1122,6 @@ class ObjectMemberGetterInvocation(BasicInvocation):
     def get_action(self):
         return None
     
-    def get_result_spec(self):
-        decl = parse_type_declaration(self.typename)
-        return MethodResult(decl)
-    
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         return None
 
@@ -1186,7 +1142,9 @@ class ObjectMemberGetterInvocation(BasicInvocation):
             if elem is None:
                 raise BadObjectMemberInvocation(self.name)
             obj = elem.object
-        return InvocationEntry(self, _GetProperty(obj, self.name), (), {})
+        
+        result_spec = MethodResult(parse_type_declaration(self.typename))
+        return InvocationEntry(self, _GetProperty(obj, self.name), (), {}, result_spec)
 
 
 class TypeConstructorInvocation(BasicInvocation):
@@ -1217,8 +1175,9 @@ class TypeConstructorInvocation(BasicInvocation):
         # 型の実装を取得する
         t = self._type.instance(context, [x.value for x in args]) # Objectをはがし、引数の型変換を行う
         # 変換コンストラクタの呼び出しを作成
-        arg = resolve_object_value(argobj)
-        return InvocationEntry(self, t.construct, (context, arg), {})
+        argvalue = t.get_typedef().get_constructor_param().make_argument_value(context, argobj)
+        result_spec = MethodResult(TypeInstanceDecl(t))
+        return InvocationEntry(self, t.construct, (context, argvalue), {}, result_spec)
     
     def get_action(self):
         raise ValueError("型変換関数の実体は取得できません")
@@ -1235,9 +1194,6 @@ class TypeConstructorInvocation(BasicInvocation):
             return mth.get_param(index)
         else:
             return None
-    
-    def get_result_spec(self):
-        return MethodResult(self._type)
 
 
 class Bind1stInvocation(BasicInvocation):
@@ -1281,7 +1237,5 @@ class Bind1stInvocation(BasicInvocation):
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         return None
-    
-    def get_result_spec(self):
-        return self._method.get_result_spec()
+
     

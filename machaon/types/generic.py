@@ -555,7 +555,7 @@ class GenericMethods:
             obj(Object): 対象
         """
         from machaon.types.fundamental import TypeType
-        return TypeType().help(obj.type, context, obj.value)
+        return TypeType().help(obj.type, context, context.spirit, obj.value)
     
     def convertas(self, obj, context, type):
         """ @method reciever-param context

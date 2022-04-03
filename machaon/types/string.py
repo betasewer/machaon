@@ -7,12 +7,12 @@ class StrType():
     ValueType:
         str
     """
-    def constructor(self, v):
+    def constructor(self, o):
         """ @meta 
         Params:
             Any:
         """
-        return str(v)
+        return str(o)
     
     def stringify(self, v):
         """ @meta """

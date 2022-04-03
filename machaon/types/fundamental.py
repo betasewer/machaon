@@ -3,7 +3,7 @@ from machaon.core.type import (
     CORE_SCOPE, BadTypeDeclaration, TypeModule, TypeDefinition, 
     TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 )
-from machaon.core.typedecl import PythonType, TypeProxy, parse_type_declaration
+from machaon.core.typedecl import PythonType, SubType, TypeProxy, parse_type_declaration
 from machaon.core.object import Object
 
 #
@@ -66,8 +66,8 @@ class TypeType():
         """
         return type.get_typedef().instantiate(context, args)
 
-    def help(self, typ, context, value=None):
-        """ @method context
+    def help(self, typ, context, app, value=None):
+        """ @task context
         型の説明、メソッド一覧を表示する。
         """
         docs = []
@@ -75,39 +75,41 @@ class TypeType():
         docs.extend(typ.get_document().splitlines())
         docs.append("［実装］\n{}".format(typ.get_describer_qualname()))
         docs.append("［メソッド］")
-        context.spirit.post("message", "\n".join(docs))
+        app.post("message", "\n".join(docs))
         # メソッドの表示
-        meths = self.methods(typ, context, value)
+        meths = self.methods(typ, context, app, value)
         meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection](names,doc,signature,source)")
-        meths_sheet.pprint(context.spirit)
+        meths_sheet.pprint(app)
 
-    def methods(self, typ, context, instance=None):
-        '''@method context
+    def methods(self, typ, context, app, instance=None):
+        '''@task context
         使用可能なメソッドを列挙する。
         Returns:
             Sheet[ObjectCollection](names,doc,signature,source): メソッドのリスト
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
-        for names, meth in enum_selectable_method(typ, instance):
-            if isinstance(meth, Exception):
-                helps.append({
-                    "names" : context.new_object(names),
-                    "doc" : "!{}: {}".format(type(meth).__name__, meth),
-                    "signature" : "",
-                    "source" : ""
-                })
-            else:
-                source = "user"
-                if meth.is_from_class_member():
-                    source = "class"
-                elif meth.is_from_instance_member():
-                    source = "instance"
-                helps.append({
-                    "names" : context.new_object(names),
-                    "source" : context.new_object(source),
-                    "#delegate" : context.new_object(meth, type="Method")
-                })
+        with app.progress_display():
+            for names, meth in enum_selectable_method(typ, instance):       
+                app.interruption_point(progress=1)
+                if isinstance(meth, Exception):
+                    helps.append({
+                        "names" : context.new_object(names),
+                        "doc" : "!{}: {}".format(type(meth).__name__, meth),
+                        "signature" : "",
+                        "source" : ""
+                    })
+                else:
+                    source = "user"
+                    if meth.is_from_class_member():
+                        source = "class"
+                    elif meth.is_from_instance_member():
+                        source = "instance"
+                    helps.append({
+                        "names" : context.new_object(names),
+                        "source" : context.new_object(source),
+                        "#delegate" : context.new_object(meth, type="Method")
+                    })
         return helps
     
     def method(self, type, name):
@@ -119,6 +121,40 @@ class TypeType():
             Method: メソッド
         """
         return type.select_method(name)
+
+    def subtype(self, typ, context, name):
+        ''' @method context [sub]
+        サブタイプを取得する。
+        Params:
+            name(str):
+        Returns:
+            Type:
+        '''
+        sub = context.type_module.get_subtype(typ, name)
+        if sub is not None:
+            return SubType(typ, sub)
+        return None
+
+    def subtypes(self, typ, context, app):
+        ''' @task context [subs]
+        サブタイプを列挙する。
+        Returns:
+            Sheet[ObjectCollection](name,doc,scope,location): メソッドのリスト
+        '''
+        with app.progress_display():
+            for scopename, name, t, error in context.type_module.enum_subtypes_of(typ, geterror=True):            
+                app.interruption_point(progress=1)
+                entry = {
+                    "name" : name,
+                }
+                if error is not None:
+                    entry["doc"] = "!!!" + error.summarize()
+                    entry["type"] = error
+                else:
+                    entry["doc"] = t.doc
+                    entry["scope"] = scopename
+                    entry["location"] = t.get_describer_qualname()
+                yield entry
     
     def name(self, type):
         ''' @method

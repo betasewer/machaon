@@ -413,9 +413,9 @@ class Spirit():
                 time.sleep(wait)
                 #print("slept {}".format(wait))
 
-        if progress and self.cur_prog_bar:
-            self.cur_prog_bar.update(progress)
-            if self.cur_prog_bar.is_starting(): 
+        if progress and self.cur_prog_display:
+            self.cur_prog_display.update(progress)
+            if self.cur_prog_display.is_starting(): 
                 time.sleep(0.1) # 初回はバー全体の表示用に待つ
         return True
     
@@ -427,13 +427,13 @@ class Spirit():
 
     # プログレスバーを開始する
     def start_progress_display(self, *, total=None, title=None, tag=None):
-        self.cur_prog_bar = MiniProgressDisplay(spirit=self, total=total, tag=tag, title=title)
+        self.cur_prog_display = MiniProgressDisplay(spirit=self, total=total, tag=tag, title=title)
 
     # プログレスバーを完了した状態にする
     def finish_progress_display(self, total=None):
-        if self.cur_prog_bar is None:
+        if self.cur_prog_display is None:
             return
-        self.cur_prog_bar.finish(total)
+        self.cur_prog_display.finish(total)
     
     # with文のためのオブジェクトを作る
     def progress_display(self, *, total=None, title=None, tag=None):
@@ -459,9 +459,9 @@ class Spirit():
             self.spirit.finish_progress_display(total=self.total)
         
         def set_total(self, total):
-            if self.spirit.cur_prog_bar is None:
+            if self.spirit.cur_prog_display is None:
                 return
-            self.spirit.cur_prog_bar.set_total(total)
+            self.spirit.cur_prog_display.set_total(total)
             self.total = total
 
     #
@@ -530,8 +530,8 @@ class TempSpirit(Spirit):
 
     # プログレスバーの更新のみを行う
     def interruption_point(self, *, nowait=False, progress=None, noexception=False):
-        if progress and self.cur_prog_bar:
-            self.cur_prog_bar.update(progress)
+        if progress and self.cur_prog_display:
+            self.cur_prog_display.update(progress)
         return True
     
 #

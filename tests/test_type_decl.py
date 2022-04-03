@@ -42,14 +42,14 @@ def test_decl_parse():
     reflectparse("Sheet[Room](number|type[])")
 
     # サブタイプ
-    equalparse("Int:Kanji", "__Sub[Int,Kanji]")
-    equalparse("Int:Zen+Neko[](a,b)+Kanji", "__Sub[Int,Zen,Neko[](a,b),Kanji]")
+    equalparse("Int:Kanji", "$Sub[Int,Kanji]")
+    equalparse("Int:Zen+Neko[](a,b)+Kanji", "$Sub[Int,Zen,Neko[](a,b),Kanji]")
     equalparse(
         "Sheet[Int:Kanji, Str:Alpha]", 
-        "Sheet[__Sub[Int,Kanji],__Sub[Str,Alpha]]")
+        "Sheet[$Sub[Int,Kanji],$Sub[Str,Alpha]]")
     equalparse(
         "Sheet[Function[](seq)|Int:Hex+Fax+Ilu|None, Str:Alpha]", 
-        "Sheet[Union[Function[](seq),__Sub[Int,Hex,Fax,Ilu],None],__Sub[Str,Alpha]]")
+        "Sheet[Union[Function[](seq),$Sub[Int,Hex,Fax,Ilu],None],$Sub[Str,Alpha]]")
 
 
 @pytest.mark.xfail
@@ -83,19 +83,19 @@ def test_decl_instance():
     assert isinstance(d, TypeInstance)
     assert d is not cxt.get_type("Sheet")
     assert d.get_typedef() is cxt.get_type("Sheet")
-    assert len(d.args) == 3
-    assert d.args[0] is cxt.get_type("Int")
-    assert d.args[1] == "@"
-    assert d.args[2] == "length"
+    assert len(d.get_args()) == 3
+    assert d.get_args()[0] is cxt.get_type("Int")
+    assert d.get_args()[1] == "@"
+    assert d.get_args()[2] == "length"
     assert d.get_typename() == "Sheet"
     assert d.get_conversion() == "Sheet: Int @ length"
     
     # declとinstanceで束縛
     d = parse_("Sheet[Int]").instance(cxt, ["length", "@"])
-    assert len(d.args) == 3
-    assert d.args[0] is cxt.get_type("Int")
-    assert d.args[1] == "length"
-    assert d.args[2] == "@"
+    assert len(d.get_args()) == 3
+    assert d.get_args()[0] is cxt.get_type("Int")
+    assert d.get_args()[1] == "length"
+    assert d.get_args()[2] == "@"
     assert d.get_conversion() == "Sheet: Int length @" 
 
 
@@ -403,12 +403,12 @@ class Oct:
     def stringify(self, v):
         """ @meta """
         return oct(v)
+
+from machaon.macatest import run
         
 
 def test_int_subtype():
     cxt = instant_context()
-    cxt.define_type(TypeDefinition(ClassDescriber(Hex), "Hex", subtypeof="Int"))
-    cxt.define_type(TypeDefinition(ClassDescriber(Oct), "Oct", subtypeof="Int"))
     
     t = cxt.get_subtype("Int", "Hex")
     assert t
@@ -421,19 +421,24 @@ def test_int_subtype():
     assert isinstance(x.construct(cxt, "0F"), int)
     assert x.construct(cxt, "FF") == 0xFF
     assert x.construct(cxt, 0x24) == 0x24
-    assert x.stringify_value(0x20) == "0x20"
+    assert x.stringify_value(0x20) == "20"
 
     x = cxt.instantiate_type("Int:Oct")
     assert isinstance(x, SubType)
     assert x.construct(cxt, "54") == 0o54
-    assert x.stringify_value(0o43) == "0o43"
+    assert x.stringify_value(0o43) == "43"
+    
+    x = cxt.instantiate_type("Int:Hex", "08")
+    assert isinstance(x, SubType)
+    assert x.construct(cxt, "FF") == 0xFF
+    assert x.stringify_value(0xFF) == "000000ff"
     
     x = cxt.instantiate_type("Int:Oct+Hex") # あまりいい例ではないが...
     assert isinstance(x, SubType)
     assert x.construct(cxt, "54") == 0o54
     assert x.construct(cxt, "AB") == 0xAB # Hexで実行される
-    assert x.stringify_value(0o43) == "0o43"
-    assert x.stringify_value(0xAB) == oct(0xAB)
+    assert x.stringify_value(0o43) == "43"
+    assert x.stringify_value(0xAB) == "253"
 
 
 

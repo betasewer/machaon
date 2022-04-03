@@ -65,9 +65,9 @@ def test_type():
     sh = cxt.new_object(datas, *columns, conversion="Sheet[Employee]")
 
     assert isinstance(sh.type, TypeInstance)
-    assert sh.type.args[0].get_conversion() == "Employee"
-    assert sh.type.args[1] == "name"
-    assert sh.type.args[2] == "postcode"
+    assert sh.type.get_args()[0].get_conversion() == "Employee"
+    assert sh.type.get_args()[1] == "name"
+    assert sh.type.get_args()[2] == "postcode"
 
     assert sh.value.get_current_column_names() == ["name", "postcode"]
 

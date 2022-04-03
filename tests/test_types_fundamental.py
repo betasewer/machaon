@@ -1,7 +1,5 @@
-from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
+
 from machaon.types.fundamental import fundamental_types
-from machaon.core.type import TYPE_TYPETRAIT_DESCRIBER, Type, TypeModule
-from machaon.core.object import Object
 from machaon.core.invocation import instant_context
 
 fundamental_type = fundamental_types()
@@ -98,6 +96,7 @@ def test_method():
     assert act(None, "0123.txt", "[0-9]+")
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
+    assert cxt.get_type("Str").get_conversion() == "Str"
     assert regmatch.get_action_target() == "Str:reg-match"
 
 def test_function():
@@ -108,3 +107,14 @@ def test_function():
     assert fnpower
     from machaon.core.message import MessageExpression
     assert isinstance(fnpower, MessageExpression)
+
+def test_fundamental_numeric_subtype():
+    cxt = instant_context()
+
+    ht = cxt.type_module.get_subtype("Int", "Hex")
+    assert len(ht.get_type_params()) == 1
+
+    t = cxt.instantiate_type("Int:Hex", "08X")
+    assert t.construct(cxt, "ABCD") == 0xABCD
+    assert t.stringify_value(0xABCD) == "0000ABCD"
+

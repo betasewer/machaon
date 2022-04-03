@@ -70,6 +70,28 @@ class RootObject:
                     entry["doc"] = t.doc
                     entry["type"] = t
                 yield entry
+        
+    def subtypes(self, spirit):
+        ''' @task
+        使用可能な型を列挙する。
+        Params:
+        Returns:
+            Sheet[ObjectCollection](name, doc, scope, location): 型のリスト
+        '''
+        with spirit.progress_display():
+            for scopename, name, t, error in self.context.type_module.enum_all_subtypes(geterror=True):
+                spirit.interruption_point(progress=1)
+                entry = {
+                    "name" : name,
+                }
+                if error is not None:
+                    entry["doc"] = "!!!" + error.summarize()
+                    entry["type"] = error
+                else:
+                    entry["doc"] = t.doc
+                    entry["scope"] = scopename
+                    entry["location"] = t.get_describer_qualname()
+                yield entry
     
     def vars(self):
         '''@method

@@ -327,6 +327,10 @@ class AryType:
         """ @meta """
         return AryType(value, p1, p2)
 
+    def stringify(self, T, p1, p2=None):
+        """ @meta """
+        return str([self.v, T.get_conversion(), p1, p2])
+
     def get(self):
         return (self.v, self.p1, self.p2)
 
@@ -349,9 +353,12 @@ def test_type_params():
     from machaon.core.typedecl import TypeAny
 
     t = decl.instance(cxt)
-    assert len(t.args) == 2
-    assert t.args[0] is None
-    assert t.args[1] == 42
+    assert len(t.get_args()) == 2
+    assert isinstance(t.get_args()[0], TypeAny)
+    assert t.get_args()[1] == 42
     v = t.construct(cxt, 111)
 
     assert v.get() == (111, 42, None)
+
+    # stringify
+    assert t.stringify_value(v) == str([111, "Any", 42, None])

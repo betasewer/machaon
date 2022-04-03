@@ -301,9 +301,9 @@ class TypeInstance(RedirectProxy):
     def get_conversion(self):
         n = ""
         n += self.type.typename
-        if self.args:
+        if self._args:
             strs = []
-            for a in self.args:
+            for a in self._args:
                 if isinstance(a, TypeProxy):
                     x = a.get_conversion()
                     if " " in x:
@@ -315,22 +315,21 @@ class TypeInstance(RedirectProxy):
         return n
 
     def constructor(self, context, value):
-        return self.type.constructor(context, value, self)
+        return self.type.constructor(context, value, self._args)
 
     def stringify_value(self, value):
-        return self.type.stringify_value(value, self)
+        return self.type.stringify_value(value, self._args)
     
     def summarize_value(self, value):
-        return self.type.summarize_value(value, self)
+        return self.type.summarize_value(value, self._args)
 
     def pprint_value(self, spirit, value):
-        return self.type.pprint_value(spirit, value, self)
+        return self.type.pprint_value(spirit, value, self._args)
     
     def reflux_value(self, value):
-        return self.type.reflux_value(value, self)
+        return self.type.reflux_value(value, self._args)
 
-    @property
-    def args(self):
+    def get_args(self):
         return self._args
 
 
@@ -528,7 +527,10 @@ class SubType(RedirectProxy):
         return self.basetype
 
     def get_typename(self):
-        return self.basetype.get_typename()
+        return self.meta.get_typename()
+
+    def get_typedef(self):
+        return self.meta.get_typedef()
         
     def get_conversion(self):
         convs = [x.get_conversion() for x in (self.basetype, *self.metatypes)]
@@ -620,13 +622,13 @@ class ConstructorReturnTypeError(Exception):
 class TypeConversionError(Exception):
     """ 引数での型チェックの失敗 """
     def __init__(self, srctype, desttype):
-        if not isinstance(srctype, type) or not isinstance(desttype, TypeProxy):
-            raise TypeError("TypeConversionError(type, TypeProxy)")
+        if not isinstance(srctype, type) or not isinstance(desttype, str):
+            raise TypeError("TypeConversionError requires args (type, str), but: ({}, {})".format(srctype, desttype))
         super().__init__(srctype, desttype)
 
     def __str__(self):
         srctype, desttype = self.args
-        return "'{}'型の引数に'{}'型の値を代入できません".format(desttype.get_conversion(), full_qualified_name(srctype))
+        return "'{}'型の引数に'{}'型の値を代入できません".format(desttype, full_qualified_name(srctype))
 
 #
 # 型宣言
@@ -690,16 +692,19 @@ class TypeDecl:
         params = typedef.get_type_params()
         if args:
             if self.declargs:
-                argvals = construct_args(params, self.declargs, args) # 非型変数のみの置き換え
+                argvals = list(construct_args(params, self.declargs, args)) # 非型変数のみの置き換え
             else:
-                argvals = iter(args) # 丸ごと置き換え
+                argvals = args # 丸ごと置き換え
         else:
-            argvals = construct_args(params, self.declargs, self.ctorargs)
+            argvals = list(construct_args(params, self.declargs, self.ctorargs))
             
         from machaon.core.method import Method
         method = Method(params=params)
-        if method.get_param_count() > 0:
-            argvals = method.make_argument_row(context, list(argvals), construct=True)
+        if not method.check_param_count(len(argvals)):
+            raise TypeError("引数より多くの型引数が与えられました: {} ({})".format(self.to_string(), ",".join([str(x) for x in argvals])))
+
+        if argvals:
+            argvals = method.make_argument_row(context, argvals, construct=True)
             if argvals:
                 return TypeInstance(typedef, argvals)
         
@@ -721,10 +726,10 @@ class TypeDecl:
             # 型制約
             typeargs = [x.instance(context) for x in self.declargs]
             return TypeUnion(typeargs)
-        elif self.typename == "__Sub":
+        elif self.typename == "$Sub":
             # サブタイプを解決する
             if len(self.declargs) < 2:
-                raise ValueError("not enough type args for __Sub")
+                raise ValueError("not enough type args for $Sub")
             baset = self.declargs[0].instance(context) # 基底型
             subtypes = []
             identity = False
@@ -733,7 +738,7 @@ class TypeDecl:
                     identity = True
                     continue
                 td = context.get_subtype(baset.typename, decl.typename)
-                t = decl.instance_type(td, context)
+                t = decl.instance_type(td, context, args)
                 subtypes.append(t)
             return SubType(baset, *subtypes, identity=identity)
         elif SIGIL_PYMODULE_DOT in self.typename: 
@@ -772,12 +777,17 @@ class TypeInstanceDecl(TypeDecl):
         return self.inst.get_conversion()
 
     def instance(self, context, args=None) -> TypeProxy:
-        return self.inst
+        if args is None or not args:
+            return self.inst
+        else:
+            # 全ての引数を入れ替える
+            return TypeInstance(self.inst.get_typedef(), args)
 
     def instantiate_constructor_method(self, type):
-        """ 束縛を行わない """
+        """ 引数を再束縛するシグニチャを提供する """
+        t = type.get_typedef()
         from machaon.core.method import Method
-        return Method(params=[])
+        return Method(params=t.get_type_params()) # 全ての引数を入れ替える
     
 
 class TypeDeclError(Exception):
@@ -870,7 +880,7 @@ def _typedecl_subtype(itr):
     elif not types:
         raise TypeDeclError(itr, "型がありません")
     else:
-        return TypeDecl("__Sub", types)
+        return TypeDecl("$Sub", types)
 
 def _typedecl_expr(itr):
     # 型名

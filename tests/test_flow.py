@@ -6,11 +6,10 @@ from machaon.core.invocation import instant_context
 from machaon.flow.flow import Flow
 from machaon.macatest import run
 
-@run
 def test_flow():
     cxt = instant_context()
     f = Flow()
-    f.pipe(cxt, "Int:Bin[](6)")
+    f.pipe(cxt, "Int:Bin[](06b)")
     assert f.influx("1011") == 0b01011
     assert f.reflux(0b010101) == "010101"
 
@@ -54,7 +53,6 @@ def test_enclosure_try():
     assert f.reflux("あ") == "『あ』"
     assert f.reflux("『あ") == "『『あ』"
 
-    
 def test_tupleflow_functor():
     from machaon.types.shell import Path
     from machaon.flow.flow import TupleFlow

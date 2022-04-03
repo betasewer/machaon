@@ -100,7 +100,7 @@ def get_name_attr(t):
     elif hasattr(t, "__name__"):
         return t.__name__
     else:
-        raise ValueError("No __qualname__ or __name__ property")
+        raise ValueError("No __qualname__ or __name__ property in '{}'".format(t))
 
 def full_qualified_name(t):
     n = get_name_attr(t)

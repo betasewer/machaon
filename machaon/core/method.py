@@ -1,5 +1,5 @@
 from machaon.core.importer import ClassDescriber
-from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE
+from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE, TypeAny, TypeInstanceDecl, TypeProxy
 from typing import (
     Any, Sequence, List, Dict, Union, Callable, 
     Optional, Tuple, Generator
@@ -318,12 +318,22 @@ class Method():
                     return None
             return self.params[index]
         return None
-    
+
     def get_param_count(self):
-        """ 仮引数の数: 可変長引数はカウントしない """
+        """ 可変長引数はカウントしない仮引数の数 """
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
         return len(self.params)
+    
+    def check_param_count(self, count):
+        """ 引数の数が仮引数の数を超えていないかチェックする """
+        if self.flags & METHOD_PARAMETER_UNSPECIFIED:
+            raise UnloadedMethod(self.name)
+        if count <= len(self.params):
+            return True
+        elif self.params and self.params[-1].is_variable():
+            return True
+        return False
 
     def make_argument_row(self, context, argobjs, *, construct=False):
         """ 
@@ -448,7 +458,7 @@ class Method():
                 typefn = this_type.delegate_method(self.target, self.mixin)
                 if typefn is not None:
                     callobj = typefn
-                    source = "{}:{}".format(this_type.get_scoped_typename(), self.name)
+                    source = "{}:{}".format(this_type.get_conversion(), self.name)
                     if this_type.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
                         self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
                     elif self.is_mixin():
@@ -834,7 +844,7 @@ class MethodParameter():
         return self.typedecl
         
     def make_argument_value(self, context, obj, typeinst=None, *, construct=False):
-        """ オブジェクトから値を取り出し型を検査する """
+        """ 型を検査しつつオブジェクトから引数となる値を得る """
         if isinstance(obj, Object):
             construct = False
         
@@ -869,6 +879,14 @@ class MethodParameter():
                 raise ArgumentTypeError(self, value)
 
             return value
+    
+    def check_argument_value(self, context, value):
+        """ 型を検査する """
+        if self.is_object():
+            return isinstance(value, Object)
+        else:
+            t0 = self.get_typedecl().instance(context)
+            return t0.check_value_type(type(value))
 
 
 class ArgumentTypeError(Exception):
@@ -919,8 +937,55 @@ class MethodResult:
     def is_return_self(self):
         return self.special is RETURN_SELF
 
+    def is_already_instantiated(self):
+        return isinstance(self.typedecl, TypeInstanceDecl)
+
     def get_typedecl(self):
         return self.typedecl
+
+    def make_result_value(self, context, value, *, message=None, negate=False):
+        """ 型を検査しつつオブジェクトから返り値となる値を得る 
+        Returns:
+            Tuple[TypeProxy, Any]:
+        """
+        # Object
+        if isinstance(value, Object):
+            return (value.type, value.value)
+
+        # Noneはそのまま返す
+        if value is None:
+            return (context.get_type("None"), None)
+        
+        # return-self
+        if self.is_return_self():
+            if message is None:
+                raise ValueError("No message is specified to get return-self value")
+            # レシーバオブジェクトを返す
+            reciever = message.get_reciever_value()
+            if isinstance(reciever, Object):
+                return (reciever.type, reciever.value)
+            else:
+                rettype = self.typedecl.instance(context)
+                return (rettype, reciever)
+        
+        # 型を決める
+        rettype = None
+        if self.is_already_instantiated():
+            rettype = self.typedecl.instance(context)
+        elif self.is_type_to_be_deduced():
+            rettype = context.deduce_type(value) # 型を値から推定する
+        else:
+            rettype = self.typedecl.instance(context)
+
+        # NEGATEモディファイアを適用            
+        if negate:
+            value = not value
+        
+        # 返り値型に値が適合しない場合は、型変換を行う
+        if not rettype.check_value_type(type(value)):
+            value = rettype.construct(context, value)
+
+        return (rettype, value)
 
 
 def parse_parameter_line(line):
@@ -995,10 +1060,10 @@ def parse_result_line(line):
 #
 #
 class MetaMethod():
-    def __init__(self, target, flags=0):
+    def __init__(self, target, flags=0, ctorparam=None):
         self.target = target
         self.flags = flags
-        self._ctorparam = None
+        self._ctorparam = ctorparam
     
     def get_action_target(self):
         return self.target
@@ -1033,7 +1098,7 @@ class MetaMethod():
         return (self.flags & METHOD_META_NOEXTRAPARAMS) > 0
 
     def get_param(self):
-        return self._ctorparam
+        return self._ctorparam or MethodParameter("value")
     
     def load_from_docstring(self, decl):
         """
@@ -1072,9 +1137,8 @@ class MetaMethod():
         """ メソッド実行時に渡す引数を準備する """        
         # コンストラクタ引数の型をチェックする
         if self._ctorparam and context is not None:
-            t0 = self._ctorparam.get_typedecl().instance(context)
-            if not t0.check_value_type(type(value)):
-                raise TypeConversionError(type(value), t0)
+            if not self._ctorparam.check_argument_value(context, value):
+                raise TypeConversionError(type(value), self._ctorparam.typename)
         
         args = []
         if context is not None and self.is_context_bound(): 
@@ -1095,18 +1159,18 @@ class MetaMethod():
             for tp in typeparams:
                 if not tp.is_type():
                     break
-                args.append(None)
+                args.append(TypeAny())
         
         return args
 
 
-meta_method_prototypes = (
+meta_method_prototypes = { x.get_action_target():x for x in (
     MetaMethod("constructor", METHOD_TYPE_BOUND),
     MetaMethod("stringify"),
     MetaMethod("summarize"),
     MetaMethod("pprint"),
     MetaMethod("reflux"),
-)
+)}
 
 
 def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
