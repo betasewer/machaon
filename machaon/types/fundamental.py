@@ -64,7 +64,7 @@ class TypeType():
         Returns:
             Type:
         """
-        return type.get_typedef().instantiate(context, args)
+        return type.instantiate(context, args)
 
     def help(self, typ, context, app, value=None):
         """ @task context

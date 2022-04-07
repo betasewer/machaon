@@ -1,3 +1,4 @@
+import code
 from typing import Any
 
 import ast
@@ -10,6 +11,8 @@ from machaon.core.symbol import (
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
     SIGIL_SCOPE_RESOLUTION,
+    SIGIL_LINE_QUOTER,
+    SIGIL_BEGIN_USER_QUOTER,
     SIGIL_SELECTOR_REVERSE_ARGS,
     SIGIL_SELECTOR_NEGATE_RESULT,
     SIGIL_SELECTOR_BASIC_RECIEVER,
@@ -76,7 +79,8 @@ class Message:
         self.reciever = None # Object
         self.selector = None # Invocation
         self.args = args or []   # List[Object]
-        self._argtrailing = False
+        self.selector_mods = set()
+        self._concluded = False
         if reciever:
             self.set_reciever(reciever)
         if selector:
@@ -94,6 +98,12 @@ class Message:
         if selector is None:
             raise TypeError()
         self.selector = selector
+
+    def set_selector_modifier(self, modifier):
+        if self.is_selector_specified():
+            self.selector.modifier.add(modifier)
+        else:
+            self.selector_mods.add(modifier)
 
     def add_arg(self, arg):
         if arg is None:
@@ -114,6 +124,11 @@ class Message:
     def is_min_arg_specified(self):        
         if self.selector:
             return len(self.args) >= self.selector.get_min_arity()
+        return False
+
+    def is_selector_arg_trailing(self):
+        if self.selector:
+            return "TRAILING_ARGS" in self.selector.modifier
         return False
     
     def is_selector_parameter_consumer(self):
@@ -152,6 +167,9 @@ class Message:
 
     def check_concluded(self, evalcontext):
         """ メッセージがすでに完成しているか """
+        if self._concluded:
+            return True
+
         urefcount = len([x for x in self._refs() if not x.is_resolved()])
         if evalcontext.locals.count() < urefcount:
             return False
@@ -162,13 +180,14 @@ class Message:
         if not self.resolve_selector(evalcontext):
             return False
         
-        if self._argtrailing:
+        if self.is_selector_arg_trailing():
             if not self.is_max_arg_specified():
                 return False
         else:
             if not self.is_min_arg_specified():
                 return False
-
+        
+        self._concluded = True
         return True
 
     def conclude(self, evalcontext):
@@ -193,7 +212,7 @@ class Message:
                 # ゼロの場合はセレクタを返す
                 self.as_selector_returner(evalcontext)
 
-        self._argtrailing = False
+        self._concluded = True
 
     def resolve_selector(self, evalcontext):
         """ セレクタを呼び出しへと解決する。 """
@@ -209,10 +228,11 @@ class Message:
         if isinstance(sel, SelectorResolver):
             sel = sel.resolve(evalcontext, self.reciever)
 
-        if "TRAILING_ARGS" in sel.modifier:
-            self._argtrailing = True
-
         self.selector = sel
+
+        if self.selector_mods:
+            self.selector.modifier |= self.selector_mods
+            self.selector_mods.clear()
         
         return True
     
@@ -279,20 +299,23 @@ class Message:
             else:
                 exprs.append(str(item))
 
-        if self.reciever is not None:
+        if self.is_reciever_specified():
             put(self.reciever)
         else:
             put("<レシーバ欠落>")
 
-        if self.selector is not None:
+        if self.is_selector_specified():
             put(self.selector)
-
-            minarg = self.selector.get_min_arity()
-            for elem, _ in zip_longest(self.args, range(minarg-1)):
-                if elem is not None:
-                    put(elem)
-                else:
-                    put("<引数欠落>")
+            if isinstance(self.selector, BasicInvocation):
+                minarg = self.selector.get_min_arity()
+                for elem, _ in zip_longest(self.args, range(minarg-1)):
+                    if elem is not None:
+                        put(elem)
+                    else:
+                        put("<引数欠落>")
+            else:
+                for a in self.args:
+                    put(a)
         else:
             put("<セレクタ欠落>")
             put("<引数欠落（個数不明）>")
@@ -612,6 +635,18 @@ class AffixedSelector:
         ("SHOW_HELP", SIGIL_SELECTOR_SHOW_HELP),
     ]
 
+    @classmethod
+    def get_modifier(cls, ch, *, fallback=False):
+        for v, c in cls.prefixes:
+            if c == ch:
+                return v
+        for v, c in cls.suffixes:
+            if c == ch:
+                return v
+        if not fallback:
+            raise ValueError("Invalid modifier character: " + ch)
+        return None
+
     def __init__(self, selector, flags=None):
         if flags is None:
             self._selector, self._flags = AffixedSelector.read_flags(selector)
@@ -678,8 +713,8 @@ TOKEN_BLOCK_BEGIN = 0x02
 TOKEN_BLOCK_END = 0x04
 TOKEN_ALL_BLOCK_END = 0x08
 TOKEN_STRING = 0x10
-TOKEN_ARGUMENT = 0x20
 TOKEN_FIRSTTERM = 0x40
+TOKEN_BLOCK_SELECTOR_MOD = 0x100
 
 #  - 要素の種類
 TERM_TYPE_MASK     = 0xF0
@@ -695,37 +730,62 @@ EXPECT_ARGUMENT = TERM_TYPE_ARGUMENT
 #
 #
 #
-class MessageTokenBuffer():
+CHAR_BEGIN_QUOTE = 1
+CHAR_END_QUOTE = 2
+CHAR_BEGIN_BLOCK = 3
+CHAR_END_BLOCK = 4
+CHAR_END_BLOCK_TRARGS = 5
+CHAR_WAIT_USER_QUOTER = 6
+CHAR_BEGIN_LINE_QUOTER = 7
+CHAR_BLOCK_SELECTOR_MOD = 8
+CHAR_SPACE = 10
+
+class SpecialChar():
+    """ コード付きの文字 """
+    def __init__(self, code, char) -> None:
+        self.code = code
+        self.char = char
+
+def testvoid(ch, brk=None):
+    if ch is None:
+        return True
+    elif ch.isspace():
+        return True
+    elif brk and ch == brk:
+        return True
+    return False
+
+def testchar(ch, *lch):
+    if ch not in lch:
+        return False
+    return True
+
+def teststring(ch, ch2, s):
+    if ch == s[0] and ch2 == s[1]:
+        return True
+    return False
+
+
+class MessageCharBuffer():
     def __init__(self):
         self.buffer = [] # type: list[str]
-        self.firstterm = True
-        self.quote_char_waiting = False
         self.quote_beg = None
         self.quote_end = None
+        self.quote_buf = []
         self.lastflush = ""
-    
+        self._readlength = 0
+
     def flush(self):
         string = "".join(self.buffer)
         self.lastflush = string
         self.buffer.clear()
-        if not string: # 空であれば排出しない
-            return False
-        return True
+        return len(string) > 0
 
-    def token(self, tokentype, string=None):
-        if string is None:
-            string = self.lastflush
-            self.lastflush = ""
-        
-        if self.firstterm: 
-            tokentype |= TOKEN_FIRSTTERM
-            if tokentype & TOKEN_TERM:
-                self.firstterm = False
-        
-        return (string, tokentype)
+    def last(self):
+        return self.lastflush
     
-    def set_next_token_firstterm(self):
-        self.firstterm = True
+    def add(self, ch):
+        self.buffer.append(ch)
     
     def quoting(self):
         return self.quote_beg is not None
@@ -735,33 +795,190 @@ class MessageTokenBuffer():
         self.quote_end = endch
         self.buffer.clear()
 
-    def add(self, ch):
-        self.buffer.append(ch)
-    
-    def check_quote_end(self):
+    def check_quote_end(self, ch):
         if not self.quoting() or self.quote_end is None:
+            return False
+
+        self.quote_buf.append(ch)
+        if len(self.quote_buf) < len(self.quote_end):
+            return False
+
+        if self.quote_buf[-1] != self.quote_end[-1]:
+            self.quote_buf.clear()
             return False
         
         if len(self.quote_end) > 1:
-            endlen = len(self.quote_end)
-            for i in range(2, endlen):
-                if self.buffer[-i] != self.quote_end[-i]:
+            for i in range(2, len(self.quote_end)):
+                if self.quote_buf[-i] != self.quote_end[-i]:
+                    self.quote_buf.clear()
                     return False
         
-        if len(self.buffer) == 0:
-            return False
-        
-        newch = self.buffer[-1]
-        if newch != self.quote_end[-1]:
-            return False
-        
-        offset = len(self.quote_end)
-        if offset>0:
-            self.buffer = self.buffer[:-offset]
-
         self.quote_beg = None
         self.quote_end = None
+        self.quote_buf.clear()
         return True
+
+    def read_char(self, s):
+        """
+        文字列をメッセージで使う文字のタイプに分ける。
+        """
+        length = len(s)
+        def char(i):
+            if 0<=i and i<length:
+                return s[i]
+            return None
+
+        consume = 0
+        userquote_wait = False
+        selector_prefixes = {x for _,x in AffixedSelector.prefixes}
+        for i in range(len(s)):
+            self._readlength += 1
+
+            if consume > 0:
+                consume -= 1
+                continue
+            
+            ch = s[i]
+
+            if userquote_wait:
+                if ch.isspace():
+                    self.begin_quote(" ", " ")
+                else:
+                    self.begin_quote(ch, QUOTE_ENDPARENS.get(ch,ch))
+                userquote_wait = False
+                continue
+
+            pch = char(i-1)
+            nch = char(i+1)
+            
+            pVOID = testvoid(pch, "(")
+            nVOID = testvoid(nch, ")")
+
+            if self.quoting():
+                if nVOID and self.check_quote_end(ch): # 引用符の後ろにスペースを必要とする
+                    yield CHAR_END_QUOTE
+                else:
+                    yield ch
+                continue
+
+            if pVOID and testchar(ch, "'", '"'):
+                # 文字列リテラルを開始する
+                self.begin_quote(ch, ch)
+                yield CHAR_BEGIN_QUOTE
+            elif pVOID and testchar(ch, "("):
+                # ブロックを開始する
+                yield CHAR_BEGIN_BLOCK
+            elif pVOID and testchar(nch, "(") and ch in selector_prefixes:
+                # モディファイア付きでブロックセレクタを開始する
+                yield CHAR_BEGIN_BLOCK
+                yield SpecialChar(CHAR_BLOCK_SELECTOR_MOD, ch)
+                consume += 1
+            elif testchar(ch, ")"):
+                # ブロックを終了する
+                if nVOID:
+                    yield CHAR_END_BLOCK
+                elif testchar(nch, SIGIL_SELECTOR_TRAILING_ARGS, SIGIL_SELECTOR_CONSUME_ARGS):
+                    yield SpecialChar(CHAR_BLOCK_SELECTOR_MOD, nch)
+                    yield CHAR_END_BLOCK
+                    consume += 1
+                else:
+                    yield ch
+            elif teststring(pch, ch, SIGIL_BEGIN_USER_QUOTER):
+                # ユーザー定義の引用符
+                userquote_wait = True
+                yield CHAR_WAIT_USER_QUOTER
+            elif teststring(pch, ch, SIGIL_LINE_QUOTER):
+                # 行末までの引用符
+                self.begin_quote("->", None)
+                yield CHAR_BEGIN_LINE_QUOTER
+            else:
+                # それ以外のメッセージを構成する文字
+                if ch.isspace():
+                    yield CHAR_SPACE
+                else:
+                    yield ch
+
+    def get_read_length(self):
+        return self._readlength
+    
+
+class MessageTokenizer():
+    """ 
+    """
+    def __init__(self):
+        self.buffer = MessageCharBuffer()
+        self._wait_firstterm = True
+        self._last_read_length = 0
+
+    def set_next_token_firstterm(self):
+        self._wait_firstterm = True
+
+    def pop_last_read(self, source):
+        l = self.buffer.get_read_length()
+        s = source[self._last_read_length:l]
+        self._last_read_length = l
+        return s
+
+    def new_token(self, s, tokentype=0):
+        if s:
+            tokentype |= TOKEN_TERM
+
+        if self._wait_firstterm: 
+            tokentype |= TOKEN_FIRSTTERM
+            if tokentype & TOKEN_TERM:
+                self._wait_firstterm = False
+        
+        return (s, tokentype)
+    
+    def read_token(self, source):
+        paren_count = 0
+        token = self.new_token
+        buf = self.buffer
+        for c in buf.read_char(source):
+            if isinstance(c, int):
+                if c == CHAR_SPACE:
+                    if buf.flush(): 
+                        yield token(buf.last())
+                elif c == CHAR_BEGIN_QUOTE:
+                    pass
+                elif c == CHAR_END_QUOTE:
+                    if buf.flush(): 
+                        yield token(buf.last(), TOKEN_STRING)
+                elif c == CHAR_BEGIN_BLOCK:
+                    if buf.flush(): 
+                        yield token(buf.last())
+                    yield token("", TOKEN_BLOCK_BEGIN)
+                    paren_count += 1
+                elif c == CHAR_END_BLOCK:
+                    if paren_count == 0:
+                        buf.add(")") # 括弧をリテラルの一部に含める
+                        paren_count = -1
+                    else:
+                        buf.flush()
+                        yield token(buf.last(), TOKEN_BLOCK_END)
+                        paren_count -= 1
+                        if paren_count < 0:
+                            raise SyntaxError("ブロックの開始記号が{}個足りません".format(-paren_count-1))
+                elif c == CHAR_BEGIN_LINE_QUOTER:
+                    pass
+                elif c == CHAR_WAIT_USER_QUOTER:
+                    pass
+            elif isinstance(c, str):
+                # バッファに文字を追加する
+                buf.add(c)
+            elif isinstance(c, SpecialChar):
+                if c.code == CHAR_BLOCK_SELECTOR_MOD:
+                    yield (c.char, TOKEN_BLOCK_SELECTOR_MOD)
+
+        if paren_count > 0:
+            raise SyntaxError("ブロックの終了記号が{}個足りません".format(paren_count))
+        
+        # バッファに残っている文字を処理する
+        buf.flush()
+        if buf.quoting():
+            yield token(buf.last(), TOKEN_ALL_BLOCK_END|TOKEN_STRING)
+        else:
+            yield token(buf.last(), TOKEN_ALL_BLOCK_END)
 
 
 #
@@ -874,8 +1091,7 @@ class InternalEngineCode():
 class MessageEngine():
     def __init__(self, expression="", messages=None):
         self.source = expression
-        self.buffer = None
-        self._tokens = []    # type: list[tuple[str, int]]
+        self._tokens = None  # type: MessageTokenizer
         self._readings = []  # type: list[Message]
         self._curblockstack = [] # type: list[int]
         self._msgs = messages or []
@@ -888,89 +1104,6 @@ class MessageEngine():
     def get_expression(self) -> str:
         """ コード文字列を返す """
         return self.source
-    
-    def read_token(self, source):
-        """ 
-        入力文字列をトークンへと変換する 
-        Params:
-            source(str): 入力文字列
-        Yields:
-            Tuple[str, int]: 文字列, トークンの意味を示す整数値
-        """
-        self.buffer = MessageTokenBuffer() # バッファをリセット
-        user_quote_prelude = ""
-        paren_count = 0
-        buffer = self.buffer
-        for ch in source:
-            self._lastread += ch
-
-            if buffer.quoting():
-                buffer.add(ch)
-            else:
-                if ch == "'" or ch == '"':
-                    buffer.begin_quote(ch, ch)
-                elif ch == "(":
-                    if buffer.flush(): 
-                        yield buffer.token(TOKEN_TERM)
-                    yield buffer.token(TOKEN_BLOCK_BEGIN, "")
-                    paren_count += 1
-                elif ch == ")":
-                    if buffer.flush():
-                        yield buffer.token(TOKEN_TERM|TOKEN_BLOCK_END)
-                    else:
-                        yield buffer.token(TOKEN_BLOCK_END)
-                    paren_count -= 1
-                    if paren_count < 0:
-                        raise SyntaxError("始め括弧が足りません")
-                elif len(user_quote_prelude) == 2:
-                    # エスケープを開始する
-                    if user_quote_prelude == "->":
-                        buffer.begin_quote("->", None)
-                        buffer.add(ch)
-                    elif user_quote_prelude == "--":
-                        if ch.isspace():
-                            buffer.begin_quote(" ", " ")
-                        else:
-                            buffer.begin_quote(ch, QUOTE_ENDPARENS.get(ch,ch))
-                    else:
-                        raise ValueError("Unknown Quote Prelude:" + user_quote_prelude)
-                    user_quote_prelude = ""
-                elif ch == "-" and len(user_quote_prelude) < 2:
-                    # エスケープ表現の途中
-                    user_quote_prelude += ch
-                elif ch == ">" and len(user_quote_prelude) == 1:
-                    # エスケープ表現の途中
-                    user_quote_prelude += ch
-                else:
-                    # その他すべての文字
-                    if len(user_quote_prelude) > 0:
-                        # エスケープ表現ではなかった -> バッファに追加
-                        for cch in user_quote_prelude: buffer.add(cch)
-                        user_quote_prelude = ""
-                    
-                    if ch.isspace():
-                        # 空白ならバッファを書き出す
-                        if buffer.flush(): 
-                            yield buffer.token(TOKEN_TERM)
-                    else:
-                        # それ以外はバッファに追記する
-                        buffer.add(ch)
-
-            if buffer.check_quote_end():
-                if buffer.flush(): 
-                    yield buffer.token(TOKEN_TERM|TOKEN_STRING)
-                continue
-            
-        if paren_count > 0:
-            raise SyntaxError("終わり括弧が足りません")
-        
-        if buffer.flush():
-            if buffer.quoting():
-                yield buffer.token(TOKEN_TERM|TOKEN_ALL_BLOCK_END|TOKEN_STRING)
-            else:
-                yield buffer.token(TOKEN_TERM|TOKEN_ALL_BLOCK_END)
-        else:
-            yield buffer.token(TOKEN_ALL_BLOCK_END)
     
     # 現在評価している途中のメッセージ
     def current_reading_message(self):
@@ -998,14 +1131,13 @@ class MessageEngine():
         #
         # 直前のトークンから次に来るべきトークンの意味を決定する
         #
-        expect = EXPECT_NOTHING
         if reading is None:
-            pass
+            expect = EXPECT_NOTHING
         elif not reading.is_reciever_specified():
             expect = EXPECT_RECIEVER
         elif not reading.is_selector_specified():
             expect = EXPECT_SELECTOR
-        elif not reading.is_max_arg_specified():
+        else:
             expect = EXPECT_ARGUMENT
 
         #
@@ -1049,6 +1181,11 @@ class MessageEngine():
                     code.add(self.ast_DISCARD_LAST_BLOCK_MESSAGE)
                     return code
                 raise BadExpressionError("メッセージの要素が足りません")
+            # 現在のブロックセレクタに適用するモディファイア
+            if tokentype == TOKEN_BLOCK_SELECTOR_MOD:
+                code.add(self.ast_MODIFY_NEXT_BLOCK_SELECTOR, token)
+                return code
+
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:
@@ -1281,7 +1418,17 @@ class MessageEngine():
     @_ast
     def ast_DISCARD_LAST_BLOCK_MESSAGE(self):
         """ """
-        self.buffer.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
+        if self._tokens is None:
+            raise ValueError("Any message has not been read")
+        self._tokens.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
+        
+    @_ast
+    def ast_MODIFY_NEXT_BLOCK_SELECTOR(self, modchar):
+        """ """
+        mod = AffixedSelector.get_modifier(modchar)
+        if len(self._readings) < 2:
+            raise ValueError("Enough number of message does not exist")
+        self._readings[-2].set_selector_modifier(mod)
 
     @_ast
     def ast_SET_AS_SELECTOR_RETURNER(self, evalcontext):
@@ -1375,23 +1522,23 @@ class MessageEngine():
     def produce_message_1st(self, evalcontext):
         """ コードから構文を組み立てつつ随時実行 """
         self._msgs = []
-        for token, tokentype in self.read_token(self.source):
+        self._tokens = MessageTokenizer()
+        for token, tokentype in self._tokens.read_token(self.source):
             reading = self.current_reading_message()
             intlcode = self.compile_code(reading, token, tokentype)
             if intlcode is None:
                 break
             evalcontext.context.log(LOG_MESSAGE_CODE, intlcode)
 
-            # これから評価するメッセージ式の文字列を排出
-            yield self._lastread.strip()
-            self._lastread = ""
-
             # 内部コードを実行する 
             intlcode.run(evalcontext)
 
             # メッセージを組み立てる
             for msg in self.complete_messages(evalcontext):
-                yield msg # 組み立てたメッセージを排出
+                # これから評価するメッセージ式の文字列を排出
+                yield self._tokens.pop_last_read(self.source)
+                # 組み立てたメッセージを排出
+                yield msg 
                 self._msgs.append(msg)
     
     def produce_message_cached(self, _evalcontext):
@@ -1443,7 +1590,7 @@ class MessageEngine():
         context = self._lastevalcxt.context
         
         if self._readings and not context.is_failed():
-            raise BadExpressionError("Unconcluded messages remain: " + self._readings) # 成功したのにメッセージが余っている
+            raise BadExpressionError("Unconcluded messages remain: {}".format([str(x) for x in self._readings])) # 成功したのにメッセージが余っている
         self._readings.clear()
 
         returns = self._lastevalcxt.locals.clear_local_objects() # 返り値はローカルスタックに置かれている

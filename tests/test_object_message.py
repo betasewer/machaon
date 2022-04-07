@@ -5,7 +5,9 @@ from machaon.core.typedecl import TypeProxy
 
 from machaon.macatest import parse_test, put_instructions, run, parse_instr
 
-from machaon.core.message import MessageEngine, MessageExpression, MemberGetExpression, MessageTokenBuffer, SequentialMessageExpression, parse_function, parse_sequential_function, run_function, MessageEngine
+from machaon.core.message import (
+    MessageCharBuffer, MessageEngine, MessageTokenizer
+)
 from machaon.types.fundamental import fundamental_types
 from machaon.core.typedecl import parse_type_declaration
 
@@ -34,111 +36,206 @@ def pinstr(s):
 
 #-----------------------------------------------------------------------
 
-def test_tokenbuffer():
-    from machaon.core.message import TOKEN_TERM, TOKEN_FIRSTTERM
-    buf = MessageTokenBuffer()
+def test_charbuffer():
+    from machaon.core.message import CHAR_SPACE, CHAR_BEGIN_BLOCK, CHAR_END_BLOCK
+
+    buf = MessageCharBuffer()
     buf.add("a")
     buf.add("b")
     buf.add("c")
     assert buf.flush()
-    assert buf.token(TOKEN_TERM) == ("abc", TOKEN_TERM|TOKEN_FIRSTTERM)
-    assert len(buf.buffer) == 0
+    assert buf.last() == "abc"
+
+    def chars(s):
+        tks = MessageCharBuffer()
+        return list(tks.read_char(s))
+    assert chars("abc") == ["a","b","c"]
+    assert chars("012 == 345") == ["0", "1", "2", CHAR_SPACE, "=", "=", CHAR_SPACE, "3", "4", "5"]
+
+    assert chars("( a )") == [
+        CHAR_BEGIN_BLOCK, CHAR_SPACE, "a", CHAR_SPACE, CHAR_END_BLOCK
+    ]
+    assert chars("(( b ))") == [
+        CHAR_BEGIN_BLOCK, CHAR_BEGIN_BLOCK, CHAR_SPACE, "b", CHAR_SPACE, CHAR_END_BLOCK, CHAR_END_BLOCK
+    ]
+
+    #assert tokens("str") == ("a, b, c, #10, =, =, #10, d, e, f")
+    #assert tokens("(32 ('Int' sub Hex): 8) help)") == (
+    #    "#3, 3, 2, #10, #3, #1, I, n, t, #2, #10, s, u, b, #10, H, e, x, #5, #10, 8, #4, #10, h, e, l, p, #4"
+    #)
+
+#@run
+def test_tokenize():
+    from machaon.core.message import (
+        TOKEN_TERM, TOKEN_FIRSTTERM, 
+        TOKEN_ALL_BLOCK_END, TOKEN_BLOCK_BEGIN, TOKEN_BLOCK_END,
+        TOKEN_STRING, TOKEN_BLOCK_SELECTOR_MOD
+    )
+    def tokens(s):
+        tks = MessageTokenizer()
+        itr = tks.read_token(s)
+        li = []
+        while True:
+            try:
+                li.append(next(itr))
+            except StopIteration:
+                break
+            except Exception as e:
+                li.append(str(e))
+        return li
+
+    tks = MessageTokenizer()
+    assert tks.new_token("abc") == ("abc", TOKEN_TERM|TOKEN_FIRSTTERM)
+    
+    #
+    #　基本構文
+    #
+    assert tokens("abc") == [
+        ("abc", TOKEN_TERM|TOKEN_FIRSTTERM|TOKEN_ALL_BLOCK_END),
+    ]
+    assert tokens("abc == def") == [
+        ("abc", TOKEN_TERM|TOKEN_FIRSTTERM),
+        ("==", TOKEN_TERM),
+        ("def", TOKEN_TERM|TOKEN_ALL_BLOCK_END)
+    ]
+
+    #
+    # かっこ
+    #
+    assert tokens("(32 + 50)") == [
+        ("", TOKEN_BLOCK_BEGIN|TOKEN_FIRSTTERM),
+        ("32", TOKEN_TERM|TOKEN_FIRSTTERM),
+        ("+", TOKEN_TERM),
+        ("50", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("", TOKEN_ALL_BLOCK_END)
+    ]
+    assert tokens("1 add (2 mul 3)") == [
+        ("1", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("add", TOKEN_TERM), 
+        ("", TOKEN_BLOCK_BEGIN),
+        ("2", TOKEN_TERM),
+        ("mul", TOKEN_TERM), 
+        ("3", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("", TOKEN_ALL_BLOCK_END)
+    ]
+    assert tokens("(1 sub 2) mul 3") == [
+        ("", TOKEN_BLOCK_BEGIN|TOKEN_FIRSTTERM),
+        ("1", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("sub", TOKEN_TERM), 
+        ("2", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("mul", TOKEN_TERM), 
+        ("3", TOKEN_TERM|TOKEN_ALL_BLOCK_END),
+    ]
+    # ネスト・2連続の括弧
+    assert tokens("((32 ('Int' sub Hex) 8) help)") == [
+        ("", TOKEN_BLOCK_BEGIN|TOKEN_FIRSTTERM),
+        ("", TOKEN_BLOCK_BEGIN|TOKEN_FIRSTTERM),
+        ("32", TOKEN_TERM|TOKEN_FIRSTTERM),
+        ("", TOKEN_BLOCK_BEGIN),
+        ("Int", TOKEN_TERM|TOKEN_STRING), 
+        ("sub", TOKEN_TERM),
+        ("Hex", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("8", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("help", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("", TOKEN_ALL_BLOCK_END)
+    ]
+    # モディファイア付き
+    assert tokens("7FFF (Int sub Hex): 8 Int") == [
+        ("7FFF", TOKEN_TERM|TOKEN_FIRSTTERM),
+        ("", TOKEN_BLOCK_BEGIN),
+        ("Int", TOKEN_TERM),
+        ("sub", TOKEN_TERM),
+        (":", TOKEN_BLOCK_SELECTOR_MOD),
+        ("Hex", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("8", TOKEN_TERM),
+        ("Int", TOKEN_TERM|TOKEN_ALL_BLOCK_END),
+    ]
+    assert tokens("7FFF !(= add =) 9FFF") == [
+        ("7FFF", TOKEN_TERM|TOKEN_FIRSTTERM),
+        ("", TOKEN_BLOCK_BEGIN),
+        ("!", TOKEN_BLOCK_SELECTOR_MOD),
+        ("=", TOKEN_TERM),
+        ("add", TOKEN_TERM),
+        ("=", TOKEN_TERM|TOKEN_BLOCK_END),
+        ("9FFF", TOKEN_TERM|TOKEN_ALL_BLOCK_END),
+    ]
+
+    #
+    # 文字リテラル
+    #
+    assert tokens("'A string' endswith g") == [
+        ("A string", TOKEN_TERM|TOKEN_FIRSTTERM|TOKEN_STRING), 
+        ("endswith", TOKEN_TERM), 
+        ("g", TOKEN_TERM|TOKEN_ALL_BLOCK_END),
+    ]
+    # 一行
+    assert tokens("and concat ->    You got wrong book.") == [
+        ("and", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("concat", TOKEN_TERM), 
+        ("    You got wrong book.", TOKEN_TERM|TOKEN_ALL_BLOCK_END|TOKEN_STRING),
+    ]
+    # ユーザー定義文字で
+    assert tokens("he says --/ What are you doing? /") == [
+        ("he", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("says", TOKEN_TERM), 
+        (" What are you doing? ", TOKEN_TERM|TOKEN_STRING),
+        ("", TOKEN_ALL_BLOCK_END)
+    ]
+    assert tokens("he says --[ This is not a joke. ]") == [
+        ("he", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("says", TOKEN_TERM), 
+        (" This is not a joke. ", TOKEN_TERM|TOKEN_STRING),
+        ("", TOKEN_ALL_BLOCK_END)
+    ]
+
+    
+    #
+    # 丸括弧の区別
+    #
+    assert tokens("this is the research(1991,Honda), he needs to read") == [
+        ("this", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("is", TOKEN_TERM), 
+        ("the", TOKEN_TERM), 
+        ("research(1991,Honda),", TOKEN_TERM), 
+        ("he", TOKEN_TERM), 
+        ("needs", TOKEN_TERM), 
+        ("to", TOKEN_TERM), 
+        ("read", TOKEN_TERM|TOKEN_ALL_BLOCK_END)
+    ]
+    # 片側に終わり括弧のあるリテラル
+    assert tokens("abc Str:Enclosed(【,】) reverse") == [
+        ("abc", TOKEN_TERM|TOKEN_FIRSTTERM), 
+        ("Str:Enclosed(【,】)", TOKEN_TERM), 
+        ("reverse", TOKEN_TERM|TOKEN_ALL_BLOCK_END),
+    ]
+    # 片側に始まり括弧のあるリテラルには対応できない
 
 
 def test_tokenize_quote():
     def push(buf, s):
         for ch in s:
-            buf.add(ch)
+            if buf.check_quote_end(ch):
+                pass
+            else:
+                buf.add(ch)
 
-    buf = MessageTokenBuffer()
+    buf = MessageCharBuffer()
     push(buf, "12345")
     buf.flush()
-    buf.token(0)
     assert not buf.quoting()
 
     buf.begin_quote("[", "]")
     assert buf.quoting()
-    assert not buf.check_quote_end()
 
     push(buf, " NUWA TSUKA MOUUUUN YAME TARA? ")
-    assert not buf.check_quote_end()
+    assert buf.quoting()
     
-    buf.add("]")
-    assert buf.check_quote_end()
+    push(buf, "]")
+    assert not buf.quoting()
 
     buf.flush()
-    buf.token(0) == " NUWA TSUKA MOUUUUN YAME TARA? "
+    buf.last() == " NUWA TSUKA MOUUUUN YAME TARA? "
 
-#
-def test_message_engine():
-    from machaon.core.message import (
-        TOKEN_TERM, TOKEN_FIRSTTERM, TOKEN_ALL_BLOCK_END, 
-        TOKEN_BLOCK_BEGIN, TOKEN_BLOCK_END, TOKEN_STRING
-    )
-
-    engine = MessageEngine()
-
-    def reads(s):
-        v = []
-        for x in engine.read_token(s):
-            v.extend(x)
-        return tuple(v)
-
-    assert reads("1 add 2") == (
-        "1", TOKEN_TERM|TOKEN_FIRSTTERM, 
-        "add", TOKEN_TERM, 
-        "2", TOKEN_TERM|TOKEN_ALL_BLOCK_END
-    )
-
-    assert reads("3 - 4") == (
-        "3", TOKEN_TERM|TOKEN_FIRSTTERM, 
-        "-", TOKEN_TERM, 
-        "4", TOKEN_TERM|TOKEN_ALL_BLOCK_END
-    )
-
-    # かっこ
-    assert reads("1 add (2 mul 3)") == (
-        "1", TOKEN_TERM|TOKEN_FIRSTTERM, 
-        "add", TOKEN_TERM, 
-        "", TOKEN_BLOCK_BEGIN,
-        "2", TOKEN_TERM,
-        "mul", TOKEN_TERM, 
-        "3", TOKEN_TERM|TOKEN_BLOCK_END,
-        "", TOKEN_ALL_BLOCK_END
-    )
-
-    # エスケープ表現
-    assert reads("'A string' endswith g") == (
-        "A string", TOKEN_TERM|TOKEN_FIRSTTERM|TOKEN_STRING, 
-        "endswith", TOKEN_TERM, 
-        "g", TOKEN_TERM|TOKEN_ALL_BLOCK_END,
-    )
-    assert reads("A concat ->You got wrong book.") == (
-        "A", TOKEN_TERM|TOKEN_FIRSTTERM, 
-        "concat", TOKEN_TERM, 
-        "You got wrong book.", TOKEN_TERM|TOKEN_ALL_BLOCK_END|TOKEN_STRING,
-    )
-    assert reads("he says --[ This is not a joke ]") == (
-        "he", TOKEN_TERM|TOKEN_FIRSTTERM, 
-        "says", TOKEN_TERM, 
-        " This is not a joke ", TOKEN_TERM|TOKEN_STRING,
-        "", TOKEN_ALL_BLOCK_END
-    )
-
-    # 丸括弧の区別
-    """
-    assert reads("this a sacrifi(1991,Mito)es what he called (his soul)") == (
-        "this", TOKEN_TERM|TOKEN_FIRSTTERM, 
-        "sacrifi(1991,Mito)es", TOKEN_TERM, 
-        "what", TOKEN_TERM,
-        "he", TOKEN_TERM,
-        "called", TOKEN_TERM,
-        "", TOKEN_BLOCK_BEGIN,
-        "his", TOKEN_TERM,
-        "soul", TOKEN_TERM|TOKEN_BLOCK_END,
-        "", TOKEN_ALL_BLOCK_END
-    )
-    """
 
 #
 def test_minimum():

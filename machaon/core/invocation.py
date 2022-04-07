@@ -1,8 +1,4 @@
-from email import message
-from json import load
-from re import sub
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
-from unittest import result
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.typedecl import (
@@ -1190,10 +1186,10 @@ class TypeConstructorInvocation(BasicInvocation):
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         if isinstance(self._type, TypeInstanceDecl):
-            mth = Method(params=self._type.get_type_params())
+            mth = Method(params=self._type.instance_constructor_params())
             return mth.get_param(index)
         else:
-            return None
+            return None # 不明：推測する
 
 
 class Bind1stInvocation(BasicInvocation):

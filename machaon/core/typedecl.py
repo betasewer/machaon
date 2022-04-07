@@ -754,18 +754,6 @@ class TypeDecl:
                 raise BadTypename(typename)
             return self.instance_type(td, context, args)
 
-    def instantiate_constructor_method(self, type):
-        """ 引数を再束縛するシグニチャを提供する """
-        t = type.get_typedef()
-        if t is None:
-            raise ValueError("Type, TypeInstance以外の引数束縛には対応しません")
-        if self.declargs:
-            ps = [x for x in t.get_type_params() if not x.is_type()] # 非型変数のみ
-        else:
-            ps = t.get_type_params()
-        from machaon.core.method import Method
-        return Method(params=ps)
-
 
 class TypeInstanceDecl(TypeDecl):
     """ 型インスタンスを保持し、TypeDeclと同じ振る舞いをする """
@@ -783,11 +771,9 @@ class TypeInstanceDecl(TypeDecl):
             # 全ての引数を入れ替える
             return TypeInstance(self.inst.get_typedef(), args)
 
-    def instantiate_constructor_method(self, type):
-        """ 引数を再束縛するシグニチャを提供する """
-        t = type.get_typedef()
-        from machaon.core.method import Method
-        return Method(params=t.get_type_params()) # 全ての引数を入れ替える
+    def instance_constructor_params(self):
+        """ 再束縛する引数の型情報を提供する """
+        return self.inst.get_typedef().get_type_params() # 全ての引数を入れ替える
     
 
 class TypeDeclError(Exception):

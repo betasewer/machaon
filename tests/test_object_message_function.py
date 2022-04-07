@@ -2,7 +2,7 @@
 from machaon.core.object import Object
 from machaon.core.message import (
     MessageEngine, MessageExpression, MemberGetExpression, 
-    MessageTokenBuffer, SequentialMessageExpression, 
+    SequentialMessageExpression, 
     parse_function, parse_sequential_function, run_function
 )
 from machaon.process import TempSpirit
