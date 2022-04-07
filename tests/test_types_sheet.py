@@ -7,7 +7,7 @@ from machaon.core.invocation import InvocationContext, instant_context
 from machaon.core.sort import ValueWrapper
 from machaon.core.message import parse_function
 from machaon.core.typedecl import TypeInstance
-from machaon.types.sheet import Sheet, DataItemItselfColumn
+from machaon.types.sheet import Sheet, ItemItselfColumn
 
 class Employee():
     """
@@ -315,7 +315,7 @@ def heterovalues():
 def test_construct():
     rooms, _cxt = hotelrooms("Okehazama")
     assert rooms.get_current_columns()
-    assert isinstance(rooms.get_current_columns()[0], DataItemItselfColumn)
+    assert isinstance(rooms.get_current_columns()[0], ItemItselfColumn)
     assert rooms.get_current_column_names() == ["@"]
 
     # 型推定をテスト

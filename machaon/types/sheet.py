@@ -1,7 +1,8 @@
+from machaon.core.invocation import BasicInvocation
 from machaon.core.object import Object
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
 
-from machaon.core.message import MemberGetExpression, parse_function
+from machaon.core.message import MemberGetExpression, parse_function, select_method_by_object
 
 from machaon.types.tuple import ElemObject
 from machaon.types.fundamental import NotFound
@@ -53,31 +54,42 @@ class BasicDataColumn():
         else:
             return object.stringify()
 
-class DataMessageColumn(BasicDataColumn):
+class SelectorColumn(BasicDataColumn):
     """
     メッセージの返す値
     """
-    def __init__(self, message, *, name=None):
-        self._fn = message
+    def __init__(self, selector, *, name=None):
+        self._sel = selector
         self._name = name
     
     def get_name(self):
         if self._name is None:
-            return '"{}"'.format(self._fn.get_expression())
+            if hasattr(self._sel, "get_expression"):
+                expr = self._sel.get_expression()
+            elif isinstance(self._sel, BasicInvocation):
+                expr = self._sel.display()[1]
+            else:
+                expr = str(self._sel)
+            return '"{}"'.format(expr)
         return self._name
     
-    def get_function(self):
-        return self._fn
+    def get_doc(self):
+        return '"{}"'.format(self._sel)
 
     def get_type_conversion(self):
-        return self._fn.get_type_conversion()
-    
+        if hasattr(self._sel, "get_type_conversion"):
+            return self._sel.get_type_conversion()
+        else:
+            return None
+
     def eval(self, subject, context):
-        obj = self._fn.run(subject, context)
-        return self.convert(context, obj)
+        selector = context.new_object(self._sel)
+        invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
+        entry = invocation.prepare_invoke(context, subject)
+        return entry.invoke(context)
 
 
-class DataItemItselfColumn(BasicDataColumn):
+class ItemItselfColumn(BasicDataColumn):
     """
     アイテムそのものを返す
     """
@@ -97,32 +109,34 @@ class DataItemItselfColumn(BasicDataColumn):
         return subject
 
 #
-DataColumnUnion = Union[DataMessageColumn, DataItemItselfColumn]
+DataColumnUnion = Union[SelectorColumn, ItemItselfColumn]
 
 def make_data_columns(*expressions):
     """
     カラムオブジェクトを返す
     Params:
-        expressions(Sequence[str]): カラム表現のリスト
-            'member-name' -> Any
-            'type-conversion|member-name'
-            'message' -> Any
-            'type-conversion|message'
+        expressions(Sequence[Any]): カラム表現のリスト
     Returns:
         List[DataColumnUnion]:
     """
     columns: List[DataColumnUnion] = []
     for expression in expressions:
-        expression = expression.strip()
-        if expression == SIGIL_ITEM_ITSELF:
-            columns.append(DataItemItselfColumn())
-            continue
-        
-        fn = parse_function(expression)
-        if isinstance(fn, MemberGetExpression):
-            columns.append(DataMessageColumn(fn, name=fn.get_expression()))
+        if isinstance(expression, str):
+            expression = expression.strip()
+            if expression == SIGIL_ITEM_ITSELF:
+                columns.append(ItemItselfColumn())
+                continue
+            
+            if " " in expression:
+                fn = parse_function(expression)
+                if isinstance(fn, MemberGetExpression):
+                    columns.append(SelectorColumn(fn, name=fn.get_expression()))
+                else:
+                    columns.append(SelectorColumn(fn))
+            else:
+                columns.append(SelectorColumn(expression, name=expression))
         else:
-            columns.append(DataMessageColumn(fn))
+            columns.append(SelectorColumn(expression))
     
     return columns
 
@@ -158,9 +172,9 @@ class Sheet():
     同じ型のオブジェクトに対する式を縦列とするデータの配列。
     Params:
         itemtype(Type): 要素の型（全要素に適用する）
-        *column_names(Str): カラム名のリスト
+        *columns(Any): カラム表現（@またはアイテムへのセレクタ）
     """
-    def __init__(self, items, *, typeconversion=None, context=None, column_names=None, uninitialized=False):
+    def __init__(self, items, *, typeconversion=None, context=None, columns=None, uninitialized=False):
         self.items = items
         self.rows = []
         self.viewcolumns: List[DataColumnUnion] = []
@@ -172,12 +186,12 @@ class Sheet():
             if self.items:
                 if not isinstance(self.items[0], Object):
                     raise TypeError("'items' must be a sequence of Object")
-            if not context or not column_names:
+            if not context or not columns:
                 self.generate_rows_identical()
             elif not context:
                 raise ValueError("Context is needed at Sheet constructor with columns")
             else:
-                new_columns = make_data_columns(*column_names)
+                new_columns = make_data_columns(*columns)
                 self.generate_rows(context, new_columns)
     
     def __iter__(self):
@@ -469,20 +483,21 @@ class Sheet():
     #
     # カラムを操作する
     #
-    def select_column(self, name):
+    def select_column(self, column):
         """ @method 
         名前でカラムオブジェクトを取得する。無ければ作成する（追加はされない）
         Params:
-            name(Str): カラム名
+            column(Any): カラム名またはセレクタ表現
         Returns:
             Tuple[int, DataColumnUnion]: カラムインデックスとオブジェクト 
         """
-        for icol, col in enumerate(self.viewcolumns):
-            if col.get_name() == name:
-                return icol, col
-        else:
-            col, *_ = make_data_columns(name)
-            return -1, col
+        if isinstance(column, str):
+            for icol, col in enumerate(self.viewcolumns):
+                if col.get_name() == column:
+                    return icol, col
+        
+        col, *_ = make_data_columns(column)
+        return -1, col
     
     def get_current_columns(self):
         """ @method　
@@ -510,13 +525,13 @@ class Sheet():
             raise ValueError("No columns")
         return self.viewcolumns[0]
     
-    def add_column(self, name):
+    def add_column(self, column):
         """ @method
         カラムを追加する
         Params:
-            name(str): 
+            column(Any): カラム表現
         """
-        col, *_ = make_data_columns(name)
+        col, *_ = make_data_columns(column)
         self.viewcolumns.append(col)
 
     #
@@ -549,7 +564,7 @@ class Sheet():
         for itemindex, item in enumerate(self.items):
             newrows.append((itemindex, [item]))
         self.rows = newrows
-        self.viewcolumns = [DataItemItselfColumn()] # identical
+        self.viewcolumns = [ItemItselfColumn()] # identical
     
     def insert_items_and_generate_rows(self, context, rowindex, items):
         """ 一連のアイテムを追加し、値を計算して行も追加する """
@@ -607,14 +622,14 @@ class Sheet():
     # 
     # ビューの列を変更する
     #
-    def _apply_view(self, context, column_exprs, rowcommand):
+    def _apply_view(self, context, columns, rowcommand):
         # 空のデータからは空のビューしか作られない
         if not self.items:
             self.rows = []
             return
 
         # 列を新規作成
-        newcolumns = make_data_columns(*column_exprs)
+        newcolumns = make_data_columns(*columns)
         
         # 行を設定する
         if rowcommand is None:
@@ -622,38 +637,37 @@ class Sheet():
         elif rowcommand is "c":
             self.generate_rows_concat(context, newcolumns)
 
-    def view(self, context, column_names):
+    def view(self, context, columns):
         """ @method context
         列を表示する。
         Params:
-            column_names(Tuple[Str]): カラム名
+            columns(Tuple[Any]): カラム表現
         """
-        self._apply_view(context, column_names, None)
+        self._apply_view(context, columns, None)
     
-    def view_union(self, context, column_names):
+    def view_union(self, context, columns):
         """ @method context alias-name [view+]
         列を追加する。同名の既に存在する列は追加しない。
         Params:
-            column_names(Tuple[Str]): カラム名
+            columns(Tuple[Any]): カラム表現
         """
         # 空のデータからは空のビューしか作られない
-        new_column_names = []
+        new_columns = []
         if self.items:
             cur_column_names = self.get_current_column_names()
-            new_column_names = []
-            for cname in column_names:
-                if cname not in cur_column_names:
-                    new_column_names.append(cname)
+            for col in columns:
+                if isinstance(col, str) and col not in cur_column_names:
+                    new_columns.append(col)
 
-        self._apply_view(context, new_column_names, "c")
+        self._apply_view(context, new_columns, "c")
     
-    def view_add(self, context, message, name=None):
+    def view_add(self, context, column, name=None):
         """ @method context alias-name [operate opr]
-        任意の関数によるカラムを一つ追加する。
+        カラムを一つ追加する。
         Params:
-            message(Str): メソッド／1変数関数
+            column(Any): カラム表現
         """
-        self._apply_view(context, [message], "c")
+        self._apply_view(context, [column], "c")
 
     #
     # アイテム関数
@@ -781,7 +795,7 @@ class Sheet():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, itemtype=None, *column_names):
+    def constructor(self, context, value, itemtype=None, *columns):
         """ @meta context
         Params:
             Any: イテラブル型
@@ -792,7 +806,7 @@ class Sheet():
             value = (value,)
         # 型変換を行う
         objs = [context.new_object(x, type=itemtype) for x in value]
-        return Sheet(objs, context=context, column_names=column_names)
+        return Sheet(objs, context=context, columns=columns)
     
     def summarize(self, itemtype, *_column_names):
         """ @meta """

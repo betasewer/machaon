@@ -1209,7 +1209,7 @@ class Bind1stInvocation(BasicInvocation):
         return self._method.get_method_doc()
 
     def display(self):
-        return ("Bind1st[{}({})]".format(self._arg, self._argtype), self._method.display()[1], self.modifier_name())
+        return ("Bind1st", "{}({})/{}".format(self._method.display()[1], self._arg, self._argtype), self.modifier_name())
     
     def is_task(self):
         return False

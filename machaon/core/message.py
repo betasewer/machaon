@@ -572,7 +572,7 @@ def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None
         return select_type_constructor(v, modbits)
     elif tn == "Str": 
         return select_method(v, typetraits, reciever=reciever, modbits=modbits)
-    elif tn == "Function":
+    elif tn == "Function" or isinstance(v, FunctionExpression):
         return MessageInvocation(v)
     elif isinstance(v, BasicInvocation):
         return v
