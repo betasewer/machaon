@@ -10,12 +10,12 @@ from machaon.core.symbol import (
     SIGIL_SCOPE_RESOLUTION
 )
 from machaon.core.typedecl import (
-    TypeAny, TypeProxy, TypeInstance, TypeDecl,
+    TypeAny, TypeProxy, TypeInstance, TypeDecl, UnspecifiedTypeParam,
     METHODS_BOUND_TYPE_TRAIT_INSTANCE,
-    METHODS_BOUND_TYPE_INSTANCE
+    METHODS_BOUND_TYPE_INSTANCE, instantiate_args
 )
 from machaon.core.method import (
-    METHOD_HAS_RECIEVER_PARAM, PARAMETER_REQUIRED, BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, 
+    PARAMETER_REQUIRED, BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, 
     make_method_from_dict, make_method_prototype, meta_method_prototypes, 
     Method, MetaMethod, MethodParameter,
     parse_type_declaration, parse_result_line, parse_parameter_line, 
@@ -145,7 +145,12 @@ class Type(TypeProxy):
 
     def instantiate(self, context, args):
         """ 型引数を型変換し、束縛したインスタンスを生成する """
-        return TypeDecl().instance_type(self, context, args)
+        targs = instantiate_args(self, self.instantiate_params(), context, args)
+        return TypeInstance(self, targs)
+
+    def instantiate_params(self):
+        """ 後ろに続く再束縛引数 """
+        return self.get_type_params() # 型引数と同じ
 
     #
     #
@@ -803,7 +808,7 @@ class TypeDefinition():
             # 全てオプショナル引数にする
             flags &= ~PARAMETER_REQUIRED 
             if typename == "Type":
-                default = TypeAny() # 型引数のデフォルトはAny
+                default = UnspecifiedTypeParam # デフォルト値
             else:
                 default = None
 

@@ -1,11 +1,23 @@
 from machaon.core.symbol import (
-    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR, SIGIL_SUBTYPE_UNION,
+    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
     BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
 )
 
 METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
 METHODS_BOUND_TYPE_INSTANCE = 2
 
+
+
+def instantiate_args(thistype, params, context, argvals):
+    """ 引数を型チェックし生成する """
+    from machaon.core.method import Method
+    method = Method(params=params)
+    if not method.check_param_count(len(argvals)):
+        raise TypeError("引数より多くの型引数が与えられました: {} ({})".format(str(thistype), ",".join([str(x) for x in argvals])))
+
+    if argvals:
+        argvals = method.make_argument_row(context, argvals, construct=True)
+    return argvals
 
 
 
@@ -76,6 +88,13 @@ class TypeProxy:
 
     def check_value_type(self, valtype):
         """ 互換性のある値型か """
+        raise NotImplementedError()
+    
+    def instantiate(self, context, args):
+        """ 型引数を型変換し、束縛したインスタンスを生成する """
+        raise NotImplementedError()
+
+    def instantiate_params(self):
         raise NotImplementedError()
 
     # メソッド関連
@@ -207,6 +226,12 @@ class RedirectProxy(TypeProxy):
 
     def check_value_type(self, valtype):
         return self.redirect().check_value_type(valtype)
+        
+    def instantiate(self, context, args):
+        return self.redirect().instantiate(context, args)
+
+    def instantiate_params(self):
+        return self.redirect().instantiate_params()
 
     def select_method(self, name):
         return self.redirect().select_method(name)
@@ -277,7 +302,9 @@ class DefaultProxy(TypeProxy):
     def is_function_type(self):
         return False
 
-
+#
+#
+#
 class TypeInstance(RedirectProxy):
     """
     引数を含むインスタンス
@@ -298,6 +325,38 @@ class TypeInstance(RedirectProxy):
     def check_value_type(self, valtype):
         return issubclass(valtype, self.type.value_type)
     
+    def instantiate(self, context, args):
+        """ 引数を付け足す """
+        moreargs = instantiate_args(self, self.instantiate_params(), context, args)
+        newargs = []
+        # UnspecifiedTypeParamを埋める
+        i = 0
+        for a in self._args:
+            if a is UnspecifiedTypeParam and i < len(moreargs):
+                newargs.append(moreargs[i])
+                i += 1
+            else:
+                newargs.append(a)
+        newargs.extend(moreargs[i:])
+
+        return TypeInstance(self.type, newargs)
+
+    def instantiate_params(self):
+        """ UnspecifiedTypeParamを埋める """
+        ps = self.type.instantiate_params()
+        params = []
+        for i, p in enumerate(ps):
+            if i < len(self._args):
+                if self._args[i] is UnspecifiedTypeParam:
+                    params.append(p)
+            else:
+                params.append(p)
+
+        if not params:
+            if ps and ps[-1].is_variable():
+                params.append(ps[-1])
+        return params        
+
     def get_conversion(self):
         n = ""
         n += self.type.typename
@@ -373,6 +432,18 @@ class PythonType(DefaultProxy):
     def check_value_type(self, valtype):
         return issubclass(valtype, self.type)
 
+    def instantiate(self, context, args):
+        """ 引数を付け足す """
+        moreargs = instantiate_args(self, self.instantiate_params(), context, args)
+        return PythonType(self.type, self.expr, self._ctorargs + moreargs)
+
+    def instantiate_params(self):
+        """ 引数の制限なし """
+        from machaon.core.method import MethodParameter
+        p = MethodParameter("params", "Any")
+        p.set_variable()
+        return [p]
+
     def select_method(self, name):
         from machaon.core.method import select_method_from_type_and_instance
         meth = select_method_from_type_and_instance(self.type, self.type, name)
@@ -432,6 +503,12 @@ class TypeAny(DefaultProxy):
     def check_value_type(self, valtype):
         return True
 
+    def instantiate(self, context, args):
+        raise TypeAnyInstantiateError()
+
+    def instantiate_params(self):
+        raise TypeAnyInstantiateError()
+
     def get_methods_bound_type(self):
         raise TypeAnyInstantiateError()
 
@@ -450,7 +527,6 @@ class TypeAny(DefaultProxy):
     def reflux_value(self, value):
         raise TypeAnyInstantiateError()
     
-
 
 class TypeAnyInstantiateError(Exception):
     def __str__(self) -> str:
@@ -490,6 +566,18 @@ class TypeUnion(DefaultProxy):
             return None
         raise TypeError(valtype)
 
+    def instantiate(self, context, args):
+        """ 型引数を追加する """
+        moretypes = instantiate_args(self, self.instantiate_params(), context, args)
+        return TypeUnion(self.types + moretypes)
+
+    def instantiate_params(self):
+        """ 可変長の型引数を取れる """
+        from machaon.core.method import MethodParameter
+        p = MethodParameter("params", "Type")
+        p.set_variable()
+        return [p]
+    
     def constructor(self, context, value):
         firsttype = self.types[0]
         return firsttype.constructor(context, value)
@@ -515,13 +603,10 @@ class SubType(RedirectProxy):
     """
     サブタイプ型
     """
-    def __init__(self, basetype, *metatypes, identity=False):
+    def __init__(self, basetype, meta):
         super().__init__()
         self.basetype = basetype
-        self.metatypes = metatypes
-        self.doidentity = identity
-        if not self.doidentity and not self.metatypes:
-            raise ValueError("no metatypes")
+        self.meta = meta
 
     def redirect(self):
         return self.basetype
@@ -533,8 +618,17 @@ class SubType(RedirectProxy):
         return self.meta.get_typedef()
         
     def get_conversion(self):
-        convs = [x.get_conversion() for x in (self.basetype, *self.metatypes)]
-        return "{}:{}".format(convs[0], "+".join(convs[1:]))
+        convs = [x.get_conversion() for x in (self.basetype, self.meta)]
+        return "{}:{}".format(convs[0], convs[1])
+    
+    def instantiate(self, context, args):
+        """ 転送する """
+        newmeta = self.meta.instantiate(context, args)
+        return SubType(self.basetype, newmeta)
+
+    def instantiate_params(self):
+        """ 転送する """
+        return self.meta.instantiate_params()
     
     def construct(self, context, value):
         """ オブジェクトを構築して値を返す """
@@ -547,33 +641,7 @@ class SubType(RedirectProxy):
         return ret
 
     def constructor(self, context, value):
-        ret = None
-        metas =  [*self.metatypes] # 複数のコンストラクタを順番に試す
-        tryidentity = self.doidentity
-        imeta = 0
-        while True:
-            meta = metas[imeta]
-            try:
-                ret = meta.constructor(context, value)
-            except Exception:
-                if len(metas) <= (imeta+1):
-                    if tryidentity:
-                        metas.append(self.basetype) # ベースタイプのコンストラクタを試す
-                        imeta += 1
-                        tryidentity = False
-                        continue
-                    raise # 最後まで来たらエラー
-                imeta += 1
-                continue
-            else:
-                return ret
-
-    @property
-    def meta(self):
-        if self.metatypes:
-            return self.metatypes[0]
-        else:
-            return self.basetype
+        return self.meta.constructor(context, value)
 
     def stringify_value(self, value):
         return self.meta.stringify_value(value)
@@ -585,10 +653,7 @@ class SubType(RedirectProxy):
         return self.meta.pprint_value(app, value)
 
     def reflux_value(self, value):
-        if self.metatypes:
-            return self.meta.reflux_value(value)
-        elif self.doidentity:
-            return value
+        return self.meta.reflux_value(value)
     
 #
 def make_conversion_from_value_type(value_type):
@@ -630,6 +695,10 @@ class TypeConversionError(Exception):
         srctype, desttype = self.args
         return "'{}'型の引数に'{}'型の値を代入できません".format(desttype, full_qualified_name(srctype))
 
+
+# 型引数のデフォルト値
+UnspecifiedTypeParam = TypeAny()
+
 #
 # 型宣言
 # Typename[Typeparam1, param2...](ctorparam1, param2...)
@@ -667,46 +736,53 @@ class TypeDecl:
             elems += ")"
         return elems
 
-    def instance_type(self, typedef, context, args=None) -> TypeProxy:
+    def instantiate_type(self, typedef, context, args=None) -> TypeProxy:
         """ Typeから型のインスタンスを作る """
-        def construct_args(params, typeargs, valueargs):
-            i, j = 0, 0
+        def collect_args(params, typeargs, valueargs, moreargs):
+            i, j, k = 0, 0, 0
             for tp in params:
                 if tp.is_type():
                     if i < len(typeargs):
                         yield typeargs[i].instance(context)
+                        i += 1
+                    elif k < len(moreargs):
+                        yield moreargs[k]
+                        k += 1
                     elif tp.is_required():
                         raise ValueError("必須の型引数'{}'が指定されていません".format(tp.name))
                     else:
                         from machaon.core.method import MethodParameterDefault
                         yield MethodParameterDefault
-                    i += 1
                 elif tp.is_variable():
                     yield from valueargs[j:]
                     j += len(valueargs)-j
                 else:
                     if j < len(valueargs):
                         yield valueargs[j]
-                    j += 1
+                        j += 1
+                    elif k < len(moreargs):
+                        yield moreargs[k]
+                        k += 1
+
+            # 残り
+            yield from moreargs[k:]
+                
         
         params = typedef.get_type_params()
         if args:
+            # Sheet | Int c1 c2
             if self.declargs:
-                argvals = list(construct_args(params, self.declargs, args)) # 非型変数のみの置き換え
+                # デフォルト型変数を埋めていく
+                argvals = list(collect_args(params, self.declargs, self.ctorargs, args))  
             else:
-                argvals = args # 丸ごと置き換え
+                argvals = [*self.ctorargs, *args] # 非型引数を結合 
         else:
-            argvals = list(construct_args(params, self.declargs, self.ctorargs))
-            
-        from machaon.core.method import Method
-        method = Method(params=params)
-        if not method.check_param_count(len(argvals)):
-            raise TypeError("引数より多くの型引数が与えられました: {} ({})".format(self.to_string(), ",".join([str(x) for x in argvals])))
-
+            argvals = list(collect_args(params, self.declargs, self.ctorargs, []))
+        
         if argvals:
-            argvals = method.make_argument_row(context, argvals, construct=True)
-            if argvals:
-                return TypeInstance(typedef, argvals)
+            args = instantiate_args(self, params, context, argvals)
+            if args:
+                return TypeInstance(typedef, args)
         
         return typedef # 引数がなければそのまま
     
@@ -732,15 +808,10 @@ class TypeDecl:
                 raise ValueError("not enough type args for $Sub")
             baset = self.declargs[0].instance(context) # 基底型
             subtypes = []
-            identity = False
-            for decl in self.declargs[1:]:
-                if decl.typename == "Identity":
-                    identity = True
-                    continue
-                td = context.get_subtype(baset.typename, decl.typename)
-                t = decl.instance_type(td, context, args)
-                subtypes.append(t)
-            return SubType(baset, *subtypes, identity=identity)
+            metadecl = self.declargs[1]
+            td = context.get_subtype(baset.typename, metadecl.typename)
+            meta = metadecl.instantiate_type(td, context, args)
+            return SubType(baset, meta)
         elif SIGIL_PYMODULE_DOT in self.typename: 
             # machaonで未定義のPythonの型: ビルトイン型はbuiltins.***でアクセス
             ctorargs = [*self.ctorargs, *(args or [])]
@@ -752,7 +823,7 @@ class TypeDecl:
             td = context.select_type(typename)
             if td is None:
                 raise BadTypename(typename)
-            return self.instance_type(td, context, args)
+            return self.instantiate_type(td, context, args)
 
 
 class TypeInstanceDecl(TypeDecl):
@@ -768,12 +839,11 @@ class TypeInstanceDecl(TypeDecl):
         if args is None or not args:
             return self.inst
         else:
-            # 全ての引数を入れ替える
-            return TypeInstance(self.inst.get_typedef(), args)
-
+            return self.inst.instantiate(context, args)
+    
     def instance_constructor_params(self):
         """ 再束縛する引数の型情報を提供する """
-        return self.inst.get_typedef().get_type_params() # 全ての引数を入れ替える
+        return self.inst.instantiate_params()
     
 
 class TypeDeclError(Exception):
@@ -855,8 +925,6 @@ def _typedecl_subtype(itr):
         elif ch == SIGIL_SUBTYPE_SEPARATOR:
             if len(types) > 1:
                 raise TypeDeclError(itr, "サブタイプは1つしか指定できません")
-            continue
-        elif ch == SIGIL_SUBTYPE_UNION:
             continue
         else:
             itr.back(pos)

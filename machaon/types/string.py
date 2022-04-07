@@ -631,8 +631,8 @@ class StrType():
         return eval(body, glob, {})
     
     def load_python(self, expr):
-        """ @method alias-name [load]
-        Pythonの関数または定数をロードする。
+        """ @method alias-name [py]
+        Pythonの関数または定数の呼び出しオブジェクトを作成する。
         Returns:
             Any:
         """

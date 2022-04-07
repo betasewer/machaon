@@ -1,5 +1,3 @@
-from select import select
-from tkinter import N
 from typing import Tuple
 
 #
@@ -152,7 +150,6 @@ SIGIL_LINE_QUOTER = "->"
 # 型名
 SIGIL_PYMODULE_DOT = "."
 SIGIL_SUBTYPE_SEPARATOR = ":"
-SIGIL_SUBTYPE_UNION = "+"
 
 #
 # 
@@ -225,3 +222,4 @@ def display_bitflag(dictionary, prefix, code):
     if c != 0:
         names.append("0x{0X}".format(c))
     return names
+

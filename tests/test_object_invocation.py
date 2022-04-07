@@ -9,6 +9,7 @@ from machaon.core.invocation import (
 from machaon.core.object import ObjectCollection, Object
 from machaon.types.fundamental import fundamental_types
 from machaon.core.type import full_qualified_name
+from machaon.macatest import run
 
 fundamental_type = fundamental_types()
 
@@ -186,10 +187,10 @@ def test_type_constructor():
     # 引数あり + TypeDecl + 引数とTypeDeclの両方で指定
     inv = TypeConstructorInvocation("Sheet[Int](positive)")
     arg1 = cxt.new_object(["7","8","9"], type="Tuple")
-    arg2 = cxt.new_object("negative")
+    arg2 = cxt.new_object("negative") 
     sht = inv.prepare_invoke(cxt, arg1, arg2)._invokeaction()
-    assert [x.value for x in sht.row_values(0)] == [-7]
-    assert sht.get_current_column_names() == ["negative"]
+    assert sht.get_current_column_names() == ["positive", "negative"] # 追加される
+    assert [x.value for x in sht.row_values(0)] == [7, -7]
 
     # 引数あり + TypeInstanceで指定
     t = cxt.instantiate_type("Sheet", "Int", "positive", "negative")
@@ -206,7 +207,6 @@ def test_type_constructor():
     s = inv.prepare_invoke(cxt, arg1)._invokeaction()
     assert s == 0x98ABCDEF
 
-from machaon.macatest import run
 
 def test_type_inv_entry_result_type():
     cxt = instant_context()

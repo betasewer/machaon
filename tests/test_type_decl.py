@@ -43,13 +43,13 @@ def test_decl_parse():
 
     # サブタイプ
     equalparse("Int:Kanji", "$Sub[Int,Kanji]")
-    equalparse("Int:Zen+Neko[](a,b)+Kanji", "$Sub[Int,Zen,Neko[](a,b),Kanji]")
+    equalparse("Int:Zen[](a,b)", "$Sub[Int,Zen[](a,b)]")
     equalparse(
         "Sheet[Int:Kanji, Str:Alpha]", 
         "Sheet[$Sub[Int,Kanji],$Sub[Str,Alpha]]")
     equalparse(
-        "Sheet[Function[](seq)|Int:Hex+Fax+Ilu|None, Str:Alpha]", 
-        "Sheet[Union[Function[](seq),$Sub[Int,Hex,Fax,Ilu],None],$Sub[Str,Alpha]]")
+        "Sheet[Function[](seq)|Int:Hex|None, Str:Alpha]", 
+        "Sheet[Union[Function[](seq),$Sub[Int,Hex],None],$Sub[Str,Alpha]]")
 
 
 @pytest.mark.xfail
@@ -433,12 +433,6 @@ def test_int_subtype():
     assert x.construct(cxt, "FF") == 0xFF
     assert x.stringify_value(0xFF) == "000000ff"
     
-    x = cxt.instantiate_type("Int:Oct+Hex") # あまりいい例ではないが...
-    assert isinstance(x, SubType)
-    assert x.construct(cxt, "54") == 0o54
-    assert x.construct(cxt, "AB") == 0xAB # Hexで実行される
-    assert x.stringify_value(0o43) == "43"
-    assert x.stringify_value(0xAB) == "253"
 
 
 

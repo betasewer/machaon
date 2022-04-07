@@ -335,7 +335,7 @@ class Method():
             return True
         return False
 
-    def make_argument_row(self, context, argobjs, *, construct=False):
+    def make_argument_row(self, context, argobjs, *, construct=False, construct_offset=None):
         """ 
         実引数の列を生成する。
         reciever-paramは含まれない
@@ -358,8 +358,12 @@ class Method():
                 ihead += 1        
         
         argvalues = []
-        for tp, valueo in args:
-            avalue = tp.make_argument_value(context, valueo, construct=construct)
+        for i, (tp, valueo) in enumerate(args):
+            if construct_offset is not None:
+                constr = i < construct_offset
+            else:
+                constr = construct
+            avalue = tp.make_argument_value(context, valueo, construct=constr)
             argvalues.append(avalue)
 
         return argvalues
@@ -836,6 +840,12 @@ class MethodParameter():
 
     def is_variable(self):
         return (self.flags & PARAMETER_VARIABLE) > 0
+
+    def set_required(self):
+        self.flags |= PARAMETER_REQUIRED
+    
+    def set_variable(self):
+        self.flags |= PARAMETER_VARIABLE
     
     def get_default(self):
         return self.default
