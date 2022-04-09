@@ -152,6 +152,21 @@ SIGIL_PYMODULE_DOT = "."
 SIGIL_SUBTYPE_SEPARATOR = ":"
 
 #
+#
+#
+def is_modifiable_selector(selector):
+    # 長さ1以下は不可とする
+    if len(selector) < 2:
+        return False
+    # 端が記号のセレクタはモディファイアとの区別がつかないのでモディファイアを無視する
+    # かわりにブロックモディファイアを使用できる
+    import re
+    m = re.search("[\u0000-\u0040\u005b-\u0060\u007b-\u007f]", selector[0]+selector[-1])
+    if m is not None:
+        return False
+    return True
+
+#
 # 
 #
 def summary_escape(s:str):

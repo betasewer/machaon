@@ -30,7 +30,7 @@ def test_modified_select():
     assert gm
     assert gm.display() == ("TypeMethod", "GenericMethods:is-in", "reverse-args")
 
-    gm = select_method("`=", StrType)
+    gm = select_method("`identical", StrType)
     assert gm
     assert gm.display() == ("TypeMethod", "GenericMethods:identical", "basic-reciever")
     

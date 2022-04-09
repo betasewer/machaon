@@ -1,4 +1,11 @@
 
+from machaon.core.typedecl import TypeProxy
+from machaon.flow.flux import (
+    FluxFunctor, TypeFlux, JsonFlux, DecomposeFlux, OrFlux,
+    NoneToBlankFlux, NoneToValueFlux
+)
+
+
 class Flow:
     """ @type
     データの変換の流れを定義する。
@@ -86,9 +93,8 @@ class Flow:
         """ @method context alias-name [>>]
         machaonの型インターフェースまたはメソッドによって変換する
         Params:
-            functor(str): 型名
+            functor(Any): 型名
         """
-        from machaon.flow.flux import FluxFunctor
         if isinstance(functor, FluxFunctor):
             # 直接指定
             return self.add_functor(functor)
@@ -96,7 +102,6 @@ class Flow:
         elif isinstance(functor, str):
             if functor == "json":
                 # jsonで変換する
-                from machaon.flow.flux import JsonFlux
                 return self.add_functor(JsonFlux())
 
             # 型インターフェースで変換する
@@ -105,13 +110,14 @@ class Flow:
             if t is None:
                 raise ValueError("型'{}'は存在しません".format(typeconversion))
 
-            from machaon.flow.flux import TypeFlux
             return self.add_functor(TypeFlux(context, t))
+
+        elif isinstance(functor, TypeProxy):
+            return self.add_functor(TypeFlux(context, functor))
 
         elif isinstance(functor, (list, tuple)) or context.is_tuple(functor):
             # リストとの変換
             selectors = functor
-            from machaon.flow.flux import DecomposeFlux
             return self.add_functor(DecomposeFlux(selectors))
         
         else:
@@ -121,7 +127,7 @@ class Flow:
         """ @method context alias-name [|]
         machaonの型インターフェースまたはメソッドによって変換する
         Params:
-            functor(str): 型名
+            functor(Any): 
         """
         self.pipe(context, functor)
         if len(self.functors) < 2:
@@ -135,10 +141,9 @@ class Flow:
         """ @method alias-name [none>>]
         machaonの型インターフェースまたはメソッドによってNoneを変換する
         Params:
-            functor(str): blank|zero|hyphen|value[a]
+            functor(Any): blank|zero|hyphen|value[a]
             arg?(Any): 引数
         """
-        from machaon.flow.flux import FluxFunctor, NoneToBlankFlux, NoneToValueFlux
         if isinstance(functor, FluxFunctor):
             # 任意のファンクタ
             self.none_functor = functor

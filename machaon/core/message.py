@@ -20,6 +20,7 @@ from machaon.core.symbol import (
     SIGIL_DISCARD_MESSAGE,
     SIGIL_TYPE_INDICATOR,
     QUOTE_ENDPARENS,
+    is_modifiable_selector,
 )
 from machaon.core.object import Object
 from machaon.core.method import MethodParameter, enum_methods_from_type_and_instance
@@ -511,7 +512,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
         if isinstance(name, AffixedSelector):
             s = name
         else:
-            s = AffixedSelector(name)
+            s = AffixedSelector.parse(name)
         name = s.selector()
         modbits = s.affixes()
 
@@ -547,7 +548,8 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
 
     if using_type_method:
         if not typetraits.is_selectable_instance_method():
-            raise BadExpressionError("メソッド '{}' は '{}' に定義されていません".format(name, typetraits.get_typename()))
+            err = "メソッド '{}' は '{}' に定義されていません:".format(name, typetraits.get_typename())
+            raise BadExpressionError(err)
     
     # インスタンスメソッド
     return InstanceMethodInvocation(name, modifier=modbits)
@@ -639,22 +641,19 @@ class AffixedSelector:
             raise ValueError("Invalid modifier character: " + ch)
         return None
 
-    def __init__(self, selector, flags=None):
-        if flags is None:
-            self._selector, self._flags = AffixedSelector.read_flags(selector)
-        else:
-            self._selector = selector
-            self._flags = set(flags)
+    def __init__(self, selector, flags):
+        self._selector = selector
+        self._flags = set(flags)
 
     def __repr__(self):
         return "<{}{}>".format(self._selector, "|".join(self._flags))
 
     @classmethod
-    def read_flags(cls, selector):
-        flags = set()
-        if len(selector)<2:
-            return selector, flags
+    def parse(cls, selector):
+        if len(selector) < 2:
+            return AffixedSelector(selector, set())
 
+        flags = set()
         buf = ""
         pre_offset = 0
         for ch in selector:
@@ -676,10 +675,10 @@ class AffixedSelector:
                 break
         
         sel = selector[pre_offset:post_offset]
-        if sel:
-            return sel, flags
+        if is_modifiable_selector(sel):
+            return AffixedSelector(sel, flags)
         else:
-            return selector, flags
+            return AffixedSelector(selector, set())
 
     def selector(self):
         return self._selector
@@ -1292,7 +1291,7 @@ class MessageEngine():
         raise BadExpressionError("Could not parse")
 
     def _add_selector_code(self, code, selector_token):
-        selector = AffixedSelector(selector_token)
+        selector = AffixedSelector.parse(selector_token)
         if selector.has("SHOW_HELP"):
             code.add(self.ast_SET_AS_SELECTOR_RETURNER)
         code.add(self.arg_SELECTOR_VALUE, selector)
