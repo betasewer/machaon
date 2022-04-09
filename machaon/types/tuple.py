@@ -3,7 +3,7 @@ from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Gene
 from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
 from machaon.types.fundamental import NotFound
-from machaon.core.message import parse_sequential_function
+from machaon.core.function import  parse_sequential_function
 
 
 #

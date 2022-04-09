@@ -1,0 +1,269 @@
+from machaon.core.symbol import (
+    SIGIL_TYPE_INDICATOR
+)
+from machaon.core.message import (
+    MessageEngine, select_method, select_method_by_object, Message, EvalContext
+)
+from machaon.core.object import Object
+
+#
+# api
+#
+def run_function(expression: str, subject, context, *, raiseerror=False) -> Object:
+    """
+    文字列をメッセージとして実行する。
+    Params:
+        expression(str): メッセージ
+        subject(Object): *引数
+        context(InvocationContext): コンテキスト
+    Returns:
+        Object: 実行の戻り値
+    """
+    if not isinstance(expression, str):
+        raise TypeError("expression must be str")
+    
+    if raiseerror:
+        context.set_flags("RAISE_ERROR", inherit_set=True)
+
+    f = MessageEngine(expression)
+    return f.run_function(subject, context)
+    
+def run_function_print_step(expression: str, subject, context, *, raiseerror=False):
+    """
+    経過を表示しつつメッセージを実行する。
+    """
+    context.set_flags("PRINT_STEP")
+    return run_function(expression, subject, context, raiseerror=raiseerror)
+
+
+#
+#　関数オブジェクト
+#
+class FunctionExpression():
+    def get_expression(self) -> str:
+        raise NotImplementedError()
+    
+    def get_type_conversion(self) -> str:
+        raise NotImplementedError()
+    
+    def run(self, subject, context, **kwargs) -> Object:
+        raise NotImplementedError()
+        
+    def run_here(self, context, **kwargs) -> Object:
+        raise NotImplementedError()
+
+
+class MessageExpression(FunctionExpression):
+    """
+    メッセージを実行する。
+    """
+    def __init__(self, expression, typeconv):
+        self.f = MessageEngine(expression)
+        self.typeconv = typeconv
+    
+    def get_expression(self) -> str:
+        return self.f.get_expression()
+    
+    def get_type_conversion(self):
+        return self.typeconv
+    
+    def run(self, subject, context, **kwargs):
+        return self.f.run_function(subject, context, **kwargs)
+    
+    def run_here(self, context, **kwargs):
+        return self.f.run_here(context, **kwargs)
+
+
+class MemberGetExpression(FunctionExpression):
+    """
+    主題オブジェクトのメンバ（引数0のメソッド）を取得する
+    Functionの機能制限版だが、キャッシュを利用する
+    """
+    def __init__(self, name, typeconv):
+        self.name = name
+        self.typeconv = typeconv
+
+    def get_expression(self) -> str:
+        return self.name
+    
+    def get_type_conversion(self):
+        return self.typeconv
+    
+    def run(self, subject, context, **kwargs):
+        """ その場でメッセージを構築し実行 """
+        subcontext = context.inherit(subject)
+        
+        inv = select_method(self.name, subject.type, reciever=subject.value)
+        message = Message(subject, inv)
+        subcontext.log_message_begin(str(self.name))
+        
+        evalcontext = EvalContext(subcontext)
+        result = message.eval(evalcontext)
+        context.log_message_begin_sub(subcontext)
+        
+        return result
+    
+    def run_here(self, context, **kwargs):
+        """ コンテクストそのままで実行 """
+        subject = context.subject_object
+        inv = select_method(self.name, subject.type, reciever=subject.value)
+        message = Message(subject, inv)
+        
+        evalcontext = EvalContext(context)
+        result = message.eval(evalcontext)
+        return result
+
+
+def parse_function(expression):
+    """
+    メッセージ式から関数オブジェクトを作成する。
+    Params:
+        expression(str):
+    """
+    # 式の型指定子と式本体に分ける
+    spl = expression.split(maxsplit=2)
+    if len(spl) > 2 and spl[1] == SIGIL_TYPE_INDICATOR:
+        typeconv = spl[0]
+        body = spl[2]
+    else:
+        body = expression
+        typeconv = None
+    
+    body = body.strip()
+    if typeconv:
+        typeconv = typeconv.strip()
+    
+    parts = body.split()
+    if len(parts) > 1:
+        return MessageExpression(body, typeconv)
+    
+    elif len(parts) == 1:
+        return MemberGetExpression(body, typeconv)
+    
+    else:
+        raise ValueError("Invalid expression")
+
+
+class SequentialMessageExpression(FunctionExpression):
+    """
+    同じコンテキストで同型のメッセージを複数回実行する
+    """
+    def __init__(self, parent_context, f, argspec = None, cache = True):
+        self.f = f
+        self.context = parent_context.inherit_sequential()
+        self.memberspecs = {}
+        self._argforge = lambda x: x # 単一の引数
+        self._subjecttype = None
+        self.cached = cache
+        
+        # 事前に型をインスタンス化しておく
+        if isinstance(argspec, dict): 
+            for key, typename in argspec.items():
+                t = self.context.instantiate_type(typename)
+                if key == "@":
+                    self._subjecttype = t
+                else:
+                    self.memberspecs[key] = t
+                
+            def collectionarg(kwargs):
+                objc = {}
+                for k, v in kwargs.items():
+                    t = self.memberspecs.get(k, None)
+                    objc[k] = self.context.new_object(v, type=t)
+                return objc
+            self._argforge = collectionarg # ObjectCollectionにまとめる
+            self._subjecttype = self.context.get_type("ObjectCollection")
+
+        elif isinstance(argspec, str):
+            self._subjecttype = self.context.instantiate_type(argspec)
+
+    def get_expression(self) -> str:
+        return self.f.get_expression()
+    
+    def get_type_conversion(self):
+        return self.f.get_type_conversion()
+
+    def set_subject_type(self, conversion):
+        self._subjecttype = self.context.instantiate_type(conversion)
+    
+    def run(self, subject, _context=None, **kwargs) -> Object:
+        """ 共通メンバの実装 オブジェクトを返す """
+        self.context.set_subject(subject) # subjecttypeは無視する
+        return self.f.run_here(self.context, cache=self.cached)
+        
+    def run_here(self, _context=None, **kwargs) -> Object:
+        """ 共通メンバの実装  """
+        return self.f.run_here(self.context, cache=self.cached)
+
+    def __call__(self, arg):
+        """ コード内で実行する（複数の引数に対応） オブジェクトではなく値を返す"""
+        argvalue = self._argforge(arg)
+        subject = self.context.new_object(argvalue, type=self._subjecttype)
+        self.context.set_subject(subject)
+        o = self.f.run_here(self.context, cache=self.cached) # 同じコンテキストで実行
+        return o.value
+    
+    def nousecache(self):
+        """ メッセージのキャッシュを使用しない """
+        self.cached = False
+    
+    @classmethod
+    def instant(cls, expression):
+        # 文字列を受け取り、即席のコンテキストでインスタンスを作る
+        from machaon.core.context import instant_context
+        cxt = instant_context()
+        return parse_sequential_function(expression, cxt)
+
+
+def parse_sequential_function(expression, context, argspec=None):
+    fn = parse_function(expression)
+    return SequentialMessageExpression(context, fn, argspec)
+
+
+
+class FunctionType():
+    """ @type [Function]
+    1引数をとるメッセージ。
+    ValueType:
+        machaon.core.function.FunctionExpression
+    Params:
+        qualifier(Str): None|(seq)uential
+    """
+    def constructor(self, context, s, qualifier=None):
+        """ @meta context
+        Params:
+            Str:
+        """
+        from machaon.core.function import  parse_function, parse_sequential_function
+        if qualifier is None:
+            f = parse_function(s)
+        elif qualifier == "sequential" or qualifier == "seq":
+            f = parse_sequential_function(s, context)
+        return f
+
+    def stringify(self, f):
+        """ @meta """
+        return f.get_expression()
+    
+    #
+    #
+    #
+    def do(self, f, context, _app, subject=None):
+        """ @task context
+        関数を実行する。
+        Params:
+            subject(Object): *引数
+        Returns:
+            Any: 返り値
+        """
+        r = f.run(subject, context)
+        return r
+        
+    def apply_clipboard(self, f, context, app):
+        """ @task context
+        クリップボードのテキストを引数として関数を実行する。
+        """
+        text = app.clipboard_paste()
+        newtext = f.run(context.new_object(text), context).value
+        app.clipboard_copy(newtext, silent=True)
+        app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))

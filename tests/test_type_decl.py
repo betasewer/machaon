@@ -2,8 +2,8 @@ import pytest
 
 from machaon.core.type import TYPE_SUBTYPE, Type, TypeDefinition
 from machaon.core.typedecl import SubType, TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, PythonType
-from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation, instant_context
-from machaon.core.importer import ClassDescriber
+from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation
+from machaon.core.context import instant_context
 
 parse_ = parse_type_declaration
 

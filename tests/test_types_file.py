@@ -3,7 +3,7 @@ import os
 
 from machaon.types.file import TextFile
 from machaon.types.shell import Path
-from machaon.core.invocation import instant_return_test, instant_context
+from machaon.core.context import instant_return_test, instant_context
 
 def test_construct(tmp_path):
     FILEPATH = Path(__file__)

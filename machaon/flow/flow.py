@@ -88,33 +88,32 @@ class Flow:
         Params:
             functor(str): 型名
         """
-        # TupleFlow
-        if isinstance(functor, TupleFlow):
-            from machaon.flow.functor import DecomposeToTuple
-            return self.add_functor(DecomposeToTuple(functor.members))
+        from machaon.flow.flux import FluxFunctor
+        if isinstance(functor, FluxFunctor):
+            # 直接指定
+            return self.add_functor(functor)
 
-        if isinstance(functor, str):
-            # jsonで変換する
+        elif isinstance(functor, str):
             if functor == "json":
-                from machaon.flow.functor import LoadJson
-                return self.add_functor(LoadJson())
+                # jsonで変換する
+                from machaon.flow.flux import JsonFlux
+                return self.add_functor(JsonFlux())
 
-            # 型インターフェースまたはメソッドによって変換する
+            # 型インターフェースで変換する
             typeconversion = functor
             t = context.instantiate_type(typeconversion)
             if t is None:
                 raise ValueError("型'{}'は存在しません".format(typeconversion))
 
-            from machaon.flow.functor import ConstructType
-            return self.add_functor(ConstructType(context, t))
+            from machaon.flow.flux import TypeFlux
+            return self.add_functor(TypeFlux(context, t))
 
-        elif len(functor) == 2:
-            # message flow
-            influx = functor[0]
-            reflux = functor[1]
-            from machaon.flow.functor import RunMessage
-            return self.add_functor(RunMessage(influx, context, reflux))
-
+        elif isinstance(functor, (list, tuple)) or context.is_tuple(functor):
+            # リストとの変換
+            selectors = functor
+            from machaon.flow.flux import DecomposeFlux
+            return self.add_functor(DecomposeFlux(selectors))
+        
         else:
             raise TypeError(functor)
 
@@ -125,51 +124,40 @@ class Flow:
             functor(str): 型名
         """
         self.pipe(context, functor)
+        if len(self.functors) < 2:
+            raise ValueError("Or節を作るためのユニットの数が足りません")
         functor2 = self.functors.pop()
         functor1 = self.functors.pop()
-        from machaon.flow.functor import OrFlow
-        return self.add_functor(OrFlow(functor1, functor2))
+        from machaon.flow.flux import OrFlux
+        return self.add_functor(OrFlux(functor1, functor2))
     
-    def pipe_none(self, context, functor, arg=None):
-        """ @method context alias-name [none>>]
+    def pipe_none(self, functor, arg=None):
+        """ @method alias-name [none>>]
         machaonの型インターフェースまたはメソッドによってNoneを変換する
         Params:
             functor(str): blank|zero|hyphen|value[a]
             arg?(Any): 引数
         """
-        from machaon.flow.functor import NoneMapValue, NoneMapBlank
-        if functor == "blank":
+        from machaon.flow.flux import FluxFunctor, NoneToBlankFlux, NoneToValueFlux
+        if isinstance(functor, FluxFunctor):
+            # 任意のファンクタ
+            self.none_functor = functor
+        elif functor == "blank":
             # 空白文字に変換する
-            self.none_functor = NoneMapBlank()
+            self.none_functor = NoneToBlankFlux()
         elif functor == "zero":
             # ゼロに変換する
-            self.none_functor = NoneMapValue(0)
+            self.none_functor = NoneToValueFlux(0)
         elif functor == "hyphen":
             # ゼロに変換する
-            self.none_functor = NoneMapValue("―")
+            self.none_functor = NoneToValueFlux("―")
         elif functor == "value":
             # 任意の値
-            self.none_functor = NoneMapValue(arg)
+            self.none_functor = NoneToValueFlux(arg)
         else:
             raise ValueError(functor)
         return self
 
-
-    #
-    # 文字列
-    #
-    def strip(self, context, chars=None):
-        """ @method context
-        空白を削除する。
-        Params:
-            chars?(str): カスタム削除文字
-        """
-        from machaon.flow.functor import RunMessage
-        return self.add_functor(RunMessage("@ strip", context, args=(chars,)))
-
-    #_ Flow >> Influx(strip) >> Str:Postfix(月) >> Reflux("{02} format @") >> Int:Zen+Kan10+Kan0 >> Int:
-    #_ Flow >> Flow:Json
-    #_ Flow >>message "@ ..." message-reflux "@ ..." 
 
 
 class FlowError(Exception):
@@ -191,19 +179,3 @@ class FlowError(Exception):
     def child_exception(self):
         return self.args[0]
     
-#
-# Flow.pipeで使用できるダミーの型
-#
-class TupleFlow():
-    """ @type
-    オブジェクトをタプルに変換する。
-    """
-    def __init__(self, *members):
-        self.members = members
-
-    def constructor(self, value):
-        """ @meta
-        Params:
-            Tuple:    
-        """
-        return TupleFlow(*value) # DecomposeToTupleが実際の処理を行う

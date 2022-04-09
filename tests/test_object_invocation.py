@@ -4,8 +4,8 @@ from machaon.core.invocation import (
     InvocationEntry, BasicInvocation, TypeMethodInvocation, 
     InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
     Bind1stInvocation, TypeConstructorInvocation,
-    instant_context
 )
+from machaon.core.context import instant_context
 from machaon.core.object import ObjectCollection, Object
 from machaon.types.fundamental import fundamental_types
 from machaon.core.type import full_qualified_name

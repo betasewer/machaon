@@ -1,4 +1,6 @@
-from machaon.core.invocation import INVOCATION_FLAG_RAISE_ERROR, InvocationContext, _new_process_error_object
+from machaon.core.context import (
+    INVOCATION_FLAG_RAISE_ERROR, InvocationContext, instant_context
+)
 import pytest
 import re
 from machaon.core.typedecl import TypeProxy
@@ -13,9 +15,7 @@ from machaon.core.typedecl import parse_type_declaration
 
 fundamental_type = fundamental_types()
 
-def test_context(*, silent=False):
-    from machaon.core.invocation import InvocationContext, instant_context
-    
+def test_context(*, silent=False):    
     cxt = instant_context()
     inputs = cxt.input_objects
     inputs.new("this-year", 2020, fundamental_type.get("Int"))    

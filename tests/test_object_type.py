@@ -1,6 +1,6 @@
 import pytest
 
-from machaon.core.invocation import TypeMethodInvocation, instant_context
+from machaon.core.context import instant_context
 from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration
 from machaon.core.type import CORE_SCOPE, TypeDefinition, TypeModule, TypeMemberAlias, Type
 from machaon.core.importer import ClassDescriber, attribute_loader

@@ -292,53 +292,6 @@ class BoolType():
         return body.run_here(context) # コンテキストを引き継ぐ
 
 
-class FunctionType():
-    """ @type [Function]
-    1引数をとるメッセージ。
-    ValueType:
-        machaon.core.message.FunctionExpression
-    Params:
-        qualifier(Str): None|(seq)uential
-    """
-    def constructor(self, context, s, qualifier=None):
-        """ @meta context
-        Params:
-            Str:
-        """
-        from machaon.core.message import parse_function, parse_sequential_function
-        if qualifier is None:
-            f = parse_function(s)
-        elif qualifier == "sequential" or qualifier == "seq":
-            f = parse_sequential_function(s, context)
-        return f
-
-    def stringify(self, f):
-        """ @meta """
-        return f.get_expression()
-    
-    #
-    #
-    #
-    def do(self, f, context, _app, subject=None):
-        """ @task context
-        関数を実行する。
-        Params:
-            subject(Object): *引数
-        Returns:
-            Any: 返り値
-        """
-        r = f.run(subject, context)
-        return r
-        
-    def apply_clipboard(self, f, context, app):
-        """ @task context
-        クリップボードのテキストを引数として関数を実行する。
-        """
-        text = app.clipboard_paste()
-        newtext = f.run(context.new_object(text), context).value
-        app.clipboard_copy(newtext, silent=True)
-        app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
-
 
 #
 #
@@ -359,19 +312,19 @@ def fundamental_types():
     module = TypeModule()
     for qualname in [
         "machaon.types.fundamental.TypeType",       # Type
-        "machaon.types.fundamental.FunctionType",   # Function
         "machaon.types.fundamental.BoolType",       # Bool
         "machaon.types.string.StrType",             # Str
         "machaon.types.numeric.IntType",            # Int
         "machaon.types.numeric.FloatType",          # Float
         "machaon.types.numeric.ComplexType",        # Complex
+        "machaon.core.function.FunctionType",       # Function
         "machaon.types.tuple.ObjectTuple",          # Tuple
         "machaon.types.sheet.Sheet",                # Sheet
         # エラー型
         "machaon.types.stacktrace.ErrorObject",     # Error
         "machaon.types.stacktrace.TracebackObject", # TracebackObject
         "machaon.types.stacktrace.FrameObject",     # FrameObject
-        "machaon.core.invocation.InvocationContext",# Context
+        "machaon.core.context.InvocationContext",   # Context
         "machaon.process.Process",                  # Process
         "machaon.types.package.Module",             # PyModule
         # システム型

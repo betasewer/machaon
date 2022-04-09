@@ -71,7 +71,7 @@ class GlobalHotkey:
         self._keys.clear()
         for label, key, fn, _msg in self.hotkeys:
             if isinstance(fn, str):
-                from machaon.core.message import parse_sequential_function
+                from machaon.core.function import  parse_sequential_function
                 fn = parse_sequential_function(fn, app.get_last_context())
             hk = HotKey(HotKey.parse(key), self.handler(label, key, fn))
             self._keys.append(hk)        

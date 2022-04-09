@@ -1,6 +1,7 @@
 from machaon.core.importer import ClassDescriber
-from machaon.core.invocation import TypeMethodInvocation, instant_context
-from machaon.core.message import run_function, select_method
+from machaon.core.invocation import TypeMethodInvocation
+from machaon.core.context import instant_context
+from machaon.core.message import select_method
 from machaon.core.type import TypeModule, Type
 from machaon.types.fundamental import fundamental_types
 

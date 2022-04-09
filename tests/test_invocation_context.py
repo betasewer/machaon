@@ -1,4 +1,4 @@
-from machaon.core.invocation import InvocationContext, instant_context
+from machaon.core.context import InvocationContext, instant_context
 from machaon.macatest import run
 
 def test_newobject_deduction():

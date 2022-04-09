@@ -1,9 +1,12 @@
 
 from machaon.core.object import Object
 from machaon.core.message import (
-    MessageEngine, MessageExpression, MemberGetExpression, 
+    MessageEngine, 
+)
+from machaon.core.function import (
+    parse_function, parse_sequential_function, run_function,
+    MessageExpression, MemberGetExpression, 
     SequentialMessageExpression, 
-    parse_function, parse_sequential_function, run_function
 )
 from machaon.process import TempSpirit
 from machaon.types.fundamental import fundamental_types
@@ -14,7 +17,7 @@ fundamental_type = fundamental_types()
 
 
 def test_context(*, silent=False):
-    from machaon.core.invocation import InvocationContext, instant_context
+    from machaon.core.context import InvocationContext, instant_context
     
     cxt = instant_context()
     inputs = cxt.input_objects
@@ -32,7 +35,7 @@ def test_context(*, silent=False):
 def test_parse_function():
     def ltest(s, subject, *rhs):
         from machaon.core.object import ObjectCollection, Object
-        from machaon.core.invocation import InvocationContext
+        from machaon.core.context import InvocationContext
 
         context = InvocationContext(input_objects=ObjectCollection(), type_module=fundamental_type)
         

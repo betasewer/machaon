@@ -3,9 +3,9 @@ import operator
 
 from machaon.core.type import TypeModule
 from machaon.core.object import ObjectCollection, Object
-from machaon.core.invocation import InvocationContext, instant_context
+from machaon.core.context import InvocationContext, instant_context
 from machaon.core.sort import ValueWrapper
-from machaon.core.message import parse_function
+from machaon.core.function import parse_function
 from machaon.core.typedecl import TypeInstance
 from machaon.types.sheet import Sheet, ItemItselfColumn
 

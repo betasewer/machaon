@@ -2,7 +2,8 @@ from machaon.core.invocation import BasicInvocation
 from machaon.core.object import Object
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
 
-from machaon.core.message import MemberGetExpression, parse_function, select_method_by_object
+from machaon.core.message import select_method_by_object
+from machaon.core.function import MemberGetExpression, parse_function
 
 from machaon.types.tuple import ElemObject
 from machaon.types.fundamental import NotFound

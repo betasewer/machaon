@@ -1,4 +1,4 @@
-from machaon.core.invocation import instant_context
+from machaon.core.context import instant_context
 from machaon.macatest import run
 
 

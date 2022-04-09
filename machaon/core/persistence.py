@@ -1,7 +1,7 @@
 import os
 from machaon.types.shell import Path
 from machaon.types.file import TextFile
-from machaon.core.message import run_function_print_step, run_function
+from machaon.core.function import run_function_print_step, run_function
 
 def get_persistent_path(root, name):
     """ オブジェクト名からファイルパスを得る
@@ -90,7 +90,7 @@ class StoredMessage():
         Params:
             context_index(str):
         """
-        from machaon.core.invocation import InvocationContext
+        from machaon.core.context import InvocationContext
         cxt = InvocationContext.constructor(InvocationContext, context, context_index)
         self._buf.append(cxt.get_message())
 

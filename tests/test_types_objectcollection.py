@@ -1,5 +1,5 @@
 from machaon.core.object import ObjectCollection
-from machaon.core.invocation import instant_return_test, instant_context
+from machaon.core.context import instant_return_test, instant_context
 
 
 def test_conversion_construct():

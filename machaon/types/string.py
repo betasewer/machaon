@@ -573,7 +573,7 @@ class StrType():
         Returns:
             Object: 返り値
         """
-        from machaon.core.message import run_function
+        from machaon.core.function import run_function
         return run_function(s, subject, context, raiseerror=True)
 
     def fn(self, s):
@@ -582,7 +582,7 @@ class StrType():
         Returns:
             Function:
         """
-        from machaon.core.message import parse_function
+        from machaon.core.function import parse_function
         return parse_function(s)
     
     def seqfn(self, s):
@@ -591,7 +591,7 @@ class StrType():
         Returns:
             Function:
         """
-        from machaon.core.message import parse_sequential_function
+        from machaon.core.function import  parse_sequential_function
         return parse_sequential_function(s)
     
     def do_external(self, s, context, app):

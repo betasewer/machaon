@@ -1,6 +1,6 @@
 
 from machaon.types.fundamental import fundamental_types
-from machaon.core.invocation import instant_context
+from machaon.core.context import instant_context
 
 fundamental_type = fundamental_types()
 
@@ -24,7 +24,7 @@ def test_fundamental_basic():
     
     t = fundamental_type.find("Function")
     assert t
-    from machaon.core.message import FunctionExpression
+    from machaon.core.function import  FunctionExpression
     assert t.get_value_type() is FunctionExpression
     
     t = fundamental_type.find("None")
@@ -105,7 +105,7 @@ def test_function():
     fntype = cxt.get_type("Function")
     fnpower = fntype.construct(cxt, "@ * @")
     assert fnpower
-    from machaon.core.message import MessageExpression
+    from machaon.core.function import  MessageExpression
     assert isinstance(fnpower, MessageExpression)
 
 def test_fundamental_numeric_subtype():
