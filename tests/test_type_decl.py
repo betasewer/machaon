@@ -98,6 +98,22 @@ def test_decl_instance():
     assert d.get_args()[2] == "@"
     assert d.get_conversion() == "Sheet: Int length @" 
 
+def test_decl_instantiate_args():
+    cxt = instant_context()
+    t = cxt.get_type("Sheet")
+
+    d = parse_type_declaration("Sheet[Str](length)")
+    args = d.instantiate_args(t.get_type_params(), cxt)
+    assert len(args) == 2
+    assert args[0].get_conversion() == "Str"
+    assert args[1] == "length"
+    
+    d = parse_type_declaration("Sheet[](mul,sub)")
+    args = d.instantiate_args(t.get_type_params(), cxt)
+    assert len(args) == 3
+    assert args[0].get_conversion() == "Any"
+    assert args[1] == "mul"
+    assert args[2] == "sub"
 
 def test_decl_syntax_check():
     cxt = instant_context()

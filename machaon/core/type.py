@@ -689,7 +689,7 @@ class TypeDefinition():
                 raise ValueError("TypeDefinition typename is not defined")
         
         if self.bits & TYPE_SUBTYPE:
-            # Subtype型を登録する（この時点で対象型はロードされていなくてもよい）
+            # Subtype型
             self.bits |= TYPE_TYPETRAIT_DESCRIBER
             self.value_type = _SubtypeBaseValueType # 代入しておかないと補完されてエラーになる
 
@@ -1210,7 +1210,9 @@ class TypeModule():
         if typename in self._lib_typename:
             dest = self._lib_typename[typename]
             if dest.get_describer_qualname() == describername:
-                return # 同じものが登録済み
+                #print("o {}".format(dest.get_type_params() if isinstance(dest, Type) else dest.load_type().get_type_params()))
+                #print("n {}".format(type.get_type_params() if isinstance(type, Type) else type.load_type().get_type_params()))
+                return dest # 同じものが登録済み
             else:
                 o = dest.get_describer_qualname()
                 n = describername

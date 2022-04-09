@@ -736,13 +736,17 @@ class TypeDecl:
             elems += ")"
         return elems
 
-    def instantiate_type(self, typedef, context, args=None) -> TypeProxy:
-        """ Typeから型のインスタンスを作る """
+    def instantiate_args(self, parameters, context, args=None) -> TypeProxy:
+        """ Typeから型に渡す引数の並びを作る """
         def collect_args(params, typeargs, valueargs, moreargs):
             i, j, k = 0, 0, 0
             for tp in params:
                 if tp.is_type():
-                    if i < len(typeargs):
+                    if tp.is_variable():
+                        for x in range(i,len(typeargs)):
+                            yield typeargs[x].instance(context)
+                        i = len(typeargs)
+                    elif i < len(typeargs):
                         yield typeargs[i].instance(context)
                         i += 1
                     elif k < len(moreargs):
@@ -753,38 +757,40 @@ class TypeDecl:
                     else:
                         from machaon.core.method import MethodParameterDefault
                         yield MethodParameterDefault
-                elif tp.is_variable():
-                    yield from valueargs[j:]
-                    j += len(valueargs)-j
                 else:
-                    if j < len(valueargs):
-                        yield valueargs[j]
-                        j += 1
-                    elif k < len(moreargs):
-                        yield moreargs[k]
-                        k += 1
+                    if tp.is_variable():
+                        yield from valueargs[j:]
+                        j = len(valueargs)
+                        yield from moreargs[k:]
+                        k = len(moreargs)
+                    else:
+                        if j < len(valueargs):
+                            yield valueargs[j]
+                            j += 1
+                        elif k < len(moreargs):
+                            yield moreargs[k]
+                            k += 1
 
-            # 残り
-            yield from moreargs[k:]
-                
-        
-        params = typedef.get_type_params()
+            # 残りの処理
+            restargs = (*typeargs[i:], *valueargs[j:], *moreargs[k:])
+            if restargs:
+                line = ",".join(str(x) for x in restargs)
+                raise TypeError("{}個の引数に対して、実引数に余りが出ます:{}".format(len(parameters), line))
+    
         if args:
             # Sheet | Int c1 c2
             if self.declargs:
                 # デフォルト型変数を埋めていく
-                argvals = list(collect_args(params, self.declargs, self.ctorargs, args))  
+                argvals = list(collect_args(parameters, self.declargs, self.ctorargs, args))  
             else:
                 argvals = [*self.ctorargs, *args] # 非型引数を結合 
         else:
-            argvals = list(collect_args(params, self.declargs, self.ctorargs, []))
+            argvals = list(collect_args(parameters, self.declargs, self.ctorargs, []))
         
         if argvals:
-            args = instantiate_args(self, params, context, argvals)
-            if args:
-                return TypeInstance(typedef, args)
-        
-        return typedef # 引数がなければそのまま
+            args = instantiate_args(self, parameters, context, argvals)
+            return args
+        return ()
     
     def instance(self, context, args=None) -> TypeProxy:
         """
@@ -806,12 +812,14 @@ class TypeDecl:
             # サブタイプを解決する
             if len(self.declargs) < 2:
                 raise ValueError("not enough type args for $Sub")
-            baset = self.declargs[0].instance(context) # 基底型
-            subtypes = []
+            basetype = self.declargs[0].instance(context) # 基底型
             metadecl = self.declargs[1]
-            td = context.get_subtype(baset.typename, metadecl.typename)
-            meta = metadecl.instantiate_type(td, context, args)
-            return SubType(baset, meta)
+            td = context.get_subtype(basetype.typename, metadecl.typename)
+            targs = metadecl.instantiate_args(td.get_type_params(), context, args)
+            if targs:
+                return SubType(basetype, TypeInstance(td, targs))
+            else:
+                return SubType(basetype, td)
         elif SIGIL_PYMODULE_DOT in self.typename: 
             # machaonで未定義のPythonの型: ビルトイン型はbuiltins.***でアクセス
             ctorargs = [*self.ctorargs, *(args or [])]
@@ -822,8 +830,12 @@ class TypeDecl:
             # 型オブジェクトを取得
             td = context.select_type(typename)
             if td is None:
-                raise BadTypename(typename)
-            return self.instantiate_type(td, context, args)
+                raise BadTypename(typename)                
+            targs = self.instantiate_args(td.get_type_params(), context, args)
+            if targs:
+                return TypeInstance(td, targs)
+            else:
+                return td
 
 
 class TypeInstanceDecl(TypeDecl):
@@ -856,18 +868,31 @@ class TypeDeclError(Exception):
         return "型宣言の構文エラー（{}）: {}".format(self.args[1], pos)
 
 
-def parse_type_declaration(decl):
+def parse_type_declaration(decl, inst_context=None, *inst_args):
     """ 型宣言をパースする
     Params:
         decl(str):
     Returns:
-        TypeDecl:
+        TypeDecl|TypeInstanceDecl:
     """
     if isinstance(decl, TypeProxy):
         return TypeInstanceDecl(decl)
     if not decl:
         raise BadTypename("<emtpy string>")    
-    return _parse_typedecl(decl)
+    d = _parse_typedecl(decl)
+    if inst_args:
+        return TypeInstanceDecl(d.instance(inst_context, inst_args))
+    return d
+    
+def instantiate_type(decl, context, *args):
+    """ 型宣言をインスタンス化する
+    Params:
+        decl(str):
+    Returns:
+        TypeDecl:
+    """
+    d = parse_type_declaration(decl)
+    return d.instance(context, args)
 
 #
 # 型宣言パーサコンビネータ 

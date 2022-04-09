@@ -2,7 +2,7 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 
 from machaon.core.type import Type, TypeModule
 from machaon.core.typedecl import (
-    PythonType, TypeAny, TypeDecl, TypeInstanceDecl, TypeProxy, 
+    PythonType, TypeAny, TypeDecl, TypeInstanceDecl, TypeProxy, instantiate_type, 
     parse_type_declaration
 )
 from machaon.core.object import EMPTY_OBJECT, Object, ObjectCollection
@@ -127,13 +127,11 @@ class InvocationEntry():
         if self.exception:
             return _new_process_error_object(context, self.exception, objectType)
     
-        # NEGATEモディファイアを適用       
-        modnegate = "NEGATE_RESULT" in self.invocation.modifier
-
         # 型を決めて値を返す
         try:
-            rettype, retval = self.result_spec.make_result_value(context, value, 
-                message=self.message, negate=modnegate
+            rettype, retval = self.result_spec.make_result_value(
+                context, value, message=self.message, 
+                negate=("NEGATE_RESULT" in self.invocation.modifier) # NEGATEモディファイアを適用   
             )
             return objectType(rettype, retval)
         except Exception as e:
@@ -340,9 +338,7 @@ class InvocationContext:
 
     def instantiate_type(self, conversion, *args) -> TypeProxy:
         """ 型をインスタンス化する """
-        typedecl = parse_type_declaration(conversion)
-        tins = typedecl.instance(self, args)
-        return tins
+        return instantiate_type(conversion, self, *args)
     
     def new_object(self, value: Any, *args, type=None, conversion=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 

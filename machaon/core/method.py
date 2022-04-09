@@ -962,21 +962,19 @@ class MethodResult:
         if isinstance(value, Object):
             return (value.type, value.value)
 
-        # Noneはそのまま返す
-        if value is None:
-            return (context.get_type("None"), None)
-        
         # return-self
         if self.is_return_self():
             if message is None:
                 raise ValueError("No message is specified to get return-self value")
             # レシーバオブジェクトを返す
             reciever = message.get_reciever_value()
-            if isinstance(reciever, Object):
-                return (reciever.type, reciever.value)
-            else:
-                rettype = self.typedecl.instance(context)
-                return (rettype, reciever)
+            if not isinstance(reciever, Object):
+                raise ValueError("reciever must be Object")
+            return (reciever.type, reciever.value)
+        
+        # Noneはそのまま返す
+        if value is None:
+            return (context.get_type("None"), None)
         
         # 型を決める
         rettype = None
