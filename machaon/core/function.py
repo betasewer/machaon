@@ -5,6 +5,7 @@ from machaon.core.message import (
     MessageEngine, select_method, select_method_by_object, Message, EvalContext
 )
 from machaon.core.object import Object
+from machaon.core.invocation import BasicInvocation
 
 #
 # api
@@ -74,17 +75,22 @@ class MessageExpression(FunctionExpression):
         return self.f.run_here(context, **kwargs)
 
 
-class MemberGetExpression(FunctionExpression):
+class SelectorExpression(FunctionExpression):
     """
     主題オブジェクトのメンバ（引数0のメソッド）を取得する
     Functionの機能制限版だが、キャッシュを利用する
     """
-    def __init__(self, name, typeconv):
-        self.name = name
+    def __init__(self, selector, typeconv):
+        self.selector = selector
         self.typeconv = typeconv
 
     def get_expression(self) -> str:
-        return self.name
+        if isinstance(self.selector, str):
+            return self.selector
+        elif isinstance(self.selector, BasicInvocation):
+            return self.selector.display()[1]
+        else:
+            return self.selector
     
     def get_type_conversion(self):
         return self.typeconv
@@ -93,12 +99,13 @@ class MemberGetExpression(FunctionExpression):
         """ その場でメッセージを構築し実行 """
         subcontext = context.inherit(subject)
         
-        inv = select_method(self.name, subject.type, reciever=subject.value)
-        message = Message(subject, inv)
-        subcontext.log_message_begin(str(self.name))
+        selector = context.new_object(self.selector)
+        invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
+        entry = invocation.prepare_invoke(context, subject)
         
-        evalcontext = EvalContext(subcontext)
-        result = message.eval(evalcontext)
+        subcontext.log_message_begin(self.get_expression())
+        result = entry.invoke(subcontext)
+        subcontext.log_message_end()
         context.log_message_begin_sub(subcontext)
         
         return result
@@ -106,15 +113,13 @@ class MemberGetExpression(FunctionExpression):
     def run_here(self, context, **kwargs):
         """ コンテクストそのままで実行 """
         subject = context.subject_object
-        inv = select_method(self.name, subject.type, reciever=subject.value)
-        message = Message(subject, inv)
-        
-        evalcontext = EvalContext(context)
-        result = message.eval(evalcontext)
-        return result
+        selector = context.new_object(self.selector)
+        invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
+        entry = invocation.prepare_invoke(context, subject)
+        return entry.invoke(context)
 
 
-def parse_function(expression):
+def parse_function_message(expression):
     """
     メッセージ式から関数オブジェクトを作成する。
     Params:
@@ -133,15 +138,24 @@ def parse_function(expression):
     if typeconv:
         typeconv = typeconv.strip()
     
-    parts = body.split()
-    if len(parts) > 1:
+    partscount = len(body.split())
+    if partscount > 1:
         return MessageExpression(body, typeconv)
-    
-    elif len(parts) == 1:
-        return MemberGetExpression(body, typeconv)
-    
+    elif partscount == 1:
+        return SelectorExpression(body, typeconv)
     else:
         raise ValueError("Invalid expression")
+
+
+def parse_function(expression):
+    """
+    メッセージ式や任意の値から関数オブジェクトを作成する。
+    Params:
+        expression(Any):
+    """
+    if isinstance(expression, str):
+        return parse_function_message(expression.strip())
+    return SelectorExpression(expression)
 
 
 class SequentialMessageExpression(FunctionExpression):

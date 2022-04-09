@@ -2,8 +2,7 @@ from machaon.core.invocation import BasicInvocation
 from machaon.core.object import Object
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
 
-from machaon.core.message import select_method_by_object
-from machaon.core.function import MemberGetExpression, parse_function
+from machaon.core.function import parse_function
 
 from machaon.types.tuple import ElemObject
 from machaon.types.fundamental import NotFound
@@ -55,39 +54,36 @@ class BasicDataColumn():
         else:
             return object.stringify()
 
-class SelectorColumn(BasicDataColumn):
+
+class FunctionColumn(BasicDataColumn):
     """
     メッセージの返す値
     """
-    def __init__(self, selector, *, name=None):
-        self._sel = selector
+    def __init__(self, fn, *, name=None):
+        self._fn = fn
         self._name = name
     
     def get_name(self):
         if self._name is None:
-            if hasattr(self._sel, "get_expression"):
-                expr = self._sel.get_expression()
-            elif isinstance(self._sel, BasicInvocation):
-                expr = self._sel.display()[1]
+            expr = self._fn.get_expression()
+            if " " in expr:
+                return '"{}"'.format(expr)
             else:
-                expr = str(self._sel)
-            return '"{}"'.format(expr)
+                return expr
         return self._name
     
     def get_doc(self):
-        return '"{}"'.format(self._sel)
+        return '"{}"'.format(self._fn.get_expression())
 
     def get_type_conversion(self):
-        if hasattr(self._sel, "get_type_conversion"):
-            return self._sel.get_type_conversion()
+        if hasattr(self._fn, "get_type_conversion"):
+            return self._fn.get_type_conversion()
         else:
             return None
 
     def eval(self, subject, context):
-        selector = context.new_object(self._sel)
-        invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-        entry = invocation.prepare_invoke(context, subject)
-        return entry.invoke(context)
+        context.set_subject(subject)
+        return self._fn.run_here(context)
 
 
 class ItemItselfColumn(BasicDataColumn):
@@ -110,7 +106,7 @@ class ItemItselfColumn(BasicDataColumn):
         return subject
 
 #
-DataColumnUnion = Union[SelectorColumn, ItemItselfColumn]
+DataColumnUnion = Union[FunctionColumn, ItemItselfColumn]
 
 def make_data_columns(*expressions):
     """
@@ -127,17 +123,9 @@ def make_data_columns(*expressions):
             if expression == SIGIL_ITEM_ITSELF:
                 columns.append(ItemItselfColumn())
                 continue
-            
-            if " " in expression:
-                fn = parse_function(expression)
-                if isinstance(fn, MemberGetExpression):
-                    columns.append(SelectorColumn(fn, name=fn.get_expression()))
-                else:
-                    columns.append(SelectorColumn(fn))
-            else:
-                columns.append(SelectorColumn(expression, name=expression))
-        else:
-            columns.append(SelectorColumn(expression))
+        
+        fn = parse_function(expression)
+        columns.append(FunctionColumn(fn))
     
     return columns
 

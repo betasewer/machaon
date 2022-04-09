@@ -5,7 +5,7 @@ from machaon.core.message import (
 )
 from machaon.core.function import (
     parse_function, parse_sequential_function, run_function,
-    MessageExpression, MemberGetExpression, 
+    MessageExpression, SelectorExpression, 
     SequentialMessageExpression, 
 )
 from machaon.process import TempSpirit
@@ -195,7 +195,7 @@ def test_message_type_indicator():
     assert r.run(None, context).value == 3
     
     r = parse_function("Str :: name")
-    assert isinstance(r, MemberGetExpression)
+    assert isinstance(r, SelectorExpression)
     assert r.get_type_conversion() == "Str"
     assert r.get_expression() == "name"
 
