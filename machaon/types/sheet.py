@@ -1,4 +1,3 @@
-from machaon.core.invocation import BasicInvocation
 from machaon.core.object import Object
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
 

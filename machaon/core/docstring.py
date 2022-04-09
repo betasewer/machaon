@@ -1,6 +1,4 @@
 from collections import defaultdict
-from itertools import takewhile
-import os.path
 
 #
 class DocStringParseError(Exception):

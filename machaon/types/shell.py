@@ -5,7 +5,6 @@ import datetime
 from collections import defaultdict
 
 from machaon.shellpopen import popen_capture
-from machaon.types.fundamental import NotFound
 from machaon.platforms import shellpath
 
 
