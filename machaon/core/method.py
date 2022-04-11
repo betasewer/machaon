@@ -55,6 +55,7 @@ METHOD_META_NOEXTRAPARAMS = 0x1000000
 PARAMETER_REQUIRED = 0x0100
 PARAMETER_VARIABLE = 0x0200
 PARAMETER_KEYWORD  = 0x0400
+PARAMETER_VARIABLE_ONEORMORE = 0x0800
 
 #
 class RETURN_SELF:
@@ -429,6 +430,9 @@ class Method():
             raise UnloadedMethod(self.name)
         cnt = 0
         for p in self.params:
+            if p.is_variable_oneormore():
+                cnt += 1
+                break
             if not p.is_required() or p.is_variable():
                 break
             cnt += 1
@@ -840,6 +844,9 @@ class MethodParameter():
 
     def is_variable(self):
         return (self.flags & PARAMETER_VARIABLE) > 0
+        
+    def is_variable_oneormore(self):
+        return (self.flags & PARAMETER_VARIABLE_ONEORMORE) > 0
 
     def set_required(self):
         self.flags |= PARAMETER_REQUIRED
@@ -970,6 +977,8 @@ class MethodResult:
             reciever = message.get_reciever_value()
             if not isinstance(reciever, Object):
                 raise ValueError("reciever must be Object")
+            if value is not None and value is not reciever.value:
+                raise ValueError("Value returned in return-self context will be discarded: {}".format(value))
             return (reciever.type, reciever.value)
         
         # Noneはそのまま返す
@@ -1007,7 +1016,7 @@ def parse_parameter_line(line):
     # sepが無くても続行する    
 
     flags = 0
-    if head.startswith("*"):
+    if head.startswith(("*","+")):
         # 可変長引数
         name, _, right = head[1:].partition("(")
         if right:
@@ -1016,6 +1025,8 @@ def parse_parameter_line(line):
         else:
             typename = "Any"
         flags |= PARAMETER_VARIABLE
+        if head[0] == "+":
+            flags |= PARAMETER_VARIABLE_ONEORMORE
     else:
         name, _, paren = head.partition("(")
         name = name.strip()
