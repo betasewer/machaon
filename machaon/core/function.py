@@ -74,6 +74,9 @@ class MessageExpression(FunctionExpression):
     def run_here(self, context, **kwargs):
         return self.f.run_here(context, **kwargs)
 
+    def bind(self, *args):
+        raise NotImplementedError()
+
 
 class SelectorExpression(FunctionExpression):
     """
@@ -83,6 +86,7 @@ class SelectorExpression(FunctionExpression):
     def __init__(self, selector, typeconv):
         self.selector = selector
         self.typeconv = typeconv
+        self._bindargs = []
 
     def get_expression(self) -> str:
         if isinstance(self.selector, str):
@@ -101,7 +105,7 @@ class SelectorExpression(FunctionExpression):
         
         selector = context.new_object(self.selector)
         invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-        entry = invocation.prepare_invoke(context, subject)
+        entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
         
         subcontext.log_message_begin(self.get_expression())
         result = entry.invoke(subcontext)
@@ -115,8 +119,11 @@ class SelectorExpression(FunctionExpression):
         subject = context.subject_object
         selector = context.new_object(self.selector)
         invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-        entry = invocation.prepare_invoke(context, subject)
+        entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
         return entry.invoke(context)
+        
+    def bind(self, *args):
+        self._bindargs = args
 
 
 def parse_function_message(expression):
@@ -220,6 +227,9 @@ class SequentialMessageExpression(FunctionExpression):
     def nousecache(self):
         """ メッセージのキャッシュを使用しない """
         self.cached = False
+
+    def bind(self, *args):
+        self.f.bind(*args)
     
     @classmethod
     def instant(cls, expression):
