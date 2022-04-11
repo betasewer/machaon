@@ -33,6 +33,7 @@ from machaon.core.invocation import (
     TypeConstructorInvocation,
     Bind1stInvocation,
 )
+from machaon.core.typedecl import TypeDeclError
 
 
 #
@@ -480,7 +481,7 @@ def select_type(context, typeexpr):
     """
     try:
         tt = context.instantiate_type(typeexpr)
-    except BadTypename:
+    except (BadTypename, TypeDeclError):
         return None
     return context.get_type("Type").new_object(tt)
 

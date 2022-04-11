@@ -416,7 +416,7 @@ class Type(TypeProxy):
         else:
             return s
     
-    def default_pprint(self, app, value, *args):
+    def default_pprint(self, value, app, *args):
         """ stringifyに流す """
         s = self.stringify_value(value, args)
         app.post("message", s)

@@ -194,7 +194,7 @@ class InvocationContext:
     def is_instance(self, value, typename):
         """ 型の一致: 任意の型 """
         t = self.get_type(typename)
-        return t.check_value_type(value)
+        return t.check_value_type(type(value))
     
     def deduce_type(self, value: Any) -> TypeProxy:
         """ 値から型を推定する """
@@ -497,8 +497,8 @@ class InvocationContext:
         
         subcxt = None
         logs = self._log
-        for i, idx in enumerate(indices):
-            submessages = [x for x in logs if x[0] == LOG_RUN_FUNCTION]
+        for idx in indices:
+            submessages = [x for x in logs if x[0] == LOG_MESSAGE_BEGIN_SUB]
             if idx<0 or idx>= len(submessages):
                 raise IndexError("'{}'に対応する子コンテキストはありません".format(index))
             subcxt = submessages[idx][1]
@@ -513,7 +513,7 @@ class InvocationContext:
             Sheet[Context](is-failed, message, last-result):
         """
         rets = []
-        submessages = [x for x in self._log if x[0] == LOG_RUN_FUNCTION]
+        submessages = [x for x in self._log if x[0] == LOG_MESSAGE_BEGIN_SUB]
         for values in submessages:
             subcxt = values[1]
             rets.append(subcxt)
