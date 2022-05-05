@@ -1,4 +1,3 @@
-from types import ModuleType
 import os
 
 from machaon.core.importer import PyModuleInstance, module_loader, walk_modules
@@ -330,14 +329,21 @@ class Module():
         return PyModuleInstance(self._m)
     
     def constructor(self, value):
-        """ @meta """
+        """ @meta 
+        Params:
+            Any:
+        """
+        from machaon.types.shell import Path
         if isinstance(value, str):
-            if os.path.isfile(value):
-                loader = module_loader(location=value)
-            else:
-                loader = module_loader(value)
+            # モジュール名
+            loader = module_loader(value)
             return Module(loader.load_module())
-        elif isinstance(value, ModuleType):
+        elif isinstance(value, Path):
+            # パス
+            loader = module_loader(value.basename(), location=value.get())
+            return Module(loader.load_module())
+        elif isinstance(value, type(os)):
+            # モジュールインスタンス
             return Module(value)
         else:
             raise TypeError("")
@@ -374,6 +380,12 @@ class Module():
             Any:
         """
         return self._m
+
+    def __getitem__(self, name):
+        """
+        モジュールのメンバを得る。
+        """
+        return getattr(self._m, name)
 
     def scan(self, app):
         """ @task
