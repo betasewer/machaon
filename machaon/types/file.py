@@ -272,13 +272,14 @@ class TextFile(BasicContextFile):
     """ @type
     テキストファイル。
     """
-    def __init__(self, path, *, encoding=None):
+    def __init__(self, path, *, encoding=None, **params):
         super().__init__(path)
         self._enc = encoding
+        self._openparams = params
     
     def openfile(self, mode):
         self.detect_encoding()
-        return open(self.pathstr, mode, encoding=self._enc)
+        return open(self.pathstr, mode, encoding=self._enc, **self._openparams)
 
     def detect_encoding(self):
         """ @method
@@ -289,14 +290,14 @@ class TextFile(BasicContextFile):
         if self._enc is not None:
             return self._enc
         if not os.path.isfile(self.pathstr):
-            raise ValueError("パスが存在しないため、文字列エンコーディングの指定が必要です")
+            raise ValueError("パスが存在しないため、ファイルを開くには文字列エンコーディングの指定が必要です")
         encoding = detect_text_encoding(self.pathstr)
         self._enc = encoding
         return encoding
     
     def encoding(self):
         """ @method
-        文字エンコーディング形式を取得する。
+        設定された文字エンコーディング形式を取得する。
         Returns:
             Str:
         """
