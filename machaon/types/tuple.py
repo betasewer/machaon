@@ -392,3 +392,28 @@ class ObjectTuple():
                 tn = o.get_typename()
                 rows.append((i, [sm, tn]))
             app.post("object-sheetview", rows=rows, columns=columns, context=context)
+
+
+
+class StrParts:
+    """ @type subtype 
+    繋がれた文字列。各要素はstripされる。
+    BaseType:
+        Tuple:
+    Params:
+        separator(Str):
+        minparts?(Int): この数に満たない場合、空文字列で埋める
+    """
+    def constructor(self, context, s, separator, minparts=0):
+        """ @meta context
+        Params:
+            s(Str):
+        """
+        parts = [x.strip() for x in s.split(separator)]
+        if len(parts) < minparts:
+            parts.extend(["" for _ in range(minparts-len(parts))])
+        return ObjectTuple.constructor(ObjectTuple, context, parts)
+
+    def stringify(self, parts, separator, minparts=0):
+        """ @meta """
+        return separator.join([x for x in parts if len(x) > 0])
