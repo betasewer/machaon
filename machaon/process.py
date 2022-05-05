@@ -44,7 +44,7 @@ class Process:
     #
     #
     def start_process(self, root):
-        # メインスレッドへの伝達者
+        # メインスレッドへの伝達者  
         spirit = Spirit(root, self)
 
         # 実行開始
@@ -59,11 +59,12 @@ class Process:
         context = InvocationContext(
             input_objects=inputobjs, 
             type_module=root.get_type_module(),
-            spirit=spirit
+            spirit=spirit,
+            herepath=root.get_basic_dir()
         )
         self.last_context = context
         msgroutine = self.message.runner(context)
-
+  
         # 実行開始
         for nextmsg in msgroutine:
             if isinstance(nextmsg, str):
@@ -79,7 +80,7 @@ class Process:
                 self._interrupted = False
                 self.thread.start()
                 return
-
+   
         # 同期実行の終わり
         self.on_finish_process(context)
 
@@ -110,6 +111,7 @@ class Process:
         return success
 
     def run_process_async(self, context, routine):
+        print("3")   
         for _ in routine: pass # 残りの処理を全て実行する
         self.on_finish_process(context)
     

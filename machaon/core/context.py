@@ -47,7 +47,7 @@ class InvocationContext:
     """ @type [Context]
     メソッドの呼び出しコンテキスト。
     """
-    def __init__(self, *, input_objects, type_module, spirit=None, subject=None, flags=0, parent=None):
+    def __init__(self, *, input_objects, type_module, spirit=None, subject=None, flags=0, herepath=None, parent=None):
         self.type_module: TypeModule = type_module
         self.input_objects: ObjectCollection = input_objects  # 外部のオブジェクト参照
         self.subject_object: Union[None, Object, Dict[str, Object]] = subject       # 無名関数の引数とするオブジェクト
@@ -57,6 +57,7 @@ class InvocationContext:
         self._extra_exception = None
         self._log = []
         self.log = self._add_log
+        self.herepath = herepath
         self.parent = parent # 継承元のコンテキスト
     
     def get_spirit(self):
@@ -67,20 +68,23 @@ class InvocationContext:
         return self.spirit.root
     
     #
-    def inherit(self, subject=None):
+    def inherit(self, subject=None, herepath=None):
         # 予約されたフラグを取り出して結合する
         preserved_flags = 0xFFFF & (self.invocation_flags >> INVOCATION_FLAG_INHERIT_BIT_SHIFT)
         flags = (0xFFFF & self.invocation_flags) | preserved_flags
         remove_flags = 0xFFFF & (self.invocation_flags >> INVOCATION_FLAG_INHERIT_REMBIT_SHIFT)
         flags = flags & ~remove_flags
-        # subject以外は全て引き継がれる
+        # パス
+        herepath = herepath or self.herepath
+        # 他の要素は全て引き継がれる
         return InvocationContext(
             input_objects=self.input_objects, 
             type_module=self.type_module, 
             spirit=self.spirit,
             subject=subject,
             flags=flags,
-            parent=self
+            herepath=herepath,
+            parent=self,
         )
 
     def inherit_sequential(self):
@@ -118,6 +122,10 @@ class InvocationContext:
     
     def is_sequential_invocation(self) -> bool: 
         return (self.invocation_flags & INVOCATION_FLAG_SEQUENTIAL) > 0
+
+    #
+    def get_herepath(self):
+        return self.herepath
 
     #
     def get_object(self, name) -> Optional[Object]:
@@ -280,7 +288,7 @@ class InvocationContext:
         self.log(LOG_MESSAGE_EVAL_BEGIN, index)
         return index
 
-    def finish_invocation(self, entry: InvocationEntry):
+    def finish_invocation(self):
         """ 呼び出しの直後に """
         index = len(self.invocations)-1
         self.log(LOG_MESSAGE_EVAL_END, index)

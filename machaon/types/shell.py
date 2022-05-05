@@ -30,6 +30,9 @@ class Path():
     
     def __str__(self):
         return self._path
+        
+    def __repr__(self):
+        return "<maca.Path {}>".format(self._path)
     
     def __fspath__(self):
         return self._path
@@ -494,9 +497,11 @@ class Path():
         return Path(os.path.join(self._path, r))
     
     @classmethod
-    def known(self, value, approot=None):
+    def known(self, value, approot=None, context=None):
         """ 場所の名前からパスを得る """
-        if value == "machaon" and approot:
+        if value == "here" and context:
+            p = context.get_herepath()
+        elif value == "machaon" and approot:
             p = approot.get_basic_dir()
         elif value == "store" and approot:
             p = os.path.join(approot.get_basic_dir(), "store")
@@ -512,11 +517,11 @@ class Path():
         Params:
             Any:
         """
-        if isinstance(value, str):
+        if isinstance(value, str) and value:
             head, tail = os.path.split(value)
             if not head: # no slash in path
                 # 場所の識別名として解釈
-                p = Path.known(value, context.spirit.get_root())
+                p = Path.known(value, context.spirit.get_root(), context)
                 if p is not None:
                     return p
             # 識別名が存在しなければパスとする

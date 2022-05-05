@@ -313,7 +313,7 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    def eval_object_message(self, message: str):        
+    def eval_object_message(self, message: str):
         if not message:
             return False
         elif message == "exit":
