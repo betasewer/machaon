@@ -1,7 +1,7 @@
 
 from machaon.core.typedecl import TypeProxy
 from machaon.flow.flux import (
-    FluxFunctor, TypeFlux, JsonFlux, DecomposeFlux, OrFlux,
+    FluxFunctor, TypeFlux, JsonFlux, DecomposeFlux, OrFlux, NamedFunctorFlux,
     NoneToBlankFlux, NoneToValueFlux
 )
 
@@ -13,6 +13,7 @@ class Flow:
     def __init__(self):
         self.functors = []
         self.none_functor = None
+        self.named_functors = {}
 
     def influx(self, value):
         """ @task nospirit
@@ -31,6 +32,24 @@ class Flow:
             raise FlowError(e, "influx", value, i, ft) from e
         return value
     
+    def influxes(self, value):
+        """ @method
+        influxをジェネレータとして実行する。
+        Params:
+            value(Any): 入力値
+        Yields:
+            Any: 各ファンクタの返り値。
+        """
+        try:
+            if self.none_functor and self.none_functor.influx(value) is None: # 最初に入力値をチェックする
+                yield None
+                return
+            for i, ft in enumerate(self.functors):
+                value = yield ft.influx(value)
+        except Exception as e:
+            raise FlowError(e, "influx", value, i, ft) from e
+        yield value
+    
     def reflux(self, value):
         """ @task nospirit
         データから入力値へと逆の変換をする。
@@ -48,6 +67,26 @@ class Flow:
         except Exception as e:
             raise FlowError(e, "reflux", value, i, ft) from e
         return value
+
+    def refluxes(self, value):
+        """ @task nospirit
+        refluxをジェネレータとして実行する。
+        Params:
+            value(Any): データ
+        Yields:
+            Any: 各ファンクタの返り値。
+        """
+        try:
+            if value is None and self.none_functor:
+                ret = self.none_functor.reflux(None) # 最初にデータをチェックする
+                yield ret
+                return
+            for i, ft in enumerate(reversed(self.functors)):
+                i = len(self.functors)-i-1
+                value = yield ft.reflux(value)
+        except Exception as e:
+            raise FlowError(e, "reflux", value, i, ft) from e
+        yield value
 
     def influx_flow(self):
         """ @method
@@ -88,6 +127,9 @@ class Flow:
     def add_functor(self, fn):
         self.functors.append(fn)
         return self
+        
+    def add_named_functor(self, name):
+        return self.add_functor(NamedFunctorFlux(self, name))
 
     def pipe(self, context, functor):
         """ @method context alias-name [>>]
@@ -100,17 +142,22 @@ class Flow:
             return self.add_functor(functor)
 
         elif isinstance(functor, str):
-            if functor == "json":
-                # jsonで変換する
+            if functor.startswith("<") and functor.endswith(">"):
+                return self.add_named_functor(functor[1:-1].strip())
+
+            elif functor == "json":
                 return self.add_functor(JsonFlux())
 
-            # 型インターフェースで変換する
-            typeconversion = functor
-            t = context.instantiate_type(typeconversion)
-            if t is None:
-                raise ValueError("型'{}'は存在しません".format(typeconversion))
+            elif functor[0].isupper():
+                # 型インターフェースで変換する
+                typeconversion = functor
+                t = context.instantiate_type(typeconversion)
+                if t is None:
+                    raise ValueError("型'{}'は存在しません".format(typeconversion))
+                return self.add_functor(TypeFlux(context, t))
 
-            return self.add_functor(TypeFlux(context, t))
+            else:
+                raise ValueError("値'{}'はファンクタとして解釈できません".format(functor))
 
         elif isinstance(functor, TypeProxy):
             return self.add_functor(TypeFlux(context, functor))
@@ -134,7 +181,6 @@ class Flow:
             raise ValueError("Or節を作るためのユニットの数が足りません")
         functor2 = self.functors.pop()
         functor1 = self.functors.pop()
-        from machaon.flow.flux import OrFlux
         return self.add_functor(OrFlux(functor1, functor2))
     
     def pipe_none(self, functor, arg=None):
@@ -163,6 +209,16 @@ class Flow:
             raise ValueError(functor)
         return self
 
+    def define_named_functor(self, name, flux):
+        """ キーワードで指定できるファンクタを定義する """
+        self.named_functors[name] = flux
+
+    def get_named_functor(self, name):
+        """ """
+        if name not in self.named_functors:
+            raise ValueError("ファンクタ名'{}'は定義されていません".format(name))
+        return self.named_functors[name]
+    
 
 
 class FlowError(Exception):

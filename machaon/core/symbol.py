@@ -213,8 +213,8 @@ SUMMARY_ESCAPE_TRANS = str.maketrans({
 #
 DefaultModuleNames = (
     "types.string", "types.numeric", "types.dateandtime", 
-    "types.shell", "types.file",
-    "flow.flow"
+    "types.shell", "types.file", "types.tuple",
+    "flow.flow", "flow.flux",
 )
 
 #

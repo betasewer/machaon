@@ -14,7 +14,7 @@ class Flux(FluxFunctor):
     """ @type
     入出力のセレクタを直接指定するユニット。
     Params:
-        refl(Function[](seq)):
+        refl(Any):
     """
     def __init__(self, infl=None, refl=None):
         self._in = infl
@@ -40,20 +40,24 @@ class Flux(FluxFunctor):
             return "<identity>"
         return self._re.get_expression()
 
-    def constructor(self, infl, refl):
-        """ @meta
+    def constructor(self, context, infl, refl):
+        """ @meta context
         Params:
-            infl(Function[](seq)):    
+            infl(Any):    
         """
-        return Flux(infl, refl)
+        return Flux.from_values(context, infl, refl)
         
     def display(self):
         return "<Flux {} |<||>| {}>".format(self._in.get_expression(), self._re.get_expression())
 
     @classmethod
-    def from_string(cls, cxt, infl, refl):
+    def from_values(cls, cxt, infl, refl):
         from machaon.core.function import  parse_sequential_function
-        return cls(parse_sequential_function(infl, cxt), parse_sequential_function(refl, cxt))
+        if not cxt.is_instance(infl, "Function"):
+            infl = parse_sequential_function(infl, cxt)
+        if not cxt.is_instance(refl, "Function"):
+            refl = parse_sequential_function(refl, cxt)
+        return cls(infl, refl)
 
 
 class TypeFlux(FluxFunctor):
@@ -103,11 +107,11 @@ class DecomposeFlux(FluxFunctor):
         arr = []
         for membername in self._members:
             if membername.startswith("."):
-                value = getattr(value, membername[1:])
+                v = getattr(value, membername[1:])
             else:
                 member = getattr(value, membername)
-                value = member()
-            arr.append(value)
+                v = member()
+            arr.append(v) # 
         return arr
 
     def reflux(self, value):
@@ -149,6 +153,176 @@ class JsonFlux(FluxFunctor):
         return "<JsonFlux>"
 
 
+class NamedFunctorFlux(FluxFunctor):
+    """ 名前付きファンクタを実行する """
+    def __init__(self, flow, name):
+        super().__init__()
+        self.flow = flow
+        self.name = name
+
+    def resolve(self):
+        return self.flow.get_named_functor(self.name)
+
+    def influx(self, value):
+        return self.resolve().influx(value)
+
+    def reflux(self, value):
+        return self.resolve().reflux(value)
+
+    def display(self):
+        return self.resolve().display()
+
+
+
+class ConstFlux(FluxFunctor):
+    """ @type
+    入力を無視して定数を返すユニット
+    """
+    def __init__(self, value):
+        super().__init__()
+        self.value = value
+    
+    def influx(self, _value):
+        return self.value
+
+    def reflux(self, _value):
+        return self.value
+
+    def influx_flow(self):
+        return "<const {}>".format(self.value)
+        
+    def reflux_flow(self):
+        return "<const {}>".format(self.value)
+
+    def constructor(self, value):
+        """ @meta """
+        return ConstFlux(value)
+
+
+class InletFlux(FluxFunctor):
+    """ @type
+    Influxの時のみ、関数を実行するユニット
+    """
+    def __init__(self, function) -> None:
+        super().__init__()
+        self.func = function
+
+    def influx(self, value):
+        return self.func(value)
+
+    def reflux(self, value):
+        return value
+
+    def influx_flow(self):
+        return self.func.get_expression()
+        
+    def reflux_flow(self):
+        return "<identity>"
+        
+    def display(self):
+        return "<InletFlux {}>".format(self.func.get_expression())
+
+    def constructor(self, context, selector):
+        """ @meta context 
+        Params:
+            selector(Any): 
+        """
+        from machaon.core.function import parse_sequential_function
+        fn = parse_sequential_function(selector, context)
+        return InletFlux(fn)
+
+
+class OutletFlux(FluxFunctor):
+    """ @type
+    refluxの時のみ、関数を実行するユニット
+    """
+    def __init__(self, function) -> None:
+        super().__init__()
+        self.func = function
+
+    def influx(self, value):
+        return value
+
+    def reflux(self, value):
+        return self.func(value)
+
+    def influx_flow(self):
+        return "<identity>"
+
+    def reflux_flow(self):
+        return self.func.get_expression()
+    
+    def display(self):
+        return "<OutletFlux {}>".format(self.func.get_expression())
+
+    def constructor(self, context, selector):
+        """ @meta context 
+        Params:
+            selector(Any): 
+        """
+        from machaon.core.function import parse_sequential_function
+        fn = parse_sequential_function(selector, context)
+        return OutletFlux(fn)
+
+#
+#
+#
+class ValidateFlux(FluxFunctor):
+    """ @type
+    値を検査し、Noneあるいは条件に合わなければ例外を投げるユニット。
+    """
+    def __init__(self, c=None):
+        self.cond = c
+
+    def constructor(self, context, value):
+        """ @meta context """
+        if isinstance(value, str):
+            if value == "exists":
+                return ValidateFlux(None)
+            elif value == "all-exists":
+                value = "@ values= all '(@ is-none not) and (@ strip length > 0)'"
+        
+        from machaon.core.function import parse_sequential_function
+        fn = parse_sequential_function(value, context)
+        return ValidateFlux(fn)
+    
+    def check(self, value):
+        if value is None:
+            raise ValidationFail(value, self)
+        if self.cond and not self.cond(value):
+            raise ValidationFail(value, self)
+
+    def influx(self, value):
+        self.check(value)
+        return value
+
+    def reflux(self, value):
+        self.check(value)
+        return value
+
+    def influx_flow(self):
+        return "validate {}".format(self.display())
+
+    def reflux_flow(self):
+        return "validate {}".format(self.display())
+    
+    def display(self):
+        if self.cond is None:
+            return "<not-none>"
+        else:
+            return self.cond.get_expression()
+
+
+class ValidationFail(Exception):
+    def __str__(self):
+        val = self.args[0]
+        cond = self.args[1].display()
+        return "値'{}'は要件にあっていません: {}".format(val, cond)
+
+
+#
+#
+#
 class NoneToValueFlux(FluxFunctor):
     """ @type
     Noneを値に変換するユニット。

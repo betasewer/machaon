@@ -75,7 +75,7 @@ def test_none_functor():
     cxt = instant_context()
     f = Flow()
     f.pipe(cxt, "Int")
-    f.pipe(cxt, Flux.from_string(cxt, "@ * 10", "@ / 10 floor"))
+    f.pipe(cxt, Flux.from_values(cxt, "@ * 10", "@ / 10 floor"))
     f.pipe_none("blank")
 
     assert f.influx("21") == 210
@@ -86,7 +86,7 @@ def test_none_functor():
 
     f = Flow()
     f.pipe(cxt, "Int")
-    f.pipe(cxt, Flux.from_string(cxt, "@ * 10", "@ / 10 floor"))
+    f.pipe(cxt, Flux.from_values(cxt, "@ * 10", "@ / 10 floor"))
     f.pipe_none("blank")
 
 
