@@ -557,17 +557,15 @@ class GenericMethods:
         from machaon.types.fundamental import TypeType
         return TypeType().help(obj.type, context, context.spirit, obj.value)
     
-    def convertas(self, obj, context, type):
+    def stringify(self, obj, context):
         """ @method reciever-param context
-        型を変換する。
+        stringifyメソッドで文字列に変換する。
         Arguments:
             obj(Object): オブジェクト
-            type(Type): 型
         Returns:
-            Any: 変換されたオブジェクト
+            Str:
         """
-        v = type.construct(context, obj.value)
-        return type.new_object(v)
+        return obj.stringify()
 
     def bind(self, left, context, right):
         """ @method reciever-param context
