@@ -581,7 +581,7 @@ def display_this_traceback(tb: TracebackObject, linewidth, showtype=None, level=
     return lines
 
 
-def verbose_display_traceback(exception, linewidth, showtype=None):
+def verbose_display_traceback(exception, linewidth=0xFFFFFF, showtype=None):
     """
     Params:
         exception(Exception): 例外オブジェクト
@@ -896,7 +896,7 @@ def find_code_function(code, fnname, locals, globals):
 
 
 class FunctionInfo:
-    def __init__(self, fn=None, type=None, bound_name=None, bound_object=None):
+    def __init__(self, fn=None, type=2, bound_name=None, bound_object=None):
         self.fn = fn
         self.type = type
         if self.type < 0 or 4 < self.type:
