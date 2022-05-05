@@ -814,7 +814,7 @@ class TypeDecl:
                 raise ValueError("not enough type args for $Sub")
             basetype = self.declargs[0].instance(context) # 基底型
             metadecl = self.declargs[1]
-            td = context.get_subtype(basetype.typename, metadecl.typename)
+            td = context.get_subtype(basetype.get_typename(), metadecl.typename)
             targs = metadecl.instantiate_args(td.get_type_params(), context, args)
             if targs:
                 return SubType(basetype, TypeInstance(td, targs))
