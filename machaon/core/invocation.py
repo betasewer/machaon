@@ -94,6 +94,8 @@ class InvocationEntry():
         context # context
     ):
         """ アクションを実行し、返り値を保存する """
+        context.begin_invocation(self)
+
         from machaon.process import ProcessInterrupted
         result = None
         try:
@@ -102,6 +104,8 @@ class InvocationEntry():
             raise e
         except Exception as e:
             self.exception = e
+        
+        context.finish_invocation()
         
         self.result = self.result_object(context, value=result)
         return self.result

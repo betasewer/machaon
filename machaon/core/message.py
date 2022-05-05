@@ -26,6 +26,7 @@ from machaon.core.object import Object
 from machaon.core.method import MethodParameter, enum_methods_from_type_and_instance
 from machaon.core.invocation import (
     BasicInvocation,
+    FunctionInvocation,
     TypeMethodInvocation,
     InstanceMethodInvocation,
     MessageInvocation,
@@ -254,11 +255,8 @@ class Message:
         context = evalcontext.context
         invocation = self.selector.prepare_invoke(context, *args)
         invocation.set_message(self)
-        context.begin_invocation(invocation)
 
         retobj = invocation.invoke(context)
-        
-        context.finish_invocation(invocation)
 
         if retobj is None:
             raise ValueError("No return value exists on the context stack")
@@ -571,6 +569,8 @@ def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None
         return v
     elif tn == "Function" or isinstance(v, FunctionExpression):
         return MessageInvocation(v)
+    elif callable(v):
+        return select_py_callable(v)
     else:
         raise BadExpressionError("'{}'はメソッドセレクタとして無効な型です".format(obj))
 
@@ -581,6 +581,17 @@ def select_index_method(value, typetraits, reciever, modbits):
 
 def select_type_constructor(name, modbits):
     return TypeConstructorInvocation(name, modbits)
+
+def select_py_callable(fn):
+    from machaon.core.method import Method
+    mth = Method()
+    mth.load_from_function(fn)
+    minarg, maxarg = mth.get_required_argument_min(), mth.get_acceptable_argument_max()
+    if maxarg < 1:
+        raise ValueError("引数は一つ以上必要です")
+    minarg -= 1
+    maxarg -= 1
+    return FunctionInvocation(fn, minarg=minarg, maxarg=maxarg)
 
 
 #

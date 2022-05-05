@@ -108,7 +108,9 @@ class SelectorExpression(FunctionExpression):
         entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
         
         subcontext.log_message_begin(self.get_expression())
+
         result = entry.invoke(subcontext)
+        
         subcontext.log_message_end()
         context.log_message_begin_sub(subcontext)
         
@@ -162,7 +164,7 @@ def parse_function(expression):
     """
     if isinstance(expression, str):
         return parse_function_message(expression.strip())
-    return SelectorExpression(expression)
+    return SelectorExpression(expression, None)
 
 
 class SequentialMessageExpression(FunctionExpression):
