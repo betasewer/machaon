@@ -672,7 +672,7 @@ class TypeDefinition():
     def get_sub_target(self):
         return self._sub_target
 
-    def proto_define(self, typemodule):
+    def proto_define(self):
         """ 型を登録する時点での処理 
         Returns:
             Str: 登録名. Noneなら登録しない
@@ -826,6 +826,24 @@ class TypeDefinition():
                 self.memberaliases.append((name, row))
 
         return True
+
+    @classmethod
+    def new(cls, describer, classname=None):
+        """ 型定義から即座に読み込み済みの型インスタンスを作成する """
+        if isinstance(describer, tuple):
+            from machaon.core.typedecl import SubType
+            basetype = cls.load_here(describer[0])
+            subtype = cls.load_here(describer[1], classname)
+            return SubType(basetype, subtype)
+        else:    
+            if not isinstance(describer, (str, ClassDescriber)):
+                describer = ClassDescriber(describer)
+            td = cls(describer, classname)
+            if not td.load_docstring():
+                raise TypeModuleError("Fail to load declaration")
+            td.proto_define()
+            return td.load_type()
+
 
 # ダミーの値型に使用
 class _SubtypeBaseValueType:
@@ -1190,7 +1208,7 @@ class TypeModule():
                 self._load_mixin(basename, basescope, t, reserve=True)
             else:
                 # 定義を型名に紐づけて配置する
-                typename = t.proto_define(self)
+                typename = t.proto_define()
                 if t.is_subtype():
                     basename, basescope = parse_scoped_typename(t.get_sub_target())
                     self._add_subtype(basename, typename, t)
@@ -1247,11 +1265,7 @@ class TypeModule():
         
     def load_definition(self, describer, classname=None) -> TypeDefinition:
         """ ただちに型定義をロードする """
-        if not isinstance(describer, (str, ClassDescriber)):
-            describer = ClassDescriber(describer)
-        td = TypeDefinition(describer, classname)
-        if not td.load_docstring():
-            raise TypeModuleError("Fail to load declaration")
+        td = TypeDefinition.new(describer, classname)
         return self.define(td)
 
     def _load_mixin(self, basename, basescope, t, *, reserve=False):
