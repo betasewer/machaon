@@ -505,8 +505,6 @@ def select_literal(context, literal):
 # メソッド
 def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
     # モディファイアを分離する
-    if isinstance(modbits, int):
-        raise ValueError("int modbits here, TO BE REMOVED")
     if modbits is None:
         if isinstance(name, AffixedSelector):
             s = name

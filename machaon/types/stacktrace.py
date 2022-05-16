@@ -888,7 +888,7 @@ def find_code_function(code, fnname, locals, globals):
 
     # グローバル関数
     gfn = globals.get(fnname, None)
-    if gfn and gfn.__code__ is code:
+    if gfn and getattr(gfn,"__code__",None) is code:
         return FunctionInfo(gfn, 2)
 
     # staticmethodは検知できない

@@ -164,7 +164,8 @@ def parse_function(expression):
     """
     if isinstance(expression, str):
         return parse_function_message(expression.strip())
-    return SelectorExpression(expression, None)
+    else:
+        return SelectorExpression(expression, None)
 
 
 class SequentialMessageExpression(FunctionExpression):

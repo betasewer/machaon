@@ -160,9 +160,10 @@ def is_modifiable_selector(selector):
         return False
     # 端が記号のセレクタはモディファイアとの区別がつかないのでモディファイアを無視する
     # かわりにブロックモディファイアを使用できる
-    import re
-    m = re.search("[\u0000-\u0040\u005b-\u0060\u007b-\u007f]", selector[0]+selector[-1])
-    if m is not None:
+    from string import punctuation
+    if selector[0] in punctuation:
+        return False
+    if selector[-1] in punctuation:
         return False
     return True
 
