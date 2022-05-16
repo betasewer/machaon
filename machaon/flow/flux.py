@@ -2,6 +2,17 @@
 """
 パイプで連結可能な処理のユニット。
 """
+from machaon.core.function import FunctionExpression
+from machaon.core.type import Type, TypeDefinition
+
+def display_function(fn):
+    if fn is None:
+        return "<identity>"
+    elif isinstance(fn, FunctionExpression):
+        return fn.get_expression()
+    else:
+        return repr(fn)
+
 
 class FluxFunctor():
     def display(self):
@@ -9,6 +20,16 @@ class FluxFunctor():
 
     def __repr__(self):
         return self.display()
+
+    def __rshift__(self, right):
+        return AndFlux(self, right)
+
+    def __or__(self, right):
+        return OrFlux(self, right)
+
+    def list(self, listtype=None):
+        return ListFlux(self, listtype)
+
 
 class Flux(FluxFunctor):
     """ @type
@@ -18,7 +39,10 @@ class Flux(FluxFunctor):
     """
     def __init__(self, infl=None, refl=None):
         self._in = infl
-        self._re = refl
+        if refl is None:
+            self._re = infl
+        else:   
+            self._re = refl
 
     def influx(self, value):
         if self._in is None:
@@ -31,15 +55,11 @@ class Flux(FluxFunctor):
         return self._re(value)
 
     def influx_flow(self):
-        if self._in is None:
-            return "<identity>"
-        return self._in.get_expression()
+        return display_function(self._in)
         
     def reflux_flow(self):
-        if self._re is None:
-            return "<identity>"
-        return self._re.get_expression()
-
+        return display_function(self._re)
+    
     def constructor(self, context, infl, refl):
         """ @meta context
         Params:
@@ -48,7 +68,10 @@ class Flux(FluxFunctor):
         return Flux.from_values(context, infl, refl)
         
     def display(self):
-        return "<Flux {} |<||>| {}>".format(self._in.get_expression(), self._re.get_expression())
+        return "<Flux\n    {}\n    {}>".format(
+            display_function(self._in), 
+            display_function(self._re)
+        )
 
     @classmethod
     def from_values(cls, cxt, infl, refl):
@@ -64,9 +87,14 @@ class TypeFlux(FluxFunctor):
     """ @type
     machaonの型インターフェースを利用して変換するユニット
     """
-    def __init__(self, context, t):
-        self._context = context
-        self._type = t
+    def __init__(self, klass=None, *args, type=None, context=None):
+        if type is not None:
+            self._context = context
+            self._type = type
+        else:
+            t = TypeDefinition.load_here(klass)
+            self._type = t
+            self._context = None
 
     def influx(self, value):
         return self._type.construct(self._context, value)
@@ -173,7 +201,6 @@ class NamedFunctorFlux(FluxFunctor):
         return self.resolve().display()
 
 
-
 class ConstFlux(FluxFunctor):
     """ @type
     入力を無視して定数を返すユニット
@@ -214,13 +241,13 @@ class InletFlux(FluxFunctor):
         return value
 
     def influx_flow(self):
-        return self.func.get_expression()
+        return display_function(self.func)
         
     def reflux_flow(self):
         return "<identity>"
         
     def display(self):
-        return "<InletFlux {}>".format(self.func.get_expression())
+        return "<InletFlux {}>".format(display_function(self.func))
 
     def constructor(self, context, selector):
         """ @meta context 
@@ -250,10 +277,10 @@ class OutletFlux(FluxFunctor):
         return "<identity>"
 
     def reflux_flow(self):
-        return self.func.get_expression()
+        return display_function(self.func)
     
     def display(self):
-        return "<OutletFlux {}>".format(self.func.get_expression())
+        return "<OutletFlux {}>".format(display_function(self.func))
 
     def constructor(self, context, selector):
         """ @meta context 
@@ -307,10 +334,7 @@ class ValidateFlux(FluxFunctor):
         return "validate {}".format(self.display())
     
     def display(self):
-        if self.cond is None:
-            return "<not-none>"
-        else:
-            return self.cond.get_expression()
+        return "<Validate {}>".format(display_function(self.cond))
 
 
 class ValidationFail(Exception):
@@ -364,8 +388,11 @@ class NoneToBlankFlux(NoneToValueFlux):
         return "<NoneToBlankFlux>"
 
 
+#
+#
+#
 class OrFlux(FluxFunctor):
-    """ @type
+    """
     複数の変換を順にためすユニット。
     """
     def __init__(self, left, right):
@@ -394,5 +421,58 @@ class OrFlux(FluxFunctor):
     
     def display(self):
         return "<OrFlux: \n  {}\n  {}\n  >".format(self.left.display(), self.right.display())
+
+
+class AndFlux(FluxFunctor):
+    """
+    変換を順に行うユニット。
+    """
+    def __init__(self, left, right):
+        self.left = left
+        self.right = right
+
+    def influx(self, value):
+        value = self.left.influx(value)
+        return self.right.influx(value)
+
+    def reflux(self, value):
+        value = self.right.reflux(value)
+        return self.left.reflux(value)
+    
+    def influx_flow(self):
+        return self.left.influx_flow() + " >> " + self.right.influx_flow()
+
+    def reflux_flow(self):
+        return self.left.reflux_flow() + " << " + self.right.reflux_flow()
+
+    def display(self):
+        return "<AndFlux: \n  {}\n  {}\n  >".format(self.left.display(), self.right.display())
+
+
+class ListFlux(FluxFunctor):
+    """
+    各要素に対し変換を行うユニット。
+    """
+    def __init__(self, elem, listtype=None):
+        self.elem = elem
+        self.listtype = listtype or list
+
+    def influx(self, value):
+        return self.listtype(self.elem.influx(x) for x in value)
+
+    def reflux(self, value):
+        return self.listtype(self.elem.reflux(x) for x in value)
+    
+    def influx_flow(self):
+        return "[foreach " + self.elem.influx_flow() + "]"
+
+    def reflux_flow(self):
+        return "[foreach " + self.elem.reflux_flow() + "]"
+
+    def display(self):
+        return "<ListFlux: {}\n  {}\n  >".format(self.listtype, self.elem.display())
+
+
+
 
 

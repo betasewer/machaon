@@ -148,21 +148,21 @@ class Flow:
             elif functor == "json":
                 return self.add_functor(JsonFlux())
 
-            elif functor[0].isupper():
+            elif context and functor[0].isupper():
                 # 型インターフェースで変換する
                 typeconversion = functor
                 t = context.instantiate_type(typeconversion)
                 if t is None:
                     raise ValueError("型'{}'は存在しません".format(typeconversion))
-                return self.add_functor(TypeFlux(context, t))
+                return self.add_functor(TypeFlux(type=t, context=context))
 
             else:
                 raise ValueError("値'{}'はファンクタとして解釈できません".format(functor))
 
-        elif isinstance(functor, TypeProxy):
-            return self.add_functor(TypeFlux(context, functor))
+        elif context and isinstance(functor, TypeProxy):
+            return self.add_functor(TypeFlux(type=functor, context=context))
 
-        elif isinstance(functor, (list, tuple)) or context.is_tuple(functor):
+        elif isinstance(functor, (list, tuple)) or (context and context.is_tuple(functor)):
             # リストとの変換
             selectors = functor
             return self.add_functor(DecomposeFlux(selectors))
@@ -237,6 +237,6 @@ class FlowError(Exception):
         err = "エラー: {}".format(error)
         return "\n".join([type, fun, arg, err])
 
-    def child_exception(self):
+    def get_error(self):
         return self.args[0]
     
