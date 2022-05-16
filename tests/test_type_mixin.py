@@ -26,7 +26,7 @@ from machaon.macatest import run, parse_test
 def test_mixin_load():
     types = TypeModule()
     types.add_fundamentals()
-    types.load_definition(StrEx)
+    types.add_definition(StrEx)
 
     StrType = types.get("Str")
     assert StrType.select_method("sparse") is not None
@@ -37,7 +37,7 @@ def test_mixin_load():
 
 def test_mixin_run():
     cxt = instant_context()
-    cxt.type_module.load_definition(StrEx)
+    cxt.type_module.add_definition(StrEx)
 
     StrType = cxt.get_type("Str")
     assert cxt.type_module.get_scope("") is not None

@@ -277,11 +277,11 @@ def test_string_literals():
     ptest("--^madman (28)^ startswith: mad", True)
     ptest("--| 'madman' (41) | endswith: --|) |", True)
     
-    # construct from string (Str.as)
-    ptest("--/ 1) 'Beck' & 'Johny' Store/ as Str", " 1) 'Beck' & 'Johny' Store")
-    ptest("--/0x32/ as Int", 0x32)
-    ptest("--/0x7F/ as Int", 0x7F)
-    ptest("--/3+5j/ as Complex", 3+5j)
+    # construct from string
+    ptest("--/ 1) 'Beck' & 'Johny' Store/ Str", " 1) 'Beck' & 'Johny' Store")
+    ptest("--/0x32/ Int", 0x32)
+    ptest("--/0x7F/ Int", 0x7F)
+    ptest("--/3+5j/ Complex", 3+5j)
 
 #@run
 def test_constructor():

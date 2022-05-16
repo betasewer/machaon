@@ -333,15 +333,15 @@ def fundamental_types():
         "machaon.core.persistence.StoredMessage",   # Stored
         "machaon.types.app.RootObject",             # RootObject
     ]:
-        module.load_definition(qualname)
+        module.add_definition(qualname)
 
     # None
-    td = module.load_definition("machaon.types.fundamental.NoneType")
+    td = module.add_definition("machaon.types.fundamental.NoneType")
     td.value_type = type(None)
     td.bits |= TYPE_NONETYPE
 
     # ObjectCollection
-    td = module.load_definition("machaon.core.object.ObjectCollection")
+    td = module.add_definition("machaon.core.object.ObjectCollection")
     td.bits |= TYPE_OBJCOLTYPE
 
     return module

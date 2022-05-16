@@ -96,7 +96,6 @@ class Type(TypeProxy):
             return self.get_scoped_typename()
         else:
             return self.get_typename()
-
         
     def get_value_type(self):
         return self.value_type
@@ -565,6 +564,19 @@ class Type(TypeProxy):
             else:
                 raise BadTypeDeclaration("定義の辞書の中に無効なメンバがあります: {}".format(key))
 
+    @classmethod
+    def new(cls, describer, classname=None):
+        """ クラス定義から即座に型定義を読み込み型インスタンスを作成する """
+        if isinstance(describer, tuple):
+            from machaon.core.typedecl import SubType
+            basetype = cls.new(describer[0])
+            subtype = cls.new(describer[1], classname)
+            return SubType(basetype, subtype)
+        else:    
+            td = TypeDefinition.new(describer, classname)
+            td.proto_define()
+            return td.load_type()
+
 
 class TypeDefinition():
     """
@@ -828,22 +840,14 @@ class TypeDefinition():
         return True
 
     @classmethod
-    def new(cls, describer, classname=None):
-        """ 型定義から即座に読み込み済みの型インスタンスを作成する """
-        if isinstance(describer, tuple):
-            from machaon.core.typedecl import SubType
-            basetype = cls.load_here(describer[0])
-            subtype = cls.load_here(describer[1], classname)
-            return SubType(basetype, subtype)
-        else:    
-            if not isinstance(describer, (str, ClassDescriber)):
-                describer = ClassDescriber(describer)
-            td = cls(describer, classname)
-            if not td.load_docstring():
-                raise TypeModuleError("Fail to load declaration")
-            td.proto_define()
-            return td.load_type()
-
+    def new(cls, describer, classname=None):       
+        """ クラス定義から読み込み前の型定義を作成する """ 
+        if not isinstance(describer, (str, ClassDescriber)):
+            describer = ClassDescriber(describer)
+        td = TypeDefinition(describer, classname)
+        if not td.load_docstring():
+            raise TypeModuleError("Fail to load declaration")
+        return td
 
 # ダミーの値型に使用
 class _SubtypeBaseValueType:
@@ -1186,7 +1190,7 @@ class TypeModule():
             if not isinstance(describer, ClassDescriber):
                 describer = ClassDescriber(describer)
             td = TypeDefinition(describer)
-            t = Type(describer, name=td.proto_define(self))
+            t = Type(describer, name=td.proto_define())
         else:
             raise TypeModuleError("TypeModule.defineは'{}'による型定義に対応していません：".format(type(describer).__name__))
         
@@ -1263,8 +1267,8 @@ class TypeModule():
         base = self._subtype_rels.setdefault(basename, {})
         base[typename] = t
         
-    def load_definition(self, describer, classname=None) -> TypeDefinition:
-        """ ただちに型定義をロードする """
+    def add_definition(self, describer, classname=None) -> TypeDefinition:
+        """ 型定義を作成する """
         td = TypeDefinition.new(describer, classname)
         return self.define(td)
 

@@ -427,7 +427,7 @@ class Module():
         v = m.load_attr(name)
         if not isinstance(v, type):
             raise ValueError("'{}'はクラスではありません: {}".format(name, v))
-        d = context.type_module.load_definition(v)
+        d = context.type_module.add_definition(v)
         return d.load_type() # 即座にロードする
 
 

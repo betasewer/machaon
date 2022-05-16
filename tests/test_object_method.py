@@ -61,7 +61,7 @@ class SomeValue(BasicValue):
 
 def test_define():
     cxt = instant_context()
-    t = cxt.type_module.load_definition(SomeValue).load_type()
+    t = cxt.type_module.add_definition(SomeValue).load_type()
     
     print(", ".join([x.get_scoped_typename() for _, x in cxt.type_module.enum()]))
 
@@ -151,7 +151,7 @@ def test_method_return_self():
 #
 def test_meta_method():
     cxt = instant_context()
-    t = cxt.type_module.load_definition(SomeValue).load_type()
+    t = cxt.type_module.add_definition(SomeValue).load_type()
 
     p = t.get_constructor_param()
     assert p is not None

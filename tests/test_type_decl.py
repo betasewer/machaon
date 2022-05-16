@@ -142,7 +142,7 @@ def test_decl_syntax_check():
     assert t.check_value_type(bytes)
     assert not t.check_value_type(str)
 
-    cxt.type_module.load_definition("machaon.types.numeric.Hex", "Hex")
+    cxt.type_module.add_definition("machaon.types.numeric.Hex", "Hex")
     t = instance("Int:Hex")
     assert isinstance(t, SubType)
     assert t.check_value_type(int)

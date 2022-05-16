@@ -66,7 +66,7 @@ def test_valuetype_define():
 # 宣言をドキュメント文字列で登録
 def test_valuetype_td_define():
     fundamental_type = fundamental_types()
-    td = fundamental_type.load_definition(SomeValue)
+    td = fundamental_type.add_definition(SomeValue)
     assert td
     t = td.load_type()
     assert t.typename == "SomeAlias" # 宣言が反映される
@@ -75,7 +75,7 @@ def test_valuetype_td_define():
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
     assert t.is_same_value_type(SomeValue)
     
-    td = fundamental_type.load_definition(SomeTrait)
+    td = fundamental_type.add_definition(SomeTrait)
     assert td
     assert td.typename == "SomeValueX"
     assert td.doc == "適当な値オブジェクトの型"
@@ -336,7 +336,7 @@ class AryType:
 
 def test_type_params():
     cxt = instant_context()
-    t = cxt.type_module.load_definition(AryType).load_type()
+    t = cxt.type_module.add_definition(AryType).load_type()
     
     assert len(t.get_type_params()) == 3
     assert t.get_type_params()[0].get_name() == "T"
