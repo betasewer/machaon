@@ -1160,9 +1160,12 @@ class MetaMethod():
                 raise TypeConversionError(type(value), self._ctorparam.typename)
         
         args = []
-        if context is not None and self.is_context_bound(): 
-            args.append(context)
-        
+        if self.is_context_bound(): 
+            if context is not None:
+                args.append(context)
+            else:
+                raise ValueError("contextを要求していますが、引数に渡されていません")
+
         args.append(value)
 
         args.extend(moreargs)

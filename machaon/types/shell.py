@@ -127,6 +127,8 @@ class Path():
         """
         if self.isdir():
             return False
+        if isinstance(names, str):
+            names = [names]
         ext = self.extension().lstrip(".")
         for name in names:
             if ext == name.lstrip("."):
@@ -369,6 +371,7 @@ class Path():
         if self.isfile():
             raise ValueError("パスは既にファイルとして存在しています")
         os.makedirs(self.normpath, exist_ok=True)
+        return self
     
     def move_to(self, d):
         """ @method
@@ -434,6 +437,14 @@ class Path():
             os.remove(self._path)
         elif self.isdir():
             os.rmdir(self._path) # 空のディレクトリのみ
+
+    def rmtree(self):
+        """
+        ディレクトリを削除する。
+        コマンドの際は確認を行う
+        """
+        if self.isdir():
+            shutil.rmtree(self._path)
 
     #
     #
