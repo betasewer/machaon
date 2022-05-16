@@ -1,5 +1,8 @@
 import re
 import string
+from machaon.core.function import parse_sequential_function
+
+from machaon.core.message import BadExpressionError, select_method, select_method_by_object
 
 class StrType():
     """ @type trait [Str]
@@ -164,17 +167,6 @@ class StrType():
             Str:
         '''
         return re.sub(pattern, new, s, count)
-
-    def slice(self, s, start=None, end=None):
-        """ @method
-        文字列の一部を切り出す。
-        Params:
-            start? (int): 
-            end? (int):
-        Returns:
-            Str:
-        """
-        return s[start:end]
     
     #
     # 大文字と小文字
@@ -252,99 +244,40 @@ class StrType():
         return s.istitle()
     
     #
-    # 文字の種類
-    #
-    def isalnum(self, s):
-        """ @method 
-        アルファベットと文字列。
-        Returns:
-            bool:
-        """
-        return s.isalnum()
-
-    def isalpha(self, s):
-        """ @method 
-        アルファベット。
-        Returns:
-            bool:
-        """
-        return s.isalpha()
-    
-    def isascii(self, s):
-        """ @method 
-        ASCIIの範囲内の文字。
-        Returns:
-            bool:
-        """
-        return s.isascii()
-
-    def isdecimal(self, s):
-        """ @method 
-        Unicodeで定められた10進数を表す文字。
-        Returns:
-            bool:
-        """
-        return s.isdecimal()
-
-    def isdigit(self, s):
-        """ @method 
-        Unicodeで定められた数字の桁を表す文字。
-        Returns:
-            bool:
-        """
-        return s.isdigit()
-
-    def isnumeric(self, s):
-        """ @method 
-        Unicodeで定められた数字を表す文字。
-        Returns:
-            bool:
-        """
-        return s.isnumeric()
-
-    def isxdigit(self, s):
-        """ @method
-        16進数で使用する文字。Unicodeの定義は参照しない。
-        Returns:
-            bool:
-        """
-        return all(c in string.hexdigits for c in s)
-    
-    def isodigit(self, s):
-        """ @method
-        8進数で使用する文字。Unicodeの定義は参照しない。
-        Returns:
-            bool:
-        """
-        return all(c in string.octdigits for c in s)
-    
-    def isprintable(self, s):
-        """ @method 
-        印刷できる文字。
-        Returns:
-            bool:
-        """
-        return s.isprintable()
-
-    def isspace(self, s):
-        """ @method 
-        Unicodeで定められた空白文字。
-        Returns:
-            bool:
-        """
-        return s.isspace()
-
-    def ispyident(self, s):
-        """ @method 
-        Pythonの識別名として使用できる文字。
-        Returns:
-            bool:
-        """
-        return s.isidentifier()
-
-    #
     # 文字列を分解・合成する
     #
+    def slice(self, s, start=None, end=None):
+        """ @method
+        文字列の一部を切り出す。
+        Params:
+            start? (int): 
+            end? (int):
+        Returns:
+            Str:
+        """
+        return s[start:end]
+    
+    def add(self, s, text):
+        """ @method
+        文字列の後ろに付け足す。
+        Params:
+            text(str):
+        Returns:
+            Str:
+        """
+        return s + text
+
+    def enclose(self, s, before, after):
+        """ @method
+        文字列の両側に付け足す。
+        Params:
+            before(str):
+            after(str):
+        Returns:
+            Str:
+        """
+        return before + s + after
+
     def format(self, s, *args):
         """@method
         引数から書式にしたがって文字列を作成する。
@@ -562,6 +495,137 @@ class StrType():
         import unicodedata
         return unicodedata.normalize(form, s) # 全角と半角など
 
+    #
+    # 文字の種類
+    #
+    def isalnum(self, s):
+        """ @method 
+        アルファベットと文字列。
+        Returns:
+            bool:
+        """
+        return s.isalnum()
+
+    def isalpha(self, s):
+        """ @method 
+        アルファベット。
+        Returns:
+            bool:
+        """
+        return s.isalpha()
+    
+    def isascii(self, s):
+        """ @method 
+        ASCIIの範囲内の文字。
+        Returns:
+            bool:
+        """
+        return s.isascii()
+
+    def isdecimal(self, s):
+        """ @method 
+        Unicodeで定められた10進数を表す文字。
+        Returns:
+            bool:
+        """
+        return s.isdecimal()
+
+    def isdigit(self, s):
+        """ @method 
+        Unicodeで定められた数字の桁を表す文字。
+        Returns:
+            bool:
+        """
+        return s.isdigit()
+
+    def isnumeric(self, s):
+        """ @method 
+        Unicodeで定められた数字を表す文字。
+        Returns:
+            bool:
+        """
+        return s.isnumeric()
+
+    def isxdigit(self, s):
+        """ @method
+        16進数で使用する文字。Unicodeの定義は参照しない。
+        Returns:
+            bool:
+        """
+        return all(c in string.hexdigits for c in s)
+    
+    def isodigit(self, s):
+        """ @method
+        8進数で使用する文字。Unicodeの定義は参照しない。
+        Returns:
+            bool:
+        """
+        return all(c in string.octdigits for c in s)
+    
+    def isprintable(self, s):
+        """ @method 
+        印刷できる文字。
+        Returns:
+            bool:
+        """
+        return s.isprintable()
+
+    def isspace(self, s):
+        """ @method 
+        Unicodeで定められた空白文字。
+        Returns:
+            bool:
+        """
+        return s.isspace()
+
+    def isnumberpunct(self, ch):
+        """ @method [isnumpunct]
+        符号。
+        Returns:
+            bool:
+        """
+        return ch in ("-", "+", ".", ",")
+
+    def is0xob(self, ch):
+        """ @method
+        2/8/16進数の接頭辞。
+        Returns:
+            bool:
+        """
+        return ch.lower() in ("0","x","o","b")
+    
+    def ispyident(self, s):
+        """ @method 
+        Pythonの識別名として使用できる文字。
+        Returns:
+            bool:
+        """
+        return s.isidentifier()
+
+    def extract(self, s, context, *classes):
+        """ @method context
+        特定の文字を抽出する
+        Params:
+            +classes(Any): 文字クラス[セレクタ|regex=正規表現]
+        Returns:
+            Str:
+        """
+        testers = []
+        for klass in classes:
+            if isinstance(klass, str) and klass.startswith("regex="):
+                reg = re.compile(klass[6:])
+                testers.append(reg.match)
+            else:
+                fn = parse_sequential_function(klass, context)
+                testers.append(fn)
+        
+        buf = []
+        for ch in s:
+            if any(tester(ch) for tester in testers):
+                buf.append(ch)
+        
+        return "".join(buf)
+
     # 
     # コード実行
     #
@@ -662,6 +726,9 @@ class StrType():
         """
         spirit.clipboard_copy(string)
         
+
+
+
 
 #
 # サブタイプ

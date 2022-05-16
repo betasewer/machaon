@@ -425,6 +425,17 @@ class DateType:
         """
         return d.strftime(format)
 
+    def joined(self, d, sep=None):
+        """ @method
+        年、月、日を区切る。
+        Params:
+            sep?(str): 区切り文字
+        Returns:
+            Str:
+        """
+        sep = sep or ""
+        return d.strftime(sep.join(("%Y","%m","%d")))
+
     
 class TimeType:
     """ @type trait [Time]
@@ -569,7 +580,7 @@ class DateSeparated:
         parts = split_by_nondigit(s)
         vs = [int(x) for x in parts if len(x)>0]
         if len(vs)<3:
-            raise ValueError(s)
+            raise ValueError("要素の数が足りません:" + s)
         return datetime.date(vs[0], vs[1], vs[2])
 
     def stringify(self, d):
