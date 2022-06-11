@@ -222,6 +222,10 @@ class AppRoot:
             self.typemodule.remove_scope(package.scope)
         return True
 
+    def check_pkg_loading(self):
+        """ パッケージの読み込みが終わったら呼び出す """
+        self.typemodule.check_loading()
+
     def add_credential(self, cred):
         """ 
         ダウンロードの認証情報をパッケージに追加する。  
