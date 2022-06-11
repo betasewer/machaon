@@ -102,10 +102,10 @@ class TypeFlux(FluxFunctor):
         if isinstance(value, _ConstructorArgs):
             value = value.ctor(self._type.get_value_type())
         return self._type.reflux_value(value)
-    
+
     def influx_flow(self):
         return "{} construct".format(self._type.get_conversion())
-        
+
     def reflux_flow(self):
         return "{} reflux".format(self._type.get_conversion())
 
@@ -144,10 +144,10 @@ class DecomposeFlux(FluxFunctor):
     def reflux(self, value):
         """ リストからConstructTypeなどに作用する引数オブジェクトを作る """
         return _ConstructorArgs(value)
-    
+
     def influx_flow(self):
         return "[{}] decompose".format(", ".join(self._members))
-        
+
     def reflux_flow(self):
         return "[{}] compose".format(", ".join(self._members))
 

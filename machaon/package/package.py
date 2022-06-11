@@ -206,7 +206,7 @@ class Package():
         
         if typemod.count() == 0:
             self._loadfail(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
-    
+
         self.finish_loading()
         return typemod
 

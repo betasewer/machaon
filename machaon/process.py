@@ -111,7 +111,6 @@ class Process:
         return success
 
     def run_process_async(self, context, routine):
-        print("3")   
         for _ in routine: pass # 残りの処理を全て実行する
         self.on_finish_process(context)
     

@@ -69,7 +69,6 @@ operators = {
     "#>" : "attrat",
     "=" : "identical",
     "?" : "pretty",
-    "as" : "convertas",
     "=>" : "bind",
     "/+" : "tuplepush",
 }
@@ -578,6 +577,32 @@ class GenericMethods:
         """
         context.bind_object(right, left)
         return left
+        
+    def cast(self, left, right):
+        """ @method reciever-param
+        コンストラクタを介さずに型を変更する。
+        Arguments:
+            left(Any): 値
+            right(Type): 型オブジェクト
+        Returns:
+            Any: 新しいオブジェクト
+        """
+        from machaon.core.object import Object
+        o = Object(right, left)
+        return o
+        
+    def cast_raw(self, left, context):
+        """ @method reciever-param context
+        オブジェクトの型をPythonTypeに変える。
+        Arguments:
+            left(Any): 値
+        Returns:
+            Any: 新しいオブジェクト
+        """
+        from machaon.core.object import Object
+        pytype = context.get_py_type(type(left))
+        o = Object(pytype, left)
+        return o
         
     def tuplepush(self, left, context, right):
         """ @method reciever-param context

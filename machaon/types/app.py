@@ -45,7 +45,12 @@ class RootObject:
             self.root.load_pkg(pkg)
             status = AppPackageType.status(AppPackageType(), pkg, spirit)
             spirit.post("message", " -> {}".format(status))
-        
+
+        try:
+            self.root.check_pkg_loading()
+        except Exception as e:
+            spirit.post("error", str(e))
+
         spirit.post("message", "")
         spirit.post("message", "ヘルプ")
         spirit.post("message", "")

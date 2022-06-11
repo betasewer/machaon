@@ -116,6 +116,9 @@ class Type(TypeProxy):
         else:
             return describer.get_full_qualname()
 
+    def get_all_describers(self):
+        return [self._describer, *self._mixin]
+
     def get_document(self):
         return self.doc
 
@@ -645,6 +648,9 @@ class TypeDefinition():
         elif not isinstance(self.value_type, type):
             raise ValueError("Cannot resolve value_type")
 
+    def get_typename(self):
+        return self.typename
+
     def get_value_type(self):
         self._resolve_value_type()
         return self.value_type
@@ -662,6 +668,9 @@ class TypeDefinition():
 
     def get_describer_qualname(self):
         return self.describer.get_full_qualname()
+        
+    def get_all_describers(self):
+        return [self.describer, *self._mixins]
 
     def is_same_value_type(self, vt):
         # TypeModule.deduceで使用 - ロードせずに名前で一致を判定する
@@ -1232,8 +1241,6 @@ class TypeModule():
         if typename in self._lib_typename:
             dest = self._lib_typename[typename]
             if dest.get_describer_qualname() == describername:
-                #print("o {}".format(dest.get_type_params() if isinstance(dest, Type) else dest.load_type().get_type_params()))
-                #print("n {}".format(type.get_type_params() if isinstance(type, Type) else type.load_type().get_type_params()))
                 return dest # 同じものが登録済み
             else:
                 o = dest.get_describer_qualname()
@@ -1334,8 +1341,7 @@ class TypeModule():
                 raise TypeModuleError("スコープ'{}'はこのモジュールに既に存在します".format(scopename)) 
             self._children[scopename].update(other)
         else:
-            self.set_parent(other, scopename)
-            self._children[scopename] = other
+            self._add_child(other, scopename)
         
     def add_fundamentals(self):
         """ 基本型を追加する """
@@ -1361,14 +1367,17 @@ class TypeModule():
         else:
             raise TypeModuleError("スコープ'{}'はこのモジュールに見つかりません".format(scope))
 
-    def set_parent(self, other, scopename):
+    def _add_child(self, child, scopename):
         """ 親モジュールを設定する """
-        other.parent = self
-        other.scopename = scopename
-        # mixinを引き継ぎ、解決する
-        self._loading_mixins.update(other._loading_mixins)
-        other._loading_mixins.clear()
+        # 子に自らを親モジュールとして設定する
+        child.parent = self
+        child.scopename = scopename
+        # mixinを子から引き継ぎ、解決する
+        self._loading_mixins.update(child._loading_mixins)
+        child._loading_mixins.clear()
         self._load_reserved_mixin_all()
+        # 子の辞書に追加する
+        self._children[scopename] = child
 
     def update(self, other):
         """ 
@@ -1385,6 +1394,23 @@ class TypeModule():
         self._subtype_rels.update(other._subtype_rels)
         self._loading_mixins.update(other._loading_mixins)
         self._children.update(other._children)
+
+    def check_loading(self):
+        """
+        型を一通り読み込んだ後にエラーをチェックする
+        """
+        not_found_mixins = []
+        for k, li in self._loading_mixins.items():
+            if li:
+                not_found_mixins.append((k, li))
+        if not_found_mixins:
+            vals = []
+            for (tn, scope), li in not_found_mixins:
+                typename = get_scoped_typename(tn, scope or "<no-scope>")
+                descs = " + ".join([desc.get_describer_qualname() for desc in li])
+                vals.append("{} <- {}".format(typename, descs))
+            raise TypeModuleError("対象の型が見つからなかったmixin実装が残っています:\n  " + ", ".join(vals))
+
 
     # 型登録の構文を提供
     class DefinitionSyntax():
@@ -1418,7 +1444,7 @@ def parse_scoped_typename(name):
         return name, None
 
 def get_scoped_typename(name, scope=None):
-    if scope is not None:
+    if scope:
         return name + SIGIL_SCOPE_RESOLUTION + scope
     else:
         return name

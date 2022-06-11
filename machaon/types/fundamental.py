@@ -200,6 +200,14 @@ class TypeType():
         '''
         return type.get_describer_qualname()
 
+    def describers(self, type):
+        ''' @method
+        mixinを含めたすべての実装場所を示す文字列を返す。
+        Returns:
+            Sheet[](name, describer):
+        '''
+        return [{"name": x.get_full_qualname(), "describer": x} for x in type.get_all_describers()]
+
     def is_python_type(self, type):
         ''' @method
         Pythonの型から直接作られたインスタンスか。
@@ -345,6 +353,7 @@ def fundamental_types():
     td.bits |= TYPE_OBJCOLTYPE
 
     return module
+
 
 
 
