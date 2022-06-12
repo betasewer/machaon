@@ -79,7 +79,7 @@ class TypeType():
         app.post("message", "\n".join(docs))
         # メソッドの表示
         meths = self.methods(typ, context, app, value)
-        meths_sheet = context.new_object(meths, conversion="Sheet[ObjectCollection](names,doc,signature,source)")
+        meths_sheet = context.new_object(meths, conversion="Sheet[Method](names,doc,signature,source)")
         meths_sheet.pprint(app)
 
     def methods(self, typ, context, app, instance=None):

@@ -129,6 +129,9 @@ class TypeProxy:
 
     def construct_obj(self, context, value):
         """ Objectのインスタンスを返す """
+        from machaon.core.object import Object
+        if isinstance(value, Object):
+            value = value.value
         convval = self.construct(context, value)
         return self.new_object(convval)
     

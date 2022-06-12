@@ -404,16 +404,19 @@ class Module():
             Tuple[str]:
         """
         mod = self.mloader()
-        p = mod.load_filepath()
-        if p is None:
-            return
-        if os.path.isfile(p):
-            d = os.path.dirname(p)
+        if mod.is_package():
+            p = mod.load_filepath()
+            if p is None:
+                return
+            if os.path.isfile(p):
+                d = os.path.dirname(p)
+            else:
+                d = p
+            for loader in walk_modules(d, self.name()):
+                name = loader.get_name()
+                yield name
         else:
-            d = p
-        for loader in walk_modules(d, self.name()):
-            name = loader.get_name()
-            yield name
+            yield mod.get_name()
 
     def load_definition(self, context, name):
         """@task nospirit context

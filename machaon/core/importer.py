@@ -236,6 +236,10 @@ class PyBasicModuleLoader:
                 modules.append(loader)
 
         return modules
+        
+    def is_package(self):
+        """ パッケージかどうか判定する """
+        return self.module.__spec__.submodule_search_locations is not None
 
 
 class PyModuleLoader(PyBasicModuleLoader):
