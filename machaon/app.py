@@ -91,6 +91,12 @@ class AppRoot:
     def get_credential_dir(self):
         return os.path.join(self.basicdir, "credential")
     
+    def get_log_dir(self):
+        p = os.path.join(self.basicdir, "log")
+        if not os.path.isdir(p) and not os.path.isfile(p):
+            os.makedirs(p) # アクセスがあってから初めて作成する
+        return p
+    
     def get_GUID_names_file(self):
         p = os.path.join(self.basicdir, "guid.ini")
         if os.path.exists(p):

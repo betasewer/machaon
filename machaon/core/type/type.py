@@ -568,7 +568,7 @@ class Type(TypeProxy):
     def new(cls, describer, classname=None):
         """ クラス定義から即座に型定義を読み込み型インスタンスを作成する """
         if isinstance(describer, tuple):
-            from machaon.core.type.decl import SubType
+            from machaon.core.type.extend import SubType
             basetype = cls.new(describer[0])
             subtype = cls.new(describer[1], classname)
             return SubType(basetype, subtype)

@@ -12,6 +12,8 @@ def new_launcher(ui=None, **args):
             return tk_launcher(args)
         elif ui == "shell":
             return shell_launcher(args)
+        elif ui == "batch":
+            return batch_server(args)
         else:
             raise ValueError("不明なUIタイプです: "+ui)
         
@@ -35,5 +37,10 @@ def shell_launcher(args):
     else:
         from machaon.ui.shell import GenericShell
         return GenericShell(args)
+
+def batch_server(args):
+    from machaon.ui.server import BatchLauncher
+    args["shell"] = shell_launcher(args)
+    return BatchLauncher(args)
 
 

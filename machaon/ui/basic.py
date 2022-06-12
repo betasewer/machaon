@@ -77,6 +77,7 @@ system_message_tags = {
 #
 class Launcher():
     wrap_width = 0xFFFFFF
+    is_async = True
 
     def __init__(self):
         self.app = None

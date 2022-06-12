@@ -24,7 +24,6 @@ class Process:
         self.index: int = index
         # 
         self.message: MessageEngine = message
-        self.routine = None
         self._finished = False
         # スレッド
         self.thread = None
@@ -69,7 +68,7 @@ class Process:
         for nextmsg in msgroutine:
             if isinstance(nextmsg, str):
                 continue
-            elif nextmsg.is_task():
+            elif launcher.is_async and nextmsg.is_task():
                 # 非同期実行へ移行する
                 self.thread = threading.Thread(
                     target=self.run_process_async, 
@@ -251,6 +250,12 @@ class Process:
     #
     #
     #
+    def get_message(self):
+        """ @method
+        メッセージを取得する
+        """
+        return self.message.get_expression()
+
     def store(self, context, name):
         """ @method context
         フォルダにメッセージを書き出す
@@ -539,9 +544,9 @@ class TempSpirit(Spirit):
 #  メッセージクラス
 #
 class ProcessMessage():
-    def __init__(self, text=None, tag="message", embed=None, **args):
+    def __init__(self, text=None, tag=None, embed=None, **args):
         self.text = text
-        self.tag = tag
+        self.tag = tag or "message"
         self.embed_ = embed or []
         self.args = args
 
@@ -570,6 +575,18 @@ class ProcessMessage():
     
     def get_text(self) -> str:
         return str(self.text)
+
+    def rebind(self, text=None, *, tag=None, embed=None, **args):
+        newargs = {}
+        newargs.update(self.args)
+        if args:
+            newargs.update(args)
+        return ProcessMessage(
+            text if text is not None else self.text,
+            tag if tag is not None else self.tag,
+            embed if embed is not None else self.embed_,
+            newargs
+        )
     
     def is_embeded(self):
         return len(self.embed_) > 0

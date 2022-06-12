@@ -542,11 +542,10 @@ def display_this_traceback(tb: TracebackObject, linewidth, showtype=None, level=
         lines.append("")
         
         # インストラクション
-        for instr in frame.instructions(tb.lasti()):
-            line = "{op:12} ({arg:})    {location:}".format(**instr)
-            lines.append(indent + indent + line)
-
-        lines.append("")
+        #for instr in frame.instructions(tb.lasti()):
+        #    line = "{op:12} ({arg:})    {location:}".format(**instr)
+        #    lines.append(indent + indent + line)
+        #lines.append("")
         
         # ローカル変数
         lines.append(indent + "-" * 30)

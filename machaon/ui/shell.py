@@ -84,7 +84,7 @@ class ShellLauncher(Launcher):
         self._last_process_end = False
         self._useansi = useansi
 
-    def printer(self, tag, text, end):
+    def printer(self, tag, text, end=None):
         if self._useansi:
             text = ansicodes.colorize(tag, text)
         else:

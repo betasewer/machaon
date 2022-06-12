@@ -3,5 +3,4 @@
 
 __version__ = '0.1.0.2'
 
-
-    
+from machaon.app import AppRoot

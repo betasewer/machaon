@@ -33,13 +33,17 @@ class RootObject:
         ''' @task
         起動画面を表示し、パッケージをロードする。
         '''
-        spirit.post('message', "Welcome to")
-        spirit.post('message-em', logo)
+        isfullform = self.root.get_ui().is_async
+        if isfullform:
+            spirit.post('message', "Welcome to")
+            spirit.post('message-em', logo)
 
-        spirit.post("message", "言語エンジンを準備します")
+        if isfullform:
+            spirit.post("message", "言語エンジンを準備します")
         self.root.boot_core(spirit)
 
-        spirit.post("message", "パッケージをロードします")
+        if isfullform:
+            spirit.post("message", "パッケージをロードします")
         for pkg in self.root.enum_packages():
             spirit.post("message", "{}".format(pkg.name), nobreak=True)
             self.root.load_pkg(pkg)
@@ -51,9 +55,10 @@ class RootObject:
         except Exception as e:
             spirit.post("error", str(e))
 
-        spirit.post("message", "")
-        spirit.post("message", "ヘルプ")
-        spirit.post("message", "")
+        if isfullform:
+            spirit.post("message", "")
+            spirit.post("message", "ヘルプ")
+            spirit.post("message", "")
 
     def types(self, spirit):
         ''' @task
