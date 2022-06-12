@@ -696,11 +696,11 @@ class Sheet():
         """ 
         表の一行を読み取り用オブジェクトに変換する 
         """
-        values = {"#delegate" : self.items[itemindex]}
+        values = {"#extend" : self.items[itemindex]}
         for i, col in enumerate(self.viewcolumns):
             key = col.get_name()
             values[key] = row[i]
-        return context.new_object(values, type="ObjectCollection")
+        return context.new_object(values, type=self.typeconversion)
 
     def foreach(self, context, _app, predicate):
         """ @task context [%]

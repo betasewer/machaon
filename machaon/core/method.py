@@ -1,9 +1,11 @@
-from machaon.core.importer import ClassDescriber
-from machaon.core.typedecl import METHODS_BOUND_TYPE_TRAIT_INSTANCE, TypeAny, TypeInstanceDecl, TypeProxy
 from typing import (
     Any, Sequence, List, Dict, Union, Callable, 
     Optional, Tuple, Generator
 )
+
+from machaon.core.importer import ClassDescriber
+from machaon.core.type.basic import METHODS_BOUND_TYPE_TRAIT_INSTANCE, TypeProxy
+from machaon.core.type.decl import TypeInstanceDecl
 
 import types
 import inspect
@@ -11,10 +13,11 @@ import inspect
 from machaon.core.object import Object
 from machaon.core.symbol import normalize_method_target, normalize_method_name
 from machaon.core.docstring import parse_doc_declaration
-from machaon.core.typedecl import (
-    TypeDecl, parse_type_declaration, TypeConversionError, 
-    make_conversion_from_value_type
+from machaon.core.type.decl import (
+    TypeDecl, parse_type_declaration, split_typename_and_value
 )
+from machaon.core.type.basic import TypeConversionError
+from machaon.core.type.extend import get_type_extension_loader
 
 # imported from...
 # type
@@ -39,9 +42,11 @@ METHOD_RESULT_UNSPECIFIED = 0x2000
 METHOD_UNSPECIFIED_MASK = 0x3000
 METHOD_KEYWORD_PARAMETER = 0x4000
 
-METHOD_INVOKEAS_FUNCTION = 0x10000
-METHOD_INVOKEAS_BOUND_METHOD = 0x20000
-METHOD_INVOKEAS_PROPERTY = 0x40000
+METHOD_INVOKEAS_FUNCTION = 0x10000          # レシーバを受け取らない関数
+METHOD_INVOKEAS_BOUND_METHOD = 0x20000      # インスタンスメソッド、レシーバを受け取る
+METHOD_INVOKEAS_PROPERTY = 0x30000          # インスタンスのプロパティ、レシーバのみを受け取る
+METHOD_INVOKEAS_BOUND_FUNCTION = 0x40000    # レシーバを第1引数に受け取る関数
+METHOD_INVOKEAS_IMMEDIATE_VALUE = 0x50000   # 値、レシーバを受け取らない
 METHOD_INVOKEAS_MASK = 0xF0000
 
 METHOD_FROM_CLASS_MEMBER    = 0x100000  # クラスメンバから得た定義
@@ -703,19 +708,24 @@ class Method():
 
     def make_invocation(self, mods=None, type=None):
         """ 適した呼び出しオブジェクトを作成する """
-        if self.flags & METHOD_INVOKEAS_BOUND_METHOD or self.flags & METHOD_INVOKEAS_PROPERTY:
+        bit = self.flags & METHOD_INVOKEAS_MASK
+        if bit == METHOD_INVOKEAS_BOUND_METHOD or bit == METHOD_INVOKEAS_PROPERTY:
             if not isinstance(self._action, InstanceBoundAction):
-                raise ValueError("InstanceBoundAction must be specified when METHOD_INVOKEAS_BOUND_METHOD is set")
+                raise ValueError("InstanceBoundAction must be specified when METHOD_INVOKEAS_BOUND_METHOD or METHOD_INVOKEAS_PROPERTY is set")
             ami = self.get_required_argument_min()
             amx = self.get_acceptable_argument_max()
             from machaon.core.invocation import InstanceMethodInvocation
             return InstanceMethodInvocation(self._action.target, mods, ami, amx)
 
-        elif self.flags & METHOD_INVOKEAS_FUNCTION:
+        elif bit == METHOD_INVOKEAS_FUNCTION or bit == METHOD_INVOKEAS_BOUND_FUNCTION:
             ami = self.get_required_argument_min()
             amx = self.get_acceptable_argument_max()
             from machaon.core.invocation import FunctionInvocation
             return FunctionInvocation(self._action, mods, ami, amx)
+
+        elif bit == METHOD_INVOKEAS_IMMEDIATE_VALUE:
+            from machaon.core.invocation import FunctionInvocation
+            return FunctionInvocation(self._action, mods, 0, 0)
 
         else:
             if type is None:
@@ -984,6 +994,11 @@ class MethodResult:
         # Noneはそのまま返す
         if value is None:
             return (context.get_type("None"), None)
+
+        # 型拡張の定義かどうか
+        extension = get_type_extension_loader(value)
+        if extension is not None:
+            value = extension.get_basic()
         
         # 型を決める
         rettype = None
@@ -994,14 +1009,18 @@ class MethodResult:
         else:
             rettype = self.typedecl.instance(context)
 
+        # 型拡張がある場合は、適用する
+        if extension is not None:
+            rettype = extension.load(rettype)
+
         # NEGATEモディファイアを適用            
         if negate:
             value = not value
-        
+
         # 返り値型に値が適合しない場合は、型変換を行う
         if not rettype.check_value_type(type(value)):
             value = rettype.construct(context, value)
-
+        
         return (rettype, value)
 
 
@@ -1178,6 +1197,7 @@ class MetaMethod():
             args.extend(typeargs)
         else:
             # デフォルト型引数をセット
+            from machaon.core.type.instance import TypeAny
             for tp in typeparams:
                 if not tp.is_type():
                     break
@@ -1236,6 +1256,20 @@ class InstanceBoundAction():
 
     def __call__(self, *args):
         raise ValueError("未解決のアクションのため呼び出せません")
+
+class ImmediateValue():
+    def __init__(self, value, name):
+        self.value = value
+        self.name = name
+
+    def __repr__(self):
+        return "<ImmediateValue '{}'>".format(self.name)
+    
+    def get_action_name(self):
+        return "ImmediateValue<{}>".format(self.name)
+
+    def __call__(self, *args):
+        return self.value
         
 #
 def classdict_invokeas(value):
@@ -1252,7 +1286,7 @@ def classdict_invokeas(value):
         if getattr(value, "__objclass__", None) is not None:
             return METHOD_INVOKEAS_BOUND_METHOD
         else:
-            return METHOD_INVOKEAS_FUNCTION
+            return METHOD_INVOKEAS_IMMEDIATE_VALUE
     else:
         return METHOD_INVOKEAS_PROPERTY
 
@@ -1309,11 +1343,13 @@ class _InvokeasTypeDict():
         return self._lookup(self._dict[name])
 
 
-def make_method_from_value(value, name, invokeas, source):
+def make_method_from_value(value, name, invokeas, source=METHOD_FROM_USER_DEFINITION):
     """ 値からメソッドオブジェクトを作成する """
     m = Method(name, flags=invokeas|source)
     if invokeas == METHOD_INVOKEAS_FUNCTION:
-        m.load_from_function(value)
+        m.load_from_function(value)  
+    elif invokeas == METHOD_INVOKEAS_BOUND_FUNCTION:
+        m.load_from_function(value, self_to_be_bound=True)
     elif invokeas == METHOD_INVOKEAS_BOUND_METHOD:
         if getattr(value, "__self__", None) is not None:
             m.load_from_function(value, action=InstanceBoundAction(name))
@@ -1323,12 +1359,20 @@ def make_method_from_value(value, name, invokeas, source):
         if inspect.ismethoddescriptor(value) or inspect.isdatadescriptor(value):
             tn = "Any"
         else:
-            tn = make_conversion_from_value_type(type(value))
+            tn, _val = split_typename_and_value(value)
         m.load_from_dict({
             "Params" : [],
             "Returns": { "Typename": tn },
             "Action" : InstanceBoundAction(name)
         })
+    elif invokeas == METHOD_INVOKEAS_IMMEDIATE_VALUE:
+        tn, val = split_typename_and_value(value)
+        m.load_from_dict({
+            "Params" : [],
+            "Returns": { "Typename": tn },
+            "Action" : ImmediateValue(val, name)
+        })
+
     return m
 
 

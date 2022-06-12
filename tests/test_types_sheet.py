@@ -1,13 +1,15 @@
 import pytest
 import operator
 
-from machaon.core.type import TypeModule
+from machaon.core.type.instance import TypeInstance
+from machaon.core.type.typemodule import TypeModule
 from machaon.core.object import ObjectCollection, Object
 from machaon.core.context import InvocationContext, instant_context
 from machaon.core.sort import ValueWrapper
 from machaon.core.function import parse_function
-from machaon.core.typedecl import TypeInstance
 from machaon.types.sheet import Sheet, ItemItselfColumn
+
+from machaon.macatest import run
 
 class Employee():
     """
@@ -119,8 +121,6 @@ def test_create_no_mod(objectdesk):
     assert values(view.row_values(0)) == ["ken"]
     assert values(view.row_values(view.selection_index())) == ["yuuji"]
 
-pytest.main(["-k", "create_no_mod"])
-
 
 def test_expand_view(objectdesk):
     view = employees_sheet(objectdesk, [("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333")], ["name", "postcode"])
@@ -141,7 +141,6 @@ def test_expand_view(objectdesk):
     assert view.count() == 4
     assert values(view.row_values(3)) == ["irina", "444-4444", 5, 500]
 
-
 def test_algorithm(objectdesk):
     view = employees_sheet(objectdesk, [
         ("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333"), ("unknown", None)
@@ -151,6 +150,15 @@ def test_algorithm(objectdesk):
     # foreach
     f = parse_function("@ tall * 1000")
     view.foreach(objectdesk, None, f)
+
+    # map
+    f = parse_function("@ tall")
+    vals = view.map(objectdesk, None, f)
+    assert len(vals) == 4
+    assert vals[0].value == 3
+    assert vals[1].value == 5
+    assert vals[2].value == 6
+    assert vals[3].value == 7
 
     # filter
     f = parse_function("(@ name contains ke) || (@ tall == 6)")

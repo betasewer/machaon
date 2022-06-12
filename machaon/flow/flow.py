@@ -1,5 +1,5 @@
 
-from machaon.core.typedecl import TypeProxy
+from machaon.core.type.basic import TypeProxy
 from machaon.flow.flux import (
     FluxFunctor, TypeFlux, JsonFlux, DecomposeFlux, OrFlux, NamedFunctorFlux,
     NoneToBlankFlux, NoneToValueFlux

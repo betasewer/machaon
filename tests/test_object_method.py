@@ -1,6 +1,8 @@
 import pytest
 
-from machaon.core.typedecl import TypeDecl, TypeInstance, instantiate_type, parse_type_declaration, METHODS_BOUND_TYPE_INSTANCE
+from machaon.core.type.alltype import (
+    TypeDecl, TypeInstance, instantiate_type, parse_type_declaration, METHODS_BOUND_TYPE_INSTANCE
+)
 from machaon.types.fundamental import fundamental_types
 from machaon.core.method import RETURN_SELF, Method, MethodResult
 from machaon.core.context import instant_context
@@ -174,7 +176,7 @@ def test_meta_method():
     assert cargs[1].get_typename() == "Any"
     assert cargs[2] == 2
 
-    from machaon.core.typedecl import TypeAny
+    from machaon.core.type.instance import TypeAny
 
     v = ti.construct(cxt, 3)
     assert isinstance(v, SomeValue)

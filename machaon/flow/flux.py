@@ -3,7 +3,6 @@
 パイプで連結可能な処理のユニット。
 """
 from machaon.core.function import FunctionExpression
-from machaon.core.type import Type
 
 def display_function(fn):
     if fn is None:
@@ -92,6 +91,7 @@ class TypeFlux(FluxFunctor):
             self._context = context
             self._type = type
         else:
+            from machaon.core.type.type import Type
             self._type = Type.new(klass)
             self._context = None
 

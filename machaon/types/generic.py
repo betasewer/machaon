@@ -1,4 +1,4 @@
-from machaon.core.type import TYPE_DELAY_LOAD_METHODS, Type
+from machaon.core.type.type import TYPE_DELAY_LOAD_METHODS, Type
 from machaon.core.symbol import normalize_method_name, normalize_method_target
 from machaon.core.method import make_method_prototype
 from machaon.core.invocation import TypeMethodInvocation

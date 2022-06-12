@@ -8,7 +8,7 @@ import re
 import importlib
 from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
-from machaon.core.type import Type, TypeModule
+from machaon.core.type.typemodule import TypeModule
 from machaon.core.importer import module_loader, PyBasicModuleLoader
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError

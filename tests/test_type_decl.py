@@ -1,7 +1,9 @@
 import pytest
 
-from machaon.core.type import TYPE_SUBTYPE, Type, TypeDefinition
-from machaon.core.typedecl import SubType, TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, PythonType
+from machaon.core.type.alltype import (
+    SubType, TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, 
+    PythonType, ExtendedType, get_type_extension_loader, TYPE_SUBTYPE, Type, TypeDefinition
+)
 from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation
 from machaon.core.context import instant_context
 
@@ -450,6 +452,32 @@ def test_int_subtype():
     assert x.stringify_value(0xFF) == "000000ff"
     
 
+def test_extension():
+    cxt = instant_context()
 
+    basic = cxt.new_object({
+        "#extend" : "АБВГДЕ",
+        "language" : "cyrillic"
+    })
+    exttype = basic.type
 
+    assert isinstance(exttype, ExtendedType)
+    assert exttype.get_basetype() is cxt.get_type("Str")
 
+    # 拡張メソッドの呼び出し
+    assert exttype.is_selectable_method("language")
+    assert exttype.select_method("language")
+    mth = exttype.select_method("language")
+    assert mth.get_name() == "language"
+    assert mth.get_param_count() == 0
+    assert mth.get_result().get_typename() == "Str"
+    
+    inv = mth.make_invocation()
+    assert inv._invoke(cxt, basic.value) == "cyrillic"
+
+    # 元の型と同じ振る舞い
+    assert exttype.get_typename() == "Str"
+    assert exttype.get_value_type() is str
+    assert exttype.get_typedef() is cxt.get_type("Str")
+    assert exttype.construct(cxt, 123) == "123"
+    assert exttype.stringify_value(basic.value) == "АБВГДЕ"

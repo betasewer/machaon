@@ -30,11 +30,10 @@ from machaon.core.invocation import (
     TypeMethodInvocation,
     InstanceMethodInvocation,
     MessageInvocation,
-    ObjectMemberInvocation,
     TypeConstructorInvocation,
     Bind1stInvocation,
 )
-from machaon.core.typedecl import TypeDeclError
+from machaon.core.type.declparser import TypeDeclError
 
 
 #
@@ -529,13 +528,6 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
         meth = typetraits.select_method(name)
         if meth is not None:
             return meth.make_invocation(modbits, typetraits)
-        
-        # レシーバがオブジェクト集合の場合はメンバ参照に変換
-        if typetraits.is_object_collection_type():
-            inv = ObjectMemberInvocation(name, modbits)
-            if reciever:
-                inv.resolve(reciever)
-            return inv
     
     # グローバル定義の関数
     from machaon.types.generic import resolve_generic_method_invocation
@@ -572,7 +564,6 @@ def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None
     else:
         raise BadExpressionError("'{}'はメソッドセレクタとして無効な型です".format(obj))
 
-
 def select_index_method(value, typetraits, reciever, modbits):
     inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
     return Bind1stInvocation(inv, value, "Int", modbits)
@@ -581,15 +572,10 @@ def select_type_constructor(name, modbits):
     return TypeConstructorInvocation(name, modbits)
 
 def select_py_callable(fn):
-    from machaon.core.method import Method
-    mth = Method()
-    mth.load_from_function(fn)
-    minarg, maxarg = mth.get_required_argument_min(), mth.get_acceptable_argument_max()
-    if maxarg < 1:
-        raise ValueError("引数は一つ以上必要です")
-    minarg -= 1
-    maxarg -= 1
-    return FunctionInvocation(fn, minarg=minarg, maxarg=maxarg)
+    # Pythonの任意の関数
+    from machaon.core.method import (make_method_from_value, METHOD_INVOKEAS_BOUND_FUNCTION)
+    mth = make_method_from_value(fn, "<unnamed>", METHOD_INVOKEAS_BOUND_FUNCTION) # 第一引数はレシーバオブジェクト
+    return mth.make_invocation()
 
 
 #

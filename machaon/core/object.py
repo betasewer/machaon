@@ -2,8 +2,8 @@ from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
 from collections import OrderedDict, defaultdict
 from copy import copy
 
-from machaon.core.typedecl import PythonType, TypeProxy
-from machaon.core.symbol import normalize_typename, full_qualified_name, disp_qualified_name
+from machaon.core.symbol import disp_qualified_name
+from machaon.core.type.basic import TypeProxy
 
 # imported from...
 # desktop
@@ -38,6 +38,7 @@ class Object():
             ds = "0x{:0X}".format(id(v))
         else:
             ds = str(v)
+        from machaon.core.type.pytype import PythonType
         if isinstance(self.type, PythonType):
             return "{}({})".format(ds, disp_qualified_name(t))
         elif not self.type.check_value_type(t):
@@ -218,18 +219,18 @@ class ObjectCollection():
             del self._items[ident]
         del self._namemap[name]
     
-    def get_delegation(self):        
+    def get_extend_base(self):        
         # 移譲先のオブジェクトを返す
-        delgate_point = self.get("#delegate")
+        delgate_point = self.get("#extend")
         if delgate_point is None:
             return None
         return delgate_point.object
     
-    def set_delegation(self, o):
+    def set_extend_base(self, o):
         if o is None:
-            self.delete("#delegate")
+            self.delete("#extend")
         else:
-            self.push("#delegate", o)
+            self.push("#extend", o)
 
     #
     #

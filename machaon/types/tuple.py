@@ -1,6 +1,5 @@
 from typing import Sequence, List, Any, Tuple, Dict, DefaultDict, Optional, Generator, Iterable, Union
 
-from machaon.core.type import Type, TypeModule
 from machaon.core.object import Object
 from machaon.types.fundamental import NotFound
 from machaon.core.function import  parse_sequential_function

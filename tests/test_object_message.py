@@ -3,7 +3,7 @@ from machaon.core.context import (
 )
 import pytest
 import re
-from machaon.core.typedecl import TypeProxy
+from machaon.core.type.decl import TypeProxy
 
 from machaon.macatest import parse_test, put_instructions, run, parse_instr
 
@@ -11,7 +11,6 @@ from machaon.core.message import (
     MessageCharBuffer, MessageEngine, MessageTokenizer
 )
 from machaon.types.fundamental import fundamental_types
-from machaon.core.typedecl import parse_type_declaration
 
 fundamental_type = fundamental_types()
 

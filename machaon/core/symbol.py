@@ -46,6 +46,20 @@ def normalize_return_typename(name: str) -> Tuple[str, str]:
 class BadTypename(Exception):
     pass
 
+# スコープ
+def parse_scoped_typename(name):
+    n, sep, s = name.partition(SIGIL_SCOPE_RESOLUTION)
+    if sep:
+        return n, s
+    else:
+        return name, None
+
+def get_scoped_typename(name, scope=None):
+    if scope:
+        return name + SIGIL_SCOPE_RESOLUTION + scope
+    else:
+        return name
+
 
 #
 # メソッド名

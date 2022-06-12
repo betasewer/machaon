@@ -1,9 +1,10 @@
 
-from machaon.core.type import (
-    CORE_SCOPE, BadTypeDeclaration, TypeModule, TypeDefinition, 
-    TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
-)
-from machaon.core.typedecl import PythonType, SubType, TypeProxy, parse_type_declaration
+from machaon.core.type.type import TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
+from machaon.core.type.typemodule import TypeModule
+from machaon.core.type.decl import parse_type_declaration
+from machaon.core.type.pytype import PythonType
+from machaon.core.type.extend import SubType
+
 from machaon.core.object import Object
 
 #
@@ -15,7 +16,7 @@ class TypeType():
     """ @type [Type]
     型そのものを表す。
     ValueType:
-        machaon.core.typedecl.TypeProxy
+        machaon.core.type.decl.TypeProxy
     """
     def constructor(self, context, value):
         """ @meta context
@@ -85,7 +86,7 @@ class TypeType():
         '''@task context
         使用可能なメソッドを列挙する。
         Returns:
-            Sheet[ObjectCollection](names,doc,signature,source): メソッドのリスト
+            Sheet[Method](names,doc,signature,source): メソッドのリスト
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
@@ -106,9 +107,9 @@ class TypeType():
                     elif meth.is_from_instance_member():
                         source = "instance"
                     helps.append({
+                        "#extend" : context.new_object(meth, type="Method"),
                         "names" : context.new_object(names),
                         "source" : context.new_object(source),
-                        "#delegate" : context.new_object(meth, type="Method")
                     })
         return helps
     

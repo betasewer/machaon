@@ -11,7 +11,7 @@ import time
 from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
-from machaon.core.type import TypeModule
+from machaon.core.type.typemodule import TypeModule
 from machaon.process import Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath

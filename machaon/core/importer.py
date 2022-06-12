@@ -124,10 +124,10 @@ class PyBasicModuleLoader:
             typename, sep, modname = line.partition(":")
             if not sep:
                 raise ValueError("Invalid module declaration: Using: [typename]:[modulename]")
-            from machaon.core.type import TypeDefinition, BadTypeDeclaration
+            from machaon.core.type.typedef import TypeDefinition, BadTypeDescription
             d = TypeDefinition(value_type=modname.strip(), typename=typename.strip())
             if not d.load_docstring():
-                raise BadTypeDeclaration()
+                raise BadTypeDescription()
             self._usingtypes.append(d)
     
     def get_package_extra_requirements(self):
@@ -169,7 +169,7 @@ class PyBasicModuleLoader:
             
             describer = ClassDescriber(AttributeLoader(self, classname), doc)
 
-            from machaon.core.type import TypeDefinition
+            from machaon.core.type.typedef import TypeDefinition
             d = TypeDefinition(describer, classname)
             if not d.load_docstring(doc):
                 continue

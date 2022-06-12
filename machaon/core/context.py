@@ -1,16 +1,15 @@
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
-from machaon.core.type import Type, TypeModule
-from machaon.core.typedecl import (
-    PythonType, TypeAny, TypeDecl, TypeInstanceDecl, TypeProxy, instantiate_type, 
-    parse_type_declaration
-)
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.symbol import (
     BadTypename, 
     normalize_method_target, normalize_method_name, 
     is_valid_object_bind_name, BadObjectBindName, full_qualified_name,
     SIGIL_SCOPE_RESOLUTION,
+)
+from machaon.core.type.alltype import (
+    TypeProxy, Type, TypeModule, TypeAny, instantiate_type, 
+    parse_type_declaration, PythonType, get_type_extension_loader
 )
 from machaon.core.invocation import (
     BasicInvocation, InvocationEntry
@@ -242,6 +241,12 @@ class InvocationContext:
             type(Any): 型を示す値（型名、型クラス、型インスタンス）
             conversion(str): 値の変換方法を示す文字列
         """
+        if isinstance(value, dict):
+            extension = get_type_extension_loader(value)
+            if extension is not None:
+                basic = self.new_object(extension.get_basic(), type=type, conversion=conversion)
+                return extension.load(basic.type).new_object(basic.value)
+
         if type and not isinstance(type, TypeAny):
             t = self.select_type(type)
             if t is None:
@@ -432,13 +437,13 @@ class InvocationContext:
         """ @method alias-name [invocations invs]
         呼び出された関数のリスト。
         Returns:
-            Sheet[ObjectCollection](message-expression, result):
+            Sheet[](message-expression, result):
         """ 
         vals = []
         for inv in self.invocations:
             vals.append({
-                "message-expression" : inv.message.sexpr(),
-                "#delegate" : inv
+                "#extend" : inv,
+                "message-expression" : inv.message.sexpr()
             })
         return vals
     
@@ -446,7 +451,7 @@ class InvocationContext:
         """ @task alias-name [errors]
         サブコンテキストも含めたすべてのエラーを表示する。
         Returns:
-            Sheet[ObjectCollection](context-id, message-expression, error):
+            Sheet[](context-id, message-expression, error):
         """
         errors = []
 
@@ -458,10 +463,10 @@ class InvocationContext:
             err = cxt.get_last_exception()
             if err:
                 errors.append({
+                    "#extend" : cxt,
                     "context-id" : l,
                     "message-expression" : cxt.get_message(),
                     "error" : err,
-                    "#delegate" : cxt
                 })
             
             for j, subcxt in enumerate(cxt.get_subcontext_list()):

@@ -2,13 +2,13 @@ import re
 
 from machaon.core.invocation import (
     InvocationEntry, BasicInvocation, TypeMethodInvocation, 
-    InstanceMethodInvocation, FunctionInvocation, ObjectMemberInvocation, ObjectMemberGetterInvocation,
+    InstanceMethodInvocation, FunctionInvocation,
     Bind1stInvocation, TypeConstructorInvocation,
 )
 from machaon.core.context import instant_context
 from machaon.core.object import ObjectCollection, Object
 from machaon.types.fundamental import fundamental_types
-from machaon.core.type import full_qualified_name
+from machaon.core.symbol import full_qualified_name
 from machaon.macatest import run
 
 fundamental_type = fundamental_types()
@@ -57,85 +57,6 @@ def test_bound_method():
     m = re.match("[a-zA-Z]", "abc")
     assert string.resolve_bound_method(m) is not None
     assert string.prepare_invoke(cxt, cxt.get_py_type(type(m)).new_object(m))._invokeaction() == "abc"
-
-
-
-def test_objectref():    
-    StrType = fundamental_type.get("Str")
-    cxt = instant_context()
-
-    col = ObjectCollection()
-    col.push("apple", Object(StrType, "リンゴ"))
-    col.push("gorilla", Object(StrType, "ゴリラ"))
-    col.push("trumpet", Object(StrType, "ラッパ"))
-    col.push("staff_id", Object(StrType, "社員ID"))
-
-    arg = fundamental_type.get("ObjectCollection").new_object(col)
-
-    inv = ObjectMemberInvocation("apple")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "リンゴ"
-    assert isinstance(inv._resolved, ObjectMemberGetterInvocation)
-    assert inv.get_min_arity() == 0
-    assert inv.get_max_arity() == 0
-    assert inv.get_parameter_spec(0) is None
-    assert inv._resolved.typename == "Str"
-    
-    inv = ObjectMemberInvocation("trumpet")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ラッパ"
-
-    inv = ObjectMemberInvocation("staff_id")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "社員ID"
-    
-    inv = ObjectMemberInvocation("staff-id")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction() is None
-
-    # generic method (Collectionを参照する)
-    inv = ObjectMemberInvocation("=")
-    assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"
-
-    # delegation
-    col.set_delegation(Object(StrType, "{math}math.pi"))
-    
-    inv = ObjectMemberInvocation("gorilla")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().value == "ゴリラ"
-
-    # unary type method
-    import math
-    inv = ObjectMemberInvocation("dopy")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction() == math.pi
-    assert isinstance(inv._resolved, TypeMethodInvocation)
-    assert inv.get_min_arity() == 0
-    assert inv.get_max_arity() == 0
-    assert inv.get_parameter_spec(0) is None
-    assert inv._resolved.get_method().get_result().get_typename() == "Any"
-
-    # unary instance method
-    #inv = ObjectMemberInvocation("iskanji")
-    #assert isinstance(inv._resolved, InstanceMethodInvocation)
-    
-    # unary generic method
-    inv = ObjectMemberInvocation("length")
-    assert inv.prepare_invoke(cxt, arg)._invokeaction() == len("{math}math.pi")
-    assert isinstance(inv._resolved, TypeMethodInvocation)
-
-    # binary type method
-    inv = ObjectMemberInvocation("reg-match")
-    assert inv.prepare_invoke(cxt, arg, StrType.new_object("[A-z{}]+"))._invokeaction() is True
-    assert isinstance(inv._resolved, TypeMethodInvocation)
-    assert inv.get_min_arity() == 1
-    assert inv.get_max_arity() == 1
-    assert inv._resolved.get_method().get_result().get_typename() == "bool"
-
-    # generic method (移譲先のオブジェクトを参照する)
-    inv = ObjectMemberInvocation("=")
-    assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "Str"
-
-    # generic method (BASIC_RECIEVERで明示的にCollectionを参照する)
-    inv = ObjectMemberInvocation("=", {"BASIC_RECIEVER"})
-    assert full_qualified_name(type(inv.prepare_invoke(cxt, arg)._invokeaction())) == "machaon.core.object.Object"
-    assert inv.prepare_invoke(cxt, arg)._invokeaction().get_typename() == "ObjectCollection"
 
 
 def test_bind1st():

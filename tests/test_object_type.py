@@ -1,8 +1,12 @@
 import pytest
 
 from machaon.core.context import instant_context
-from machaon.core.typedecl import METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration
-from machaon.core.type import CORE_SCOPE, TypeDefinition, TypeModule, TypeMemberAlias, Type
+from machaon.core.type.alltype import (
+    METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration
+)
+from machaon.core.type.alltype import (
+    CORE_SCOPE, TypeDefinition, TypeModule, TypeMemberAlias, Type
+)
 from machaon.core.importer import ClassDescriber, attribute_loader
 from machaon.types.fundamental import fundamental_types
 
@@ -350,7 +354,7 @@ def test_type_params():
     assert len(decl.declargs) == 0
     assert len(decl.ctorargs) == 1
 
-    from machaon.core.typedecl import TypeAny
+    from machaon.core.type.instance import TypeAny
 
     t = decl.instance(cxt)
     assert len(t.get_args()) == 2
