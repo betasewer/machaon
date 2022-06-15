@@ -1,3 +1,4 @@
+from msilib.schema import Error
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
 from machaon.core.object import Object, ObjectCollection
@@ -202,6 +203,11 @@ class InvocationContext:
         """ 型の一致: 任意の型 """
         t = self.get_type(typename)
         return t.check_value_type(type(value))
+
+    def is_error(self, value):
+        """ 型の一致: エラー """
+        from machaon.types.stacktrace import ErrorObject
+        return isinstance(value, ErrorObject)
     
     def deduce_type(self, value: Any) -> TypeProxy:
         """ 値から型を推定する """
@@ -324,6 +330,15 @@ class InvocationContext:
             bool:
         """
         return self.get_last_exception() is not None
+
+    def raise_if_failed(self, value=None):
+        """ """
+        err = self.get_last_exception()
+        if err is not None:
+            raise err
+        if value and self.is_error(value):
+            err = value.get_error()
+            raise err
     
     def push_extra_exception(self, exception):
         """ 呼び出し以外の場所で起きた例外を保存する """

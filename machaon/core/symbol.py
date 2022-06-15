@@ -106,16 +106,18 @@ def get_module_attr(t):
             return mod
     return None
 
-def get_name_attr(t):
+def get_name_attr(t, fallback):
     if hasattr(t, "__qualname__"):
         return t.__qualname__
     elif hasattr(t, "__name__"):
         return t.__name__
-    else:
+    elif not fallback:
         raise ValueError("No __qualname__ or __name__ property in '{}'".format(t))
+    else:
+        return repr(t)
 
-def full_qualified_name(t):
-    n = get_name_attr(t)
+def full_qualified_name(t, fallback=False):
+    n = get_name_attr(t, fallback)
     mod = get_module_attr(t)
     if mod is None:
         return n
@@ -138,7 +140,7 @@ SIGIL_OBJECT_ROOT_MEMBER = "@"
 SIGIL_SCOPE_RESOLUTION = "/"
 
 SIGIL_SELECTOR_NEGATE_RESULT        = "!"
-SIGIL_SELECTOR_REVERSE_ARGS         = "~"
+SIGIL_SELECTOR_REVERSE_MESSAGE      = "~"
 SIGIL_SELECTOR_BASIC_RECIEVER       = "`"
 SIGIL_SELECTOR_TRAILING_ARGS        = ":"
 SIGIL_SELECTOR_CONSUME_ARGS         = ">"

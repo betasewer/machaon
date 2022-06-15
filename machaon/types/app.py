@@ -154,7 +154,7 @@ class RootObject:
         return self.context.spirit
 
     #
-    # UI
+    # クリアする
     #
     def _clear_processes(self, app, pred):
         ''' プロセスの実行結果とプロセス自体を削除する。 '''
@@ -186,12 +186,16 @@ class RootObject:
             return pr.is_failed()
         self._clear_processes(app, is_failed)
     
+    #
+    # 
+    #
     def keymap(self):
         ''' @method
         ショートカットキーの一覧を表示する。 
         Returns:
-            Sheet[ObjectCollection](key, command):
+            Sheet[](key, command):
         '''
+        # ショートカットキー
         keymap = self.root.get_ui().get_keymap()
         rets = []
         for cmd in keymap.all_commands():
@@ -205,8 +209,27 @@ class RootObject:
                 "command" : cmd.command,
                 "key" : key
             })
+        
+        # グローバルホットキー
+        for hkey in self.root.enum_hotkeys():
+            rets.append({
+                "command" : "{}: {}".format(hkey.get_label(), hkey.get_message()),
+                "key" : hkey.get_key()
+            })
+
         return rets
+
+    def push_key(self, k):
+        """ @method
+        キーボードのキーを押す。
+        Params:
+            k(str):
+        """ 
+        self.root.push_key(k)
     
+    #
+    #
+    #
     def dump_screen(self, app, path):
         """ @task
         アクティブなチャンバーに表示されたテキストをファイルに書き出す。

@@ -7,10 +7,9 @@ from machaon.core.symbol import (
     SIGIL_OBJECT_ID,
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
-    SIGIL_SCOPE_RESOLUTION,
     SIGIL_LINE_QUOTER,
     SIGIL_BEGIN_USER_QUOTER,
-    SIGIL_SELECTOR_REVERSE_ARGS,
+    SIGIL_SELECTOR_REVERSE_MESSAGE,
     SIGIL_SELECTOR_NEGATE_RESULT,
     SIGIL_SELECTOR_BASIC_RECIEVER,
     SIGIL_SELECTOR_TRAILING_ARGS,
@@ -512,6 +511,10 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
         name = s.selector()
         modbits = s.affixes()
 
+    # 逆転モディファイアには専用の呼び出しを使う
+    if "REVERSE_MESSAGE" in modbits:
+        return ReversedMessageInvocation(name, typetraits, reciever, modbits)
+
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
@@ -545,6 +548,9 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
 
 
 def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
+    # 逆転モディファイアには専用の呼び出しを使う
+    #if "REVERSE_MESSAGE" in modbits:
+
     tn = obj.get_typename()
     v = obj.value
 
@@ -616,7 +622,7 @@ def enum_selectable_method(typetraits, instance=None):
 class AffixedSelector:
     prefixes = [
         ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
-        ("REVERSE_ARGS", SIGIL_SELECTOR_REVERSE_ARGS),
+        ("REVERSE_MESSAGE", SIGIL_SELECTOR_REVERSE_MESSAGE),
         ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER),
     ]
     suffixes = [

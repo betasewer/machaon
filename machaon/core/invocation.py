@@ -50,12 +50,6 @@ class InvocationEntry():
         self.exception = exception
         self.message = None
         
-        if self.invocation:
-            mod = self.invocation.modifier
-            if "REVERSE_ARGS" in mod:
-                # 引数逆転
-                self.args = list(reversed(self.args))
-    
     def clone(self):
         inv = InvocationEntry(self.invocation, self.action, self.args, self.kwargs, exception=self.exception)
         inv.result = self.result

@@ -16,7 +16,7 @@ from machaon.process import Spirit, ProcessHive, ProcessChamber
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
-from machaon.ui.global_hotkey import GlobalHotkey
+from machaon.ui.keycontrol import HotkeySet, KeyController
 
 #
 #
@@ -27,7 +27,7 @@ class AppRoot:
     """
     def __init__(self):
         self.ui = None
-        self.globalhotkey = GlobalHotkey()
+        self.keycontrol = KeyController()
 
         self.basicdir = "" # 設定ファイルなどを置くディレクトリ
         self.pkgmanager = None
@@ -70,8 +70,8 @@ class AppRoot:
         self.typemodule.add_default_modules()
 
         # ホットキーの監視を有効化する
-        if GlobalHotkey.available:
-            self.globalhotkey.start(spirit)
+        if KeyController.available:
+            self.keycontrol.start(spirit)
     
     def get_ui(self):
         return self.ui
@@ -270,21 +270,43 @@ class AppRoot:
     #
     def add_hotkey(self, label, key, message):
         """
-        グローバルなホットキーを定義する
+        グローバルなホットキーを定義する。
         Params:
             key(str):
             message(str):
         """
-        self.globalhotkey.add(label, key, message)
+        self.keycontrol.add_hotkey(label, key, message)
+
+    def add_hotkey_set(self, target, ignition):
+        """
+        一連のグローバルなホットキーを定義する。
+        Params:
+            target(str): HotKeySetを返す関数のシンボル
+            ignition(str): 共通の修飾キー
+        """
+        from machaon.core.importer import attribute_loader
+        loader = attribute_loader(target)
+        keyset = loader()()
+        if not isinstance(keyset, HotkeySet):
+            raise TypeError("{}はHotKeySet型のオブジェクトを返さなければなりません".format(target))
+        keyset.install(self, ignition)
 
     def enum_hotkeys(self):
         """
         グローバルなホットキーの定義をリストアップする
-        Returns:
+        Returns: 2345
             List[Tuple[str, str]]: キーとメッセージの組のリスト 
         """
-        return self.globalhotkey.enum()
+        return self.keycontrol.enum_hotkeys()
 
+    def push_key(self, k):
+        """
+        キーを押して離す
+        Params:
+            key(str):
+        """
+        self.keycontrol.push(k)
+    
     #
     # アプリの実行
     #
@@ -355,13 +377,18 @@ class AppRoot:
                 return False # 他のプロセスが実行中
 
         return True
-        
-        
-    # プロセスをスレッドで実行しアクティブにする
-    def new_desktop(self, name: str):
-        #chamber = self.processhive.new_desktop(name)
-        #return chamber
-        return 
+    
+    def create_root_context(self, process=None):
+        """ 実行コンテキストを作成する """
+        from machaon.core.context import InvocationContext
+        spirit = Spirit(self, process)
+        context = InvocationContext(
+            input_objects=self.objcol, 
+            type_module=self.typemodule,
+            spirit=spirit,
+            herepath=self.get_basic_dir()
+        )
+        return context
 
     #
     # プロセススレッド
@@ -384,9 +411,6 @@ class AppRoot:
                 return pr
         return None
 
-    def select_object_collection(self):
-        return self.objcol
-        
     #
     # 外部アプリ
     #

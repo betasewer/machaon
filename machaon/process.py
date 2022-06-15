@@ -43,25 +43,16 @@ class Process:
     #
     #
     def start_process(self, root):
-        # メインスレッドへの伝達者  
-        spirit = Spirit(root, self)
-
         # 実行開始
         timestamp = datetime.datetime.now()
         launcher = root.get_ui()
         launcher.post_on_exec_process(self, timestamp)
 
-        # オブジェクトを取得
-        inputobjs = root.select_object_collection()
-
-        # コマンドを解析
-        context = InvocationContext(
-            input_objects=inputobjs, 
-            type_module=root.get_type_module(),
-            spirit=spirit,
-            herepath=root.get_basic_dir()
-        )
+        # コンテキストの作成
+        context = root.create_root_context(self)
         self.last_context = context
+        
+        # コマンドを解析
         msgroutine = self.message.runner(context)
   
         # 実行開始
@@ -324,6 +315,8 @@ class Spirit():
         return self.process
 
     def get_last_context(self):
+        if self.process is None:
+            return None
         return self.process.last_context
 
     #
@@ -332,9 +325,11 @@ class Spirit():
     # プロセススレッド側からメッセージを投稿
     def post_message(self, msg):
         if self.process is None:
+            self.root.post_stray_message()
             print("discarded message:", msg.text)
             return
-        self.process.post_message(msg)
+        else:
+            self.process.post_message(msg)
     
     def post(self, tag, value=None, **options):
         """ メッセージを共同キューに入れる。
@@ -784,7 +779,10 @@ class ProcessChamber:
             return True
     
     def post_chamber_message(self, tag, value=None, **options):
-        self.chamber_msgs.append(ProcessMessage(tag=tag, text=value, **options))
+        if isinstance(tag, ProcessMessage):
+            self.chamber_msgs.append(tag)
+        else:
+            self.chamber_msgs.append(ProcessMessage(tag=tag, text=value, **options))
 
     def get_index(self): # -
         return self._index

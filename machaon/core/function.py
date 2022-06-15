@@ -207,6 +207,9 @@ class SequentialMessageExpression(FunctionExpression):
     def get_type_conversion(self):
         return self.f.get_type_conversion()
 
+    def get_context(self):
+        return self.context
+
     def set_subject_type(self, conversion):
         self._subjecttype = self.context.instantiate_type(conversion)
     
@@ -291,6 +294,20 @@ class FunctionType():
         クリップボードのテキストを引数として関数を実行する。
         """
         text = app.clipboard_paste()
-        newtext = f.run(context.new_object(text), context).value
-        app.clipboard_copy(newtext, silent=True)
-        app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
+        if text is None:
+            app.root.post_stray_message("error", "クリップボードの内容を取り出せませんでした")
+        else:
+            newtext = f.run(context.new_object(text), context).value
+            context.raise_if_failed(newtext)
+            app.clipboard_copy(newtext, silent=True)
+            app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
+
+    def copy_apply_paste(self, f, context, app):
+        """ @task context
+        コピーコマンドを入力に送り、関数を適用し、ペーストコマンドを送る。
+        """
+        import time
+        app.root.push_key("<ctrl>+c")
+        time.sleep(0.2)
+        self.apply_clipboard(f, context, app)
+        app.root.push_key("<ctrl>+v")
