@@ -118,7 +118,7 @@ class StrType():
         Returns:
             str:
         """
-        return s.replace(old, new, count)
+        return s.replace(old, new, count or -1)
 
     def translate(self, s, table):
         """ @method
