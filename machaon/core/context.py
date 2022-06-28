@@ -1,4 +1,3 @@
-from msilib.schema import Error
 from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
 
 from machaon.core.object import Object, ObjectCollection
