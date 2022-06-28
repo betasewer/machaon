@@ -210,6 +210,22 @@ class Bin:
         """ @meta """
         return formatstr(fmt,"b").format(v)
 
+class Dec:
+    """ @type subtype
+    緩いルールで10進数に変換する。
+    BaseType:
+        Int
+    Params:
+        format?(str): 書式指定
+    """
+    def constructor(self, v, fmt=None):
+        """ @meta """
+        return int(v, 10)
+
+    def stringify(self, v):
+        """ @meta """
+        return "{}".format(v)
+
 #
 # ロケール
 #
