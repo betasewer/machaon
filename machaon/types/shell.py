@@ -401,7 +401,7 @@ class Path():
         p = shutil.move(p.get(), dest.get())
         return Path(p)
     
-    def copy_to(self, d):
+    def copy_to(self, d, name=None, *, overwrite=False):
         """ @method
         このディレクトリにファイルをコピーする。
         Params:
@@ -409,13 +409,13 @@ class Path():
         Returns:
             Path: コピーされたファイルパス
         """ 
-        dest = d.dir() / self.name()
-        if dest.exists():
+        dest = d.dir() / (name or self.name())
+        if not overwrite and dest.exists():
             raise ValueError("すでに同名ファイルが宛先に存在しています")
         p = shutil.copy(self.get(), dest.get())
         return Path(p)
     
-    def copy_from(self, p):
+    def copy_from(self, p, *, overwrite=False):
         """ @method
         このディレクトリにファイルをコピーする。
         Params:
@@ -424,7 +424,7 @@ class Path():
             Path: コピーされたファイルパス
         """ 
         dest = self.dir() / p.name()
-        if dest.exists():
+        if not overwrite and dest.exists():
             raise ValueError("すでに同名ファイルが宛先に存在しています")
         p = shutil.copy(p.get(), dest.get())
         return Path(p)
