@@ -373,7 +373,23 @@ class Path():
         os.makedirs(self.normpath, exist_ok=True)
         return self
     
-    def move_to(self, d):
+    #
+    # コピー・移動・削除
+    #
+    def move(self, dest, *, overwrite=False):
+        """ @method
+        このパスにファイルを移動する。
+        Params:
+            dest(Path): 移動先のパス
+        Returns:
+            Path: 移動されたファイルパス
+        """
+        if not overwrite and dest.exists():
+            raise ValueError("すでに同名ファイルが宛先に存在しています")
+        p = shutil.move(self.get(), dest.get())
+        return Path(p)
+    
+    def move_to(self, d, *, overwrite=False):
         """ @method
         別のディレクトリにこのファイルを移動する。
         Params:
@@ -382,12 +398,12 @@ class Path():
             Path: コピーされたファイルパス
         """
         dest = d.dir() / self.name()
-        if dest.exists():
+        if not overwrite and dest.exists():
             raise ValueError("すでに同名ファイルが宛先に存在しています")
         p = shutil.move(self.get(), dest.get())
         return Path(p)
     
-    def move_from(self, p):
+    def move_from(self, p, *, overwrite=False):
         """ @method
         このディレクトリにファイルを移動する。
         Params:
@@ -396,9 +412,22 @@ class Path():
             Path: コピーされたファイルパス
         """
         dest = self.dir() / p.name()
-        if dest.exists():
+        if not overwrite and dest.exists():
             raise ValueError("すでに同名ファイルが宛先に存在しています")
         p = shutil.move(p.get(), dest.get())
+        return Path(p)
+
+    def copy(self, dest, *, overwrite=False):
+        """ @method
+        このパスにファイルをコピーする。
+        Params:
+            dest(Path): コピー先のパス
+        Returns:
+            Path: コピーされたファイルパス
+        """
+        if not overwrite and dest.exists():
+            raise ValueError("すでに同名ファイルが宛先に存在しています")
+        p = shutil.copy(self.get(), dest.get())
         return Path(p)
     
     def copy_to(self, d, name=None, *, overwrite=False):
