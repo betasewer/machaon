@@ -495,6 +495,8 @@ class TypeModule():
         for module in DefaultModuleNames:
             pkg = create_package("module-{}".format(module), "module:machaon.{}".format(module))
             mod = pkg.load_type_module()
+            if mod is None:
+                continue
             self.update_scope(CORE_SCOPE, mod)
 
     def remove_scope(self, scope):
