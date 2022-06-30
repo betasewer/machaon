@@ -20,11 +20,22 @@ def _import_platform_module(name):
         pltdir = "windows"
     elif system == "darwin":
         pltdir = "osx"
+    elif system == "linux":
+        pltdir = "linux"
     else:
-        raise ValueError("Unsupported system: "+system)
-    
+        pltdir = "generic"
+        
     import importlib
-    return importlib.import_module("machaon.platforms.{}.{}".format(pltdir, name))
+    import importlib.util
+    spec = importlib.util.find_spec("machaon.platforms.{}.{}".format(pltdir, name))
+    if spec is None:
+        mod = importlib.import_module("machaon.platforms.generic.{}".format(name))
+    else:
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+    from machaon.platforms.common import NotSupportedAttrs
+    return getattr(mod, "Exports", NotSupportedAttrs())
 
 
 def shellpath():
@@ -39,11 +50,11 @@ def clipboard():
     """
     return _import_platform_module("clipboard")
 
-def console():
+def ui():
     """
     コンソール
     """
-    return _import_platform_module("console")
+    return _import_platform_module("ui")
     
 def draganddrop():
     """

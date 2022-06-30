@@ -26,13 +26,15 @@ class ShellTheme():
     
     def getfont(self, key):
         fontname = self.getfontname()
-        fontsize = self.getval(key+"size", machaon.platforms.console().preferred_fontsize)
+        fontsize = self.getval(key+"size", machaon.platforms.ui().preferred_fontsize)
         if isinstance(fontsize, str) and not fontsize.isdigit():
+            return None
+        if fontname is None or fontsize is None:
             return None
         return (fontname, int(fontsize))
     
     def getfontname(self):
-        return self.getval("font", machaon.platforms.console().preferred_fontname)
+        return self.getval("font", machaon.platforms.ui().preferred_fontname)
 
 
 #

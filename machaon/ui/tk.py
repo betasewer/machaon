@@ -189,7 +189,7 @@ class tkLauncher(Launcher):
         self.focusbg = (None, None)
         self.does_stick_bottom = tk.BooleanVar(value=True)
         self.does_overflow_wrap = tk.BooleanVar(value=False)
-        self.dnd = machaon.platforms.draganddrop().TkDND()
+        self.dnd = machaon.platforms.draganddrop().tkDND()
         #
         self._destroyed = False
 

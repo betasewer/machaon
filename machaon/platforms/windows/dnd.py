@@ -73,8 +73,11 @@ class DND:
             return drops
         return None
 
-
 class TkDND(DND):
     def enter(self, ui):
         super().enter(ui.root.winfo_id()) # hwndを得られる
 
+class Exports:
+    @staticmethod
+    def tkDND():
+        return TkDND()

@@ -160,92 +160,99 @@ class EnvPaths():
 #
 #
 #
-def get_known_path(name: str, param: str = "", approot = None):
-    """
-    特殊なフォルダ・ファイルの名前からパスを得る。
-    """
-    paths = KnownPaths(approot)
-    try:
-        paths._load_apis()
-    except AttributeError:
-        paths = EnvPaths() # type: ignore
+class Exports:
+    @staticmethod
+    def get_known_path(name: str, param: str = "", approot = None):
+        """
+        特殊なフォルダ・ファイルの名前からパスを得る。
+        """
+        paths = KnownPaths(approot)
+        try:
+            paths._load_apis()
+        except AttributeError:
+            paths = EnvPaths() # type: ignore
 
-    # それぞれの実装から返す
-    key = name.lower()
-    if key == "fallback":
-        raise ValueError("不正な名前です")
-    access = getattr(paths, key, None)
-    if access:
-        path = access(param) if param else access()
-    else:
-        path = paths.fallback(key)
-    if path:
-        return path
+        # それぞれの実装から返す
+        key = name.lower()
+        if key == "fallback":
+            raise ValueError("不正な名前です")
+        access = getattr(paths, key, None)
+        if access:
+            path = access(param) if param else access()
+        else:
+            path = paths.fallback(key)
+        if path:
+            return path
 
-    # 環境変数から探して返す
-    envname = name.upper()
-    if envname in os.environ:
-        return os.environ[envname]
+        # 環境変数から探して返す
+        envname = name.upper()
+        if envname in os.environ:
+            return os.environ[envname]
 
-    return None
-
-def known_paths(approot):
-    names = common_known_names + [
-        # platform spec
-        "windows",
-    ]
-    common_names = set(names)
-
-    paths = KnownPaths(approot)
-    try:
-        paths._load_apis()
-    except AttributeError:
-        paths = EnvPaths() # type: ignore
-    
-    for k in names:
-        yield k, getattr(paths, k)()
-    
-    for k, v in paths.special_locations():
-        if not k in common_names:
-            yield k, v
-
-def start_command_powershell(path, operation=None):
-    ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    if not os.path.isfile(ps):
         return None
-    cmds = []
-    cmds.append(ps)
-    cmds.append("-NonInteractive")
-    cmds.append("-NoLogo")
-    if operation:
-        starter = """ -Command "Start-Process '{}' -Verb {}" """.format(path, operation)
-    else:
-        starter = """ -Command "Start-Process '{}'" """.format(path)
-    cmds.append(starter)
-    return cmds
 
-def start_file(path, operation=None):
-    """
-    デフォルトの方法でパスを開く。
-    """
-    os.startfile(path, operation or "open")
+    @staticmethod
+    def known_paths(approot):
+        names = common_known_names + [
+            # platform spec
+            "windows",
+        ]
+        common_names = set(names)
 
-def has_hidden_attribute(path):
-    """
-    隠し属性がついているファイルか。
-    """
-    if os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN:
-        return True
-    return False
+        paths = KnownPaths(approot)
+        try:
+            paths._load_apis()
+        except AttributeError:
+            paths = EnvPaths() # type: ignore
+        
+        for k in names:
+            yield k, getattr(paths, k)()
+        
+        for k, v in paths.special_locations():
+            if not k in common_names:
+                yield k, v
 
-def open_by_system_text_editor(path, line=None, column=None):
-    """
-    メモ帳でファイルを開く。
-    """
-    import subprocess
-    args = []
-    args.append("notepad.exe")
-    args.append(path)
-    subprocess.Popen(args)
+    @staticmethod
+    def start_command_powershell(path, operation=None):
+        ps = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        if not os.path.isfile(ps):
+            return None
+        cmds = []
+        cmds.append(ps)
+        cmds.append("-NonInteractive")
+        cmds.append("-NoLogo")
+        if operation:
+            starter = """ -Command "Start-Process '{}' -Verb {}" """.format(path, operation)
+        else:
+            starter = """ -Command "Start-Process '{}'" """.format(path)
+        cmds.append(starter)
+        return cmds
+
+    @staticmethod
+    def start_file(path, operation=None):
+        """
+        デフォルトの方法でパスを開く。
+        """
+        os.startfile(path, operation or "open")
+
+    @staticmethod
+    def has_hidden_attribute(path):
+        """
+        隠し属性がついているファイルか。
+        """
+        if os.stat(path).st_file_attributes & stat.FILE_ATTRIBUTE_HIDDEN:
+            return True
+        return False
+
+    @staticmethod
+    def open_by_system_text_editor(path, line=None, column=None):
+        """
+        メモ帳でファイルを開く。
+        """
+        import subprocess
+        args = []
+        args.append("notepad.exe")
+        args.append(path)
+        subprocess.Popen(args)
 
 
