@@ -55,8 +55,8 @@ class StdoutReader():
 #
 #
 def popen_capture(cmds, *, encoding=None, **popenargs):
-    from machaon.platforms import console
-    shell_encoding = encoding or console().default_encoding
+    from machaon.platforms import ui
+    shell_encoding = encoding or ui().default_encoding
 
     proc = subprocess.Popen(cmds, 
         stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
