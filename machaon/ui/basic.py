@@ -558,7 +558,8 @@ class KeybindMap():
         elif machaon.platforms.is_osx():
             pltkey = "mac"
         else:
-            raise ValueError("サポートされていないプラットフォームです")
+            app.post_stray_message("message", "この実行環境ではキーバインドは使用できません")
+            return
         
         for section in cfg.sections():
             when = "root"
