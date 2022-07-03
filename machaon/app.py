@@ -7,6 +7,7 @@ import sys
 import shutil
 import subprocess
 import time
+from collections import namedtuple
 
 from typing import Optional, List, Any, Text
 
@@ -17,6 +18,9 @@ from machaon.package.package import Package, PackageManager, PackageNotFoundErro
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 from machaon.ui.keycontrol import HotkeySet, KeyController
+
+#
+StartupVariable = namedtuple("StartupVariable", ["name", "value", "typename"])
 
 #
 #
@@ -39,6 +43,7 @@ class AppRoot:
 
         self._extapps = None # 外部アプリコンフィグファイル
         self._startupmsgs = []
+        self._startupvars = []
 
     def initialize(self, *, ui, basic_dir=None, **uiargs):
         # 初期化内容を設定する
@@ -267,6 +272,20 @@ class AppRoot:
         else:
             self._startupmsgs.append("'{}: {}' =".format(tag, value))
 
+    def add_startup_variable(self, name, value, typename=None):
+        """ 開始直後に自動で追加される引数 """
+        self._startupvars.append(StartupVariable(name, value, typename))
+    
+    def load_startup_variables(self, context):
+        """ startupで呼び出される """
+        c = 0
+        for v in self._startupvars:
+            o = context.new_object(v.value, conversion=v.typename)
+            self.objcol.push(v.name, o)
+            c += 1
+        self._startupvars.clear()
+        return c
+
     #
     # グローバルなホットキー
     #
@@ -313,12 +332,14 @@ class AppRoot:
     # アプリの実行
     #
     def run(self):
+        # 初期化
         self.boot_ui()
-        
+
         # 自動実行メッセージの登録
         startupmsgs = ["@@startup", *self._startupmsgs] # 初期化処理を行うメッセージを先頭に追加する
         chm = self.chambers().get_active()
         chm.post_chamber_message("eval-message-seq", messages=startupmsgs, chamber=chm)
+        self._startupmsgs.clear()
 
         # 基本型を先に登録：初期化処理メッセージを解読するために必要
         self.typemodule.add_fundamentals() 
@@ -461,6 +482,8 @@ class AppRoot:
         else:
             shellpath().open_by_system_text_editor(filepath, line, column)
 
+
+
 #
 # 
 #
@@ -530,4 +553,49 @@ def transfer_deployed_directory(app, src, destdir):
         if oldcmd.isfile():
             oldcmd.remove()
         deploy_osx_start_command(main)
+
+#
+#
+#
+class AppStarter:
+    def __init__(self, root: AppRoot):
+        self.root = root
+        self._adder = None
+
+    def __getitem__(self, name):
+        if self._adder is None:
+            raise ValueError()
+        def _add(*args, **kwargs):
+            self._adder(args, kwargs, name)
+            return self
+        return _add
+
+    def _set_adder(self, adder):
+        self._adder = adder
+    
+    def packages(self):
+        @self._set_adder
+        def _add_pkg(args, kwargs, name):
+            self.root.add_package(name, *args, **kwargs)
+        return self
+
+    def hotkeys(self):
+        @self._set_adder
+        def _add_hotkey(args, kwargs, label):
+            self.root.add_hotkey(label, *args, **kwargs)
+        return self
+    
+    def messages(self, *lines):
+        for line in lines:
+            self.root.add_startup_message(line)
+        return self
+
+    def end(self):
+        return self.root
+
+
+def create_app(*args, **kwargs):
+    root = AppRoot()
+    root.initialize(*args, **kwargs)
+    return AppStarter(root)
 

@@ -334,6 +334,10 @@ class TracebackObject():
         msg = verbose_display_traceback(excep, app.get_ui_wrap_width())
         app.post("message", msg)
 
+    def display(self, app):
+        excep = self._error
+        return verbose_display_traceback(excep, app.get_ui_wrap_width())
+
     def constructor(self, value):
         """ @meta
         Params:

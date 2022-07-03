@@ -1,6 +1,14 @@
 '''
 machaon 起動スクリプト
+'''
+from machaon.app import AppRoot
+import os
 
+# machaonフォルダの場所を指定する
+basic_dir = os.path.join(os.path.dirname(__file__), "machaon")
+root = AppRoot()
+
+'''
 ** 初期設定 **
 root.initialize(
     ui = "UIタイプ",
@@ -8,8 +16,15 @@ root.initialize(
 )
 UIタイプ:
     tk    tkinterを使用 (win/osx)
+    shell ターミナル（win/osx/generic）
+    batch バッチ実行（all）
+'''
+root.initialize(
+    ui="shell", 
+    basic_dir=basic_dir 
+)
 
-
+'''
 ** パッケージの定義 **
 root.add_package(
     "[スコープ名]",
@@ -22,24 +37,6 @@ root.add_package(
     module        pythonのモジュール名
     file          pythonのモジュールファイルへのフルパス
     package-arc   pythonのパッケージが入ったzip:開始パッケージへの相対パス
-    
 '''
-from machaon.app import AppRoot
-import os
-
-# machaonフォルダの場所を指定する
-basic_dir = os.path.join(os.path.dirname(__file__), "machaon")
-root = AppRoot()
-
-root.initialize(
-    ui="tk", 
-    basic_dir=basic_dir 
-)
-
-root.add_package(
-    "machaon.shell",
-    "module:machaon.types.shell"
-)
-
 
 root.run()

@@ -9,47 +9,93 @@ import datetime
 #
 #
 class LoggingLauncher(Launcher):
+    """
+    """
     def __init__(self, args):
         super().__init__()
         self.shell = args["shell"]
         self._title = args["title"]
         self._logger = None
-        self._loggersetup = {}
-        if "log" in args:
-            self._loggersetup["handler"] = args["log"]
-        elif "logfile" in args:
-            self._loggersetup["file_handler"] = args["logfile"]
+        self._loggersetup = {k:args.get(k) for k in ("loghandler", "logfileperiod", "logfile", "logdir")}
+        # handler : logging.Handler
+        # fileperiod : str = daily, monthly
 
     #
     # ログファイル設定
     #
     def init_screen(self):
         """ 初期化 """
-        if "handler" in self._loggersetup:
-            self.setup_logger(self._loggersetup["handler"])
-        elif "file_handler" in self._loggersetup:
-            self.setup_file_logger(self._loggersetup["file_handler"])
-        # 
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
-        self.writelog("message", "[{}] 起動 [{}]".format(self._title, timestamp))
+        if self._loggersetup["loghandler"]:
+            # ハンドラを直接指定
+            self.setup_logger(self._loggersetup["loghandler"])
+        else:
+            logpath = self.get_logfile_path()
+            if logpath is not None:
+                # ログファイルハンドラを指定
+                self.setup_file_logger(logpath)
+            else:
+                # ヌルハンドラを指定
+                self.setup_logger(logging.NullHandler())
+        
+        self.on_enter()
 
     def setup_logger(self, handler):
         self._logger = logging.getLogger("machaon batch {}".format(self._title))
         self._logger.setLevel(logging.INFO)
         self._logger.addHandler(handler)
 
-    def setup_file_logger(self, dateset):
-        if dateset == "daily":
-            date = datetime.datetime.today().strftime("%Y%m%d")
-        elif dateset == "monthly":
-            date = datetime.datetime.today().strftime("%Y%m")
-        else:
-            raise ValueError(dateset)
-        logpath = os.path.join(self.app.get_log_dir(), "{}{}.txt".format(self._title, date))
-        self.setup_logger(logging.FileHandler(logpath, encoding="utf-8"))
+    def setup_file_logger(self, logpath):
+        f = logging.FileHandler(logpath, encoding="utf-8")
+        
+        # カスタムログレコードの生成を設定する
+        super_factory = logging.getLogRecordFactory()
+        def record_factory(name, level, fn, lno, msg, args, exc_info, func=None, sinfo=None, **kwargs):
+            record = super_factory(name, level, fn, lno, msg, args, exc_info, func=None, sinfo=None, **kwargs)
+            if level == logging.INFO:
+                levelsign = ""
+            elif level == logging.ERROR:
+                levelsign = "失敗 "
+            elif level == logging.WARN:
+                levelsign = "注意 "
+            elif level == logging.CRITICAL:
+                levelsign = "破綻 "
+            else:
+                levelsign = "調査 "
+            record.levelsign = levelsign
+            return record
+        logging.setLogRecordFactory(record_factory)
+        f.setFormatter(logging.Formatter("{asctime} - {levelsign}{message}", style="{"))
+
+        self.setup_logger(f)
     
     def get_logger(self):
         return self._logger
+
+    def get_logfile_path(self):
+        filename = None
+
+        period = self._loggersetup["logfileperiod"]
+        if period is not None:
+            if period == "daily":
+                date = datetime.datetime.today().strftime("%Y%m%d")
+            elif period == "monthly":
+                date = datetime.datetime.today().strftime("%Y%m")
+            else:
+                raise ValueError(period+": invalid file logging period name")
+            filename = "{}{}.txt".format(self._title, date)
+
+        if filename is None and self._loggersetup["logfile"]:
+            filename = self._loggersetup["logfile"]
+
+        if filename is None:
+            return None
+            
+        if self._loggersetup["logdir"]:
+            logdir = self._loggersetup["logdir"]
+        else:
+            logdir = self.app.get_log_dir()
+        
+        return os.path.join(logdir, filename)
 
     def writelog(self, tag, text, *, nobreak=False, **kwargs):
         if self._logger is None:
@@ -106,40 +152,54 @@ class LoggingLauncher(Launcher):
         return "" # 入力プロンプトはなし
 
     #
+    def on_enter(self):
+        """ アプリ起動時 """
+        header = "##アプリ起動 [{}]".format(self._title)
+        self.writelog("message", header)
+
     def post_on_exec_process(self, process, exectime):
         """ プロセス実行開始時 """
         index = process.get_index()
         message = process.get_message()
-        process.post("input", "P{:03} | {} [{}]".format(index, message, exectime.strftime("%Y-%m-%d|%H:%M.%S")))
+        process.post("input", "#プロセス起動 {:03} | {}".format(index, message)) # exectime.strftime("%Y-%m-%d|%H:%M.%S")
     
     def post_on_success_process(self, process, ret, spirit):
         """ プロセスの正常終了時 """
+        process.post("message", " -> [{}]".format(ret.get_typename()))
         ret.pprint(spirit) # 結果は常に詳細表示にする
-        process.post("message", " -> {} [{}]".format(ret.summarize(), ret.get_typename()))
 
     def post_on_interrupt_process(self, process):
         """ プロセス中断時 """
-        process.post("message-em", "中断しました")
+        process.post("message-em", " ->* 中断しました")
     
     def post_on_error_process(self, process, excep):
         """ プロセスの異常終了時 """
-        index = process.get_index()
-        process.post("input", " process[{}] error ".format(index), nobreak=True)
+        process.post("error", " ->* エラーが発生しました ")
         #
-        process.post("error", "{}".format(excep.summarize()))
+        process.post("error", excep.summarize())
         spi = Spirit(self.app, process)
-        excep.value.traceback(0).showall(spi)
+        process.post("error", "スタックトレース：")
+        for line in excep.value.traceback(0).display(spi).splitlines():
+            process.post("error", "    " + line)
 
     def post_on_end_process(self, process):
         """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """
         pass # 何も表示しない
 
     def on_exit(self):
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d|%H:%M.%S")
-        self.writelog("message", "[{}] 終了 [{}]".format(self._title, timestamp))
+        """ アプリ終了時 """
+        self.writelog("message", "##アプリ終了 [{}]".format(self._title))
 
 
+
+#
+#
+#
 class BatchLauncher(LoggingLauncher):
+    """
+    対話的でないアプリケーション。
+    起動後ただちにコマンドを実行し、終了する。
+    """
     is_async = False
 
     def __init__(self, args):
@@ -166,4 +226,3 @@ class BatchLauncher(LoggingLauncher):
         # スタートアップメッセージを処理して終了する
         self.update_chamber_messages(None)
         self.app.exit()
-

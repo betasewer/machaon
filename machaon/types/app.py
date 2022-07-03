@@ -55,6 +55,10 @@ class RootObject:
         except Exception as e:
             spirit.post("error", str(e))
 
+        count = self.root.load_startup_variables(self.context)
+        if count > 0:
+            spirit.post("message", "{}個の変数がロード済みです".format(count))
+
         if isfullform:
             spirit.post("message", "")
             spirit.post("message", "ヘルプ")
