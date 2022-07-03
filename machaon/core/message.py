@@ -19,6 +19,7 @@ from machaon.core.symbol import (
     SIGIL_DISCARD_MESSAGE,
     SIGIL_TYPE_INDICATOR,
     QUOTE_ENDPARENS,
+    is_triming_control_char,
     is_modifiable_selector,
 )
 from machaon.core.object import Object
@@ -832,6 +833,9 @@ class MessageCharBuffer():
                 continue
             
             ch = s[i]
+
+            if is_triming_control_char(ord(ch)):
+                continue
 
             if userquote_wait:
                 if ch.isspace():

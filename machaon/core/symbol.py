@@ -183,6 +183,16 @@ def is_modifiable_selector(selector):
         return False
     return True
 
+def is_triming_control_char(code):
+    if 0x00 <= code and code < 0x09:
+        return True
+    if 0x10 <= code and code < 0x20:
+        return True
+    if 0x7F == code:
+        return True
+    return False
+
+
 #
 # 
 #
