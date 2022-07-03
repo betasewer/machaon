@@ -15,9 +15,17 @@ class ObjectCollectionType(Type):
         return make_method_from_value(ObjectCollectionMemberGetter(name), name, METHOD_INVOKEAS_BOUND_FUNCTION)
 
     def select_method(self, name):
+        # 型固有のメソッド
         meth = super().select_method(name)
-        if meth is None:
-            meth = self.spawn_getter(name)
+        if meth is not None:
+            return meth
+        # ジェネリックメソッド
+        from machaon.types.generic import resolve_generic_method
+        meth = resolve_generic_method(name)
+        if meth is not None:
+            return meth
+        # メンバセレクタ 
+        meth = self.spawn_getter(name)
         return meth
 
     def is_selectable_method(self, name):

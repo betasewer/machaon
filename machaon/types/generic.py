@@ -1,3 +1,4 @@
+from pydoc import resolve
 from machaon.core.type.type import TYPE_DELAY_LOAD_METHODS, Type
 from machaon.core.symbol import normalize_method_name, normalize_method_target
 from machaon.core.method import make_method_prototype
@@ -7,7 +8,7 @@ from machaon.core.importer import ClassDescriber
 #
 # どんな型にも共通のメソッドを提供
 #
-def resolve_generic_method_invocation(name, modbits=None):
+def resolve_generic_method(name):
     if name in operators:
         name = operators[name]
 
@@ -34,8 +35,14 @@ def resolve_generic_method_invocation(name, modbits=None):
         for aliasname in aliases:
             _GenericMethodsType.add_member_alias(aliasname, name)
 
-    # 呼び出しを作成する
+    return method
+
+def resolve_generic_method_invocation(name, modbits=None):
+    method = resolve_generic_method(name)
+    if method is None:
+        return None
     return TypeMethodInvocation(_GenericMethodsType, method, modbits)
+
 
 #
 # 演算子と実装の対応
