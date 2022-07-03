@@ -57,6 +57,23 @@ class IntType(NumericType):
         """
         return pow(n, exp)
 
+    #
+    #
+    #
+    def to(self, n, end, step=None):
+        """ @method
+        タプルを生成する。
+        Params:
+            end(Int):
+            step?(Int):
+        Returns:
+            Tuple:
+        """
+        if step is not None:
+            return range(n, end, step)
+        else:
+            return range(n, end)
+
 
 class FloatType(NumericType):
     """ @type trait [Float]
