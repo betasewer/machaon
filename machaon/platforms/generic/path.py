@@ -1,5 +1,5 @@
 import os
-from machaon.platforms.common import common_known_names
+from machaon.platforms.common import common_known_names, Unsupported
 
 class Exports:
     @staticmethod
@@ -11,22 +11,6 @@ class Exports:
         home = os.path.expanduser("~")
         if name == "home":
             return home
-        elif name == "desktop":
-            return os.path.join(home, "Desktop")
-        elif name == "documents":
-            return os.path.join(home, "Documents")
-        elif name == "downloads":
-            return os.path.join(home, "Downloads")
-        elif name == "applications" or name == "programs":
-            return os.path.join(home, "Applications")
-        elif name == "pictures":
-            return os.path.join(home, "Pictures")
-        elif name == "musics":
-            return os.path.join(home, "Music")
-        elif name == "videos":
-            return os.path.join(home, "Movies")
-        elif name == "library":
-            return os.path.join(home, "Library")
         elif name == "python":
             p = Exports.which_path("python3")
             if p is None:
@@ -37,7 +21,7 @@ class Exports:
             envname = name.upper()
             if envname in os.environ:
                 return os.environ[envname]
-                
+        
         return None
         
     @staticmethod
@@ -53,13 +37,7 @@ class Exports:
         """
         デフォルトの方法でパスを開く。
         """
-        import subprocess
-        if operation is None:
-            subprocess.run(["open", path])
-        elif operation == "explore":
-            subprocess.run(["open", path])
-        else:
-            raise ValueError("Unsupported")
+        raise Unsupported("start_file")
 
     @staticmethod
     def has_hidden_attribute(path):
