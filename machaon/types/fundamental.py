@@ -95,6 +95,7 @@ class TypeType():
                 app.interruption_point(progress=1)
                 if isinstance(meth, Exception):
                     helps.append({
+                        "#extend" : None,
                         "names" : context.new_object(names),
                         "doc" : "!{}: {}".format(type(meth).__name__, meth),
                         "signature" : "",
