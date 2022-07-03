@@ -106,7 +106,7 @@ def get_module_attr(t):
             return mod
     return None
 
-def get_name_attr(t, fallback):
+def get_name_attr(t, fallback=False):
     if hasattr(t, "__qualname__"):
         return t.__qualname__
     elif hasattr(t, "__name__"):
