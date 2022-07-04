@@ -671,26 +671,42 @@ class StrType():
     def do_python(self, expr, _app):
         """ @task [dopy do-py]
         Pythonの式として評価し、実行して返す。
-        先頭に{name1 name2...}と書くことでモジュールをインポートできる。
+        先頭に[name1 name2...]と書くことでモジュールをインポートできる。
         Returns:
             Any:
         """
         expr = expr.strip()
-        if expr.startswith("{"):
+        if expr.startswith("["):
             from machaon.core.importer import module_loader
-            rparen = expr.find("}")
+            rparen = expr.find("]")
             if rparen == -1:
                 raise ValueError("モジュール指定の括弧が閉じていません")
-            imports = expr[1:rparen].split()
-            body = expr[rparen+1:]
+            imports = expr[1:rparen].strip().split()
+            body = expr[rparen+1:].strip()
+
+            if body.startswith("."):
+                body = imports[0] + body
         else:
             imports = []
             body = expr
 
+        class submodule:
+            pass
+
         glob = {}
         for impname in imports:
             loader = module_loader(impname)
-            glob[impname] = loader.load_module()
+            mod = loader.load_module()
+
+            par = mod
+            chi = mod
+            nameparts = impname.split(".")
+            for namepart in reversed(nameparts[1:]):
+                par = submodule()
+                setattr(par, namepart, chi)
+                chi = par
+
+            glob[nameparts[0]] = par
         
         return eval(body, glob, {})
     
