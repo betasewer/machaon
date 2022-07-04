@@ -368,7 +368,7 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    def eval_object_message(self, message: str):
+    def eval_object_message(self, message: str, *, is_process_seq=False):
         if not message:
             return False
         elif message == "exit":
@@ -388,8 +388,9 @@ class AppRoot:
             return False
 
         # 実行
-        process = self.processhive.new_process(message)
-        process.start_process(self) # メッセージを実行する
+        process = self.processhive.new_process(message, is_process_seq=is_process_seq)
+        context = self.create_root_context(process)
+        process.start_process(context) # メッセージを実行する
 
         # 表示を更新する
         if atnewchm:
@@ -522,6 +523,11 @@ def deploy_directory(path):
     
     elif is_windows():
         path.copy_from(configs / "main.py")
+
+    else:
+        # generic
+        path.copy_from(configs / "main.py")
+
 
 def deploy_osx_start_command(main):
     from machaon.types.file import TextFile

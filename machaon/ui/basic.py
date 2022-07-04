@@ -143,7 +143,8 @@ class Launcher():
 
             elif tag == "eval-message":
                 message, = msg.req_arguments("message")
-                self.app.eval_object_message(message) # メッセージを実行する
+                leading = msg.argument("leading")
+                self.app.eval_object_message(message, is_process_seq=leading) # メッセージを実行する
 
             elif tag == "eval-message-seq":
                 messages, chamber = msg.req_arguments("messages", "chamber")

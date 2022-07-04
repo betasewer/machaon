@@ -81,7 +81,7 @@ class ShellLauncher(Launcher):
         self.wrap_width = width 
         self.maxlinecount = maxlinecount
         self._loop = True
-        self._last_process_end = False
+        self._waiting_input_message = False
         self._useansi = useansi
 
     def printer(self, tag, text, end=None):
@@ -119,7 +119,7 @@ class ShellLauncher(Launcher):
             text = ansicodes.deleteline(count)
             print(text, end="")
         else:
-            raise NotImplementedError()
+            pass # Not Implemented
 
     def replace_screen_text(self, text):
         pass
@@ -178,16 +178,20 @@ class ShellLauncher(Launcher):
         # 次回入力へのプロンプト
         process.post("message-em", self.get_input_prompt(), nobreak=True) 
         # 入力待ちになる
-        self._last_process_end = True
+        if process.is_process_sequence:
+            self._waiting_input_message = False # 自動実行モード
+            process.post("message", "") 
+        else:
+            self._waiting_input_message = True
 
     def run_mainloop(self):
         while self._loop:
             self.update_chamber_messages(None)
 
-            if self._last_process_end and self.chambers.get_active().is_messages_consumed():
-                self._last_process_end = False
+            if self._waiting_input_message and self.chambers.get_active().is_messages_consumed():
+                self._waiting_input_message = False
                 if not self.execute_input_text():
-                    self._last_process_end = True
+                    self._waiting_input_message = True # エラーが起きた
 
     def on_exit(self):
         self._loop = False

@@ -8,7 +8,7 @@ def create_main_app():
         description = "Machaon is a message-oriented Python application environment",
     )
     pser.add_argument("-e", "--entrypoint", help="Pythonの関数を[モジュール名.変数名]の形式で指定して実行")
-    pser.add_argument("-m", "--message", help="任意のメッセージを実行")
+    pser.add_argument("-m", "--message", help="任意のメッセージを実行", action="append", default=[])
     pser.add_argument("-d", "--deploy", help="machaonディレクトリを配備する")
     pser.add_argument("-u", "--ui", help="UIを指定する")
     pser.add_argument("-b", "--batch", help="バッチモードで起動する", action="store_const", dest="ui", const="batch")
@@ -48,7 +48,8 @@ def create_main_app():
         root.add_startup_message("@result =")
     
     elif args.message:
-        root.add_startup_message(args.message)
+        for msg in args.message:
+            root.add_startup_message(msg)
 
     elif args.deploy:
         root.add_startup_variable("path", args.deploy, "Path")

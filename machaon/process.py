@@ -8,19 +8,16 @@ import traceback
 import datetime
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
 
-#from machaon.action import ActionInvocation
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.message import MessageEngine
-from machaon.core.context import InvocationContext
 from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
-from machaon.ui.basic import Launcher
 
 
 class Process:
     """ @type
     メッセージの実行スレッドを操作する。
     """
-    def __init__(self, index, message):
+    def __init__(self, index, message, *, is_process_seq):
         self.index: int = index
         # 
         self.message: MessageEngine = message
@@ -36,20 +33,23 @@ class Process:
         self.input_waiting = False
         self.event_inputend = threading.Event()
         self.last_input = None
+        # プロセスの連続
+        self.is_process_sequence = is_process_seq
 
     #
     #
     # プロセスの実行フロー
     #
     #
-    def start_process(self, root):
+    def start_process(self, context):
+        root = context.root
+
         # 実行開始
         timestamp = datetime.datetime.now()
         launcher = root.get_ui()
         launcher.post_on_exec_process(self, timestamp)
 
         # コンテキストの作成
-        context = root.create_root_context(self)
         self.last_context = context
         
         # コマンドを解析
@@ -835,7 +835,7 @@ class ProcessChamber:
             while iline < len(messages):
                 c1 = chamber.count_process()
                 if iline <= c1 and chamber.is_messages_consumed():
-                    chamber.post_chamber_message("eval-message", message=messages[iline])
+                    chamber.post_chamber_message("eval-message", message=messages[iline], leading=(iline < len(messages)-1))
                     iline += 1
                 else:
                     time.sleep(0.1)
@@ -896,10 +896,10 @@ class ProcessHive:
         self._nextprocindex: int = 0
     
     # 新しい開始前のプロセスを作成する
-    def new_process(self, expression: str):
+    def new_process(self, expression: str, **kwargs):
         procindex = self._nextprocindex + 1
         message = MessageEngine(expression)
-        process = Process(procindex, message)
+        process = Process(procindex, message, **kwargs)
         self._nextprocindex = procindex
         return process
 
