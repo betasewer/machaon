@@ -53,7 +53,7 @@ class AppRoot:
 
         # パス
         if basic_dir is None:
-            basic_dir = os.path.join(shellpath().get_known_path("documents", approot=self), "machaon")
+            basic_dir = get_default_basic_dir()
         self.basicdir = basic_dir
 
     def boot_ui(self):
@@ -483,6 +483,11 @@ class AppRoot:
             shellpath().open_by_system_text_editor(filepath, line, column)
 
 
+def get_default_basic_dir():
+    d = Path.known("documents")
+    if d is None:
+        d = Path.known("home")
+    return (d / "machaon").get()
 
 #
 # 

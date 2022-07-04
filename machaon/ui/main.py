@@ -14,6 +14,7 @@ def create_main_app():
     pser.add_argument("-b", "--batch", help="バッチモードで起動する", action="store_const", dest="ui", const="batch")
     pser.add_argument("-l", "--location", help="開始ディレクトリを指定する")
     pser.add_argument("-o", "--option", help="オプションを指定する: [NAME]=[VALUE]", action="append", default=[])
+    pser.add_argument("--update", help="machaonをアップデートして終了する", action="store_const", const=True)
     args = pser.parse_args()
     
     options = {}
@@ -52,6 +53,10 @@ def create_main_app():
     elif args.deploy:
         root.add_startup_variable("path", args.deploy, "Path")
         root.add_startup_message("@@deploy @path")
+        
+    elif args.update:
+        root.add_startup_message("@@machaon-update")
+        root.add_startup_message("exit")
     
     return root
 
