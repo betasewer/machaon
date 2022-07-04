@@ -17,7 +17,7 @@ class Process:
     """ @type
     メッセージの実行スレッドを操作する。
     """
-    def __init__(self, index, message, *, is_process_seq):
+    def __init__(self, index, message, *, is_process_seq=False):
         self.index: int = index
         # 
         self.message: MessageEngine = message
