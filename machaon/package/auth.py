@@ -7,6 +7,9 @@ class Credential():
     def __init__(self, hostname, username):
         self.hostname = hostname
         self.username = username
+
+    def user(self):
+        return "{}@{}".format(self.username, self.hostname)
     
     def build_request(self, rep, url, **kwargs):  
         raise NotImplementedError()

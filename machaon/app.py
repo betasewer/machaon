@@ -18,6 +18,7 @@ from machaon.package.package import Package, PackageManager, PackageNotFoundErro
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 from machaon.ui.keycontrol import HotkeySet, KeyController
+from machaon.ui.external import ExternalApps
 
 #
 StartupVariable = namedtuple("StartupVariable", ["name", "value", "typename"])
@@ -31,7 +32,6 @@ class AppRoot:
     """
     def __init__(self):
         self.ui = None
-        self.keycontrol = KeyController()
 
         self.basicdir = "" # 設定ファイルなどを置くディレクトリ
         self.pkgmanager = None
@@ -41,7 +41,9 @@ class AppRoot:
         self.typemodule = TypeModule()
         self.objcol = ObjectCollection()
 
-        self._extapps = None # 外部アプリコンフィグファイル
+        self.keycontrol = KeyController()
+        self.extapps = ExternalApps()
+
         self._startupmsgs = []
         self._startupvars = []
 
@@ -101,6 +103,9 @@ class AppRoot:
         if not os.path.isdir(p) and not os.path.isfile(p):
             os.makedirs(p) # アクセスがあってから初めて作成する
         return p
+
+    def get_external_applist(self):
+        return os.path.join(self.basicdir, "apps.ini")
     
     def get_GUID_names_file(self):
         p = os.path.join(self.basicdir, "guid.ini")
@@ -114,7 +119,7 @@ class AppRoot:
             return p
         return None
 
-    def local_dir(self, appname):
+    def get_local_dir(self, appname):
         p = os.path.join(self.basicdir, "local", appname)
         if not os.path.isdir(p):
             os.makedirs(p)
@@ -163,7 +168,7 @@ class AppRoot:
             src = newpkg.get_source()
             from machaon.package.auth import create_credential
             cred = create_credential(self, repository=src)
-            src.add_credential(cred)
+            src.load_credential(cred)
 
         return newpkg
     
@@ -239,13 +244,8 @@ class AppRoot:
         """ パッケージの読み込みが終わったら呼び出す """
         self.typemodule.check_loading()
 
-    def add_credential(self, cred):
-        """ 
-        ダウンロードの認証情報をパッケージに追加する。  
-        Params:
-            target(str): 対象［ホスト名:ユーザー名］
-            cred(Any): *認証オブジェクト
-        """
+    def load_credential(self, cred):
+        """ ダウンロードの認証情報をパッケージに追加する。 """
         mark = False
         for pkg in self.pkgs:
             src = pkg.get_source()
@@ -255,7 +255,7 @@ class AppRoot:
             mark = True
         
         if not mark:
-            raise ValueError("認証情報はどのパッケージにも設定されませんでした")
+            raise ValueError("'{}'の認証情報はどのパッケージにも設定されませんでした".format(cred.user()))
     
     #
     # メッセージ
@@ -306,8 +306,8 @@ class AppRoot:
             ignition(str): 共通の修飾キー
         """
         from machaon.core.importer import attribute_loader
-        loader = attribute_loader(target)
-        keyset = loader()()
+        loadfn = attribute_loader(target)()
+        keyset = loadfn()
         if not isinstance(keyset, HotkeySet):
             raise TypeError("{}はHotKeySet型のオブジェクトを返さなければなりません".format(target))
         keyset.install(self, ignition)
@@ -315,7 +315,7 @@ class AppRoot:
     def enum_hotkeys(self):
         """
         グローバルなホットキーの定義をリストアップする
-        Returns: 2345
+        Returns:
             List[Tuple[str, str]]: キーとメッセージの組のリスト 
         """
         return self.keycontrol.enum_hotkeys()
@@ -438,21 +438,6 @@ class AppRoot:
     #
     # 外部アプリ
     #
-    @property
-    def _external_apps(self):
-        if self._extapps is None:
-            p = os.path.join(self.basicdir, "apps.ini")
-            if os.path.isfile(p):
-                cfg = configparser.ConfigParser()
-                cfg.read(p)
-                self._extapps = cfg
-        return self._extapps
-    
-    def _has_external_app(self, section):
-        if self._external_apps:
-            return self._external_apps.has_section(section)
-        return False
-
     def open_by_text_editor(self, filepath, line=None, column=None):
         """ テキストエディタで開く。
         Params:
@@ -460,28 +445,7 @@ class AppRoot:
             line(int): 行番号
             column(int): 文字カラム番号
         """
-        if self._has_external_app("text-editor"):
-            editor = None
-            lineopt = None
-            charopt = None
-            
-            editor = self._external_apps.get_option("text-editor", "path")
-            if line is not None and self._external_apps.has_option("text-editor", "line"):
-                lineopt = self._external_apps.get_option("text-editor", "line").format(line)
-            if column is not None and self._external_apps.has_option("text-editor", "column"):
-                charopt = self._external_apps.get_option("text-editor", "column").format(column)
-        
-            args = []
-            args.append(editor)
-            args.append(filepath)
-            if lineopt is not None:
-                args.append(lineopt)
-            if charopt is not None:
-                args.append(charopt)
-            subprocess.Popen(args, shell=False)
-        
-        else:
-            shellpath().open_by_system_text_editor(filepath, line, column)
+        self.extapps.open_by_text_editor(self, filepath, line, column)
 
 
 def get_default_basic_dir():

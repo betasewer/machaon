@@ -24,6 +24,9 @@ def create_main_app():
             raise ValueError("=で区切ってください;" + opt)
         options[key] = value
 
+    if args.update or args.deploy:
+        args.ui = "batch"
+
     #
     #
     #
@@ -54,6 +57,7 @@ def create_main_app():
     elif args.deploy:
         root.add_startup_variable("path", args.deploy, "Path")
         root.add_startup_message("@@deploy @path")
+        root.add_startup_message("exit")
         
     elif args.update:
         root.add_startup_message("@@machaon-update")
