@@ -186,15 +186,16 @@ class ObjectCollection():
         # オブジェクトを代入
         if not isinstance(obj, Object):
             raise TypeError()
-        if name not in self._namemap:
-            raise ValueError("{} is not found".format(name))
-        idents = self._namemap[name]
-        ident = idents[0]
-        item = ObjectCollectionItem(ident, name, obj)
-        self._items[ident] = item
-        for delident in idents[1:]:
-            del self._items[delident]
-        return item
+        if name in self._namemap:
+            idents = self._namemap[name]
+            ident = idents[0]
+            item = ObjectCollectionItem(ident, name, obj)
+            self._items[ident] = item
+            for delident in idents[1:]:
+                del self._items[delident]
+            return item
+        else:
+            return self.push(name, obj)
 
     def pick(self, name) -> Generator[ObjectCollectionItem, None, None]:
         # 名前で検索する
