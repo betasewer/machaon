@@ -729,13 +729,9 @@ class tkLauncher(Launcher):
             if view.is_marquee():
                 if not view.update_change_bit(30):
                     return
-                modbit = view.lastbit % 3
-                if modbit == 0:
-                    l, m = 0, 0.3
-                elif modbit == 1:
-                    l, m = 0.33, 0.34
-                elif modbit == 2:
-                    l, m = 0.7, 0.3
+                l, m = (
+                    (0, 0.3), (0.33, 0.34), (0.7, 0.3)
+                )[view.lastbit % 3]
                 lb = round(l * width)
                 mb = round(m * width)
                 rb = width - lb - mb
@@ -764,27 +760,6 @@ class tkLauncher(Launcher):
         if command != "start":
             self.delete_screen_text(-1, 1)
         self.insert_screen_text("message", header + bar)
-
-
-    #
-    #
-    #
-    def insert_screen_appendix(self, valuelines, title=""):
-        if title:
-            self.insert_screen_text("message", ">>> {}".format(title))
-
-        if isinstance(valuelines, str):
-            self.insert_screen_text("message", valuelines)
-        else:
-            # シーケンスが渡されたなら、簡単な表形式にする
-            maxspacing = max(*[len(x[0]) for x in valuelines], 0, 0)
-            for value, desc in valuelines:
-                spacing = " " * (maxspacing - len(value) + 2)
-                for msg in ProcessMessage("%1%" + spacing + desc).embed(value, "message-em").expand():
-                    self.insert_screen_text("message", msg)
-
-        self.insert_screen_text("message", "")
-        self.log.yview_moveto(1.0)
 
     #
     # チャンバーメニューの操作
