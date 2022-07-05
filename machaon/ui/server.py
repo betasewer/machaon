@@ -1,4 +1,5 @@
 
+from requests import head
 from machaon.ui.basic import Launcher
 from machaon.process import Spirit, ProcessSentence
 
@@ -108,10 +109,15 @@ class LoggingLauncher(Launcher):
         else:
             self._logger.log(logging.INFO, text)
 
-    def writelog_setview(self, rows, columns, dataid, context):
-        self._logger.log(logging.INFO, "\t".join(columns))
-        for _index, row in rows:
-            self._logger.log(logging.INFO, "\t".join(row))
+    def writelog_setview(self, rows, columns, dataid, context):        
+        """ 表はリスト形式でレイアウトする """
+        if not columns:
+            return
+        maxcolwidth = max([len(x) for x in columns])
+        for index, row in rows:
+            self._logger.log(logging.INFO, "[{}]".format(index))
+            for col, val in zip(columns, row):
+                self._logger.log(logging.INFO, "{} : {}".format(col.ljust(maxcolwidth), val))
 
     #
     # オーバーライド
@@ -136,6 +142,29 @@ class LoggingLauncher(Launcher):
         self.writelog_setview(*args, **kwargs)
         return self.shell.insert_screen_setview(*args, **kwargs)
 
+    def insert_screen_progress_display(self, command, view):
+        self.shell.insert_screen_progress_display(command, view)
+
+        if command == "start":
+            if view.title:
+                header = "{}: ".format(view.title)
+            else:
+                header = ""
+
+            if view.is_marquee():
+                l = "* {}処理中...".format(header)
+            else:
+                l = "* {}処理中({})... ".format(header, view.total)
+            self.writelog("message", l)
+
+        elif command == "end":
+            if view.is_marquee():
+                l = "* 処理完了({})".format(view.progress)
+            else:
+                l = "* 処理完了"
+            self.writelog("message", l)
+        
+            
     def add_chamber_menu(self, chamber):
         pass
 

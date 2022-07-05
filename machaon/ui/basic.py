@@ -211,7 +211,7 @@ class Launcher():
     def insert_screen_appendix(self, values, title=""):
         raise NotImplementedError()
     
-    def insert_screen_progress_display(self, command, key, args):
+    def insert_screen_progress_display(self, command, view):
         raise NotImplementedError()
 
     def insert_screen_object_summary(self, msg):
