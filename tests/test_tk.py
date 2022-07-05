@@ -48,24 +48,6 @@ def test_message_window(approot):
     #wnd.run_mainloop()
 
 
-def test_progress_display(approot):
-    spi = TempSpirit(approot)
-    wnd = approot.get_ui()
-
-    import time
-    from machaon.cui import MiniProgressDisplay
-    dis = MiniProgressDisplay(spi)
-
-    def display():
-        for x in range(20):
-            dis.update(50)
-            #time.sleep(0.5)
-    display()
-
-    def dd():
-        spi.printout()
-
-
 def test_textindex(approot):
     from machaon.ui.tk import TextIndex as textindex
 
