@@ -142,6 +142,29 @@ class ShellLauncher(Launcher):
                 print("{} : {}".format(col.ljust(maxcolwidth), val))
             print("")
 
+    def insert_screen_progress_display(self, command, view):
+        """ 一行のプログレスバー """
+        width = 30
+        if command == "progress" and not view.is_marquee():
+            if view.update_change_bit(width):
+                print("O", end="")
+            
+        elif command == "start":
+            if view.title:
+                print(" {}".format(view.title))
+            if view.is_marquee():
+                print("   * 処理中...", end="")
+            else:
+                print(" |" + "-" * width + "| {}".format(view.total))
+                print("  ", end="")
+            
+        elif command == "end":
+            if view.is_marquee():
+                print(" 完了 ({})".format(view.progress))
+            else:
+                print(" ", end="")
+                print(" 完了")
+
     def add_chamber_menu(self, chamber):
         pass
 
@@ -159,7 +182,8 @@ class ShellLauncher(Launcher):
     #
     def post_on_exec_process(self, process, exectime):
         """ プロセス実行開始時 """
-        pass # 何も表示しない
+        if process.get_sentence() and process.get_sentence().is_auto():
+            process.post("input", process.get_message())
     
     def post_on_success_process(self, process, ret, spirit):
         """ プロセスの正常終了時 """
@@ -184,9 +208,8 @@ class ShellLauncher(Launcher):
         # 次回入力へのプロンプト
         process.post("message-em", self.get_input_prompt(), nobreak=True) 
         # 入力待ちになる
-        if process.is_process_sequence:
+        if process.get_sentence() and process.get_sentence().is_auto_leading():
             self._waiting_input_message = False # 自動実行モード
-            process.post("message", "") 
         else:
             self._waiting_input_message = True
 

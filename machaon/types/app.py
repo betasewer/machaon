@@ -357,8 +357,8 @@ class RootObject:
         """
         app.start_progress_display(total=50)
         for _ in range(50):
-            app.interruption_point(progress=1, wait=1)
-        app.finish_progress_display(total=50)
+            app.interruption_point(progress=1, wait=0.5)
+        app.finish_progress_display()
 
     def test_graphic(self, app):
         """ @task

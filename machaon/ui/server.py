@@ -1,6 +1,6 @@
 
 from machaon.ui.basic import Launcher
-from machaon.process import Spirit
+from machaon.process import Spirit, ProcessSentence
 
 import logging
 import os
@@ -218,7 +218,7 @@ class BatchLauncher(LoggingLauncher):
         if messages:
             for message in messages:
                 # メッセージを実行する
-                self.app.eval_object_message(message) 
+                self.app.eval_object_message(ProcessSentence(message, auto=True, autoleading=True)) 
                 # プロセスにたまったメッセージを処理する（再帰呼び出し）
                 self.update_chamber_messages(None)
     

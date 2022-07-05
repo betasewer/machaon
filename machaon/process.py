@@ -4,22 +4,64 @@ import os
 import threading
 import queue
 import time
-import traceback
 import datetime
 from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.message import MessageEngine
-from machaon.cui import collapse_text, test_yesno, MiniProgressDisplay, composit_text
+from machaon.cui import collapse_text, test_yesno
+
+
+class ProcessSentence:
+    """
+    実行されるメッセージ文
+    """
+    def __init__(self, message, auto=False, autoleading=False):
+        self.atnewchm = False
+        self.atexit = False
+        self.auto = auto
+        self.autoleading = autoleading
+
+        #
+        # メッセージを前処理する
+        #
+        if message == "exit":
+            self.atexit = True
+        else:
+            head, sep, tail = message.partition(" ")
+            if head == "+":
+                self.atnewchm = True # 新規チャンバーで実行する
+                message = tail
+        
+        self.message = message
+
+    def get_message(self):
+        return self.message
+
+    def is_empty(self):
+        return not self.message
+
+    def at_exit(self):
+        return self.atexit
+
+    def at_new_chamber(self):
+        return self.atnewchm
+
+    def is_auto(self):
+        return self.auto
+
+    def is_auto_leading(self):
+        return self.autoleading
 
 
 class Process:
     """ @type
     メッセージの実行スレッドを操作する。
     """
-    def __init__(self, index, message, *, is_process_seq=False):
+    def __init__(self, index, message, sentence=None):
         self.index: int = index
         # 
+        self.sentence = sentence # 入力文
         self.message: MessageEngine = message
         self._finished = False
         # スレッド
@@ -33,8 +75,6 @@ class Process:
         self.input_waiting = False
         self.event_inputend = threading.Event()
         self.last_input = None
-        # プロセスの連続
-        self.is_process_sequence = is_process_seq
 
     #
     #
@@ -258,6 +298,10 @@ class Process:
         message = self.message.get_expression()
         m.write(message)
 
+    def get_sentence(self):
+        """ 入力文 """
+        return self.sentence
+
     #
     #
     #
@@ -301,7 +345,7 @@ class Spirit():
         self.root = root
         self.process: Process = process
         # プログレスバー
-        self.cur_prog_display = None 
+        self.progbars = []
         self._slp = 0
     
     def inherit(self, other):
@@ -409,15 +453,13 @@ class Spirit():
             if slp - self._slp > 0.1:
                 time.sleep(0.05)
                 self._slp = slp
-                #print("slept 0.05 {}".format(slp))
             if wait:
                 time.sleep(wait)
-                #print("slept {}".format(wait))
 
-        if progress and self.cur_prog_display:
-            self.cur_prog_display.update(progress)
-            if self.cur_prog_display.is_starting(): 
-                time.sleep(0.1) # 初回はバー全体の表示用に待つ
+        if progress and self.progbars:
+            self.update_progress_display(progress)
+            #if self.cur_prog_display.is_starting(): 
+            #    time.sleep(0.1) # 初回はバー全体の表示用に待つ
         return True
     
     def raise_interruption(self):
@@ -426,45 +468,60 @@ class Spirit():
     def is_interrupted(self):
         return self.process and self.process.is_interrupted()
 
-    # プログレスバーを開始する
-    def start_progress_display(self, *, total=None, title=None, tag=None):
-        self.cur_prog_display = MiniProgressDisplay(spirit=self, total=total, tag=tag, title=title)
+    #
+    # プログレスバー
+    #
+    def _new_progbar_key(self):
+        key = len(self.progbars)+1
+        self.progbars.append(key)
+        return key
 
-    # プログレスバーを完了した状態にする
-    def finish_progress_display(self, total=None):
-        if self.cur_prog_display is None:
-            return
-        self.cur_prog_display.finish(total)
+    def start_progress_display(self, *, total=None, title=None):
+        """ 開始する """
+        key = self._new_progbar_key()
+        self.post("progress-display", "start", key=key, total=total, title=title)
+        return key
     
+    def finish_progress_display(self, *, key=None):
+        """ 完了した状態にする """
+        if key is None:
+            key = self.progbars.pop()
+        else:
+            self.progbars.remove(key)
+        self.post("progress-display", "end", key=key)
+
+    def update_progress_display(self, progress,  *, key=None):
+        if key is None:
+            key = self.progbars[-1]
+        self.post("progress-display", "progress", key=key, progress=progress)
+        
     # with文のためのオブジェクトを作る
-    def progress_display(self, *, total=None, title=None, tag=None):
-        return Spirit.ProgressDisplayScope(self, total, title=title, tag=tag)
+    def progress_display(self, *, total=None, title=None):
+        return Spirit.ProgressDisplayScope(self, total, title=title)
     
     class ProgressDisplayScope():
         def __init__(self, spirit, total=None, **kwargs):
+            self.key = None
             self.spirit = spirit
             self.total = total
             self.kwargs = kwargs
         
         def __enter__(self):
-            self.start()
+            self.key = self.start()
             return self
         
         def __exit__(self, et, ev, tb):
             self.finish()
 
         def start(self):
-            self.spirit.start_progress_display(total=self.total, **self.kwargs)
+            return self.spirit.start_progress_display(total=self.total, **self.kwargs)
 
         def finish(self):
-            self.spirit.finish_progress_display(total=self.total)
+            self.spirit.finish_progress_display(key=self.key)
         
-        def set_total(self, total):
-            if self.spirit.cur_prog_display is None:
-                return
-            self.spirit.cur_prog_display.set_total(total)
-            self.total = total
-
+        def progress(self, progress):
+            self.spirit.update_progress_display(progress, key=self.key)
+    
     #
     # キャンバス
     #
@@ -669,6 +726,8 @@ class ProcessMessageIO():
     
     def closed(self):
         return False
+
+
 
 #
 # #####################################################################
@@ -896,10 +955,10 @@ class ProcessHive:
         self._nextprocindex: int = 0
     
     # 新しい開始前のプロセスを作成する
-    def new_process(self, expression: str, **kwargs):
+    def new_process(self, sentence: ProcessSentence):
         procindex = self._nextprocindex + 1
-        message = MessageEngine(expression)
-        process = Process(procindex, message, **kwargs)
+        message = MessageEngine(sentence.get_message())
+        process = Process(procindex, message, sentence)
         self._nextprocindex = procindex
         return process
 

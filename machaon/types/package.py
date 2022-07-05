@@ -184,7 +184,7 @@ class AppPackageType:
             elif state == PackageManager.DOWNLOADING:
                 app.interruption_point(progress=state.size)
             elif state == PackageManager.DOWNLOAD_END:
-                app.finish_progress_display(total=state.total)
+                app.finish_progress_display()
             elif state == PackageManager.DOWNLOAD_ERROR:
                 app.post("error", "ダウンロードに失敗しました：\n  {}".format(state.error))
                 return False

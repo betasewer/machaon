@@ -723,6 +723,52 @@ class tkLauncher(Launcher):
     #
     #
     #
+    def insert_screen_progress_display(self, command, view):
+        width = 30
+        if command == "progress":
+            if view.is_marquee():
+                if not view.update_change_bit(30):
+                    return
+                modbit = view.lastbit % 3
+                if modbit == 0:
+                    l, m = 0, 0.3
+                elif modbit == 1:
+                    l, m = 0.33, 0.34
+                elif modbit == 2:
+                    l, m = 0.7, 0.3
+                lb = round(l * width)
+                mb = round(m * width)
+                rb = width - lb - mb
+                bar = "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", view.progress)
+            else:
+                bar_width = round(width * view.get_progress_rate())
+                rest_width = width - bar_width
+                hund = round(view.get_progress_rate() * 100)
+                bar = "[{}{}] {}% ({}/{})".format(bar_width*"o", rest_width*"-", hund, view.progress, view.total)
+                     
+        elif command == "start":
+            bar = "[{}{}] {}% ({}/{})".format("", width*"-", 0, 0, view.total)
+        elif command == "end":
+            if view.is_marquee():
+                bar = "[{}{}] ({})".format(width*"o", "", view.progress+1)
+            else:
+                bar = "[{}{}] {}% ({}/{})".format(width*"o", "", 100, view.total, view.total)
+        else:
+            return
+
+        if view.title:
+            header = "{}: ".format(view.title)
+        else:
+            header = ""
+
+        if command != "start":
+            self.delete_screen_text(-1, 1)
+        self.insert_screen_text("message", header + bar)
+
+
+    #
+    #
+    #
     def insert_screen_appendix(self, valuelines, title=""):
         if title:
             self.insert_screen_text("message", ">>> {}".format(title))

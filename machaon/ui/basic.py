@@ -9,6 +9,7 @@ from typing import Dict, Iterator, Tuple, Sequence, List, Optional, Any
 
 from machaon.cui import composit_text
 from machaon.types.stacktrace import ErrorObject
+from machaon.process import ProcessSentence
 
 #
 #
@@ -86,6 +87,7 @@ class Launcher():
         self.keymap = self.new_keymap()
         self.screens = {} 
         self.chmstates = {}
+        self.progress_displays = {}
         
     def init_with_app(self, app):
         self.app = app
@@ -127,6 +129,12 @@ class Launcher():
                 cnt = msg.argument("count", 1)
                 self.delete_screen_text(lno, cnt)
             
+            elif tag == "progress-display":
+                command = msg.text
+                key, = msg.req_arguments("key")
+                view = self.update_progress_display_view(command, key, msg.args)
+                self.insert_screen_progress_display(command, view)
+            
             elif tag == "object-summary":
                 self.insert_screen_object_summary(msg)
             
@@ -144,7 +152,7 @@ class Launcher():
             elif tag == "eval-message":
                 message, = msg.req_arguments("message")
                 leading = msg.argument("leading")
-                self.app.eval_object_message(message, is_process_seq=leading) # メッセージを実行する
+                self.app.eval_object_message(ProcessSentence(message, auto=True, autoleading=leading)) # メッセージを実行する
 
             elif tag == "eval-message-seq":
                 messages, chamber = msg.req_arguments("messages", "chamber")
@@ -203,6 +211,9 @@ class Launcher():
     def insert_screen_appendix(self, values, title=""):
         raise NotImplementedError()
     
+    def insert_screen_progress_display(self, command, key, args):
+        raise NotImplementedError()
+
     def insert_screen_object_summary(self, msg):
         raise NotImplementedError()
     
@@ -239,7 +250,8 @@ class Launcher():
         
         else:
             # メッセージを実行する
-            if not self.app.eval_object_message(message):
+            sentence = ProcessSentence(message)
+            if not self.app.eval_object_message(sentence):
                 return False
         
             # 入力履歴に追加する
@@ -392,6 +404,24 @@ class Launcher():
     #
     def select_setview_item(self, index):
         raise NotImplementedError()
+
+    #
+    #
+    #
+    def update_progress_display_view(self, command, key, args):        
+        if command == "start":
+            v = ProgressDisplayView(key, total=args.get("total"), title=args.get("title"))
+            self.progress_displays[key] = v
+            return v
+        else:
+            v = self.progress_displays.get(key)
+            if v is None:
+                raise ValueError(key)
+            if command == "progress":
+                v.update(args.get("progress"))
+            elif command == "end":
+                v.finish()
+            return v
     
     #
     # ハンドラ
@@ -458,6 +488,68 @@ def parse_procindex(expr):
             procindex = expr[1:end]
             argname = expr[end+1:]
     return procindex, argname.strip()
+
+#
+#
+#
+class ProgressDisplayView:
+    def __init__(self, key, total=None, title=None):
+        self.key = key
+        self.title = title
+        self.total = total
+        self.progress = None
+        self.marquee = False if total else True
+        self.lastbit = None
+        self.changed = False
+
+    def is_starting(self):
+        """ updateでバーが初めて表示された """
+        return self.progress == 0
+    
+    def set_total(self, total):
+        if total:
+            self.total = total
+            self.marquee = False
+        else:
+            self.total = None
+            self.marquee = True
+
+    def is_marquee(self):
+        return self.marquee
+
+    def get_total_int(self):
+        return round(self.total)
+
+    def get_progress_rate(self):
+        if self.total is None:
+            return None
+        return self.progress / self.total
+    
+    def update(self, delta=None):
+        progress = self.progress 
+        if progress is None:
+            progress = 0
+        else:
+            progress += int(delta)
+        self.progress = progress
+
+    def update_change_bit(self, total_width):
+        if self.marquee:
+            bit = round(self.progress / total_width)
+        else:
+            bit = round(total_width * (self.progress / self.total))
+        if self.lastbit == bit:
+            changed = False
+        else:
+            changed = True
+            self.lastbit = bit
+        return changed
+
+    def finish(self):
+        if self.marquee:
+            pass
+        else:
+            self.progress = self.total
 
 
 #

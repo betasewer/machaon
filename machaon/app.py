@@ -1,19 +1,16 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-import configparser
 import os
 import sys
 import shutil
-import subprocess
-import time
 from collections import namedtuple
 
 from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type.typemodule import TypeModule
-from machaon.process import Spirit, ProcessHive, ProcessChamber
+from machaon.process import ProcessSentence, Spirit, ProcessHive, ProcessChamber, ProcessSentence
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
@@ -368,32 +365,21 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    def eval_object_message(self, message: str, *, is_process_seq=False):
-        if not message:
+    def eval_object_message(self, sentence: ProcessSentence):
+        if sentence.is_empty():
             return False
-        elif message == "exit":
+        elif sentence.at_exit():
             # 終了コマンド
             self.exit()
             return False
-        
-        atnewchm = False
-
-        head, *_tails = message.split(maxsplit=1)
-        if head == "+":
-            # 新規チャンバーを追加してアクティブにする
-            atnewchm = True
-            message = message[1:].lstrip()
-        
-        if not message:
-            return False
 
         # 実行
-        process = self.processhive.new_process(message, is_process_seq=is_process_seq)
+        process = self.processhive.new_process(sentence)
         context = self.create_root_context(process)
         process.start_process(context) # メッセージを実行する
 
         # 表示を更新する
-        if atnewchm:
+        if sentence.at_new_chamber():
             self.ui.activate_new_chamber(process)
         else:
             chamber = self.processhive.get_active()
