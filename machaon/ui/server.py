@@ -1,5 +1,4 @@
 
-from requests import head
 from machaon.ui.basic import Launcher
 from machaon.process import Spirit, ProcessSentence
 
