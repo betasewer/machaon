@@ -131,10 +131,16 @@ class ShellLauncher(Launcher):
         pass
 
     def insert_screen_setview(self, rows, columns, dataid, context):
-        print("\t".join(columns))
-        print("---------------------------")
-        for _index, row in rows:
-            print("\t".join(row))
+        """ 表はリスト形式でレイアウトする """
+        if not columns:
+            return
+        
+        maxcolwidth = max([len(x) for x in columns])
+        for index, row in rows:
+            print("[{}]---------------------------".format(index))
+            for col, val in zip(columns, row):
+                print("{} : {}".format(col.ljust(maxcolwidth), val))
+            print("")
 
     def add_chamber_menu(self, chamber):
         pass

@@ -69,7 +69,7 @@ class RootObject:
         使用可能な型を列挙する。
         Params:
         Returns:
-            Sheet[ObjectCollection](name, doc, type): 型のリスト
+            Sheet[](name, doc, describer): 型のリスト
         '''
         with spirit.progress_display():
             for name, t, error in self.context.type_module.enum(geterror=True):
@@ -78,11 +78,11 @@ class RootObject:
                     "name" : name,
                 }
                 if error is not None:
-                    entry["doc"] = "!!!" + error.summarize()
-                    entry["type"] = error
+                    entry["doc"] = "!!!型の読み込みに失敗!!!"
+                    entry["describer"] = error
                 else:
                     entry["doc"] = t.doc
-                    entry["type"] = t
+                    entry["describer"] = t.get_describer_qualname()
                 yield entry
         
     def subtypes(self, spirit):

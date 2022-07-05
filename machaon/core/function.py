@@ -101,28 +101,35 @@ class SelectorExpression(FunctionExpression):
     
     def run(self, subject, context, **kwargs):
         """ その場でメッセージを構築し実行 """
-        subcontext = context.inherit(subject)
-        
-        selector = context.new_object(self.selector)
-        invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-        entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
-        
-        subcontext.log_message_begin(self.get_expression())
+        subcontext = context.inherit(subject)        
+        try:
+            selector = context.new_object(self.selector)
+            invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
+            entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
+            
+            subcontext.log_message_begin(self.get_expression())
 
-        result = entry.invoke(subcontext)
+            result = entry.invoke(subcontext)
+            
+            subcontext.log_message_end()
+            context.log_message_begin_sub(subcontext)
         
-        subcontext.log_message_end()
-        context.log_message_begin_sub(subcontext)
+            return result
         
-        return result
+        except Exception as e:
+            return context.new_object(e, type="Error")
     
     def run_here(self, context, **kwargs):
         """ コンテクストそのままで実行 """
-        subject = context.subject_object
-        selector = context.new_object(self.selector)
-        invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-        entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
-        return entry.invoke(context)
+        subject = context.subject_object        
+        try:
+            selector = context.new_object(self.selector)
+            invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
+            entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
+            return entry.invoke(context)
+        
+        except Exception as e:
+            return context.new_object(e, type="Error")
         
     def bind(self, *args):
         self._bindargs = args

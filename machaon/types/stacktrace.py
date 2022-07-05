@@ -5,6 +5,7 @@ import inspect
 import sys
 import dis
 import traceback
+import types
 
 from machaon.core.message import InternalMessageError
 from machaon.cui import collapse_text, composit_text
@@ -189,6 +190,9 @@ class TracebackObject():
         else:
             self._tb = tb_or_error
             self._error = error
+
+        if not isinstance(self._tb, types.TracebackType):
+            raise TypeError("TracebackObject requires TracebackType, but {}".format(self._tb))
     
     def error(self):
         """ @method
