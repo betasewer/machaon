@@ -165,7 +165,7 @@ class AppRoot:
             src = newpkg.get_source()
             from machaon.package.auth import create_credential
             cred = create_credential(self, repository=src)
-            src.load_credential(cred)
+            src.add_credential(cred)
 
         return newpkg
     
@@ -241,7 +241,7 @@ class AppRoot:
         """ パッケージの読み込みが終わったら呼び出す """
         self.typemodule.check_loading()
 
-    def load_credential(self, cred):
+    def add_credential(self, cred):
         """ ダウンロードの認証情報をパッケージに追加する。 """
         mark = False
         for pkg in self.pkgs:
