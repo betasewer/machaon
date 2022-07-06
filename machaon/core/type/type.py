@@ -578,8 +578,6 @@ class Type(TypeProxy):
             td.proto_define()
             return td.load_type()
 
-
-
 #
 #
 #

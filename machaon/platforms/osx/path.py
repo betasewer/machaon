@@ -1,5 +1,5 @@
 import os
-from machaon.platforms.common import import_external_module
+from machaon.platforms.common import exists_external_module
 import machaon.platforms.generic.path
 Basic = machaon.platforms.generic.path.Exports
 
@@ -48,11 +48,11 @@ class Exports(Basic):
         """
         隠し属性がついているファイルか。
         """
-        Foundation = import_external_module("Foundation")
-        if Foundation is None:
+        if not exists_external_module("Foundation"):
             return False
+        import Foundation # import_関数では正しくインポートできない
         url = Foundation.NSURL.fileURLWithPath_(path)
         result = url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)
         return result[1]
     
-    
+
