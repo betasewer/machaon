@@ -471,14 +471,10 @@ class Spirit():
     #
     # プログレスバー
     #
-    def _new_progbar_key(self):
-        key = len(self.progbars)+1
-        self.progbars.append(key)
-        return key
-
     def start_progress_display(self, *, total=None, title=None):
         """ 開始する """
-        key = self._new_progbar_key()
+        key = len(self.progbars)+1
+        self.progbars.append(key)
         self.post("progress-display", "start", key=key, total=total, title=title)
         return key
     
@@ -491,9 +487,12 @@ class Spirit():
         self.post("progress-display", "end", key=key)
 
     def update_progress_display(self, progress,  *, key=None):
-        if key is None:
-            key = self.progbars[-1]
+        if key is None: key = self.progbars[-1]
         self.post("progress-display", "progress", key=key, progress=progress)
+        
+    def set_total_progress_display(self, count,  *, key=None):
+        if key is None: key = self.progbars[-1]
+        self.post("progress-display", "total", key=key, count=count)
         
     # with文のためのオブジェクトを作る
     def progress_display(self, *, total=None, title=None):
@@ -521,6 +520,9 @@ class Spirit():
         
         def progress(self, progress):
             self.spirit.update_progress_display(progress, key=self.key)
+
+        def set_total(self, count):
+            self.spirit.set_total_progress_display(count, key=self.key)
     
     #
     # キャンバス
@@ -586,10 +588,10 @@ class TempSpirit(Spirit):
     def get_message(self):
         return self.msgs
 
-    # プログレスバーの更新のみを行う
     def interruption_point(self, *, nowait=False, progress=None, noexception=False):
-        if progress and self.cur_prog_display:
-            self.cur_prog_display.update(progress)
+        # プログレスバーの更新のみを行う
+        if progress and self.progbars:
+            self.update_progress_display(progress)
         return True
     
 #

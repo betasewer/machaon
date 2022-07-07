@@ -418,6 +418,8 @@ class Launcher():
                 v.update(args.get("progress"))
             elif command == "end":
                 v.finish()
+            elif command == "total":
+                v.set_total(args.get("total"))
             return v
     
     #
@@ -504,7 +506,7 @@ class ProgressDisplayView:
         return self.progress == 0
     
     def set_total(self, total):
-        if total:
+        if total is not None:
             self.total = total
             self.marquee = False
         else:

@@ -1,6 +1,6 @@
 
-import importlib
-if importlib.util.find_spec("pynput") is not None:
+from machaon.platforms.common import exists_external_module
+if exists_external_module("pynput"):
     from pynput.keyboard import Listener, HotKey, Controller
     available = True
 else:
