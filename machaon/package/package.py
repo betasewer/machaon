@@ -193,7 +193,7 @@ class Package():
             return
 
         if not modules:
-            return self._loadfail("モジュールを1つも読み込めませんでした")
+            return self._loadfail(PackageLoadError("モジュールを1つも読み込めませんでした"))
 
         for modloader in modules:
             try:
@@ -236,6 +236,8 @@ class Package():
         Params:
             e(Exception): 例外オブジェクト
         """
+        if not isinstance(e, Exception):
+            raise TypeError(e)
         self._loaded.append(e)
     
     def is_load_failed(self):
