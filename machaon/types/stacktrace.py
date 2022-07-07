@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # coding: utf-8
 
-import inspect
 import sys
 import dis
 import traceback
 import types
+import pprint
 
 from machaon.core.message import InternalMessageError
 from machaon.cui import collapse_text, composit_text
@@ -560,8 +560,8 @@ def display_this_traceback(tb: TracebackObject, linewidth, showtype=None, level=
 
         tb_vars = frame.get_variables(tb.lasti())
         for name, val in tb_vars.items():
-            line = display_variable(name, val, linewidth)
-            lines.append(indent + line)
+            for l in display_variable(name, val, linewidth):
+                lines.append(indent + l)
         
         lines.append(indent + "-" * 30)
 
@@ -841,7 +841,7 @@ def display_variable(name, value, linewidth):
         dictionary(dict[str, Any]): 変数の辞書
         linewidth(Optional[int]): 表示幅
     Returns:
-        str: 
+        List[str]: 
     """
     try:
         if isinstance(value, UndefinedValue):
@@ -852,13 +852,19 @@ def display_variable(name, value, linewidth):
             else:
                 val_str = "<{}>".format(full_qualified_name(type(value)))
         else:
-            val_str = repr(value)
+            val_str = pprint.pformat(value, width=linewidth)
+        
     except Exception as e:
-        val_str = "<error on __repr__: {}>".format(str(e))
-    val_str = collapse_text(val_str, linewidth)
-    val_str = val_str.replace('\n', '\n{}'.format(' ' * (len(name) + 2)))
+        err = collapse_text(str(e), width=linewidth)
+        val_str = "<error on pprint.pformat: {}>".format(err)
     
-    return "{} = {}".format(name, val_str)
+    vallines = collapse_text(val_str, linewidth).splitlines()
+
+    lines = []
+    lines.append("{} = {}".format(name, vallines[0]))
+    for l in vallines[1:]:
+        lines.append(" " * (len(name) + 3) + l)
+    return lines
 
 
 def find_code_function(code, fnname, locals, globals):
