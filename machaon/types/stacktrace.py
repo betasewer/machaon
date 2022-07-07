@@ -45,9 +45,9 @@ class ErrorObject():
         """
         err = self.get_error()
         if level == 0:
-            return TracebackObject(err)
+            return get_traceback(err)
         else:
-            return TracebackObject(err).dive(level)
+            return get_traceback(err, dive=level)
     
     def lasttraceback(self):
         """ @method [lasttb]
@@ -56,7 +56,7 @@ class ErrorObject():
             TracebackObject:
         """
         err = self.get_error()
-        return TracebackObject(err).dive()
+        return get_traceback(err, dive=True)
 
     def get_context(self):
         """ @method alias-name [context]
@@ -144,13 +144,19 @@ class ErrorObject():
     
     def stringify(self):
         """ @meta """
-        p, lno = self.lasttraceback().location()
+        tb = self.lasttraceback()
+        if tb is not None:
+            p, lno = tb.location()
+            loc = "({}, {})".format(p, lno)
+        else:
+            loc = "(トレースバック無し)"
+            
         if isinstance(self.error, InternalMessageError):
             error = self.cause().get_error()
-            return "文法エラー：{}[{}] ({}, {})".format(str(error), self.get_error_typename(), p, lno)
+            return "文法エラー：{}[{}] {}".format(str(error), self.get_error_typename(), loc)
         else:
             error = self.cause().get_error()
-            return "実行エラー：{}[{}] ({}, {})".format(str(error), self.get_error_typename(), p, lno)
+            return "実行エラー：{}[{}] {}".format(str(error), self.get_error_typename(), loc)
 
     def summarize(self):
         """ @meta """
@@ -180,21 +186,27 @@ class ErrorObject():
 #
 #
 #
+def get_traceback(error, *, dive=None):
+    tb = error.__traceback__
+    if tb is None:
+        return None
+    tbo = TracebackObject(tb, error)
+    if dive is None:
+        return tbo
+    elif dive is True:
+        return tbo.dive()
+    else:
+        return tbo.dive(dive)
+
+
 class TracebackObject():
     """ @type
     トレースバック。
     """
-    def __init__(self, tb_or_error, error=None):        
-        if isinstance(tb_or_error, Exception):
-            self._tb = tb_or_error.__traceback__
-            self._error = tb_or_error
-        else:
-            self._tb = tb_or_error
-            self._error = error
+    def __init__(self, tb, error=None):
+        self._tb = tb
+        self._error = error
 
-        if not isinstance(self._tb, types.TracebackType):
-            raise TypeError("TracebackObject requires TracebackType, but {}".format(self._tb))
-    
     def error(self):
         """ @method
         発生したエラー
@@ -597,7 +609,9 @@ def verbose_display_traceback(exception, linewidth=0xFFFFFF, showtype=None):
         showtype(Optional[str]): 表示タイプ [None(full)|short]
     """
     lines = []
-    tbtop = TracebackObject(exception)
+    tbtop = get_traceback(exception)
+    if tbtop is None:
+        return "トレースバックが存在しません"
     for level, tb, nexttb in tbtop.walk():
         newls = display_this_traceback(tb, linewidth, showtype, level, printerror=(nexttb is None))
         lines.extend(newls)

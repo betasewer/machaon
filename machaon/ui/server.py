@@ -9,6 +9,8 @@ import datetime
 #
 #
 class LoggingLauncher(Launcher):
+    wrap_width = 100
+
     """
     """
     def __init__(self, args):
@@ -207,8 +209,12 @@ class LoggingLauncher(Launcher):
         process.post("error", excep.summarize())
         spi = Spirit(self.app, process)
         process.post("error", "スタックトレース：")
-        for line in excep.value.traceback(0).display(spi).splitlines():
-            process.post("error", "    " + line)
+        tb = excep.value.traceback(0)
+        if tb is not None:
+            for line in tb.display(spi).splitlines():
+                process.post("error", "    " + line)
+        else:
+            process.post("error", "トレースバックがありません")
 
     def post_on_end_process(self, process):
         """ 正常であれ異常であれ、プロセスが終了した後に呼ばれる """

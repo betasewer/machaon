@@ -29,22 +29,28 @@ class AppPackageType:
 
         if "notfound" == loadstatus:
             if "notfound" == installstatus:
-                return "未インストール"
+                return "インストールされていない"
             else:
-                return "インストールされたモジュールが見つからない"
+                return "インストールされたがモジュールが見つからない"
         if "delayed" == loadstatus:
             if "notfound" == installstatus:
-                return "アンインストール済"
+                return "インストールされていない"
             else:
                 return "読み込み待機中"
         if "failed" == loadstatus:
             if "notfound" == installstatus:
-                return "アンインストール済"
+                return "インストールされていない"
             else:
-                return "全モジュールのロードに失敗"
+                errors = []
+                if package.is_load_failed():
+                    errcnt = len(package.get_load_errors())
+                    errors.append("{}件のエラー".format(errcnt))
+                
+                return "モジュールのロードに失敗 ({})".format("／".join(errors))
+            
         if loadstatus.startswith("ready"):
             if "notfound" == installstatus:
-                return "利用可能"
+                return "インストールされていないが利用可能"
             else:
                 errors = []
                 if package.is_load_failed():
@@ -53,7 +59,7 @@ class AppPackageType:
                 
                 errexmodules = sum([1 for b in package.check_required_modules_ready().values() if not b])
                 if errexmodules > 0:
-                    errors.append("追加依存パッケージが{}個足りません".format(errexmodules))
+                    errors.append("{}個の追加依存パッケージが不足".format(errexmodules))
 
                 if not errors:
                     return "準備完了"
