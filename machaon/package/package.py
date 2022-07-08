@@ -508,7 +508,7 @@ class PackageManager():
                 pkg.entrypoint = self.database[pkg.name]["toplevel"]
 
     def update(self, pkg, options=None):
-        return self.install(pkg, newinstall=False, options)
+        return self.install(pkg, options, newinstall=False)
 
     def uninstall(self, pkg: Package):
         if pkg.is_module_source():
