@@ -448,7 +448,7 @@ class PackageManager():
         return self.database.has_section(pkgname)
 
     #
-    def install(self, pkg: Package, newinstall: bool):
+    def install(self, pkg: Package, newinstall: bool, options=None):
         if pkg.is_module_source():
             # インストールは不要
             return
@@ -476,7 +476,8 @@ class PackageManager():
             if newinstall:
                 yield from run_pip(
                     installtarget=localpath, 
-                    installdir=self.dir if pkg.is_installation_separated() else None
+                    installdir=self.dir if pkg.is_installation_separated() else None,
+                    options=options
                 )
 
                 # pipが作成したデータを見に行く
