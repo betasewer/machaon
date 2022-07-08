@@ -167,21 +167,25 @@ class AppPackageType:
         """
         return app.root.package_manager().get_installed_location(package)
     
-    def install(self, package: Package, context, app):
+    def install(self, package: Package, context, app, options=None):
         """ @task context
         パッケージをインストールし、ロードする。
+        Params:
+            options?(Tuple):
         """
-        self.display_update(package, context, app, forceinstall=True)
+        self.display_update(package, context, app, forceinstall=True, options=options)
     
-    def update(self, package: Package, context, app):
+    def update(self, package: Package, context, app, options=None):
         """ @task context
         パッケージを更新し、再ロードする。
+        Params:
+            options?(Tuple):
         """
-        self.display_update(package, context, app)
+        self.display_update(package, context, app, options=options)
 
     # 
-    def display_download_and_install(self, app, package:Package, operation):
-        for state in operation(package):
+    def display_download_and_install(self, app, package:Package, operation, options=None):
+        for state in operation(package, options):
             # ダウンロード中
             if state == PackageManager.DOWNLOAD_START:
                 url = package.get_source().get_download_url()
@@ -210,7 +214,7 @@ class AppPackageType:
                     return False
         return True
         
-    def display_update(self, package: Package, context, app, forceinstall=False):
+    def display_update(self, package: Package, context, app, forceinstall=False, options=None):
         if not package.is_remote_source():
             app.post("message", "リモートソースの指定がありません")
             return
@@ -239,7 +243,7 @@ class AppPackageType:
             return
 
         # ダウンロード・インストール処理
-        self.display_download_and_install(app, package, operation)
+        self.display_download_and_install(app, package, operation, options)
 
         # 型をロードする
         approot.load_pkg(package)
