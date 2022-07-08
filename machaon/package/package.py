@@ -448,7 +448,7 @@ class PackageManager():
         return self.database.has_section(pkgname)
 
     #
-    def install(self, pkg: Package, newinstall: bool, options=None):
+    def install(self, pkg: Package, options=None, newinstall: bool=True):
         if pkg.is_module_source():
             # インストールは不要
             return
@@ -507,8 +507,8 @@ class PackageManager():
             if pkg.entrypoint is None:
                 pkg.entrypoint = self.database[pkg.name]["toplevel"]
 
-    def update(self, pkg):
-        return self.install(pkg, newinstall=False)
+    def update(self, pkg, options=None):
+        return self.install(pkg, newinstall=False, options)
 
     def uninstall(self, pkg: Package):
         if pkg.is_module_source():
