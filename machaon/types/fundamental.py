@@ -341,6 +341,7 @@ def fundamental_types():
         "machaon.core.method.Method",               # Method
         "machaon.types.package.AppPackageType",     # Package
         "machaon.core.persistence.StoredMessage",   # Stored
+        "machaon.ui.theme.ShellTheme",              # ShellTheme
         "machaon.types.app.RootObject",             # RootObject
     ]:
         module.add_definition(qualname)

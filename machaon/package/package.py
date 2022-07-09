@@ -646,10 +646,10 @@ def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=(
     from machaon.shellpopen import popen_capture
     proc = popen_capture(cmd)
     for msg in proc:
+        if msg.is_output():
+            yield PackageManager.PIP_MSG.bind(msg=msg.text)
         if msg.is_finished():
             yield PackageManager.PIP_END.bind(returncode=msg.returncode)
-        elif msg.is_output():
-            yield PackageManager.PIP_MSG.bind(msg=msg.text)
 
 #
 #

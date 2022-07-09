@@ -6,17 +6,30 @@ import machaon.platforms
 # 色の設定
 #
 class ShellTheme():    
-    def __init__(self, config={}):
-        self.config=config
+    """ @type
+    シェルに設定するカラーテーマ。
+    """
+    def __init__(self, name, config=None):
+        self._name = name
+        self.config = config or {}
     
-    def extend(self, config):
-        self.config.update(config)
-        return self
+    def extend(self, name, config):
+        th = ShellTheme(name, {})
+        th.config.update(self.config)
+        th.config.update(config)
+        return th
     
     def setval(self, key, value):
         self.config[key] = value
 
     def getval(self, key, fallback=None):
+        """ @method [option]
+        オプション
+        Params:
+            key(Str):
+        Returns:
+            Any:
+        """
         c = self.config.get(key)
         if c is None and fallback is not None:
             c = fallback
@@ -34,12 +47,41 @@ class ShellTheme():
         return (fontname, int(fontsize))
     
     def getfontname(self):
+        """ @method
+        フォント名
+        Returns:
+            Str:
+        """
         return self.getval("font", machaon.platforms.ui().preferred_fontname)
+
+    #
+    def name(self):
+        """ @method
+        テーマ名
+        Returns:
+            Str:
+        """
+        return self._name
+
+    def options(self):
+        """ @method
+        テーマ設定値
+        Returns:
+            Str:
+        """
+        return self._theme
+
+    #
+    def apply(self, app):
+        """ @method spirit
+        このカラーテーマをUIに適用する。
+        """
+        app.root.get_ui().apply_theme(self)
 
 
 #
 def dark_classic_theme():
-    return ShellTheme({
+    return ShellTheme("classic", {
         "color.message" : "#CCCCCC",
         "color.background" : "#242428",
         "color.insertmarker" : "#CCCCCC",
@@ -65,7 +107,7 @@ def dark_classic_theme():
     })
 
 def light_terminal_theme():
-    return ShellTheme({
+    return ShellTheme("light", {
         "color.message" : "#303030",
         "color.background" : "#F0F0F0",
         "color.insertmarker" : "#000000",
@@ -91,7 +133,7 @@ def light_terminal_theme():
     })
     
 def dark_blue_theme():
-    return dark_classic_theme().extend({
+    return dark_classic_theme().extend("dark-blue", {
         "color.message-em" : "#00FFFF",
         "color.warning" : "#D9FF00",
         "color.error" : "#FF0080",
@@ -101,7 +143,7 @@ def dark_blue_theme():
     })
 
 def grey_green_theme():
-    return dark_classic_theme().extend({
+    return dark_classic_theme().extend("grey-green", {
         "color.background" : "#E8FFE8",
         "color.insertmarker" : "#000000",
         "color.message" : "#000000",
@@ -117,7 +159,7 @@ def grey_green_theme():
 
 
 def papilio_machaon_theme():
-    return grey_green_theme().extend({
+    return grey_green_theme().extend("papilio-machaon", {
         "color.background" : "#88FF88",
         "color.message-em" : "#FFA500",
         "color.message" : "#000000",
@@ -127,63 +169,11 @@ def papilio_machaon_theme():
     })
 
 
-#
-#
-#
-class ShellThemeItem():
-    def __init__(self, name, theme):
-        self._name = name
-        self._theme = theme
-
-    def get_link(self):
-        return self._name
-
-    def name(self):
-        return self._name
-
-    def theme(self):
-        return self._theme
-
-    def fontname(self):
-        return self._theme.getfontname()
-    
-    def message(self):
-        return self._theme.getval("color.message")
-    
-    def message_em(self):
-        return self._theme.getval("color.message-em")
-
-    def background(self):
-        return self._theme.getval("color.background")
-
-    def values(self):
-        lines = []
-        for k, v in self._theme.config.items():
-            lines.append("{}={}".format(k,v))
-        return " ".join(lines)
-    
-    @classmethod
-    def describe(cls, ref):
-        ref.default_columns(
-            table = ("name", "message", "message-em", "background", "fontname")
-        )["name"](
-            disp="名前"
-        )["message"](
-            disp="文字色"
-        )["message-em"](
-            disp="強調文字色"
-        )["background"](
-            disp="背景色"
-        )["values"](
-            disp="設定項目"
-        )["fontname"](
-            disp="フォント名"
-        )
-
-theme_dict = {
-        "classic" : dark_classic_theme,
-        "darkblue" : dark_blue_theme,
-        "greygreen" : grey_green_theme,
-        "papilio.machaon" : papilio_machaon_theme
+theme_constructors = {
+    "classic" : dark_classic_theme,
+    "light" : light_terminal_theme,
+    "dark-blue" : dark_blue_theme,
+    "grey-green" : grey_green_theme,
+    "papilio-machaon" : papilio_machaon_theme
 }
 

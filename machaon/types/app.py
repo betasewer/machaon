@@ -266,6 +266,16 @@ class RootObject:
         ui = self.root.get_ui()
         if hasattr(ui, "use_ansi"):
             ui.use_ansi(b)
+
+    def themes(self):
+        """ @method 
+        UIのカラーテーマの一覧を表示する。
+        Returns:
+            Sheet[ShellTheme](name):
+        """
+        from machaon.ui.theme import theme_constructors
+        for ctor in theme_constructors.values():
+            yield ctor()
         
     #
     #
@@ -375,30 +385,3 @@ class RootObject:
             .rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
             .rectangle(coord=(10,100,90,300), color="#0000FF")
         )
-
-"""
-
-# テーマの選択
-def command_ui_theme(spi, themename=None, alt="", show=False):
-    from machaon.ui.theme import theme_dict, ShellThemeItem
-    if themename is None and not alt:
-        theme_items = [ShellThemeItem(k,fn()) for (k,fn) in theme_dict.items()]
-        spi.create_data(theme_items)
-        spi.dataview()
-    else:
-        root = spi.get_app()
-        if themename:
-            themenew = theme_dict.get(themename, None)
-            if themenew is None:
-                spi.error("'{}'という名のテーマはありません".format(themename))
-                return
-            theme = themenew()        
-        else:
-            theme = root.get_ui().get_theme()
-        
-        for altrow in alt.split():
-            cfgname, cfgval = altrow.split("=")
-            theme.setval(cfgname, cfgval)
-        
-        root.get_ui().apply_theme(theme)
-"""
