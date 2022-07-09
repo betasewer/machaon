@@ -9,6 +9,8 @@ class BasicLoadFile():
     load / save
     """
     def __init__(self, path=None, *, file=None):
+        if not isinstance(path, Path):
+            path = Path(path)
         self._path = path or Path()
         self._file = file
     
