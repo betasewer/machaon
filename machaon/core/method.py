@@ -106,7 +106,7 @@ class MethodParameterDefault:
 #
 #
 #
-class Method():
+class Method:
     """ @type
     メソッド定義。
     """
@@ -769,8 +769,6 @@ class Method():
         parts = []
         if self_typename and (self.flags & METHOD_HAS_RECIEVER_PARAM) == 0:
             parts.append(self_typename)
-        if fully:
-            parts.append(self.name)
         if params:
             parts.append(" ".join(params))
         parts.append("->")
@@ -779,9 +777,10 @@ class Method():
     
     def pprint(self, app):
         """ @meta """
+        app.post("message", self.name)
+        app.post("message", self.doc)
         sig = self.get_signature(fully=True)
         app.post("message", sig)
-        app.post("message", self.doc)
 
         app.post("message", "引数:")
         if not self.params:

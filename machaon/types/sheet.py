@@ -728,17 +728,19 @@ class Sheet():
         # 選択を引き継ぐ
         self._reselect()
     
-    def sort(self, context, _app, sorter):
+    def sort(self, context, _app, sorter=None):
         """ @task context
         行の順番を並べ替える。
         Params:
-            sorter(Function[](seq)): 並べ替え関数
+            sorter?(Function[](seq)): 並べ替え関数
         """
-        def sortkey(entry):
-            subject = self.row_to_object(context, *entry)
-            return sorter.run(subject, context).test_truth()
-
-        self.rows.sort(key=sortkey)
+        if sorter is not None:
+            def sortkey(entry):
+                subject = self.row_to_object(context, *entry)
+                return sorter.run(subject, context).test_truth()
+            self.rows.sort(key=sortkey)
+        else:
+            self.rows.sort()
         
         # 選択を引き継ぐ
         self._reselect()
