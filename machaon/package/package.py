@@ -473,6 +473,7 @@ class PackageManager():
                 if pkg.name not in self.database:
                     newinstall = True
 
+            options = options or ()
             if newinstall:
                 yield from run_pip(
                     installtarget=localpath, 
@@ -493,7 +494,7 @@ class PackageManager():
                 yield from run_pip(
                     installtarget=localpath, 
                     installdir=self.dir if isseparate else None,
-                    options=["--upgrade"]
+                    options=[*options, "--upgrade"]
                 )
 
                 # データベースに書き込む
@@ -642,6 +643,8 @@ def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=(
     
     if options:
         cmd.extend(options)
+    
+    yield PackageManager.PIP_MSG.bind(msg=" ".join(cmd))
 
     from machaon.shellpopen import popen_capture
     proc = popen_capture(cmd)

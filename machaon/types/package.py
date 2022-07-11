@@ -167,19 +167,19 @@ class AppPackageType:
         """
         return app.root.package_manager().get_installed_location(package)
     
-    def install(self, package: Package, context, app, options=None):
+    def install(self, package: Package, context, app, *options):
         """ @task context
         パッケージをインストールし、ロードする。
         Params:
-            options?(Tuple):
+            *options(str):
         """
         self.display_update(package, context, app, forceinstall=True, options=options)
     
-    def update(self, package: Package, context, app, options=None):
+    def update(self, package: Package, context, app, *options):
         """ @task context
         パッケージを更新し、再ロードする。
         Params:
-            options?(Tuple):
+            *options(Str):
         """
         self.display_update(package, context, app, options=options)
 
