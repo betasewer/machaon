@@ -2,7 +2,7 @@ from machaon.core.symbol import (
     SIGIL_TYPE_INDICATOR
 )
 from machaon.core.message import (
-    MessageEngine, select_method, select_method_by_object, Message, EvalContext
+    MessageEngine, select_method, select_method_by_object, Message, EvalContext, ResultStackRef
 )
 from machaon.core.object import Object
 from machaon.core.invocation import BasicInvocation
@@ -86,7 +86,18 @@ class SelectorExpression(FunctionExpression):
     def __init__(self, selector, typeconv):
         self.selector = selector
         self.typeconv = typeconv
-        self._bindargs = []
+        self.bindargs = []
+        self._args = None
+        self._selc = None
+        
+    def _make_invocation(self, context, subject):
+        if self._args is None:
+            self._args = [context.new_object(x) for x in self.bindargs]
+            self._selc = context.new_object(self.selector)
+        
+        invocation = select_method_by_object(self._selc, subject.type, reciever=subject.value)
+        entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._args))
+        return entry
 
     def get_expression(self) -> str:
         if isinstance(self.selector, str):
@@ -103,10 +114,7 @@ class SelectorExpression(FunctionExpression):
         """ その場でメッセージを構築し実行 """
         subcontext = context.inherit(subject)        
         try:
-            selector = context.new_object(self.selector)
-            invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-            entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
-            
+            entry = self._make_invocation(context, subject)
             subcontext.log_message_begin(self.get_expression())
 
             result = entry.invoke(subcontext)
@@ -114,8 +122,7 @@ class SelectorExpression(FunctionExpression):
             subcontext.log_message_end()
             context.log_message_begin_sub(subcontext)
         
-            return result
-        
+            return result        
         except Exception as e:
             return context.new_object(e, type="Error")
     
@@ -123,16 +130,13 @@ class SelectorExpression(FunctionExpression):
         """ コンテクストそのままで実行 """
         subject = context.subject_object        
         try:
-            selector = context.new_object(self.selector)
-            invocation = select_method_by_object(selector, subject.type, reciever=subject.value)
-            entry = invocation.prepare_invoke(context, subject, *(context.new_object(x) for x in self._bindargs))
+            entry = self._make_invocation(context, subject)
             return entry.invoke(context)
-        
         except Exception as e:
             return context.new_object(e, type="Error")
         
     def bind(self, *args):
-        self._bindargs = args
+        self.bindargs = args
 
 
 def parse_function_message(expression):

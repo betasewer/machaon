@@ -48,7 +48,7 @@ class InvocationEntry():
         self.result = EMPTY_OBJECT
         self.result_spec = result_spec or MethodResult()
         self.exception = exception
-        self.message = None
+        self._message = None
         
     def clone(self):
         inv = InvocationEntry(self.invocation, self.action, self.args, self.kwargs, exception=self.exception)
@@ -134,7 +134,16 @@ class InvocationEntry():
         return False
     
     def set_message(self, message):
-        self.message = message
+        self._message = message
+
+    @property
+    def message(self):
+        if self._message is not None:
+            return self._message
+        else:
+            # 引数なしの呼び出しがなされたと解釈する
+            from machaon.core.message import Message, ResultStackRef
+            return Message(ResultStackRef(), self.invocation)
 
 #
 #
