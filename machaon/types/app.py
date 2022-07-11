@@ -314,7 +314,8 @@ class RootObject:
         pkg = create_package("machaon", "github:betasewer/machaon")
 
         # ダウンロードしてインストールする
-        def operation(pkg):
+        def operation(pkg, options):
+            options = options or []
             path = None
             tmpdir = None
             for status in package_extraction(pkg):
@@ -329,7 +330,7 @@ class RootObject:
             
             yield PackageManager.PIP_INSTALLING
             try:
-                yield from run_pip(installtarget=path, installdir=installdir, options=["--upgrade"])
+                yield from run_pip(installtarget=path, installdir=installdir, options=[*options, "--upgrade"])
             finally:
                 tmpdir.cleanup()
         
