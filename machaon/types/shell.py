@@ -207,6 +207,28 @@ class Path():
         """
         return stat.filemode(self.stat.st_mode)
     
+    def split(self):
+        """ @method
+        全ての構成要素を分割して返す。
+        Returns:
+            Tuple[Str]:
+        """
+        names = []
+        p = self._path
+        while len(names) < 256:
+            up, basename = os.path.split(p)
+            if not up or p == up:
+                if p == up:
+                    names.append(up)
+                elif basename:
+                    names.append(basename)
+                names.reverse()
+                return names
+            if basename:
+                names.append(basename)
+            p = up
+        raise ValueError("パス深度の限界値に到達しました")
+    
     #
     # パス操作
     #
@@ -228,7 +250,7 @@ class Path():
         """
         up, _basename = os.path.split(self._path)
         return Path(up)
-    
+
     def append(self, path):
         """ @method
         パスを付け足す。
@@ -296,6 +318,31 @@ class Path():
     def join(self, *paths):
         """ パスを結合する """
         return Path(os.path.join(self._path, *paths))
+
+    def relative_to(self, base):
+        """ @method
+        引数のパスに対する相対パスを返す。
+        Returns:
+            Path:
+        """
+        return os.path.relpath(self._path, start=base)
+
+    def is_relative_to(self, base):
+        """ @method
+        引数のパスに対して相対かどうかを返す。
+        Params:
+            base(Path):
+        Returns:
+            bool:
+        """
+        try:
+            p = os.path.relpath(self._path, start=base)
+            if ".." in p:
+                return False
+            return True
+        except ValueError:
+            return False
+
 
     #
     # シェル機能
