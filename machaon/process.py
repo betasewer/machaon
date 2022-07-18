@@ -566,17 +566,23 @@ class Spirit():
 #
 #
 class TempSpirit(Spirit):
-    def __init__(self, app=None, cd=None):
+    def __init__(self, app=None, cd=None, *, doprint=False):
         super().__init__(app, process=None)
         self.msgs = []
         self.cd = cd
+        self._doprint = doprint
 
     def post_message(self, msg):
+        def append_msg(m):
+            if self._doprint:
+                print("{}: {}".format(m.tag, m.text))
+            self.msgs.append(m)
+        
         if msg.is_embeded():
             for m in msg.expand():
-                self.msgs.append(m)
+                append_msg(m)
         else:
-            self.msgs.append(msg)
+            append_msg(msg)
     
     def printout(self, *, printer=None):
         if printer is None: printer = print
