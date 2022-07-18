@@ -44,6 +44,13 @@ class DatetimeType():
 
         if isinstance(s, int):
             return datetime.datetime.fromordinal(s)
+        elif isinstance(s, (list, tuple)):
+            if len(s) < 3:
+                raise ValueError("{}: 要素の数が足りません".format(s))
+            if len(s) >= 6:
+                return datetime.datetime(s[0], s[1], s[2], s[3], s[4], s[5])
+            else:
+                return datetime.datetime(s[0], s[1], s[2])
 
         klass, sep, tail = s.partition("/")
         klass = klass.lower()
@@ -308,6 +315,10 @@ class DateType:
 
         if isinstance(s, int):
             return datetime.date.fromordinal(s)
+        elif isinstance(s, (list, tuple)):
+            if len(s) < 3:
+                raise ValueError("{}: 要素の数が足りません".format(s))
+            return datetime.date(s[0], s[1], s[2])
 
         klass, sep, tail = s.partition("/")
         klass = klass.lower()
@@ -454,6 +465,10 @@ class TimeType:
             t = time.gmtime(s)
             h, m, c = t[3], t[4], t[5]
             return datetime.time(h, m, c)
+        elif isinstance(s, (list, tuple)):
+            if len(s) < 3:
+                raise ValueError("{}: 要素の数が足りません".format(s))
+            return datetime.time(s[0], s[1], s[2])
 
         klass, sep, tail = s.partition("/")
         klass = klass.lower()
@@ -577,11 +592,14 @@ class DateSeparated:
     """
     def constructor(self, s):
         """ @meta """
-        parts = split_by_nondigit(s)
-        vs = [int(x) for x in parts if len(x)>0]
-        if len(vs)<3:
-            raise ValueError("要素の数が足りません:" + s)
-        return datetime.date(vs[0], vs[1], vs[2])
+        if isinstance(s, str):
+            parts = split_by_nondigit(s)
+            vs = [int(x) for x in parts if len(x)>0]
+            if len(vs)<3:
+                raise ValueError("要素の数が足りません:" + s)
+            return datetime.date(vs[0], vs[1], vs[2])
+        else:
+            return DateType.constructor(DateType, s)
 
     def stringify(self, d):
         """ @meta """
