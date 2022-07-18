@@ -24,10 +24,13 @@ class FluxFunctor():
         return AndFlux(self, right)
 
     def __or__(self, right):
+        if not isinstance(right, FluxFunctor):
+            right = ConstFlux(right)
         return OrFlux(self, right)
 
-    def list(self, listtype=None):
-        return ListFlux(self, listtype)
+    @property
+    def foreach(self):
+        return ListFlux(self)
 
 
 class Flux(FluxFunctor):
@@ -42,6 +45,12 @@ class Flux(FluxFunctor):
             self._re = infl
         else:   
             self._re = refl
+
+    def define_influx(self, re):
+        self._re = re
+
+    def define_reflux(self, re):
+        self._re = re
 
     def influx(self, value):
         if self._in is None:
@@ -86,7 +95,7 @@ class TypeFlux(FluxFunctor):
     """ @type
     machaonの型インターフェースを利用して変換するユニット
     """
-    def __init__(self, klass=None, *args, type=None, context=None):
+    def __init__(self, klass=None, *, type=None, context=None):
         if type is not None:
             self._context = context
             self._type = type
@@ -295,7 +304,7 @@ class OutletFlux(FluxFunctor):
 #
 class ValidateFlux(FluxFunctor):
     """ @type
-    値を検査し、Noneあるいは条件に合わなければ例外を投げるユニット。
+    値を検査し、Noneであるか条件を満たさなければ、例外を投げるユニット。
     """
     def __init__(self, c=None):
         self.cond = c
@@ -452,24 +461,23 @@ class ListFlux(FluxFunctor):
     """
     各要素に対し変換を行うユニット。
     """
-    def __init__(self, elem, listtype=None):
+    def __init__(self, elem):
         self.elem = elem
-        self.listtype = listtype or list
 
     def influx(self, value):
-        return self.listtype(self.elem.influx(x) for x in value)
+        return [self.elem.influx(x) for x in value]
 
     def reflux(self, value):
-        return self.listtype(self.elem.reflux(x) for x in value)
+        return [self.elem.reflux(x) for x in value]
     
     def influx_flow(self):
-        return "[foreach " + self.elem.influx_flow() + "]"
+        return "[list foreach: " + self.elem.influx_flow() + "]"
 
     def reflux_flow(self):
-        return "[foreach " + self.elem.reflux_flow() + "]"
+        return "[list foreach: " + self.elem.reflux_flow() + "]"
 
     def display(self):
-        return "<ListFlux: {}\n  {}\n  >".format(self.listtype, self.elem.display())
+        return "<ListFlux:\n  {}\n  >".format(self.elem.display())
 
 
 
