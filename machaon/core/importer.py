@@ -34,6 +34,14 @@ def attribute_loader(expr, *, attr=None, location=None):
         modloader = module_loader(mod, location=location)
     return AttributeLoader(modloader, member)
 
+def load_attribute_value(expr, **kwargs):
+    loader = attribute_loader(expr, **kwargs)
+    entrypoint = loader()
+    if callable(entrypoint):
+        return entrypoint()
+    else:
+        return entrypoint
+
 def module_loader_from_file(path, namebasepath):
     name = module_name_from_path(path, namebasepath)
     return PyModuleFileLoader(name, path)

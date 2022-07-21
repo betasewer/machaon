@@ -44,11 +44,22 @@ class AppRoot:
         self._startupmsgs = []
         self._startupvars = []
 
-    def initialize(self, *, ui, basic_dir=None, **uiargs):
-        # 初期化内容を設定する
+    def initialize(self, *, ui, basic_dir=None, ignore_args=False, **uiargs):
+        """ 初期化前に初期設定を指定する """
+        if not ignore_args:
+            # コマンドライン引数を読み込む
+            from machaon.ui.main import initialize_app_args
+            initargs = initialize_app_args(self, ui=ui, basic_dir=basic_dir, **uiargs)
+            ui = initargs.pop("ui")
+            basic_dir = initargs.pop("basic_dir")
+        else:
+            initargs = uiargs
+        
         # UIを設定する
+        if ui is None:
+            ui = "shell"
         from machaon.ui import new_launcher
-        self.ui = new_launcher(ui, **uiargs)
+        self.ui = new_launcher(ui, **initargs)
 
         # パス
         if basic_dir is None:
@@ -328,11 +339,11 @@ class AppRoot:
     #
     # アプリの実行
     #
-    def run(self):
-        # 初期化
+    def run(self, *, ignore_args=False):
+        # UIを作成
         self.boot_ui()
 
-        # 自動実行メッセージの登録
+        # 自動実行メッセージを立ち上げるメッセージを仕込む
         startupmsgs = ["@@startup", *self._startupmsgs] # 初期化処理を行うメッセージを先頭に追加する
         chm = self.chambers().get_active()
         chm.post_chamber_message("eval-message-seq", messages=startupmsgs, chamber=chm)
@@ -360,6 +371,7 @@ class AppRoot:
         self.ui.on_exit()
 
     def interrupt(self):
+        # 全てのプロセスに停止フラグを立てる
         self.processhive.interrupt_all()
 
     #

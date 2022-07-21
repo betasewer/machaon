@@ -1,6 +1,6 @@
 
 from machaon.app import create_app
-
+from machaon.macatest import runmain
 
 def test_batch_launcher(tmpdir):
     from machaon.types.shell import Path
@@ -16,12 +16,9 @@ def test_batch_launcher(tmpdir):
             "github:betasewer/python-xlsx-xtended:xlsxx"
         ).messages(
             "1 + 2",
-            "2 / 0",
             "1 to 30"
         ).end()
     app.run()
 
     p = Path(app.get_ui().get_logfile_path())
     assert p.isfile()
-
-

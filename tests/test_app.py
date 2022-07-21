@@ -26,3 +26,4 @@ def test_deploy(tmpdir):
     assert deploydir2.join("main.py").check()
 
     assert not deploydir.join("machaon").check()
+

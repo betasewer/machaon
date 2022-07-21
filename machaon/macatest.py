@@ -1,7 +1,7 @@
 from machaon.core.object import Object
 from machaon.process import TempSpirit
 from machaon.core.message import MessageEngine
-
+import pytest
 
 def message_test(source, context, lhs, rhs, tester=None):
     if isinstance(lhs, Object):
@@ -42,6 +42,12 @@ def put_instructions(cxt, sep='\n'):
 
 def run(f):
     f()
+
+def runmain(f):
+    _h, sep, name = f.__name__.partition("test_")
+    if not sep:
+        name = f.__name__
+    pytest.main(["-k", name])
 
 def parse_test(context, s, rhs, *, q=None):
     parser = MessageEngine(s)
