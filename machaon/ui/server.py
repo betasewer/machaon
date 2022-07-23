@@ -16,11 +16,11 @@ class LoggingLauncher(Launcher):
     def __init__(self, args):
         super().__init__()
         self.shell = args["shell"]
-        self._title = args["title"]
+        self._title = args.get("title", "machaon-app")
         self._logger = None
         self._loggersetup = {k:args.get(k) for k in ("loghandler", "logfileperiod", "logfile", "logdir")}
         # handler : logging.Handler
-        # fileperiod : str = daily, monthly
+        # fileperiod : str(daily|monthly)
 
     #
     # ログファイル設定
