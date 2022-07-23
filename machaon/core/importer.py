@@ -1,3 +1,5 @@
+from typing import List, Tuple
+
 import importlib
 import importlib.util
 import builtins
@@ -7,7 +9,6 @@ import traceback
 
 from machaon.core.docstring import parse_doc_declaration
 from machaon.core.symbol import full_qualified_name
-
 
 def module_loader(expr=None, *, location=None):
     if location:
@@ -55,12 +56,16 @@ class PyBasicModuleLoader:
         self._requires = []
         self._defmodules = []
         self._usingtypes = []
+        self._usingpackages = []
     
     @property
     def module(self):
         if self._m is None:
             self._m = self.load_module()
         return self._m
+
+    def exists(self):
+        raise NotImplementedError()
 
     def get_name(self):
         raise NotImplementedError()
@@ -109,7 +114,8 @@ class PyBasicModuleLoader:
         pser = decl.create_parser((
             "Extra-Requirements Extra-Req",
             "TypedefModules DefModules",
-            "Using",
+            "UsingType",
+            "UsingPackage",
         ))
         # 追加の依存するmachaonパッケージ名
         self._requires = []
@@ -128,21 +134,38 @@ class PyBasicModuleLoader:
 
         # 参照する外部のmachaon型
         self._usingtypes = []
-        for line in pser.get_lines("Using"):
+        for line in pser.get_lines("UsingType"):
             typename, sep, modname = line.partition(":")
             if not sep:
-                raise ValueError("Invalid module declaration: Using: [typename]:[modulename]")
+                raise ValueError("Invalid module declaration: UsingType: [typename]:[modulename]")
             from machaon.core.type.typedef import TypeDefinition, BadTypeDescription
             d = TypeDefinition(value_type=modname.strip(), typename=typename.strip())
             if not d.load_docstring():
                 raise BadTypeDescription()
             self._usingtypes.append(d)
-    
+            
+        # 参照する外部のパッケージ
+        self._usingpackages = []
+        for line in pser.get_lines("UsingPackage"):
+            packagename, sep, libname = line.partition(":")
+            if sep:
+                entry = (packagename.strip(), libname.strip())
+            else:
+                libname = line.strip()
+                entry = (libname, libname)
+            self._usingpackages.append(entry)
+
     def get_package_extra_requirements(self):
+        """ 追加の依存するmachaonパッケージ名 """
         return self._requires
 
     def get_package_defmodule_loaders(self):
+        """ このパッケージ中にて型定義が含まれるモジュールを明示する """
         return self._defmodules
+
+    def get_using_extra_packages(self) -> List[Tuple[str, str]]:
+        """ このモジュールが依存する外部パッケージ """
+        return self._usingpackages
     
     def scan_type_definitions(self):
         """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す
@@ -262,6 +285,10 @@ class PyModuleLoader(PyBasicModuleLoader):
     def get_name(self):
         return self.module_name
 
+    def exists(self):
+        spec = importlib.util.find_spec(self.module_name)
+        return spec is not None
+
     def load_module(self):
         import sys
         if self.module_name in sys.modules:
@@ -307,6 +334,9 @@ class PyModuleFileLoader(PyBasicModuleLoader):
     def get_name(self):
         return self.module_name
     
+    def exists(self):
+        return os.path.isfile(self._path)
+
     def load_module(self):
         spec = importlib.util.spec_from_file_location(self.module_name, self._path)
         if spec is None:
@@ -328,6 +358,9 @@ class PyModuleInstance(PyBasicModuleLoader):
     """
     def get_name(self):
         return self._m.__name__
+
+    def exists(self):
+        return True
     
     def load_module(self):
         return self._m

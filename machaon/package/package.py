@@ -142,9 +142,7 @@ class Package():
         """ 依存するmachaonパッケージのロード状況 """
         rets = {}
         for module_name in self._extra_reqs:
-            spec = importlib.util.find_spec(module_name)
-            est = spec is not None
-            rets[module_name] = est
+            rets[module_name] = module_loader(module_name).exists()
         return rets
     
     def load_module_loaders(self):
@@ -177,6 +175,12 @@ class Package():
         elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
             modules = [initial_module]
 
+        # サブモジュールのdocstringを解析する
+        for mod in modules:
+            try:
+                mod.load_module_declaration()
+            except Exception as e:
+                self._loadfail(PackageLoadError(type(e).__name__, e))
         return modules
     
     def load_type_module(self) -> TypeModule:
@@ -197,6 +201,9 @@ class Package():
 
         for modloader in modules:
             try:
+                notfounddepends = [n for n,x in modloader.get_using_extra_packages() if not module_loader(x).exists()]
+                if notfounddepends:
+                    raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfounddepends)))
                 for typedef in modloader.scan_type_definitions():
                     typemod.define(typedef)
             except Exception as e:

@@ -29,14 +29,14 @@ def test_methoddoc_ordinal():
 
 def test_moduledoc():
     module_doc = """@module
-Using:
+UsingType:
     Typename1: module-name
     Typename2: module-name
 """
     
-    p = DocStringParser(module_doc, ("Using", ))
+    p = DocStringParser(module_doc, ("UsingType", ))
     assert p.detect_indent(module_doc, True) == 0
-    assert p.get_string("Using") == "    Typename1: module-name\n    Typename2: module-name"
+    assert p.get_string("UsingType") == "    Typename1: module-name\n    Typename2: module-name"
 
     
 
