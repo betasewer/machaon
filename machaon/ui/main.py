@@ -9,6 +9,7 @@ def create_main_app():
         basic_dir = None,
         title = "machaon",
     )
+    return root
 
 def initialize_app_args(root, argv=None, **defaults):
     pser = argparse.ArgumentParser(
