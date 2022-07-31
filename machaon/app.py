@@ -132,6 +132,17 @@ class AppRoot:
         if not os.path.isdir(p):
             os.makedirs(p)
         return Path(p)
+
+    def get_local_config(self, appname, filename, *, fallback=False):
+        p = self.get_local_dir(appname) / filename
+        if not p.isfile():
+            if fallback:
+                return None
+            raise ValueError("{}は存在しません".format(p))
+        import configparser
+        cfg = configparser.ConfigParser()
+        cfg.read(p)
+        return cfg
  
     #
     # クラスパッケージ
