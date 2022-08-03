@@ -438,7 +438,7 @@ class PackageManager():
             os.makedirs(self.dir)
         with open(self._dbpath, "w", encoding="utf-8") as fo:
             self.database.write(fo)
-        print("save setting file '{}'".format(self._dbpath))
+        #print("save setting file '{}'".format(self._dbpath))
     
     def check_database(self):
         if self.database is None:

@@ -115,7 +115,7 @@ class KeyController:
         elif len(codes) == 2:
             with self._controller.pressed(codes[0]):
                 self._controller.tap(codes[1])
-            print(codes)
+            #print(codes)
         elif len(codes) == 3:
             with self._controller.pressed(codes[0]):
                 with self._controller.pressed(codes[1]):
