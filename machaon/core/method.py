@@ -1,3 +1,4 @@
+from subprocess import call
 from typing import (
     Any, Sequence, List, Dict, Union, Callable, 
     Optional, Tuple, Generator
@@ -445,7 +446,7 @@ class Method:
             cnt -= 1
         return cnt
     
-    def load(self, this_type):
+    def load(self, this_type=None):
         """
         実装をロードする。
         """
@@ -468,6 +469,8 @@ class Method:
                 source = self.target
             else:
                 # クラスに定義されたメソッドが実装となる
+                if this_type is None:
+                    raise ValueError("this_type is needed unless METHOD_EXTERNAL_TARGET is specified")
                 typefn = this_type.delegate_method(self.target, self.mixin)
                 if typefn is not None:
                     callobj = typefn
@@ -477,11 +480,18 @@ class Method:
                     elif self.is_mixin():
                         self.flags |= METHOD_TYPE_BOUND
 
+            # ドキュメント文字列を取り出す
+            calldoc = getattr(callobj, "__doc__", None)
+
+            # プロパティオブジェクトから関数を取り出す
+            if isinstance(callobj, property):
+                callobj = callobj.fget
+
             # アクションオブジェクトの初期化処理
             if hasattr(callobj, "describe_method"):
                 # アクションに定義されたメソッド定義処理があれば実行
                 callobj.describe_method(self)
-            elif hasattr(callobj, "__doc__") and callobj.__doc__ is not None:
+            elif calldoc is not None:
                 # callobjのdocstringsを解析する
                 self.parse_syntax_from_docstring(callobj.__doc__, callobj)
             else:
@@ -489,15 +499,15 @@ class Method:
         
             if isinstance(callobj, type):
                 callobj = callobj()
-        
-            if callobj is not None and callable(callobj):
-                action = callobj
-                break
-            
-            raise ValueError("無効なアクションです：{}".format(self.target))
+
+            if callobj is None or not callable(callobj):
+                raise BadMethodDeclaration("アクションは呼び出し可能な値ではありません：{} = {}".format(self.target, callobj))
+
+            action = callobj
+            break
         
         # 返り値が無い場合はレシーバ自身を返す
-        if not self.result:
+        if not self.result and this_type is not None:
             self.add_result_self(this_type)
         
         if self.flags & METHOD_UNSPECIFIED_MASK:
@@ -774,6 +784,16 @@ class Method:
         parts.append("->")
         parts.append(", ".join(results))
         return " ".join(parts)
+
+    def constructor(self, value):
+        """ @meta 
+        Params:
+            str: オブジェクト修飾名
+        """
+        _heads, _sep, name = value.rpartition(".")
+        mth = Method(name=name, target=value, flags=METHOD_EXTERNAL_TARGET)
+        mth.load()
+        return mth
     
     def pprint(self, app):
         """ @meta """
