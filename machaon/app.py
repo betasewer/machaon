@@ -141,7 +141,7 @@ class AppRoot:
             raise ValueError("{}は存在しません".format(p))
         import configparser
         cfg = configparser.ConfigParser()
-        cfg.read(p)
+        cfg.read(p, encoding="utf-8")
         return cfg
  
     #
