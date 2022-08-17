@@ -251,6 +251,16 @@ class Path():
         up, _basename = os.path.split(self._path)
         return Path(up)
 
+    def shift(self):
+        """ @method
+        トップ要素をパスから取り除く。 
+        Returns:
+            Path:
+        """
+        elements = self.split()
+        elements.pop(0)
+        return Path(os.path.join(*elements))
+
     def append(self, path):
         """ @method
         パスを付け足す。
@@ -325,7 +335,7 @@ class Path():
         Returns:
             Path:
         """
-        return os.path.relpath(self._path, start=base)
+        return Path(os.path.relpath(self._path, start=base))
 
     def is_relative_to(self, base):
         """ @method
@@ -385,6 +395,25 @@ class Path():
             return [Path(self._path)]
         items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
         return items
+
+    def walkfile(self):
+        """ @method
+        サブディレクトリのファイルを再帰的に辿る。
+        Returns:
+            Sheet[Path](name, filetype, modtime, size):
+        """
+        for dirpath, dirnames, filenames in os.walk(self._path):
+            for filename in filenames:
+                yield Path(os.path.join(dirpath, filename))
+    
+    def walkdir(self):
+        """ @method
+        サブディレクトリを再帰的に辿る。
+        Returns:
+            Sheet[Path](name, filetype, modtime, size):
+        """
+        for dirpath, dirnames, filenames in os.walk(self._path):
+            yield Path(dirpath)
     
     def dialog(self):
         """ @method [dlg]
