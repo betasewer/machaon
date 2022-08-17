@@ -375,6 +375,9 @@ class InstanceMethodInvocation(BasicInvocation):
     def get_min_arity(self):
         return self.minarg
     
+    def is_task(self):
+        return True
+    
     def display(self):
         return ("InstanceMethod", self.attrname, self.modifier_name())
     
@@ -432,6 +435,9 @@ class FunctionInvocation(BasicInvocation):
 
     def get_min_arity(self):
         return self.minarg
+        
+    def is_task(self):
+        return True
 
 
 class MessageInvocation(BasicInvocation):
@@ -466,6 +472,9 @@ class MessageInvocation(BasicInvocation):
 
     def get_min_arity(self):
         return 0
+
+    def is_task(self):
+        return True
 
 
 class TypeConstructorInvocation(BasicInvocation):
