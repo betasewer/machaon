@@ -105,20 +105,20 @@ class BasicContextFile(BasicLoadFile):
         super().__init__(path)
         self._stream = None
     
+    def openfile(self, mode):
+        raise NotImplementedError()
+
     def open(self, mode):
         if mode not in ("r", "w"):
             raise ValueError("mode must be 'r' or 'w'")
         if self._stream is not None:
-            raise ValueError("File has already been opened")
+            raise ValueError("ファイル'{}'は既に開かれています".format(self.path()))
         self._stream = self.openfile(mode)
         return self
     
-    def openfile(self, mode):
-        raise NotImplementedError()
-
     def close(self):
         if self._stream is None:
-            raise ValueError("File has not been opened")
+            raise ValueError("ファイル'{}'はまだ開かれていません".format(self.path()))
         self._stream.close()
         self._stream = None
     
@@ -129,7 +129,7 @@ class BasicContextFile(BasicLoadFile):
         self.close()
     
     #
-    # LoadFileとして
+    # LoadFileとしてオーバーライド
     #
     def savefile(self, path):
         if self._file is None:
@@ -145,7 +145,7 @@ class BasicContextFile(BasicLoadFile):
     @property
     def stream(self):
         if self._stream is None:
-            raise ValueError("File has not been opened")
+            raise ValueError("ファイル'{}'はまだ開かれていません".format(self.path()))
         return self._stream
     
     def read_stream(self):
@@ -156,121 +156,106 @@ class BasicContextFile(BasicLoadFile):
         """ ファイルを開いて書き込みストリームを返す。 """
         return self.open("w")
 
-    def open_do(self, app, context, mode, block):
+    def open_do(self, app, context, mode, selector):
         """ @task context
         ファイルを開いて操作を行い、閉じる。
         Params:
             mode(Str): r/w
-            block(Function):
+            selector(Function[](seq)):
         """
         with self.open(mode):
-            subject = context.new_object(self, type=type(self))
-            block.run_as_function(subject, context)
+            selector(self)
 
 
-class BasicStream():
-    """ ストリームの基底クラス """
-    def __init__(self, source):
-        self._source = source
-        self._stream = None
-    
-    def get_path(self):
-        if isinstance(self._source, str):
-            return self._source
-        elif hasattr(self._source, "__fspath__"):
-            return self._source.__fspath__()
-        import io
-        if isinstance(self._source, io.FileIO):
-            return self._source.name
-        if hasattr(self._source, "path"): # Pathオブジェクトが返される
-            return self._source.path().get()
+class BasicFileStream(BasicContextFile):
+    """ Pythonストリームの基底クラス """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)    
+
+    #
+    #
+    #
+    def seek(self, offset):
+        """ @task nospirit
+        先頭からのオフセット位置に移動する
+        Params:
+            offset(int):
+        Returns:
+            int:
+        """
+        if offset > 0:
+            self.stream.seek(offset, 0)
+        elif offset < 0:
+            self.stream.seek(offset, 2)
         
-        return None
-
-    def __enter__(self):
-        return self
+    def seekdelta(self, offset):
+        """ @task nospirit
+        現在地からのオフセット位置に移動する
+        Params:
+            offset(int):
+        Returns:
+            int:
+        """
+        return self.stream.seek(offset, 1)
     
-    def __exit__(self, et, ev, tb):
-        self.close()
-
-    def _open_stream(self, rw, binary, encoding):
-        source = self._source
-
-        # ファイルパスから開く
-        fpath = None
-        if isinstance(source, str):
-            fpath = source
-        elif hasattr(source, "__fspath__"):
-            fpath = source.__fspath__()
-        if fpath:
-            mode = rw[0] + ("b" if binary else "")
-            return open(fpath, mode, encoding=encoding)
+    def tell(self):
+        """ @task nospirit
+        現在のオフセットを返す
+        Returns:
+            int:
+        """
+        return self.stream.tell()
         
-        # オブジェクトから開く
-        if hasattr(source, "{}_stream".format(rw)):
-            opener = getattr(source, "{}_stream".format(rw))
-            return opener()
+    def read(self, length=None):
+        """ @task nospirit
+        開いているストリームから読み取る
+        Params:
+            length(int):
+        """
+        return self.stream.read(length or -1)
+
+    def write(self, data):
+        """ @task nospirit
+        開いているストリームに書き込む
+        Params:
+            data(Any):
+        """
+        return self.stream.write(data)
+
+    def flush(self):
+        """ @task nospirit 
+        バッファを書き込む
+        """
+        self.stream.flush()
         
-        # 開かれたストリームである
-        import io
-        if isinstance(source, io.IOBase):
-            if source.closed:
-                raise ValueError("Stream has already been closed")
-            return source
+    def seek_and_read(self, offset, length):
+        """ @task nospirit
+        あるオフセットからある長さのデータを読み取る
+        Params:
+            offset(int):
+            length(int):
+        """
+        if offset is not None:
+            self.seek(offset)
+        return self.read(length)
         
-        raise TypeError("'{}'からストリームを取り出せません".format(repr(source)))
+    def seek_and_write(self, offset, data):
+        """ @task nospirit
+        あるオフセットからある長さのデータを書き込む
+        Params:
+            offset(int):
+            data(Any):
+        """
+        if offset is not None:
+            self.seek(offset)
+        return self.write(data)
 
-    def _must_be_opened(self):
-        if self._stream is None:
-            raise ValueError("Stream is not opened")
-    
-    def close(self):
-        self._must_be_opened()
-        self._stream.close()
-    
-
-class InputStream(BasicStream):
-    def open(self, binary=False, encoding=None):
-        self._stream = self._open_stream("read", binary=binary, encoding=encoding)
-        return self
-    
-    def lines(self):
-        self._must_be_opened()
-        for l in self._stream:
-            yield l
-    
-    def constructor(self, value):
-        """ @meta """
-        return InputStream(value)
-    
-    def stringify(self, _v):
-        """ @meta """
-        return "<InputStream>"
-
-
-class OutputStream(BasicStream):
-    def open(self, binary=False, encoding=None):
-        self._stream = self._open_stream("write", binary=binary, encoding=encoding)
-        return self
-    
-    def write(self, v):
-        self._must_be_opened()
-        return self._stream.write(v)
-
-    def constructor(self, value):
-        """ @meta """
-        return OutputStream(value)
-
-    def stringify(self, _v):
-        """ @meta """
-        return "<OutputStream>"
-        
 #
 #
 #
 #
 #
-class TextFile(BasicContextFile):
+class TextFile(BasicFileStream):
     """ @type
     テキストファイル。
     """
@@ -313,26 +298,29 @@ class TextFile(BasicContextFile):
         """
         self._enc = encoding
     
-    def text(self, size=None):
+    def text(self, size=None, offset=None):
         """ @task nospirit
         テキストを丸ごと返す。
         Params:
             size?(int): 取得する文字数
+            offset?(int):
         Returns:
             Str:
         """
-        return self.loadfile(size)
+        with self.read_stream():
+            return self.seek_and_read(offset, size)
 
-    def write_text(self, text):
+    def write_text(self, text, offset=None):
         """ @task nospirit
         テキストを書き込んで閉じる。
         Params:
             text(str): 書き込むテキスト
+            offset?(int):
         Returns:
             Str:
         """
         with self.write_stream():
-            self.stream.write(text)
+            self.seek_and_write(offset, text)
 
     def lines(self):
         """ @task nospirit
@@ -403,20 +391,65 @@ def detect_text_encoding(fpath):
 #
 #
 #
-def get_binary_content(app, target, size=128, width=16):
-    app.message-em("ファイル名：[%1%]", embed=[
-        app.hyperlink.msg(target)
-    ])
-    app.message-em("--------------------")
-    with open(app.abspath(target), "rb") as fi:
-        bits = fi.read(size)
-    j = 0
-    app.message-em("        |" + " ".join(["{:0>2X}".format(x) for x in range(width)]))
-    for i, bit in enumerate(bits):
-        if i % width == 0:
-            app.message-em("00000{:02X}0|".format(j), nobreak=True)
-        app.message("{:02X} ".format(bit), nobreak=True)
-        if i % width == width-1:
-            app.message("")
-            j += 1
-    app.message-em("\n--------------------")
+class BinaryFile(BasicFileStream):
+    """ @type
+    バイナリデータファイル。
+    """
+    def __init__(self, path, **params):
+        super().__init__(path)
+        self._openparams = params
+
+    def openfile(self, mode):
+        return open(self.pathstr, mode+"b", **self._openparams)
+
+    def bytes(self, size=None, offset=None):
+        """ @task nospirit
+        データを読み取る。
+        Params:
+            size?(int): 取得する文字数
+            offset?(int): 先頭からのオフセット
+        Returns:
+            Str:
+        """
+        with self.read_stream():
+            return self.seek_and_read(offset, size)
+    
+    def write_bytes(self, bits, offset=None):
+        """ @task nospirit
+        データを書き込む。
+        Params:
+            bits(Any): 書き込むデータ
+            offset?(int):
+        Returns:
+            Str:
+        """
+        with self.write_stream():
+            self.seek_and_write(offset, bits)
+
+    def view(self, app, size=None, offset=None):
+        """ @task
+        先頭の数バイトを表示する。
+        Params:
+            size?(int): 取得するバイト数
+            offset?(int): 先頭からのオフセット（負値も可）
+        """
+        bits = self.bytes(size or 64, offset)
+
+        width = 16
+        indent = " " * 8
+        app.post("message-em", indent + "|" + " ".join(["{:0>2X}".format(x) for x in range(width)]))
+
+        j = 0
+        linebuf = []
+        for i, bit in enumerate(bits):
+            app.interruption_point()
+            if i % width == 0:
+                app.post("message-em", "00000{:02X}0|".format(j), nobreak=True)
+            linebuf.append(bit)
+            if i % width == width-1:
+                app.post("message", " ".join(["{:02X}".format(x) for x in linebuf]))
+                linebuf.clear()
+                j += 1
+    
+
+        

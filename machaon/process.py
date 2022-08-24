@@ -552,16 +552,6 @@ class Spirit():
         from machaon.types.shell import Path
         return Path(p)
 
-    def open_input_stream(self, target, binary=False, encoding=None):
-        """ 読み込みストリームを返す """
-        from machaon.types.fundamental import InputStream
-        return InputStream(target).open(binary, encoding)
-    
-    def open_output_stream(self, target, binary=False, encoding=None):
-        """ 書き込みストリームを返す """
-        from machaon.types.fundamental import OutputStream
-        return OutputStream(target).open(binary, encoding)
-
 #
 #
 #
