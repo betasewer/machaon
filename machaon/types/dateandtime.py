@@ -700,9 +700,17 @@ class Day:
         """ @meta noarg """
         return d.day
 
+def complete_year_low(y):
+    if 0 <= y and y < 50: # 2000 ~ 2049
+        y = 2000 + y
+    elif 50 <= y and y < 100: # 1950 ~ 1999
+        y = 1900 + y
+    return y
+
+
 class YearLowMonth:
     """ @type subtype
-    西暦の下二桁と月の組み合わせ。
+    西暦の下二桁と月の区切られた組み合わせ。
     BaseType:
         Date:
     Params:
@@ -715,15 +723,28 @@ class YearLowMonth:
         if len(digits) < 2:
             raise ValueError("年と月の区切りが不明です")
         
-        y = digits[0]
+        y = complete_year_low(digits[0])
         m = digits[1]
-        if y < 50: # 1950 ~ 2049
-            y = 2000 + y
-        else:
-            y = 1900 + y
-        if day is not None:
-            d = day
-        else:
-            d = 1
+        d = day if day is not None else 1
         return datetime.datetime(y, m, d)
 
+class YearLowDate:
+    """ @type subtype
+    西暦の下二桁と月日の区切られた組み合わせ。
+    BaseType:
+        Date:
+    Params:
+        day?(int):
+    """
+    def constructor(self, s):
+        """ @meta """
+        parts = split_by_nondigit(s)
+        digits = [int(x) for x in parts]
+        if len(digits) < 3:
+            raise ValueError("年と月の区切りが不明です")
+        
+        y = complete_year_low(digits[0])
+        m = digits[1]
+        d = digits[2]
+        return datetime.datetime(y, m, d)
+    
