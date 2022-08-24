@@ -347,11 +347,43 @@ class Path():
         """
         try:
             p = os.path.relpath(self._path, start=base)
-            if ".." in p:
-                return False
-            return True
+            return Path(p).is_redundant()
         except ValueError:
-            return False
+            return False # Windowsでドライブが異なる場合
+
+    def is_redundant(self):
+        """ @method
+        '.'または'..'が含まれているか。
+        Returns:
+            bool:
+        """
+        for elem in self.split():
+            if elem == "." or elem == "..":
+                return True
+        return False
+
+    def new_increment(self, suffixformat=None, start=1):
+        """ @method
+        存在しないパスになるまでサフィックスを付して新たに生成する。
+        Params:
+            suffixformat?(str): サフィックスの書式文字列
+            start?(int): 開始の数字
+        Returns:
+            Path:
+        """
+        if not self.exists():
+            return self
+        
+        suffixformat = suffixformat or "_{}"
+        up, name = os.path.split(self._path)
+        basename, ext = os.path.splitext(name)
+        for alt in range(start, 100):
+            altname = basename + suffixformat.format(alt) + ext
+            newpath = os.path.join(up, altname)
+            if not os.path.exists(newpath): # 既に存在する
+                return Path(newpath)
+        else:
+            raise ValueError("Too many same name dir: {}".format(self._path)) 
 
 
     #
@@ -448,6 +480,14 @@ class Path():
             raise ValueError("パスは既にファイルとして存在しています")
         os.makedirs(self.normpath, exist_ok=True)
         return self
+    
+    def isemptydir(self):
+        """ @task nospirit
+        空のフォルダか調べる（隠しフォルダ含む）
+        Returns:
+            bool:
+        """
+        return len(self.listdirall()) == 0
     
     #
     # コピー・移動・削除
