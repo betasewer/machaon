@@ -409,7 +409,7 @@ class BinaryFile(BasicFileStream):
             size?(int): 取得する文字数
             offset?(int): 先頭からのオフセット
         Returns:
-            Str:
+            Any:
         """
         with self.read_stream():
             return self.seek_and_read(offset, size)
@@ -420,8 +420,6 @@ class BinaryFile(BasicFileStream):
         Params:
             bits(Any): 書き込むデータ
             offset?(int):
-        Returns:
-            Str:
         """
         with self.write_stream():
             self.seek_and_write(offset, bits)
