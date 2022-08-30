@@ -25,6 +25,29 @@ def parse_time(s):
         m = int(s)
     return h, m, c
 
+
+def UTCOffset(utc_delta) -> datetime.tzinfo:
+    """ UTCからの差分で表されるタイムゾーン """
+    if utc_delta < 0:
+        delta = -datetime.timedelta(hours=-utc_delta)
+    else:
+        delta = datetime.timedelta(hours=utc_delta)
+
+    class _UTCOffset(datetime.tzinfo):
+        def __repr__(self):
+            return self.tzname(self)
+
+        def utcoffset(self, dt):
+            return delta
+
+        def tzname(self, dt):
+            return "UTC{+d}".format(utc_delta)
+
+        def dst(self, dt):
+            return datetime.timedelta(0)
+        
+    return _UTCOffset()
+
 # 
 #
 #
