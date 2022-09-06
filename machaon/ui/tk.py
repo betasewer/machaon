@@ -2,6 +2,7 @@
 # coding: utf-8
 
 import os
+from turtle import width
 from typing import Tuple, Sequence, List, Optional, Any, Generator
 
 import tkinter as tk
@@ -163,6 +164,11 @@ HANDLE_MESSAGE_MAX = 10
 APP_UPDATE_RATE = 100
 TK_UPDATE_RATE = 10
 
+LINER_LAYOUT = 1
+WIDE_LAYOUT = 2
+
+PADDING = 3
+
 #
 #
 #
@@ -182,6 +188,9 @@ class tkLauncher(Launcher):
         self.commandline = None  #
         self.chambermenu = None  #
         self.log = None          #
+        self.buttonpanel = None
+        self.commandpanel = None
+        self._layoutmode = LINER_LAYOUT
         #
         self.hyperlinks = HyperlinkDatabase()
         self.hyperlabels = []
@@ -250,7 +259,7 @@ class tkLauncher(Launcher):
         self.root.geometry("{}x{}".format(*self.screen_geo))
         self.root.protocol("WM_DELETE_WINDOW", self.app.exit)        
         
-        padx, pady = 3, 3
+        padx, pady = PADDING, PADDING
         self.rootframe = ttk.Frame(self.root)
         self.rootframe.pack(fill=tk.BOTH, expand=1)
 
@@ -258,18 +267,12 @@ class tkLauncher(Launcher):
         self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
 
         # コマンド入力欄
-        self.commandline = tk.Text(self.frame, relief="solid", height=1)
+        self.commandpanel = self.addframe(self.frame)
+        self.commandline = tk.Text(self.commandpanel, relief="solid", height=2)
         self.commandline.focus_set()
-        
-        # ボタンパネル
-        
-        histlist = tk.Text(self.frame, relief="solid", height=1)
-        histlist.tag_configure("chamberlink")
-        histlist.tag_bind("chamberlink", "<Enter>", lambda e: histlist.config(cursor="hand2"))
-        histlist.tag_bind("chamberlink", "<Leave>", lambda e: histlist.config(cursor=""))
-        histlist.tag_bind("chamberlink", "<Button-1>", self.chamber_menu_click)
-        histlist.mark_unset("insert")
-        self.chambermenu = histlist
+        cmdexpander = self.addbutton(self.commandpanel, text=u"■", width=2, command=self.toggle_window_layout)  
+        self.commandline.pack(side=tk.LEFT, expand=True, fill=tk.X) 
+        cmdexpander.pack(side=tk.TOP, padx=padx)
         
         # ログウィンドウ
         #self.log = tk.scrolledtext.ScrolledText(self.frame, wrap="word", font="TkFixedFont")
@@ -297,13 +300,16 @@ class tkLauncher(Launcher):
         # ボタン等
         self.btnpanel = self.addframe(self.frame)
         
-        lefties = [
-            #addbutton(btnpanel, text=u"作業ディレクトリ", command=self.change_cd_dialog),
-            #addbutton(btnpanel, text=u"ファイルパス入力", command=self.input_filepath)
-        ]
-        for b in reversed(lefties):
-            b.pack(side=tk.LEFT, padx=padx)
-
+        # チャンバーパネル
+        histlist = tk.Text(self.btnpanel, relief="solid", height=1)
+        histlist.tag_configure("chamberlink")
+        histlist.tag_bind("chamberlink", "<Enter>", lambda e: histlist.config(cursor="hand2"))
+        histlist.tag_bind("chamberlink", "<Leave>", lambda e: histlist.config(cursor=""))
+        histlist.tag_bind("chamberlink", "<Button-1>", self.chamber_menu_click)
+        histlist.mark_unset("insert")
+        self.chambermenu = histlist
+        self.chambermenu.pack(side=tk.LEFT)
+        
         righties = [
             self.addbutton(self.btnpanel, text=u"停止", command=lambda:self.break_chamber_process(), width=4),
             self.addbutton(self.btnpanel, text=u"▲", command=lambda:self.on_commandline_up(), width=4),
@@ -315,15 +321,14 @@ class tkLauncher(Launcher):
             b.pack(side=tk.RIGHT, padx=padx)
     
         # メインウィジェットの配置
-        self.commandline.grid(column=0, row=0, columnspan=2, sticky="news", padx=padx, pady=pady)
-        self.chambermenu.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady)
-        self.log.grid(column=0, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        self.commandpanel.grid(column=0, row=0, columnspan=2, sticky="news", padx=padx, pady=pady)
+        self.log.grid(column=0, row=1, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
         #self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
-        self.btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
+        self.btnpanel.grid(column=0, row=2, columnspan=2, sticky="new", padx=padx)
     
         tk.Grid.columnconfigure(self.frame, 0, weight=1)
-        tk.Grid.rowconfigure(self.frame, 2, weight=1)
-        tk.Grid.rowconfigure(self.frame, 3, weight=0)
+        tk.Grid.rowconfigure(self.frame, 1, weight=1)
+        tk.Grid.rowconfigure(self.frame, 2, weight=0)
 
         # テーマの適用
         #self.root.overrideredirect(True)
@@ -980,6 +985,43 @@ class tkLauncher(Launcher):
     #
     # テーマ
     #
+    def toggle_window_layout(self):
+        """ コマンドの広い配置と狭い配置を切り替える """
+        if self._layoutmode == WIDE_LAYOUT:
+            newmode = LINER_LAYOUT
+        elif self._layoutmode == LINER_LAYOUT:
+            newmode = WIDE_LAYOUT
+
+        if newmode == LINER_LAYOUT:
+            self.liner_window_layout()
+        elif newmode == WIDE_LAYOUT:
+            self.wide_window_layout()
+        self._layoutmode = newmode
+
+    def liner_window_layout(self):
+        # メインウィジェットの配置
+        padx, pady = PADDING, PADDING
+        #self.commandpanel.grid(column=0, row=0, columnspan=2, sticky="news", padx=padx, pady=pady)
+        #self.chambermenu.grid(column=0, row=1, columnspan=2, sticky="news", padx=padx, pady=pady)
+        #self.log.grid(column=0, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        #self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        #self.btnpanel.grid(column=0, row=3, columnspan=2, sticky="new", padx=padx)
+        #
+        self.commandline.configure(height=2)
+
+    def wide_window_layout(self):
+        # メインウィジェットの配置
+        padx, pady = PADDING, PADDING
+        # 
+        #self.commandpanel.grid(column=0, row=0, sticky="nws", padx=padx, pady=pady)
+        #self.chambermenu.grid(column=0, row=1, sticky="new", padx=padx, pady=pady)
+        #self.log.grid(column=1, row=0, rowspan=3, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        #self.objdesk.grid(column=1, row=2, sticky="news", padx=padx, pady=pady) #  columnspan=2, 
+        #self.btnpanel.grid(column=0, row=2, sticky="new", padx=padx)
+        #
+        self.commandline.configure(height=10)
+        #self.commandline.pack(side=tk.TOP)
+
     def apply_theme(self, theme):
         ttktheme = theme.getval("ttktheme", "clam")
         style = ttk.Style()
