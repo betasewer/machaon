@@ -199,7 +199,7 @@ class Launcher():
     def replace_screen_text(self, text):
         raise NotImplementedError()
     
-    def save_screen_text(self):
+    def dump_screen_text(self):
         raise NotImplementedError()
     
     def drop_screen_text(self, process_ids):
@@ -301,7 +301,7 @@ class Launcher():
     
     def flip_chamber_content(self, chamber, prevchamber):
         if prevchamber:
-            self.screens[prevchamber.get_index()] = self.save_screen_text() # 現在のチャンバーの内容物を保存する
+            self.screens[prevchamber.get_index()] = self.dump_screen_text() # 現在のチャンバーの内容物を保存する
         if chamber.get_index() in self.screens:
             self.replace_screen_text(self.screens[chamber.get_index()]) # 新たなチャンバーの内容物に置き換える
         else:
