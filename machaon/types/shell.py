@@ -1,3 +1,4 @@
+from genericpath import isdir
 import os
 import shutil
 import stat
@@ -207,27 +208,37 @@ class Path():
         """
         return stat.filemode(self.stat.st_mode)
     
+    def track(self):
+        """
+        全ての構成要素を下から順に返す。
+        Yields:
+            Str:
+        """
+        names = []
+        p = self._path
+        while len(names) < 256:
+            up, basename = os.path.split(p)
+            if basename:
+                yield basename
+            if not up or p == up:
+                if p == up:
+                    yield up
+                elif basename:
+                    yield basename
+                return
+            p = up
+        raise ValueError("パス深度の限界値に到達しました")
+
     def split(self):
         """ @method
         全ての構成要素を分割して返す。
         Returns:
             Tuple[Str]:
         """
-        names = []
-        p = self._path
-        while len(names) < 256:
-            up, basename = os.path.split(p)
-            if not up or p == up:
-                if p == up:
-                    names.append(up)
-                elif basename:
-                    names.append(basename)
-                names.reverse()
-                return names
-            if basename:
-                names.append(basename)
-            p = up
-        raise ValueError("パス深度の限界値に到達しました")
+        names = list(self.tra)
+        names.reverse()
+        return names
+
     
     #
     # パス操作
@@ -385,6 +396,16 @@ class Path():
         else:
             raise ValueError("Too many same name dir: {}".format(self._path)) 
 
+    def is_same(self, right):
+        """ @method
+        同じファイルまたはディレクトリを指しているか。
+        Params:
+            right(Path):
+        Returns:
+            bool:
+        """
+        return os.path.samefile(self.get(), right.get())
+
 
     #
     # シェル機能
@@ -445,7 +466,8 @@ class Path():
             Sheet[Path](name, filetype, modtime, size):
         """
         for dirpath, dirnames, filenames in os.walk(self._path):
-            yield Path(dirpath)
+            for dirname in dirnames:
+                yield Path(os.path.join(dirpath, dirname))
     
     def dialog(self):
         """ @method [dlg]
