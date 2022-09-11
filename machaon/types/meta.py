@@ -2,13 +2,12 @@
 型のtrait実装を直接操作する
 """
 from machaon.core.importer import attribute_loader
-from machaon.types.numeric import Oct
 
 
 class Meta:
-    def __init__(self, describer, *, valueclass=False):
+    def __init__(self, describer, *, value=False):
         self._describer = describer
-        self._trait = not valueclass
+        self._trait = not value
     
     def constructor(self, *args):
         """ この型のオブジェクトを作成する """
@@ -28,9 +27,12 @@ class Meta:
         else:
             return self._describer.pprint(value, app)
     
-    def convert_stringify(self, *args):
+    def convert_stringify(self, *args, dest=None):
         """ この型のオブジェクトを作成し、そのまま文字列にして返す """
-        o = self.construct(*args)
+        if dest:
+            o = dest.constructor(*args)
+        else:
+            o = self.constructor(*args)
         return self.stringify(o)
     
 
