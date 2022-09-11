@@ -322,7 +322,7 @@ class Process:
 #
 # プロセスの中断指示
 #
-class ProcessInterrupted(Exception):
+class ProcessInterrupted(BaseException): # キャッチさせない
     pass
 
 #
