@@ -23,7 +23,7 @@ def initialize_app_args(root, argv=None, **defaults):
     pser.add_argument("-b", "--batch", help="バッチモードで起動する", action="store_const", dest="ui", const="batch")
     pser.add_argument("-l", "--location", help="開始ディレクトリを指定する")
     pser.add_argument("-o", "--option", help="オプションを指定する: [NAME]=[VALUE]", action="append", default=[])
-    pser.add_argument("--update", help="machaonをアップデートして終了する", action="store_const", const=True)
+    pser.add_argument("--update", help="全てのパッケージとmachaon本体をアップデートして終了する", action="store_const", const=True)
     pser.add_argument("--title", help="アプリの名前")
     args = pser.parse_args(argv)
     
@@ -46,6 +46,7 @@ def initialize_app_args(root, argv=None, **defaults):
         autoexit = True
         
     if args.update:
+        root.add_startup_message("@@update-all")
         root.add_startup_message("@@machaon-update")
         autoexit = True
 
