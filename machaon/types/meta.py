@@ -29,11 +29,11 @@ class Meta:
     
     def convert_stringify(self, *args, dest=None):
         """ この型のオブジェクトを作成し、そのまま文字列にして返す """
+        o = self.constructor(*args)
         if dest:
-            o = dest.constructor(*args)
+            return dest.stringify(o)
         else:
-            o = self.constructor(*args)
-        return self.stringify(o)
+            return self.stringify(o)
     
 
 class DefinedMeta:
