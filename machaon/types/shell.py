@@ -235,7 +235,7 @@ class Path():
         Returns:
             Tuple[Str]:
         """
-        names = list(self.tra)
+        names = list(self.track())
         names.reverse()
         return names
 
