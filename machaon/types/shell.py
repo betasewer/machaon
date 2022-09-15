@@ -235,7 +235,7 @@ class Path():
         Returns:
             Tuple[Str]:
         """
-        names = list(self.tra)
+        names = list(self.track())
         names.reverse()
         return names
 
@@ -343,6 +343,8 @@ class Path():
     def relative_to(self, base):
         """ @method
         引数のパスに対する相対パスを返す。
+        Params:
+            base(Path):
         Returns:
             Path:
         """
@@ -358,7 +360,7 @@ class Path():
         """
         try:
             p = os.path.relpath(self._path, start=base)
-            return Path(p).is_redundant()
+            return not Path(p).is_redundant()
         except ValueError:
             return False # Windowsでドライブが異なる場合
 
