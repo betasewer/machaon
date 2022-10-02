@@ -355,12 +355,15 @@ class RootObject:
         Params:
             text?(str): 
         """
-        app.post("message", text)
-        app.post("message-em", "[強調]" + text)
-        app.post("input", "[入力]" + text)
-        app.post("hyperlink", "[リンク]" + text)
-        app.post("warn", "[注意]" + text)
-        app.post("error", "[エラー発生]" + text)
+        app.post("message", "=== カラーテスト")
+        with app.indent_post("    "):
+            app.post("message", text)
+            app.post("message-em", "[強調]" + text)
+            app.post("input", "[入力]" + text)
+            app.post("hyperlink", "[リンク]" + text)
+            app.post("warn", "[注意]" + text)
+            app.post("error", "[エラー発生]" + text)
+        app.post("message", "===")
     
     def test_progress(self, app):
         """@task

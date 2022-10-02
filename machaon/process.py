@@ -344,6 +344,8 @@ class Spirit():
     def __init__(self, root, process=None):
         self.root = root
         self.process: Process = process
+        # 文字
+        self._indents = []
         # プログレスバー
         self.progbars = []
         self._slp = 0
@@ -386,13 +388,31 @@ class Spirit():
         object-view: object
         canvas: *, name, width, height, color
         """
+        if self._indents and isinstance(value, str):
+            self.post_message(ProcessMessage("".join(self._indents), "message", nobreak=True))
         self.post_message(ProcessMessage(value, tag, **options))
     
-    def message(self, tag, value=None, **options):
+    def new_message(self, tag, value=None, **options):
         return ProcessMessage(value, tag, **options)
 
     def message_io(self, tag="message", *, oneliner=False, **options):
         return ProcessMessageIO(self, tag, oneliner, **options)
+
+    # 
+    class IndentPostScope:
+        def __init__(self, spi):
+            self._spi = spi
+        def __enter__(self):
+            return self
+        def __exit__(self, et, ev, tb):
+            self._spi.unindent_post()
+
+    def indent_post(self, text):
+        self._indents.append(text)
+        return Spirit.IndentPostScope(self)
+
+    def unindent_post(self):
+        self._indents.pop()
     
     #
     # UIの関数を呼び出す
