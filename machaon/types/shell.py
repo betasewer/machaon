@@ -25,7 +25,6 @@ class Path():
     """
     def __init__(self, path=None):
         self._path = os.fspath(path) if path else ""
-        self._isdir = None
         self._stat = None
     
     def __str__(self):
@@ -141,9 +140,7 @@ class Path():
         Returns:
             Bool:
         """
-        if self._isdir is None:
-            self._isdir = os.path.isdir(self._path)
-        return self._isdir
+        return os.path.isdir(self._path)
     
     def isfile(self):
         """ @method
@@ -337,7 +334,12 @@ class Path():
 
     def join(self, *paths):
         """ パスを結合する """
-        return Path(os.path.join(self._path, *paths))
+        ps = [self._path] + [os.fspath(x) for x in paths]
+        ps = [x for x in ps if x]
+        if ps:
+            return Path(os.path.join(*ps))
+        else:
+            return Path()
 
     def relative_to(self, base):
         """ @method
@@ -666,14 +668,7 @@ class Path():
     #
     def __truediv__(self, right):
         """ パスの結合 """
-        if isinstance(right, Path):
-            r = right._path
-        elif isinstance(right, str):
-            r = right
-        else:
-            raise TypeError("right")
-
-        return Path(os.path.join(self._path, r))
+        return self.join(right)
     
     @classmethod
     def known(self, value, approot=None, context=None):
