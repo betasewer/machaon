@@ -43,10 +43,11 @@ def put_instructions(cxt, sep='\n'):
 def run(f):
     f()
 
-def runmain(f):
-    _h, sep, name = f.__name__.partition("test_")
+def runmain(*, fn):
+    # 起動前に関数が定義済みでなければならないので、デコレータにはできない
+    _h, sep, name = fn.__name__.partition("test_")
     if not sep:
-        name = f.__name__
+        name = fn.__name__
     pytest.main(["-k", name])
 
 def parse_test(context, s, rhs, *, q=None):
