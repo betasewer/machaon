@@ -155,6 +155,41 @@ class EnvPaths():
         return []
 
 
+class WindowsPath:
+    """ 
+    Windowsのパス 
+    """
+    def fileattributes(self, f):
+        """ @method [fileattrs]
+        WindowsのFILE_ATTRIBUTE_XXXフラグ
+        Returns:
+            Tuple[Str]:
+        """
+        attrib = f.stat.st_file_attributes
+        consts = (
+            (stat.FILE_ATTRIBUTE_ARCHIVE, "archive"),
+            (stat.FILE_ATTRIBUTE_COMPRESSED, "compressed"),
+            (stat.FILE_ATTRIBUTE_DEVICE, "device"),
+            (stat.FILE_ATTRIBUTE_DIRECTORY, "directory"),
+            (stat.FILE_ATTRIBUTE_ENCRYPTED, "encrypted"),
+            (stat.FILE_ATTRIBUTE_HIDDEN, "hidden"),
+            (stat.FILE_ATTRIBUTE_INTEGRITY_STREAM, "integrity-system"),
+            (stat.FILE_ATTRIBUTE_NORMAL, "normal"),
+            (stat.FILE_ATTRIBUTE_NOT_CONTENT_INDEXED, "not-content-indexed"),
+            (stat.FILE_ATTRIBUTE_NO_SCRUB_DATA, "no-scrub-data"),
+            (stat.FILE_ATTRIBUTE_OFFLINE, "offline"),
+            (stat.FILE_ATTRIBUTE_READONLY, "readonly"),
+            (stat.FILE_ATTRIBUTE_REPARSE_POINT, "reparse-point"),
+            (stat.FILE_ATTRIBUTE_SPARSE_FILE, "sparse-file"),
+            (stat.FILE_ATTRIBUTE_SYSTEM, "system"),
+            (stat.FILE_ATTRIBUTE_TEMPORARY, "temporary"),
+            (stat.FILE_ATTRIBUTE_VIRTUAL, "virtual")
+        )
+        for cst, name in consts:
+            if attrib & cst:
+                yield name
+
+
 #
 #
 #
@@ -255,4 +290,5 @@ class Exports:
         args.append(path)
         subprocess.Popen(args)
 
+    PlatformPath = WindowsPath
 

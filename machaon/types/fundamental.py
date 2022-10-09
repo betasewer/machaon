@@ -12,7 +12,7 @@ from machaon.core.object import Object
 #  言語の基本機能に関する型
 #
 #
-class TypeType():
+class TypeType:
     """ @type [Type]
     型そのものを表す。
     ValueType:

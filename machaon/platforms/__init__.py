@@ -21,7 +21,7 @@ def _import_platform_module(name):
     elif system == "darwin":
         pltdir = "osx"
     elif system == "linux":
-        pltdir = "linux"
+        pltdir = "unix"
     else:
         pltdir = "generic"
         
@@ -61,4 +61,3 @@ def draganddrop():
     ドラッグアンドドロップの実装
     """
     return _import_platform_module("dnd")
-

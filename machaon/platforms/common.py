@@ -38,3 +38,7 @@ def fallback_generic(name):
     import importlib
     mod = importlib.import_module("machaon.platforms.generic.{}".format(name))
     return getattr(mod, "Exports", None)
+
+
+class EmptyMixin:
+    pass

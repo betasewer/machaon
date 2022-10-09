@@ -1,7 +1,37 @@
 import os
 from machaon.platforms.common import exists_external_module
+from machaon.platforms.unix.unixpath import UnixPath
+
 import machaon.platforms.generic.path
 Basic = machaon.platforms.generic.path.Exports
+
+
+class OSXPath(UnixPath):
+    """ osx独自のパス機能 """
+    def realsize(self, f):
+        """ @method
+        ファイルの実際のサイズ
+        Returns:
+            Int:
+        """
+        return f.stat.st_rsize
+        
+    def creator(self, f):
+        """ @method
+        ファイルの作成者
+        Returns:
+            Str:
+        """
+        return f.stat.st_creator
+
+    def osfiletype(self, f):
+        """ @method
+        ファイルタイプ
+        Returns:
+            Str:
+        """
+        return f.stat.st_type
+
 
 class Exports(Basic):
     @staticmethod
@@ -55,4 +85,5 @@ class Exports(Basic):
         result = url.getResourceValue_forKey_error_(None, Foundation.NSURLIsHiddenKey, None)
         return result[1]
     
+    PlatformPath = OSXPath
 

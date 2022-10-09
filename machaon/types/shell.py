@@ -16,7 +16,7 @@ def _normext(extension):
 # Path new known-location-names
 #
 #
-class Path():
+class Path:
     """ @type
     ファイル・フォルダのパス。
     コンストラクタ＝
@@ -171,13 +171,78 @@ class Path():
         """
         return os.path.exists(self._path)
     
-    def modtime(self):
+    def track(self):
+        """
+        全ての構成要素を下から順に返す。
+        Yields:
+            Str:
+        """
+        names = []
+        p = self._path
+        while len(names) < 256:
+            up, basename = os.path.split(p)
+            if basename:
+                yield basename
+            if not up:
+                return
+            elif p == up:
+                yield up
+                return
+            p = up
+        raise ValueError("パス深度の限界値に到達しました")
+
+    def split(self):
         """ @method
-        変更日時
+        全ての構成要素を分割して返す。
+        Returns:
+            Tuple[Str]:
+        """
+        names = list(self.track())
+        names.reverse()
+        return names
+
+    #
+    # ファイル属性
+    #
+    def device(self):
+        """ @method
+        ファイルが存在するデバイス名
+        Returns:
+            Str:
+        """
+        return self.stat.st_dev
+
+    def link_count(self):
+        """ @method
+        ハードリンクの数
+        Returns:
+            Int:
+        """
+        return self.stat.st_nlink
+
+    def modtime(self):
+        """ @method [mtime]
+        変更日時。
         Returns:
             Datetime:
         """
-        return datetime.datetime.fromtimestamp(os.path.getmtime(self._path))
+        return datetime.datetime.fromtimestamp(self.stat.st_mtime)
+    
+    def accesstime(self):
+        """ @method [atime]
+        アクセス日時。
+        Returns:
+            Datetime:
+        """
+        return datetime.datetime.fromtimestamp(self.stat.st_atime)
+    
+    def creationtime(self):
+        """ @method [ctime]
+        作成日時／メタデータ変更日時
+        Returns:
+            Datetime:
+        """
+        return datetime.datetime.fromtimestamp(self.stat.st_ctime)
     
     def size(self):
         """ @method
@@ -203,39 +268,15 @@ class Path():
             Str:
         """
         return stat.filemode(self.stat.st_mode)
-    
-    def track(self):
-        """
-        全ての構成要素を下から順に返す。
-        Yields:
-            Str:
-        """
-        names = []
-        p = self._path
-        while len(names) < 256:
-            up, basename = os.path.split(p)
-            if basename:
-                yield basename
-            if not up or p == up:
-                if p == up:
-                    yield up
-                elif basename:
-                    yield basename
-                return
-            p = up
-        raise ValueError("パス深度の限界値に到達しました")
 
-    def split(self):
+    def inode(self):
         """ @method
-        全ての構成要素を分割して返す。
+        ファイルのinodeまたはインデックス
         Returns:
-            Tuple[Str]:
+            Int:
         """
-        names = list(self.track())
-        names.reverse()
-        return names
-
-    
+        return self.stat.st_ino
+        
     #
     # パス操作
     #
@@ -831,7 +872,22 @@ class TextPath:
             parts.append("column {}".format(self._column))
         return ", ".join(parts)
 
-#
+
+class PlatformPath(shellpath().PlatformPath):
+    """ @type mixin
+    プラットフォーム独自のパス機能を提供するミキシン
+    MixinType:
+        Path:
+    """
+    def www(self):
+        """ @method
+        Returns:
+            Str
+        """
+        return "www"
+
+
+# 
 #
 #
 def run_command_capturing(app, params):

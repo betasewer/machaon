@@ -1,8 +1,8 @@
-from doctest import master
 import os
 
 import pytest
 from machaon.types.shell import Path
+from machaon.macatest import run
 
 def test_path_concatenate():
     a = Path("desktop/folder")
@@ -20,4 +20,6 @@ def test_path_split():
     assert Path("C:/desktop/folder/").split() == ["C:/","desktop","folder"]
     assert Path("D:/subfolder/file.txt").split() == ["D:/","subfolder","file.txt"]
     assert Path("/subfolder/file.txt").split() == ["/","subfolder","file.txt"]
+    assert Path("/folder/subfolder/file.txt").split() == ["/","folder","subfolder","file.txt"]
     assert Path("subfolder/file.txt").split() == ["subfolder","file.txt"]
+    assert Path("folder/subfolder/file.txt").split() == ["folder","subfolder","file.txt"]
