@@ -429,9 +429,8 @@ class TypeModule():
             return
 
         # 型やスコープの定義がまだ無かった
-        # トップレベルのモジュールで予約する
         if reserve:
-            li = self.root._loading_mixins.setdefault((basename, basescope), [])
+            li = self._loading_mixins.setdefault((basename, basescope), [])
             li.append(t)
 
     def _load_reserved_mixin(self, typename, scopename, target):
@@ -444,7 +443,7 @@ class TypeModule():
 
     def _load_reserved_mixin_all(self):
         """  """
-        for (name, scope), mts in self._loading_mixins.items():
+        for (name, scope), mts in self.root._loading_mixins.items():
             target = self._select_scoped(scope, name)
             if target is None:
                 continue
@@ -482,7 +481,9 @@ class TypeModule():
             self._children[scopename].update(other)
         else:
             self._add_child(other, scopename)
-        
+        # 予約中のmixinを解決する
+        self._load_reserved_mixin_all()
+  
     def add_fundamentals(self):
         """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
@@ -493,7 +494,7 @@ class TypeModule():
         from machaon.core.symbol import DefaultModuleNames
         from machaon.package.package import create_package
         for module in DefaultModuleNames:
-            pkg = create_package("module-{}".format(module), "module:machaon.{}".format(module))
+            pkg = create_package("default-module-{}".format(module), "module:machaon.{}".format(module))
             mod = pkg.load_type_module()
             if mod is None:
                 continue
@@ -514,10 +515,9 @@ class TypeModule():
         # 子に自らを親モジュールとして設定する
         child.parent = self
         child.scopename = scopename
-        # mixinを子から引き継ぎ、解決する
-        self._loading_mixins.update(child._loading_mixins)
+        # mixinをrootへと引き継ぐ
+        self.root._loading_mixins.update(child._loading_mixins)
         child._loading_mixins.clear()
-        self._load_reserved_mixin_all()
         # 子の辞書に追加する
         self._children[scopename] = child
 
@@ -534,8 +534,9 @@ class TypeModule():
         self._lib_describer.update(other._lib_describer)
         self._lib_valuetype.update(other._lib_valuetype)
         self._subtype_rels.update(other._subtype_rels)
-        self._loading_mixins.update(other._loading_mixins)
         self._children.update(other._children)
+        # mixinはトップレベルのモジュールで予約する
+        self.root._loading_mixins.update(other._loading_mixins)
 
     def check_loading(self):
         """

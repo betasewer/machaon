@@ -134,7 +134,8 @@ class TypeDefinition():
         return self._sub_target
 
     def proto_define(self):
-        """ 型を登録する時点での処理 
+        """ 
+        型登録の直前に設定値を補完する処理 
         Returns:
             Str: 登録名. Noneなら登録しない
         """
