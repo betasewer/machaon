@@ -9,7 +9,7 @@ import datetime
 #
 #
 class LoggingLauncher(Launcher):
-    wrap_width = 100
+    wrap_width = 200
 
     """
     """
@@ -19,6 +19,7 @@ class LoggingLauncher(Launcher):
         self._title = args.get("title", "machaon-app")
         self._logger = None
         self._loggersetup = {k:args.get(k) for k in ("loghandler", "logfileperiod", "logfile", "logdir")}
+        self._nobreakbuf = []
         # handler : logging.Handler
         # fileperiod : str(daily|monthly)
 
@@ -56,13 +57,13 @@ class LoggingLauncher(Launcher):
             if level == logging.INFO:
                 levelsign = ""
             elif level == logging.ERROR:
-                levelsign = "失敗 "
+                levelsign = "【失敗】 "
             elif level == logging.WARN:
-                levelsign = "注意 "
+                levelsign = "【注意】 "
             elif level == logging.CRITICAL:
-                levelsign = "破綻 "
+                levelsign = "【破綻】 "
             else:
-                levelsign = "調査 "
+                levelsign = "【情報】 "
             record.levelsign = levelsign
             return record
         logging.setLogRecordFactory(record_factory)
@@ -102,7 +103,14 @@ class LoggingLauncher(Launcher):
     def writelog(self, tag, text, *, nobreak=False, **kwargs):
         if self._logger is None:
             return
-        # nobreakは無視される
+
+        if nobreak:
+            self._nobreakbuf.append(text)
+            return
+        elif self._nobreakbuf:
+            text = "".join(self._nobreakbuf) + text
+            self._nobreakbuf.clear()
+
         if tag == "error":
             self._logger.log(logging.ERROR, text)
         elif tag == "warn":
@@ -222,6 +230,9 @@ class LoggingLauncher(Launcher):
 
     def on_exit(self):
         """ アプリ終了時 """
+        if self._nobreakbuf:
+            text = "".join(self._nobreakbuf)
+            self.writelog("message", text)
         self.writelog("message", "##アプリ終了 [{}]".format(self._title))
 
 
