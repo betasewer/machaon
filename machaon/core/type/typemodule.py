@@ -483,22 +483,31 @@ class TypeModule():
             self._add_child(other, scopename)
         # 予約中のmixinを解決する
         self._load_reserved_mixin_all()
-  
+
     def add_fundamentals(self):
         """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
         self.add_scope(CORE_SCOPE, fundamental_types())
     
-    def add_default_modules(self):
+    def add_default_modules(self, names=None):
         """ 標準モジュールの型を追加する """
+        from machaon.package.package import create_module_package
         from machaon.core.symbol import DefaultModuleNames
-        from machaon.package.package import create_package
-        for module in DefaultModuleNames:
-            pkg = create_package("default-module-{}".format(module), "module:machaon.{}".format(module))
+        names = names or DefaultModuleNames
+        for module in names:
+            pkg = create_module_package("machaon." + module)
             mod = pkg.load_type_module()
             if mod is None:
                 continue
             self.update_scope(CORE_SCOPE, mod)
+
+    def add_package_types(self, pkg, scope=CORE_SCOPE):
+        """ 手動でパッケージを読み込み追加する """
+        mod = pkg.load_type_module()
+        if mod is None:
+            return False
+        self.update_scope(scope, mod)
+        return True
 
     def remove_scope(self, scope):
         """ 削除する 

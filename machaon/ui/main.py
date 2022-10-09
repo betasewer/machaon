@@ -46,6 +46,7 @@ def initialize_app_args(root, argv=None, **defaults):
         autoexit = True
         
     if args.update:
+        root.ignore_at_startup("packages")
         root.add_startup_message("@@update-all")
         root.add_startup_message("@@machaon-update")
         autoexit = True

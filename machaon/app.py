@@ -43,8 +43,9 @@ class AppRoot:
 
         self._startupmsgs = []
         self._startupvars = []
+        self._startupignores = {}
 
-    def initialize(self, *, ui, basic_dir=None, ignore_args=False, **uiargs):
+    def initialize(self, *, ui, basic_dir=None, ignore_args=False, ignore_packages=False, ignore_hotkeys=False, **uiargs):
         """ 初期化前に初期設定を指定する """
         if not ignore_args:
             # コマンドライン引数を読み込む
@@ -66,6 +67,16 @@ class AppRoot:
             basic_dir = get_default_basic_dir()
         self.basicdir = basic_dir
 
+        # 設定フラグ
+        self.ignore_at_startup("packages", ignore_packages)
+        self.ignore_at_startup("hotkey", ignore_hotkeys)
+
+    def ignore_at_startup(self, name, b=True):
+        self._startupignores[name] = b
+
+    def is_ignored_at_startup(self, name):
+        return self._startupignores.get(name)
+    
     def boot_ui(self):
         """ UIを立ち上げる """
         if self.ui is None:
@@ -85,9 +96,9 @@ class AppRoot:
         self.typemodule.add_default_modules()
 
         # ホットキーの監視を有効化する
-        if KeyController.available:
+        if KeyController.available and not self._startupignores.get("hotkey"):
             self.keycontrol.start(spirit)
-    
+
     def get_ui(self):
         return self.ui
 
@@ -171,7 +182,13 @@ class AppRoot:
             separate(bool): site-packageにインストールしない
             hashval(str): パッケージハッシュ値の指定
         """
-        newpkg = create_package(name, package, modules, type=type, separate=separate, hashval=hashval)
+        if package is None:
+            if not isinstance(name, Package):
+                raise ValueError("'package'引数を指定してください")
+            newpkg = name
+        else:
+            newpkg = create_package(name, package, modules, type=type, separate=separate, hashval=hashval)
+
         for pkg in self.pkgs:
             if pkg.name == newpkg.name:
                 if newpkg.is_undefined():

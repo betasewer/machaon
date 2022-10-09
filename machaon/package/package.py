@@ -340,6 +340,11 @@ def _parse_repository_source(src, repository_class):
     return rep, mod
 
 
+def create_module_package(module):
+    return create_package("module-{}".format(module), "module:{}".format(module))
+
+
+
 #
 class PackageNotFoundError(Exception):
     pass

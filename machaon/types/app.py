@@ -2,17 +2,17 @@
 # coding: utf-8
 import os
 from machaon.core.importer import PyModuleLoader
-from machaon.package.package import PackageManager
+from machaon.package.package import PackageManager, create_module_package
 from machaon.types.package import AppPackageType
 from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
 
-logo = '''
+logo = """
 8b    d8    db     dP""b8 88  88    db     dP"Yb  88b 88 
 88b  d88   dPYb   dP   `" 88  88   dPYb   dP   Yb 88Yb88 
 88YbdP88  dP__Yb  Yb      888888  dP__Yb  Yb   dP 88 Y88 
 88 YY 88 dP""""Yb  YboodP 88  88 dP""""Yb  YbodP  88  Y8
   message-oriented style Python application environment                         
-'''[1:]
+"""[1:]
 
 class RootObject:
     """ @type
@@ -30,9 +30,9 @@ class RootObject:
     # メソッド
     #
     def startup(self, spirit):
-        ''' @task
+        """ @task
         起動画面を表示し、パッケージをロードする。
-        '''
+        """
         isfullform = self.root.get_ui().is_async
         if isfullform:
             spirit.post('message', "Welcome to")
@@ -42,18 +42,19 @@ class RootObject:
             spirit.post("message", "言語エンジンを準備します")
         self.root.boot_core(spirit)
 
-        if isfullform:
-            spirit.post("message", "パッケージをロードします")
-        for pkg in self.root.enum_packages():
-            spirit.post("message", "{}".format(pkg.name), nobreak=True)
-            self.root.load_pkg(pkg)
-            status = AppPackageType.status(AppPackageType(), pkg, spirit)
-            spirit.post("message", " -> {}".format(status))
+        if not self.root.is_ignored_at_startup("packages"):
+            if isfullform:
+                spirit.post("message", "パッケージをロードします")
+            for pkg in self.root.enum_packages():
+                spirit.post("message", "{}".format(pkg.name), nobreak=True)
+                self.root.load_pkg(pkg)
+                status = AppPackageType().status(pkg, spirit)
+                spirit.post("message", " -> {}".format(status))
 
-        try:
-            self.root.check_pkg_loading()
-        except Exception as e:
-            spirit.post("error", str(e))
+            try:
+                self.root.check_pkg_loading()
+            except Exception as e:
+                spirit.post("error", str(e))
 
         count = self.root.load_startup_variables(self.context)
         if count > 0:
@@ -64,13 +65,45 @@ class RootObject:
             spirit.post("message", "ヘルプ")
             spirit.post("message", "")
 
+    def load_using_packages(self, app, *names):
+        """ @task alias-name [using]
+        モジュールを読み込む
+        Params:
+            +names(Str):
+        """
+        defmods = []
+        pkgs = []
+        from machaon.core.symbol import DefaultModuleNames
+        for name in names:
+            if name in DefaultModuleNames:
+                defmods.append(name)
+            else:
+                pkg = self.root.get_package(name)
+                if pkg is None:
+                    # パッケージを追加する
+                    pkg = create_module_package(name)
+                    self.root.add_package(pkg)
+                pkgs.append(pkg)
+        
+        # 読み込みを行う
+        if defmods:
+            app.post("message", "標準モジュール = '{}'".format(", ".join(defmods)))
+            self.root.get_type_module().add_default_modules(defmods)
+        
+        for pkg in pkgs:
+            app.post("message", "パッケージ = '{}' ".format(pkg.name), nobreak=True)
+            self.root.load_pkg(pkg)
+            app.post("message", " -> {}".format(AppPackageType().status(pkg, app)))
+        
+        self.root.check_pkg_loading()
+
     def types(self, spirit):
-        ''' @task
+        """ @task
         使用可能な型を列挙する。
         Params:
         Returns:
             Sheet[](name, doc, describer): 型のリスト
-        '''
+        """
         with spirit.progress_display():
             for name, t, error in self.context.type_module.enum(geterror=True):
                 spirit.interruption_point(progress=1)
@@ -86,12 +119,12 @@ class RootObject:
                 yield entry
         
     def subtypes(self, spirit):
-        ''' @task
+        """ @task
         使用可能な型を列挙する。
         Params:
         Returns:
             Sheet[ObjectCollection](name, doc, scope, location): 型のリスト
-        '''
+        """
         with spirit.progress_display():
             for scopename, name, t, error in self.context.type_module.enum_all_subtypes(geterror=True):
                 spirit.interruption_point(progress=1)
@@ -108,74 +141,74 @@ class RootObject:
                 yield entry
     
     def vars(self):
-        '''@method
+        """@method
         全ての変数を取得する。
         Returns:
             ObjectCollection: 辞書
-        '''
+        """
         return self.context.input_objects
     
     def store_objects(self):
-        ''' @method alias-name [store]
+        """ @method alias-name [store]
         machaonフォルダのファイル名を列挙する。
         Returns:
             Sheet[Str]: 名前のリスト
-        '''
+        """
         from machaon.core.persistence import enum_persistent_names
         return enum_persistent_names(self.root)
 
     def packages(self):
-        ''' @method
+        """ @method
         パッケージを取得する。
         Returns:
             Sheet[Package](name, source, scope, status): パッケージリスト
-        '''
+        """
         return list(self.root.enum_packages())
     
     def startup_errors(self):
-        ''' @method
+        """ @method
         パッケージ読み込みのエラーを取得する。
         Returns:
             Sheet[Error]: エラーリスト
-        '''
+        """
         for pkg in self.root.enum_packages():
             yield from pkg.get_load_errors()
     
     def context_(self):
-        ''' @method alias-name [context]
+        """ @method alias-name [context]
         現在の呼び出しコンテキストを取得する。
         Returns:
             Context: 
-        '''
+        """
         return self.context
     
     def spirit_(self):
-        ''' @method alias-name [spirit]
+        """ @method alias-name [spirit]
         現在の呼び出しコンテキストのSpiritを取得する。
         Returns:
             Any:
-        '''
+        """
         return self.context.spirit
 
     #
     # クリアする
     #
     def _clear_processes(self, app, pred):
-        ''' プロセスの実行結果とプロセス自体を削除する。 '''
+        """ プロセスの実行結果とプロセス自体を削除する。 """
         chm = self.root.chambers().get_active()
         pids = chm.drop_processes(pred=pred)
         app.get_ui().drop_screen_text(pids)
         
     def clear(self, app):
-        ''' @method spirit [cla]
+        """ @method spirit [cla]
         現在のチャンバーの全ての実行結果を削除する。
-        '''
+        """
         self._clear_processes(app, None)
     
     def clear_except_last(self, app):
-        ''' @method spirit [cl]
+        """ @method spirit [cl]
         直前のプロセスを除いてすべてを削除する。
-        '''
+        """
         chm = self.root.chambers().get_active()
         index = chm.last_process.get_index()
         def is_lastpr(pr):
@@ -183,9 +216,9 @@ class RootObject:
         self._clear_processes(app, is_lastpr)
 
     def clear_failed(self, app):
-        ''' @method spirit [claf]
+        """ @method spirit [claf]
         エラーを返した実行結果をすべて削除する。
-        '''
+        """
         def is_failed(pr):
             return pr.is_failed()
         self._clear_processes(app, is_failed)
@@ -194,11 +227,11 @@ class RootObject:
     # 
     #
     def keymap(self):
-        ''' @method
+        """ @method
         ショートカットキーの一覧を表示する。 
         Returns:
             Sheet[](key, command):
-        '''
+        """
         # ショートカットキー
         keymap = self.root.get_ui().get_keymap()
         rets = []
@@ -281,26 +314,26 @@ class RootObject:
     #
     #
     def deploy(self, app, path):
-        ''' @task
+        """ @task
         machaonディレクトリを配置する。
         Params:
             path(Path):
-        '''
+        """
         deploy_directory(path)
     
     def trans_deploy(self, app, path):
-        ''' @task
+        """ @task
         machaonディレクトリを移譲する。
         Params:
             path(Path): 新たにmachaonが配備されるディレクトリ
-        '''
+        """
         from machaon.types.shell import Path
         transfer_deployed_directory(app, Path(self.root.get_basic_dir()), path)
     
     def machaon_update(self, context, app):
-        ''' @task context
+        """ @task context
         machaonをリポジトリからダウンロードして更新する。
-        '''
+        """
         curmodule = PyModuleLoader("machaon")
         location = curmodule.load_filepath()
         if location is None:
@@ -338,9 +371,9 @@ class RootObject:
             app.post("message", "machaonを更新しました。次回起動時に反映されます")
 
     def update_all(self, context, app):
-        ''' @task context
+        """ @task context
         すべてのパッケージに更新を適用する。
-        '''
+        """
         apppkg = AppPackageType()
         for pkg in self.root.enum_packages():
             apppkg.update(pkg, context, app)
