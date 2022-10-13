@@ -80,7 +80,11 @@ def popen_capture(cmds, *, encoding=None, **popenargs):
                 break
             elif inputmsg.value is not None:
                 proc.stdin.write((inputmsg.value+'\n').encode(shell_encoding))
-                proc.stdin.flush()
+                try:
+                    proc.stdin.flush()
+                except Exception as e: # 入力待ちが終わった後で入力するとエラーが起きる
+                    pass
+                    #yield PopenMessage(value=e, mode=POPEN_INPUT_ERROR)
         
         # 出力を取り出す
         try:
@@ -106,6 +110,7 @@ POPEN_WAITINPUT = 1
 POPEN_FINISHED = 2
 POPEN_KILLED = 3
 POPEN_OUTPUT_EMPTY = 4
+POPEN_INPUT_ERROR = 5
 
 class PopenMessage():
     def __init__(self, *, mode, value=None):
