@@ -1,5 +1,5 @@
 import os
-from machaon.platforms.common import common_known_names, Unsupported
+from machaon.platforms.common import EmptyMixin, common_known_names, Unsupported
 
 class Exports:
     @staticmethod
@@ -61,3 +61,5 @@ class Exports:
             return p    
         return None 
     
+    # パス実装に追加なし
+    PlatformPath = EmptyMixin
