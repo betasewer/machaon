@@ -119,9 +119,7 @@ class AppRoot:
     
     def get_log_dir(self):
         p = os.path.join(self.basicdir, "log")
-        if not os.path.isdir(p) and not os.path.isfile(p):
-            os.makedirs(p) # アクセスがあってから初めて作成する
-        return p
+        return Path(p).makedirs()
 
     def get_external_applist(self):
         return os.path.join(self.basicdir, "apps.ini")
@@ -140,9 +138,7 @@ class AppRoot:
 
     def get_local_dir(self, appname):
         p = os.path.join(self.basicdir, "local", appname)
-        if not os.path.isdir(p):
-            os.makedirs(p)
-        return Path(p)
+        return Path(p).makedirs()
 
     def get_local_config(self, appname, filename, *, fallback=False):
         p = self.get_local_dir(appname) / filename

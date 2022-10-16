@@ -432,7 +432,7 @@ class Path:
         suffixformat = suffixformat or "_{}"
         up, name = os.path.split(self._path)
         basename, ext = os.path.splitext(name)
-        for alt in range(start, 100):
+        for alt in range(start, 10000):
             altname = basename + suffixformat.format(alt) + ext
             newpath = os.path.join(up, altname)
             if not os.path.exists(newpath): # 既に存在する
@@ -452,7 +452,7 @@ class Path:
 
 
     #
-    # シェル機能
+    # パス調査
     #
     def listdir(self):
         """ @method [ls]
@@ -658,7 +658,7 @@ class Path:
             shutil.rmtree(self._path)
 
     #
-    #
+    # 実行・シェル機能
     #
     def run_command(self, app, *params):
         """ @task
@@ -703,6 +703,15 @@ class Path:
         if self.isdir():
             raise ValueError("Unsupported")
         shellpath().start_file(self._path, "print")
+
+    def touch(self):
+        """ @method
+        空ファイルを作成する。
+        """
+        if self.exists():
+            raise ValueError("ファイルは既に存在します")
+        with open(self._path, "wb") as fo:
+            fo.write(bytes())
     
     #
     # 型の振る舞い

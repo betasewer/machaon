@@ -29,14 +29,14 @@ def initialize_app_args(root, argv=None, **defaults):
     args = pser.parse_args(argv)
     
     autoexit = False
+    coreonly = False
 
     if args.update or args.deploy:
         if not args.ui:
             args.ui = "batch"
 
     if args.core_only:
-        root.ignore_at_startup("packages")
-        root.ignore_at_startup("hotkey")
+        coreonly = True
 
     if args.entrypoint:
         for i, ent in enumerate(args.entrypoint, start=1):
@@ -50,17 +50,21 @@ def initialize_app_args(root, argv=None, **defaults):
         root.add_startup_variable("path", args.deploy, "Path")
         root.add_startup_message("@@deploy @path")
         autoexit = True
+        coreonly = True
 
     if args.update:
         root.add_startup_message("@@update-all")
         root.add_startup_message("@@machaon-update")
         autoexit = True
+        coreonly = True
 
     if autoexit:
+        root.add_startup_message("exit")
+
+    if coreonly:
         root.ignore_at_startup("packages")
         root.ignore_at_startup("hotkey")
-        root.add_startup_message("exit")
-    
+
     options = {}
     for opt in args.option:
         key, sep, value = opt.partition("=")
