@@ -576,10 +576,9 @@ class Spirit():
 #
 #
 class TempSpirit(Spirit):
-    def __init__(self, app=None, cd=None, *, doprint=False):
+    def __init__(self, app=None, *, doprint=False):
         super().__init__(app, process=None)
         self.msgs = []
-        self.cd = cd
         self._doprint = doprint
 
     def post_message(self, msg):

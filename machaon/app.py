@@ -45,7 +45,7 @@ class AppRoot:
         self._startupvars = []
         self._startupignores = {}
 
-    def initialize(self, *, ui, basic_dir=None, ignore_args=False, ignore_packages=False, ignore_hotkeys=False, **uiargs):
+    def initialize(self, *, ui, basic_dir=None, ignore_args=False, ignore_packages=None, ignore_hotkeys=None, **uiargs):
         """ 初期化前に初期設定を指定する """
         if not ignore_args:
             # コマンドライン引数を読み込む
@@ -70,34 +70,6 @@ class AppRoot:
         # 設定フラグ
         self.ignore_at_startup("packages", ignore_packages)
         self.ignore_at_startup("hotkey", ignore_hotkeys)
-
-    def ignore_at_startup(self, name, b=True):
-        self._startupignores[name] = b
-
-    def is_ignored_at_startup(self, name):
-        return self._startupignores.get(name)
-    
-    def boot_ui(self):
-        """ UIを立ち上げる """
-        if self.ui is None:
-            raise ValueError("App UI must be initialized")
-        if hasattr(self.ui, "init_with_app"):
-            self.ui.init_with_app(self)
-        self.ui.activate_new_chamber() # 空のチャンバーを追加する
-    
-    def boot_core(self, spirit):
-        """ コア機能を立ち上げる """
-        # パッケージマネージャの初期化
-        package_dir = self.get_package_dir()
-        self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
-        self.pkgmanager.add_to_import_path()
-
-        # 標準モジュールをロードする
-        self.typemodule.add_default_modules()
-
-        # ホットキーの監視を有効化する
-        if KeyController.available and not self._startupignores.get("hotkey"):
-            self.keycontrol.start(spirit)
 
     def get_ui(self):
         return self.ui
@@ -150,6 +122,46 @@ class AppRoot:
         cfg = configparser.ConfigParser()
         cfg.read(p, encoding="utf-8")
         return cfg
+
+    #
+    # 
+    #
+    def ignore_at_startup(self, name, b=True):
+        """ 起動を無視するフラグを立てる """
+        if b is None:
+            return
+        self._startupignores[name] = b
+
+    def is_ignored_at_startup(self, name):
+        """ 起動を無視するフラグを調べる """
+        return self._startupignores.get(name)
+    
+    def boot_ui(self):
+        """ UIを立ち上げる """
+        if self.ui is None:
+            raise ValueError("App UI must be initialized")
+        if hasattr(self.ui, "init_with_app"):
+            self.ui.init_with_app(self)
+        self.ui.activate_new_chamber() # 空のチャンバーを追加する
+    
+    def boot_core(self, spirit):
+        """ コア機能を立ち上げる """
+        # パッケージマネージャの初期化
+        package_dir = self.get_package_dir()
+        self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
+        self.pkgmanager.add_to_import_path()
+
+        # 標準モジュールをロードする
+        self.typemodule.add_default_modules()
+
+        # ホットキーの監視を有効化する
+        if KeyController.available and not self._startupignores.get("hotkey"):
+            self.keycontrol.start(spirit)
+
+    def stray_spirit(self, **kwargs):
+        """ プロセスに属さないスピリットを作成 """
+        from machaon.process import TempSpirit
+        return TempSpirit(self, **kwargs)
  
     #
     # クラスパッケージ

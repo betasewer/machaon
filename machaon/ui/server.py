@@ -5,6 +5,7 @@ from machaon.process import Spirit, ProcessSentence
 import logging
 import os
 import datetime
+import time
 
 #
 #
@@ -242,7 +243,7 @@ class LoggingLauncher(Launcher):
 #
 class BatchLauncher(LoggingLauncher):
     """
-    対話的でないアプリケーション。
+    対話的でない同期実行アプリケーション。
     起動後ただちにコマンドを実行し、終了する。
     """
     is_async = False
@@ -271,3 +272,59 @@ class BatchLauncher(LoggingLauncher):
         # スタートアップメッセージを処理して終了する
         self.update_chamber_messages(None)
         self.app.exit()
+
+
+
+class ServerLauncher(BatchLauncher):
+    """
+    対話的でない非同期実行アプリケーション。
+    起動後ただちにコマンドを開始し、終了まで待機する。
+    """
+    is_async = True
+
+    def __init__(self, args):
+        super().__init__(args)
+        self._loop = True
+        self._startups = []
+    
+    def message_handler(self, msg, *, nested=False):
+        messages = []
+        if msg.tag == "eval-message-seq":
+            messages, _chamber = msg.req_arguments("messages", "chamber")
+        elif msg.tag == "eval-message":
+            message = msg.req_arguments("message")
+            messages.append(message)
+        else:
+            return super().message_handler(msg, nested=nested)
+
+        if messages:
+            self._startups.extend(messages)
+    
+    def run_mainloop(self):
+        # スタートアップメッセージを取得
+        self.update_chamber_messages(None)
+
+        # プロセスが終了するまで待機する
+        for message in self._startups:
+            self.app.eval_object_message(ProcessSentence(message, auto=True, autoleading=True))
+            # 実行チャンバーを監視する
+            chm = self.app.chambers().get_active()
+            if chm is None:
+                continue
+            while self._loop:
+                self.update_chamber_messages(None)
+                if chm.is_finished() and chm.is_messages_consumed():
+                    break
+                time.sleep(0.3)
+
+        # プロセスが終了し、メッセージの処理が完了した
+        time.sleep(0.3)
+        self.app.post_stray_message("message", "終了します")
+        self.update_chamber_messages(None)
+        self.app.exit()
+    
+    def on_exit(self):
+        # アプリから呼び出して停止する
+        super().on_exit()
+        self._loop = False
+
