@@ -10,7 +10,7 @@ from typing import Optional, List, Any, Text
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type.typemodule import TypeModule
-from machaon.process import ProcessSentence, Spirit, ProcessHive, ProcessChamber, ProcessSentence
+from machaon.process import ProcessSentence, Spirit, TempSpirit, ProcessHive, ProcessChamber, ProcessSentence
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
@@ -158,9 +158,17 @@ class AppRoot:
         if KeyController.available and not self._startupignores.get("hotkey"):
             self.keycontrol.start(spirit)
 
-    def stray_spirit(self, **kwargs):
-        """ プロセスに属さないスピリットを作成 """
-        from machaon.process import TempSpirit
+    def stray_spirit(self, message=None):
+        """ 未開始のプロセスのスピリットを確保する """
+        if message is not None:
+            sentence = ProcessSentence(message)
+        else:
+            sentence = None
+        proc = self.processhive.new_process(sentence)
+        return Spirit(self, proc)
+
+    def temp_spirit(self, **kwargs):
+        """ プロセスを介さないスピリットを作成 """
         return TempSpirit(self, **kwargs)
  
     #

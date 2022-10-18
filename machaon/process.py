@@ -58,11 +58,11 @@ class Process:
     """ @type
     メッセージの実行スレッドを操作する。
     """
-    def __init__(self, index, message, sentence=None):
+    def __init__(self, index, message=None, sentence=None):
         self.index: int = index
         # 
         self.sentence = sentence # 入力文
-        self.message: MessageEngine = message
+        self.message: MessageEngine = message or MessageEngine()
         self._finished = False
         # スレッド
         self.thread = None
@@ -972,10 +972,13 @@ class ProcessHive:
         self._nextprocindex: int = 0
     
     # 新しい開始前のプロセスを作成する
-    def new_process(self, sentence: ProcessSentence):
+    def new_process(self, sentence: ProcessSentence = None):
         procindex = self._nextprocindex + 1
-        message = MessageEngine(sentence.get_message())
-        process = Process(procindex, message, sentence)
+        if sentence:
+            message = MessageEngine(sentence.get_message())
+            process = Process(procindex, message, sentence)
+        else:
+            process = Process(procindex)
         self._nextprocindex = procindex
         return process
 
