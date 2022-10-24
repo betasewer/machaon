@@ -144,14 +144,14 @@ class KeyController:
         for hk in self._keys:
             hk.release(self.listener.canonical(k))
 
-    def start(self, app):
+    def start(self, root):
         """ @method spirit
         リスナースレッドを開始する
         """
         if not available:
             raise GlobalHotkeyError("pynputがインストールされていません")
 
-        self.root = app.root
+        self.root = root
         self._controller = Controller()
         
         # ホットキーを準備する
@@ -164,7 +164,6 @@ class KeyController:
 
         self.listener = Listener(on_press=self.on_press, on_release=self.on_release)
         self.listener.start()
-        app.post("message", "入力リスナーを立ち上げました")
         
     def stop(self, app):
         """ @method spirit
@@ -187,15 +186,16 @@ class HotkeySet:
         self._newkey = key
         return self
 
-    def __call__(self, label, message):
+    def __call__(self, label, *, message):
         if self._newkey is None:
             raise ValueError("")
         self.entries.append((label, self._newkey, message))
         return self
     
-    def install(self, root, ignition_key):
+    def install(self, root, ignition_key, function_method):
         for label, k, message in self.entries:
             key = ignition_key + "+" + k
-            root.add_hotkey(label, key, message)
+            msg = "--‣{}‣ Function {}".format(message, function_method)
+            root.add_hotkey(label, key=key, message=msg)
 
     

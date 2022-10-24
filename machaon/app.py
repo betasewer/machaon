@@ -144,7 +144,7 @@ class AppRoot:
             self.ui.init_with_app(self)
         self.ui.activate_new_chamber() # 空のチャンバーを追加する
     
-    def boot_core(self, spirit):
+    def boot_core(self, spirit=None):
         """ コア機能を立ち上げる """
         # パッケージマネージャの初期化
         package_dir = self.get_package_dir()
@@ -156,21 +156,9 @@ class AppRoot:
 
         # ホットキーの監視を有効化する
         if KeyController.available and not self._startupignores.get("hotkey"):
-            self.keycontrol.start(spirit)
+            self.keycontrol.start(self)
+            if spirit: spirit.post("message", "入力リスナーを立ち上げました")
 
-    def stray_spirit(self, message=None):
-        """ 未開始のプロセスのスピリットを確保する """
-        if message is not None:
-            sentence = ProcessSentence(message)
-        else:
-            sentence = None
-        proc = self.processhive.new_process(sentence)
-        return Spirit(self, proc)
-
-    def temp_spirit(self, **kwargs):
-        """ プロセスを介さないスピリットを作成 """
-        return TempSpirit(self, **kwargs)
- 
     #
     # クラスパッケージ
     #
@@ -341,28 +329,31 @@ class AppRoot:
     #
     # グローバルなホットキー
     #
-    def add_hotkey(self, label, key, message):
+    def add_hotkey(self, label, *, key, message):
         """
         グローバルなホットキーを定義する。
         Params:
-            key(str):
-            message(str):
+            label(str): 定義名
+            key(str): キーの組み合わせ
+            message(str): 実行するメッセージ
         """
         self.keycontrol.add_hotkey(label, key, message)
 
-    def add_hotkey_set(self, target, ignition):
+    def add_hotkey_set(self, target, *, ignition, function_method=None):
         """
         一連のグローバルなホットキーを定義する。
         Params:
             target(str): HotKeySetを返す関数のシンボル
             ignition(str): 共通の修飾キー
+            function_method(str): メッセージ関数に適用するメソッド　デフォルトでclipboard-apply
         """
         from machaon.core.importer import attribute_loader
         loadfn = attribute_loader(target)()
         keyset = loadfn()
         if not isinstance(keyset, HotkeySet):
             raise TypeError("{}はHotKeySet型のオブジェクトを返さなければなりません".format(target))
-        keyset.install(self, ignition)
+        function_method = function_method or "apply-clipboard"
+        keyset.install(self, ignition, function_method)
 
     def enum_hotkeys(self):
         """
@@ -456,6 +447,18 @@ class AppRoot:
         )
         return context
 
+    def create_process(self, message=None):
+        """ 未開始のプロセスを生成する """
+        if message is not None:
+            sentence = ProcessSentence(message)
+        else:
+            sentence = None
+        return self.processhive.new_process(sentence)
+
+    def temp_spirit(self, **kwargs):
+        """ プロセスを介さないスピリットを作成 """
+        return TempSpirit(self, **kwargs)
+ 
     #
     # プロセススレッド
     #

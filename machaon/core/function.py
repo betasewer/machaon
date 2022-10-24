@@ -6,6 +6,7 @@ from machaon.core.message import (
 )
 from machaon.core.object import Object
 from machaon.core.invocation import BasicInvocation
+from machaon.platforms import is_windows
 
 #
 # api
@@ -313,12 +314,42 @@ class FunctionType():
             app.clipboard_copy(newtext, silent=True)
             app.root.post_stray_message("message", "クリップボード上で変換: {} -> {}".format(text, newtext))
 
+    def copy_apply(self, f, context, app):
+        """ @task context
+        コピーコマンドを入力に送り、関数を適用する。
+        """
+        import time
+        app.root.push_key(copy_command())
+        time.sleep(0.2)
+        self.apply_clipboard(f, context, app)
+    
     def copy_apply_paste(self, f, context, app):
         """ @task context
         コピーコマンドを入力に送り、関数を適用し、ペーストコマンドを送る。
         """
         import time
-        app.root.push_key("<ctrl>+c")
+        self.copy_apply(f, context, app)
+        app.root.push_key(paste_command())
         time.sleep(0.2)
-        self.apply_clipboard(f, context, app)
-        app.root.push_key("<ctrl>+v")
+        # 一二三
+
+#
+# 一時的措置
+#
+def copy_command():
+    import machaon.platforms
+    if machaon.platforms.is_windows():
+        return "<ctrl>+c"
+    elif machaon.platforms.is_osx():
+        return "<cmd>+c"
+    else:
+        return "<cmd>+c"
+
+def paste_command():
+    import machaon.platforms
+    if machaon.platforms.is_windows():
+        return "<ctrl>+v"
+    elif machaon.platforms.is_osx():
+        return "<cmd>+v"
+    else:
+        return "<cmd>+v"
