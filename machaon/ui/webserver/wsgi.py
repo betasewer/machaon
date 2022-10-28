@@ -76,6 +76,7 @@ class WSGIApp:
     """ アプリの基底クラス """
     def __init__(self):
         self.root = None
+        self.spirit = None
         self.run_entry = None
         self.logger = None
 
@@ -87,13 +88,13 @@ class WSGIApp:
     #
     def _app(self, env, start_response):
         """ """
-        request = WSGIRequest(self.root.temp_spirit(), env, start_response)
+        request = WSGIRequest(self.spirit, env, start_response)
         results = list(self.run(request))
         return results
 
     def _logged_app(self, env, start_response):
         """ """
-        request = WSGIRequest(self.logger.spirit(), env, start_response)
+        request = WSGIRequest(self.spirit, env, start_response)
         results = self.logger.log(self.run(request), self.root.ui)
         return results
     
@@ -109,6 +110,7 @@ class WSGIApp:
         from machaon.app import AppRoot
         self.root = AppRoot()
         self.root.initialize(ui="batch", **uiargs)
+        self.spirit = self.root.temp_spirit()
         # エントリ関数を設定
         self.run_entry = self._app
 
@@ -120,9 +122,17 @@ class WSGIApp:
         self.root.boot_ui()
         # ロガー生成
         self.logger = WSGIAppLogger(self.root)
+        self.spirit = self.logger.spirit()
         # エントリ関数を設定
         self.run_entry = self._logged_app
 
+    def intrasetup(self, spirit):
+        """ 実行中のmachaonを引き継ぐ """
+        self.spirit = spirit
+        self.root = spirit.root
+        # エントリ関数を設定
+        self.run_entry = self._app
+        
 
 class WSGIAppLogger:
     """ machaonでログをとる """
