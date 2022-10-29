@@ -61,8 +61,8 @@ class WSGIRequest:
     def query(self):
         return self._uriparts.query
 
-    def query_dict(self):
-        return urllib.parse.parse_qs(self.query)
+    def parse_query(self):
+        return urllib.parse.parse_qsl(self.query)
     
     #
     # envの更新

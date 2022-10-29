@@ -11,9 +11,13 @@ from machaon.ui.webserver.wsgi import WSGIApp
 #
 class ApiSlot:
     """ Apiの定義 """
-    def __init__(self, parts, fn):
+    def __init__(self, parts, fn, paramsig=None):
         self.parts = parts
         self.fn = fn
+        self.paramsigs = {}
+        for k, v in urllib.parse.parse_qsl(paramsig):
+            p = ApiParam.parse(k, v)
+            self.paramsigs[p.name] = p
 
     def cast(self, pathparts):
         """ マッチする場合、呼び出しオブジェクトを構築する """
@@ -29,13 +33,58 @@ class ApiSlot:
         
         return ApiCast(params)
 
+    def build_args(self, request, cast):
+        # クエリパラメータを構築する
+        kwargs = {}
+        for k, v in request.parse_query():
+            sig = self.paramsigs.get(k)
+            if sig:
+                sig.store(kwargs, v)
+            else:
+                kwargs[k] = v
+
+        return cast.params, kwargs
+
     def invoke(self, server, request, cast):
         """ APIを呼び出す """
-        return self.fn(server, *cast.params, **request.query_dict())
+        args, kwargs = self.build_args(request, cast)
+        return self.fn(server, *args, **kwargs)
+
+
+class ApiParam:
+    """ apiのパラメータ型 """
+    def __init__(self, name, valtype, ismulti):
+        self.name = name
+        self.valtype = valtype
+        self.ismulti = ismulti
+    
+    @classmethod
+    def parse(cls, nameexpr, valexpr):
+        if valexpr:
+            valtype = {"int":int, "float":float}.get(valexpr)
+            if valtype is None:
+                raise ValueError(valexpr + 'は不明なビルトイン型です')
+        else:
+            valtype = str
+        ismulti = False
+        if nameexpr.startswith("*"):
+            nameexpr = nameexpr[1:]
+            ismulti = True
+        return ApiParam(nameexpr, valtype, ismulti)    
+
+    def store(self, kwargs, value):
+        k = self.name
+        v = self.valtype(value)
+        if k in kwargs and self.ismulti:
+            if not isinstance(kwargs[k], list):
+                kwargs[k] = [kwargs[k]]
+            kwargs[k].append(v)
+        else:
+            kwargs[k] = v
 
 
 class ApiCast:
-    """ apiの呼び出しパラメータ """
+    """ apiのエントリポイント """
     def __init__(self, params):
         self.params = params
 
@@ -49,11 +98,15 @@ class ApiServerApp(WSGIApp):
         self.request = None
 
     @classmethod
-    def slot(cls, route):
-        """ スロット定義デコレータ """
+    def slot(cls, route, paramsig=None):
+        """ スロット定義デコレータ 
+        Params:
+            route(str): apiのエントリポイント
+            paramsig(str): クエリパラメータのシグニチャをクエリパラメータの形式で記述する
+        """
         parts = route.split("/")
         def _deco(fn):
-            return ApiSlot(parts, fn)
+            return ApiSlot(parts, fn, paramsig)
         return _deco
 
     def _load_slots(self):
