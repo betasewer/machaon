@@ -27,10 +27,17 @@ class WSGIRequest:
         code = "{} {}".format(status.value, status.phrase)
         self._start_response(code, header)
 
-    def response_and_status_message(self, status_name):
+    def response_and_status_message(self, status_code_or_name):
         """ レスポンスを返し表示用メッセージを作成する簡易ヘルパー """
-        self.response(status_name, [('Content-type', 'text/html; charset=utf-8')])
-        status = getattr(HTTPStatus, status_name)
+        if isinstance(status_code_or_name, str):
+            status = getattr(HTTPStatus, status_code_or_name)
+        elif isinstance(status_code_or_name, HTTPStatus):
+            status = status_code_or_name
+        else:
+            raise TypeError(status_code_or_name)
+
+        code = "{} {}".format(status.value, status.phrase)
+        self._start_response(code, [('Content-type', 'text/html; charset=utf-8')])
         message = "<html><body><h2>{} {}</h2><p>{}.</p></body>".format(status.value, status.phrase, status.description)
         return message.encode("utf-8")
 
