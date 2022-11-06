@@ -114,10 +114,12 @@ def get_name_attr(t, fallback=False):
     elif not fallback:
         raise ValueError("No __qualname__ or __name__ property in '{}'".format(t))
     else:
-        return repr(t)
+        return None
 
 def full_qualified_name(t, fallback=False):
     n = get_name_attr(t, fallback)
+    if n is None:
+        return None
     mod = get_module_attr(t)
     if mod is None:
         return n
@@ -125,7 +127,9 @@ def full_qualified_name(t, fallback=False):
         return mod + "." + n
 
 def disp_qualified_name(t):
-    n = get_name_attr(t)
+    n = get_name_attr(t, fallback=True)
+    if n is None:
+        n = repr(t)
     mod = get_module_attr(t)
     if mod is None:
         return n

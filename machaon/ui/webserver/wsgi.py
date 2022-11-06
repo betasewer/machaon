@@ -78,104 +78,95 @@ class WSGIRequest:
         wsgiutil.shift_path_info(self._env)
 
 
-
-class WSGIApp:
-    """ アプリの基底クラス """
+#
+#
+#
+class ServerBasic:
     def __init__(self):
-        self.root = None
-        self.spirit = None
-        self.run_entry = None
-        self.logger = None
+        pass
 
-    def run(self, request: WSGIRequest):
+    def run(self, env, start_response):
         raise NotImplementedError()
 
-    #
-    #
-    #
-    def _app(self, env, start_response):
-        """ """
-        request = WSGIRequest(self.spirit, env, start_response)
-        results = list(self.run(request))
-        return results
-
-    def _logged_app(self, env, start_response):
-        """ """
-        request = WSGIRequest(self.spirit, env, start_response)
-        results = self.logger.log(self.run(request), self.root.ui)
-        return results
-    
     def __call__(self, env, start_response):
-        return self.run_entry(env, start_response)
+        return self.run(env, start_response)
 
-    #
-    #
-    #
-    def setup(self, **uiargs):
-        """ ログを取得しない設定 """
+    def test_server(self, port):
+        return TestServerThread(port, self)
+
+
+
+class InternalServer(ServerBasic):
+    """ 実行中のmachaonから開始するサーバーアプリ """
+    def __init__(self, serverapp, spirit):
+        super().__init__()
+        self._server = serverapp
+        self._spirit = spirit
+
+    def run(self, env, start_response):
+        """ """
+        request = WSGIRequest(self._spirit, env, start_response)
+        results = list(self._server.run(request))
+        return results
+
+
+class SingleServer(ServerBasic):
+    """ machaonを介した単体のサーバーアプリ """
+    def __init__(self, serverapp, **uiargs):
+        super().__init__()
+        self._server = serverapp
         # machaonの初期化
         from machaon.app import AppRoot
-        self.root = AppRoot()
-        self.root.initialize(ui="batch", **uiargs)
-        self.spirit = self.root.temp_spirit()
-        # エントリ関数を設定
-        self.run_entry = self._app
+        self._root = AppRoot()
+        self._root.initialize(ui="batch", **uiargs)
+        self._spirit = self._root.temp_spirit()
+    
+    def run(self, env, start_response):
+        """ """
+        request = WSGIRequest(self._spirit, env, start_response)
+        results = list(self._server.run(request))
+        return results
 
-    def logging_setup(self, **uiargs):
-        """ ログを取得する設定 """
-        self.setup(**uiargs)
+
+class LoggedSingleServer(SingleServer):
+    """ machaonのログを記録する単体のサーバーアプリ """
+    def __init__(self, serverapp, **uiargs):
+        super().__init__(serverapp, **uiargs)
         # 言語とUIの初期化
-        self.root.boot_core()
-        self.root.boot_ui()
+        self._root.boot_core()
+        self._root.boot_ui()
         # ロガー生成
-        self.logger = WSGIAppLogger(self.root)
-        self.spirit = self.logger.spirit()
-        # エントリ関数を設定
-        self.run_entry = self._logged_app
-
-    def intrasetup(self, spirit):
-        """ 実行中のmachaonを引き継ぐ """
-        self.spirit = spirit
-        self.root = spirit.root
-        # エントリ関数を設定
-        self.run_entry = self._app
-        
-
-class WSGIAppLogger:
-    """ machaonでログをとる """
-    def __init__(self, root):
-        # 実行プロセス（ログ生成用）
-        self.proc = root.create_process()
-        self.context = root.create_root_context(self.proc)
-
-    def spirit(self):
-        return self.context.spirit
-
-    def log(self, apprunner, ui):
-        """
-        アプリケーションを実行する
+        self._proc = self._root.create_process() # ログ生成用実行プロセス
+        self._context = self._root.create_root_context(self._proc)
+        self._spirit = self._context.get_spirit()
+    
+    def run(self, env, start_response):
+        """ 
+        ログを取りつつアプリを実行する
         一度の呼び出しごとにプロセスを使いまわす
         """
-        ui.post_on_exec_process(self.proc, datetime.datetime.now())
+        request = WSGIRequest(self._spirit, env, start_response)
+        
+        ui = self._root.ui
+        ui.post_on_exec_process(self._proc, datetime.datetime.now())
 
         try:
-            results = list(apprunner)
-            resultobj = self.context.new_object(results)
-            ui.post_on_success_process(self.proc, resultobj, self.spirit())
+            results = list(self._server.run(request))
+            resultobj = self._context.new_object(results)
+            ui.post_on_success_process(self._proc, resultobj, self.spirit())
         except Exception as e:
-            errorobj = self.context.new_invocation_error_object(e)
-            ui.post_on_error_process(self.proc, errorobj)
+            errorobj = self._context.new_invocation_error_object(e)
+            ui.post_on_error_process(self._proc, errorobj)
         
-        ui.post_on_end_process(self.proc)
+        ui.post_on_end_process(self._proc)
 
         # メッセージを反映する
         ui.update_chamber_messages(5)
         return results
-    
 
 
 """
-wsgiapp = WSGIApp(appobj, method).setup()
+wsgiapp = ServerApp(appobj) # wsgiappがエントリポイントとなる
 """
 
 class TestServerThread:
@@ -185,14 +176,14 @@ class TestServerThread:
         self.appmain = appmain
         self._thr = None
 
-    def launch(self):
-        self._thr = threading.Thread(target=self.start)
-        self._thr.setDaemon(True)
-        self._thr.start()
-
     def start(self):
         """ サーバーアプリケーションを実行する """
         with wsgiref.simple_server.make_server('', self.port, self.appmain) as httpd:
-            print("Start API server: http://localhost:{}/ ...".format(self.port))
+            print("Start server: http://localhost:{}/ ...".format(self.port))
             httpd.serve_forever()
+
+    def startthread(self):
+        self._thr = threading.Thread(target=self.start)
+        self._thr.setDaemon(True)
+        self._thr.start()
 

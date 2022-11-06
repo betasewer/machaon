@@ -3,7 +3,7 @@ from http import HTTPStatus
 import json
 import urllib.parse
 
-from machaon.ui.webserver.wsgi import WSGIApp 
+
 
 #
 #
@@ -130,13 +130,13 @@ class ApiResult:
         return header
 
 
-class ApiServerApp(WSGIApp):
+class ApiServerApp:
     """ apiを実装する """
     def __init__(self):
         super().__init__()
-        self._slots = []
-        self._load_slots()
         self.request = None
+
+    _slots = []
 
     @classmethod
     def slot(cls, route, paramsig=None, *, blob=False):
@@ -148,19 +148,13 @@ class ApiServerApp(WSGIApp):
         """
         parts = route.split("/")
         def _deco(fn):
-            return ApiSlot(parts, fn, paramsig, blob=blob)
+            slot = ApiSlot(parts, fn, paramsig, blob=blob)
+            cls._slots.append(slot)
+            return slot
         return _deco
 
-    @classmethod
-    def blob(cls, bits, *headers):
-        """ バイト列を記述して返す """
-        return ApiResult(bits, *headers)
-
-    def _load_slots(self):
-        """ スロット定義を取り出す """
-        for v in vars(type(self)).values():
-            if isinstance(v, ApiSlot):
-                self._slots.append(v)
+    def get_slots(self):
+        return type(self)._slots
 
     def run(self, req):
         """ リクエストを処理する """
@@ -169,7 +163,7 @@ class ApiServerApp(WSGIApp):
 
         # apiを探して実行する
         slot = None
-        for slot in self._slots:
+        for slot in self.get_slots():
             cast = slot.cast(paths)
             if cast is not None:
                 result = slot.invoke(self, req, cast)
@@ -192,6 +186,11 @@ class ApiServerApp(WSGIApp):
         header = result.create_header()
         req.response("OK", header)
         yield result.bits
+
+    @classmethod
+    def blob(cls, bits, *headers):
+        """ APIの返り値で、バイト列を直接記述する """
+        return ApiResult(bits, *headers)
 
     #
     # 派生クラスで、ApiSlot.defineをメソッド定義に用いてスロットを定義する

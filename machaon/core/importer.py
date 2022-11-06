@@ -531,15 +531,17 @@ def enum_attributes(value_type, value):
             attr = e
         if attr is None:
             continue
+
+        fn = attr
         
-        code = getattr(attr, "__code__", None)
+        code = getattr(fn, "__code__", None)
         if code is None:
             nocodemembers.append((attrname, attr))
             continue
         
         # クラス名を取り出す
-        qual = full_qualified_name(attr)
-        if "." in qual:
+        qual = full_qualified_name(fn, fallback=True)
+        if qual and "." in qual:
             klass = qual.rpartition(".")[0]
         else:
             klass = None
