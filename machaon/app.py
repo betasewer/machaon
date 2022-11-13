@@ -71,6 +71,12 @@ class AppRoot:
         self.ignore_at_startup("packages", ignore_packages)
         self.ignore_at_startup("hotkey", ignore_hotkeys)
 
+    def initialize_as_server(self, **args):
+        """ サーバー実行用に初期化し、サーバーアプリを返す """
+        self.initialize(ui="headless", ignore_hotkeys=True, **args)
+        from machaon.ui.server.macaserver import machaon_server
+        return machaon_server(self)
+
     def get_ui(self):
         return self.ui
 
@@ -144,8 +150,12 @@ class AppRoot:
             self.ui.init_with_app(self)
         self.ui.activate_new_chamber() # 空のチャンバーを追加する
     
-    def boot_core(self, spirit=None):
+    def boot_core(self, spirit=None, *, fundamentals=False):
         """ コア機能を立ち上げる """
+        if fundamentals: # 既に初期化済みでない場合はここで
+            # 基本型をロードする
+            self.typemodule.add_fundamentals() 
+
         # パッケージマネージャの初期化
         package_dir = self.get_package_dir()
         self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))

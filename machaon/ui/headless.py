@@ -275,7 +275,7 @@ class BatchLauncher(LoggingLauncher):
 
 
 
-class ServerLauncher(BatchLauncher):
+class AsyncBatchLauncher(BatchLauncher):
     """
     対話的でない非同期実行アプリケーション。
     起動後ただちにコマンドを開始し、終了まで待機する。
@@ -328,3 +328,32 @@ class ServerLauncher(BatchLauncher):
         super().on_exit()
         self._loop = False
 
+
+
+class PassiveLauncher(LoggingLauncher):
+    """
+    同期実行アプリケーション。
+    メッセージの更新やランチャの終了を自発的に行わない。
+    """
+    is_async = False
+
+    def __init__(self, args):
+        super().__init__(args)
+
+    def message_handler(self, msg, *, nested=False):
+        messages = []
+        if msg.tag == "eval-message-seq":
+            messages, _chamber = msg.req_arguments("messages", "chamber")
+        elif msg.tag == "eval-message":
+            message = msg.req_arguments("message")
+            messages.append(message)
+        else:
+            return super().message_handler(msg, nested=nested)
+
+        for message in messages:
+            # メッセージを実行する
+            self.app.eval_object_message(ProcessSentence(message, auto=True, autoleading=True))
+    
+    def run_mainloop(self):
+        # スタートアップメッセージを処理する
+        self.update_chamber_messages(None)

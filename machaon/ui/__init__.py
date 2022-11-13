@@ -1,8 +1,12 @@
 import importlib.util
 
-def has_tk():
-    tk = importlib.util.find_spec("tkinter")
-    return tk is not None
+ui_names = (
+    "tk",
+    "shell",
+    "batch", "headless",
+    "async-batch", "async-headless",
+)
+
 
 def new_launcher(ui=None, **args):
     if isinstance(ui, str):
@@ -14,8 +18,10 @@ def new_launcher(ui=None, **args):
             return shell_launcher(args)
         elif ui == "batch":
             return batch_launcher(args)
-        elif ui == "server" or ui == "async":
-            return server_launcher(args)
+        elif ui == "async-batch":
+            return async_batch_launcher(args)
+        elif ui == "headless":
+            return passive_launcher(args)
         else:
             raise ValueError("不明なUIタイプです: "+ui)
         
@@ -26,6 +32,9 @@ def new_launcher(ui=None, **args):
         else:
             return shell_launcher(args)
     
+def has_tk():
+    tk = importlib.util.find_spec("tkinter")
+    return tk is not None
 
 def tk_launcher(args):
     from machaon.ui.tk import tkLauncher
@@ -41,12 +50,17 @@ def shell_launcher(args):
         return GenericShell(args)
 
 def batch_launcher(args):
-    from machaon.ui.server import BatchLauncher
+    from machaon.ui.headless import BatchLauncher
     args["shell"] = shell_launcher(args)
     return BatchLauncher(args)
 
-def server_launcher(args):
-    from machaon.ui.server import ServerLauncher
+def async_batch_launcher(args):
+    from machaon.ui.headless import AsyncBatchLauncher
     args["shell"] = shell_launcher(args)
-    return ServerLauncher(args)
+    return AsyncBatchLauncher(args)
+
+def passive_launcher(args):
+    from machaon.ui.headless import PassiveLauncher
+    args["shell"] = shell_launcher(args)
+    return PassiveLauncher(args)
 

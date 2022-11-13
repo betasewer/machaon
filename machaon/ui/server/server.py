@@ -1,82 +1,9 @@
 
-
-
 from datetime import datetime
-import urllib.parse
-import wsgiref.util as wsgiutil
 import wsgiref.simple_server
-from http import HTTPStatus
 import threading
 
-#
-#
-# WSGIアプリケーション
-#
-#
-class WSGIRequest:
-    def __init__(self, app, env, start_response):
-        self._env = env
-        self._start_response = start_response
-        self._app = app
-        self._uri = wsgiutil.request_uri(self._env)
-        self._uriparts = urllib.parse.urlsplit(self._uri, allow_fragments=False)
-
-    def response(self, status_name, header):
-        """ レスポンスを返す """
-        status = getattr(HTTPStatus, status_name)
-        code = "{} {}".format(status.value, status.phrase)
-        self._start_response(code, header)
-
-    def response_and_status_message(self, status_code_or_name):
-        """ レスポンスを返し表示用メッセージを作成する簡易ヘルパー """
-        if isinstance(status_code_or_name, str):
-            status = getattr(HTTPStatus, status_code_or_name)
-        elif isinstance(status_code_or_name, HTTPStatus):
-            status = status_code_or_name
-        else:
-            raise TypeError(status_code_or_name)
-
-        code = "{} {}".format(status.value, status.phrase)
-        self._start_response(code, [('Content-type', 'text/html; charset=utf-8')])
-        message = "<html><body><h2>{} {}</h2><p>{}.</p></body>".format(status.value, status.phrase, status.description)
-        return message.encode("utf-8")
-
-    @property
-    def app(self):
-        return self._app
-
-    #
-    # envからの取得
-    #
-    @property
-    def uri(self):
-        return self._uri
-
-    @property
-    def scheme(self):
-        return self._uriparts.scheme
-
-    @property
-    def netloc(self):
-        return self._uriparts.netloc
-    
-    @property
-    def path(self):
-        return self._uriparts.path
-    
-    @property
-    def query(self):
-        return self._uriparts.query
-
-    def parse_query(self):
-        return urllib.parse.parse_qsl(self.query)
-    
-    #
-    # envの更新
-    #
-    def shift_path_info(self):
-        wsgiutil.shift_path_info(self._env)
-
+from machaon.ui.server.wsgi import WSGIRequest
 
 #
 #
@@ -120,6 +47,12 @@ class SingleServer(ServerBasic):
         self._root = AppRoot()
         self._root.initialize(ui="batch", **uiargs)
         self._spirit = self._root.temp_spirit()
+        if hasattr(self._server, "init_app_root"):
+            self._server.init_app_root(self._root)
+
+    def use_core(self):
+        self._root.boot_core(fundamentals=True)
+        self._root.boot_ui()
     
     def run(self, env, start_response):
         """ """
@@ -133,8 +66,7 @@ class LoggedSingleServer(SingleServer):
     def __init__(self, serverapp, **uiargs):
         super().__init__(serverapp, **uiargs)
         # 言語とUIの初期化
-        self._root.boot_core()
-        self._root.boot_ui()
+        self.use_core()
         # ロガー生成
         self._proc = self._root.create_process() # ログ生成用実行プロセス
         self._context = self._root.create_root_context(self._proc)
@@ -186,4 +118,3 @@ class TestServerThread:
         self._thr = threading.Thread(target=self.start)
         self._thr.setDaemon(True)
         self._thr.start()
-

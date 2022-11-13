@@ -3,6 +3,9 @@ from http import HTTPStatus
 import json
 import urllib.parse
 
+def split_url_path(url):
+    """ 前後の空の要素を取り除く """
+    return [x for x in url.split("/") if x]
 
 
 #
@@ -12,7 +15,8 @@ import urllib.parse
 #
 class ApiSlot:
     """ Apiの定義 """
-    def __init__(self, parts, fn, paramsig=None, blob=False):
+    def __init__(self, method, parts, fn, paramsig=None, blob=False):
+        self.method = method
         self.parts = parts
         self.fn = fn
         self.paramsigs = {}
@@ -22,8 +26,11 @@ class ApiSlot:
             p = ApiParam.parse(k, v)
             self.paramsigs[p.name] = p
 
-    def cast(self, pathparts):
+    def cast(self, method, pathparts):
         """ マッチする場合、呼び出しオブジェクトを構築する """
+        if self.method != method:
+            return None
+        
         if len(self.parts) != len(pathparts):
             return None
         
@@ -130,6 +137,7 @@ class ApiResult:
         return header
 
 
+
 class ApiServerApp:
     """ apiを実装する """
     def __init__(self):
@@ -139,19 +147,41 @@ class ApiServerApp:
     _slots = []
 
     @classmethod
-    def slot(cls, route, paramsig=None, *, blob=False):
+    def slot(cls, route, paramsig=None, *, method=None, blob=False):
         """ スロット定義デコレータ 
         Params:
             route(str): apiのエントリポイント
             paramsig(str): クエリパラメータのシグニチャをクエリパラメータの形式で記述する
             content_type(str): ブロブを返す場合に指定する。
         """
-        parts = route.split("/")
+        parts = split_url_path(route)
+        method = method or "GET"
         def _deco(fn):
-            slot = ApiSlot(parts, fn, paramsig, blob=blob)
+            slot = ApiSlot(method, parts, fn, paramsig, blob=blob)
             cls._slots.append(slot)
             return slot
+
+        _deco.get = cls.get_slot
+        _deco.post = cls.post_slot
+        _deco.put = cls.put_slot
+        _deco.delete = cls.delete_slot
         return _deco
+    
+    @classmethod
+    def get_slot(cls, *args, **kwargs):
+        return cls.slot(*args, method="GET", **kwargs)
+    
+    @classmethod
+    def post_slot(cls, *args, **kwargs):
+        return cls.slot(*args, method="POST", **kwargs)
+        
+    @classmethod
+    def put_slot(cls, *args, **kwargs):
+        return cls.slot(*args, method="PUT", **kwargs)
+        
+    @classmethod
+    def delete_slot(cls, *args, **kwargs):
+        return cls.slot(*args, method="DELETE", **kwargs)
 
     def get_slots(self):
         return type(self)._slots
@@ -159,12 +189,13 @@ class ApiServerApp:
     def run(self, req):
         """ リクエストを処理する """
         self.request = req
-        paths = [x for x in req.path.split("/") if x] # 前後の空の要素を取り除く
+        method = req.method
+        paths = split_url_path(req.path) # 前後の空の要素を取り除く
 
         # apiを探して実行する
         slot = None
         for slot in self.get_slots():
-            cast = slot.cast(paths)
+            cast = slot.cast(method, paths)
             if cast is not None:
                 result = slot.invoke(self, req, cast)
                 break
