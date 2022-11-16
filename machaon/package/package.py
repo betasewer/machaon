@@ -467,20 +467,19 @@ class PackageManager():
 
         # ダウンロードと展開を行う
         localpath = None
-        tmpdir = None
         for status in package_extraction(pkg):
-            if status == PackageManager.EXTRACTED_FILES:
-                localpath = status.path
-                tmpdir = status.tmpdir
-                break
-            yield status
-        
-        if localpath is None:
-            return
+            if status != PackageManager.EXTRACTED_FILES:
+                yield status
+                continue
+            
+            # EXTRACTED_FILES
+            localpath = status.path
+            if localpath is None:
+                return
 
-        # pipにインストールさせる
-        yield PackageManager.PIP_INSTALLING
-        try:
+            # pipにインストールさせる
+            yield PackageManager.PIP_INSTALLING
+
             if not newinstall:
                 if pkg.name not in self.database:
                     newinstall = True
@@ -512,10 +511,7 @@ class PackageManager():
                 # データベースに書き込む
                 self.add_database(pkg)
         
-        finally:
-            tmpdir.cleanup()
-        
-        # パッケージの情報を修正する
+        # インストール完了後、パッケージの情報を修正する
         if "toplevel" in self.database[pkg.name]:
             if pkg.entrypoint is None:
                 pkg.entrypoint = self.database[pkg.name]["toplevel"]
@@ -617,11 +613,11 @@ def package_extraction(pkg: Package):
             out = tmpdir.path() / "content"
             out.makedirs()
             localpath = rep.extract(arcfilepath, out.get())
+            yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
     else:
         # 単にパスを取得する
         localpath = rep.get_local_path()
-
-    yield PackageManager.EXTRACTED_FILES.bind(path=localpath, tmpdir=tmpdir)
+        yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
 
 
 def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):
