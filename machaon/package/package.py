@@ -468,48 +468,50 @@ class PackageManager():
         # ダウンロードと展開を行う
         localpath = None
         for status in package_extraction(pkg):
-            if status != PackageManager.EXTRACTED_FILES:
+            print(repr(status))
+            if status == PackageManager.EXTRACTED_FILES:
+                localpath = status.path
+                if localpath is None:
+                    return
+
+                # pipにインストールさせる
+                yield PackageManager.PIP_INSTALLING
+                print("installing:", os.path.exists(localpath))
+
+                if not newinstall:
+                    if pkg.name not in self.database:
+                        newinstall = True
+
+                options = options or ()
+                if newinstall:
+                    yield from run_pip(
+                        installtarget=localpath, 
+                        installdir=self.dir if pkg.is_installation_separated() else None,
+                        options=options
+                    )
+
+                    # pipが作成したデータを見に行く
+                    distinfo: Dict[str, str] = {}
+                    if pkg.is_installation_separated():
+                        distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
+
+                    # データベースに書き込む
+                    self.add_database(pkg, **distinfo)
+
+                else:
+                    isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)   
+                    yield from run_pip(
+                        installtarget=localpath, 
+                        installdir=self.dir if isseparate else None,
+                        options=[*options, "--upgrade"]
+                    )
+
+                    # データベースに書き込む
+                    self.add_database(pkg)
+            
+            else:
                 yield status
                 continue
-            
-            # EXTRACTED_FILES
-            localpath = status.path
-            if localpath is None:
-                return
-
-            # pipにインストールさせる
-            yield PackageManager.PIP_INSTALLING
-
-            if not newinstall:
-                if pkg.name not in self.database:
-                    newinstall = True
-
-            options = options or ()
-            if newinstall:
-                yield from run_pip(
-                    installtarget=localpath, 
-                    installdir=self.dir if pkg.is_installation_separated() else None,
-                    options=options
-                )
-
-                # pipが作成したデータを見に行く
-                distinfo: Dict[str, str] = {}
-                if pkg.is_installation_separated():
-                    distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
-
-                # データベースに書き込む
-                self.add_database(pkg, **distinfo)
-
-            else:
-                isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)   
-                yield from run_pip(
-                    installtarget=localpath, 
-                    installdir=self.dir if isseparate else None,
-                    options=[*options, "--upgrade"]
-                )
-
-                # データベースに書き込む
-                self.add_database(pkg)
         
         # インストール完了後、パッケージの情報を修正する
         if "toplevel" in self.database[pkg.name]:
