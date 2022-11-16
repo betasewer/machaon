@@ -419,7 +419,7 @@ class Path:
 
     def new_increment(self, suffixformat=None, start=1):
         """ @method
-        存在しないパスになるまでサフィックスを付して新たに生成する。
+        存在しないパスになるまで、元のパスにサフィックスを付して新たに生成する。
         Params:
             suffixformat?(str): サフィックスの書式文字列
             start?(int): 開始の数字
@@ -440,6 +440,40 @@ class Path:
         else:
             raise ValueError("Too many same name dir: {}".format(self._path)) 
 
+    def new_random_name(self, width=8):
+        """ @method
+        存在しないパスになるまで、元のパスにランダムな英数字の連続を付して生成する。
+        Params:
+            width?(int): 新たな名前の文字数
+        Returns:
+            Path:
+        """
+        import random
+        import string
+        wd = len(string.digits)
+        wl = len(string.ascii_lowercase)
+        puncts = "_-=[]"
+        wp = len(puncts)
+
+        def pickchar():
+            index = random.randrange(0,wd+wl+wp)
+            if index < wd:
+                return string.digits[index]
+            index -= wd
+            if index < wl:
+                return string.ascii_lowercase[index]
+            index -= wl
+            return puncts[index]
+
+        #
+        for alt in range(0, 100):
+            suffix = "".join(pickchar() for _ in range(width))
+            newpath = self.with_basename_format("{}{}", suffix)
+            if not newpath.exists(): # 存在しない新しい名
+                return newpath
+        else:
+            raise ValueError("Too many same name dir: {}".format(self._path)) 
+            
     def is_same(self, right):
         """ @method
         同じファイルまたはディレクトリを指しているか。
@@ -888,12 +922,70 @@ class PlatformPath(shellpath().PlatformPath):
     MixinType:
         Path:
     """
-    def www(self):
-        """ @method
-        Returns:
-            Str
-        """
-        return "www"
+
+#
+#
+#
+class TemporaryDirectory():
+    """  
+    exit時に削除される一時ディレクトリ
+    """
+    def __init__(self, *, ignore_cleanup_errors=False):
+        self.dir = None
+        self._ignerror = ignore_cleanup_errors
+
+    def make(self):
+        import tempfile
+        return Path(tempfile.mkdtemp())
+
+    def deletes(self, d):
+        shutil.rmtree(d)
+
+    def prepare(self):
+        if self.dir is None:
+            self.dir = self.make()
+    
+    def cleanup(self):
+        if self.dir is not None:
+            self.deletes(self.dir)
+            self.dir = None
+    
+    def get(self):
+        if self.dir is None:
+            raise ValueError("not prepared")
+        return self.dir.get()
+    
+    def path(self):
+        return self.dir
+
+    def __fspath__(self):
+        return os.fspath(self.dir)
+
+    def __enter__(self):
+        self.prepare()
+        return self
+
+    def __exit__(self, et, ev, tb):
+        try:
+            self.cleanup()
+        except:
+            if self._ignerror:
+                pass
+            else:
+                raise
+
+
+class UserTemporaryDirectory(TemporaryDirectory):
+    def __init__(self, root, **kwargs):
+        self.root = root
+        super().__init__(**kwargs)
+    
+    def make(self):
+        return (self.root / "temp").new_random_name().makedirs()
+    
+    def deletes(self, d):
+        shutil.rmtree(d)
+        
 
 
 # 
@@ -963,3 +1055,6 @@ def unzip(app, path, out=None, win=False):
             newpath = os.path.join(cd, memberpath.encode("cp437").decode("utf-8"))
             os.rename(oldpath, newpath)
             stack.extend([(newpath, d[memberpath], x) for x in d[memberpath]])
+
+
+

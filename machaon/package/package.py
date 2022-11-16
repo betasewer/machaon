@@ -587,53 +587,36 @@ class PackageManager():
 #
 #
 def package_extraction(pkg: Package):
-    class TempDir():
-        def __init__(self):
-            self.dir = None
-        def init(self):
-            if self.dir is None:
-                self.dir = tempfile.mkdtemp()
-        def cleanup(self):
-            if self.dir is None:
-                shutil.rmtree(self.dir)
-        def get(self):
-            return self.dir
-    tmpdir = TempDir()
+    from machaon.types.shell import TemporaryDirectory
+    def opentempdir():
+        return TemporaryDirectory()
     
     rep = pkg.get_source()
     if isinstance(rep, RepositoryArchive):
         # ダウンロードする
-        tmpdir.init()
-        try:
-            total = rep.query_download_size()
-            yield PackageManager.DOWNLOAD_START.bind(total=total)
+        with opentempdir() as tmpdir:
+            try:
+                total = rep.query_download_size()
+                yield PackageManager.DOWNLOAD_START.bind(total=total)
 
-            arcfilepath = rep.get_arcfilepath(tmpdir.get())
-            for size in rep.download_iter(arcfilepath):
-                yield PackageManager.DOWNLOADING.bind(size=size, total=total)
-                
-            yield PackageManager.DOWNLOAD_END.bind(total=total)
+                arcfilepath = rep.get_arcfilepath(tmpdir.get())
+                for size in rep.download_iter(arcfilepath):
+                    yield PackageManager.DOWNLOADING.bind(size=size, total=total)
+                    
+                yield PackageManager.DOWNLOAD_END.bind(total=total)
 
-        except RepositoryURLError as e:
-            yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
-            tmpdir.cleanup()
-            return
-        except Exception:
-            tmpdir.cleanup()
-            return
+            except RepositoryURLError as e:
+                yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
+                return
 
     localpath = None
     if isinstance(rep, BasicArchive):
         # ローカルに展開する
-        tmpdir.init()
-        try:
+        with opentempdir() as tmpdir:
             arcfilepath = rep.get_arcfilepath(tmpdir.get())
-            out = os.path.join(tmpdir.get(), "content")
-            os.mkdir(out)
-            localpath = rep.extract(arcfilepath, out)
-        except Exception:
-            tmpdir.cleanup()
-            return
+            out = tmpdir.path() / "content"
+            out.makedirs()
+            localpath = rep.extract(arcfilepath, out.get())
     else:
         # 単にパスを取得する
         localpath = rep.get_local_path()
