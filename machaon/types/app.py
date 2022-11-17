@@ -330,42 +330,49 @@ class RootObject:
         from machaon.types.shell import Path
         transfer_deployed_directory(app, Path(self.root.get_basic_dir()), path)
     
-    def machaon_update(self, context, app):
+    def machaon_update(self, context, app, forceinstall=False):
         """ @task context
         machaonをリポジトリからダウンロードして更新する。
+        Params:
+            forceinstall?(bool): 
         """
+        # インストールディレクトリ
         curmodule = PyModuleLoader("machaon")
         location = curmodule.load_filepath()
         if location is None:
             raise ValueError("インストール先が不明です")
+        
         installdir = os.path.normpath(os.path.join(os.path.dirname(location), ".."))
         lock = os.path.normpath(os.path.join(installdir, "..", ".machaon-update-lock"))
         if os.path.isfile(lock):
             raise ValueError("{}: 上書きしないようにロックされています".format(lock))
 
+        # パッケージを定義する
         from machaon.package.package import create_package, package_extraction, run_pip
         pkg = create_package("machaon", "github:betasewer/machaon")
+        status = self.root.query_package_status(pkg)
+        if status == "latest":
+            app.post("message", "最新の状態です")
+            if not forceinstall:
+                return
+        elif status != "unknown":
+            app.post("message", "より新しいバージョンが存在します")
+        else:
+            app.post("error", "不明：パッケージの状態の取得に失敗")
+            if not forceinstall:
+                return
 
         # ダウンロードしてインストールする
-        def operation(pkg, options):
-            options = options or []
-            path = None
-            tmpdir = None
-            for status in package_extraction(pkg):
-                if status == PackageManager.EXTRACTED_FILES:
-                    path = status.path
-                    tmpdir = status.tmpdir
-                    break
-                yield status
-            
-            if path is None:
-                return
-            
-            yield PackageManager.PIP_INSTALLING
-            try:
-                yield from run_pip(installtarget=path, installdir=installdir, options=[*options, "--upgrade"])
-            finally:
-                tmpdir.cleanup()
+        def operation(pkg, _options):
+            with package_extraction(pkg) as extraction:
+                for status in extraction:
+                    if status == PackageManager.EXTRACTED_FILES:
+                        if status.path is None:
+                            return
+                        yield PackageManager.PIP_INSTALLING
+                        yield from run_pip(installtarget=status.path, installdir=installdir, options=["--upgrade"])
+                    else:
+                        yield status
         
         if AppPackageType().display_download_and_install(app, pkg, operation):
             app.post("message", "machaonを更新しました。次回起動時に反映されます")

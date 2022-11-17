@@ -380,7 +380,7 @@ class PackageManager():
     DOWNLOADING = milestone_msg("size")
     DOWNLOAD_END = milestone_msg("total")
     DOWNLOAD_ERROR = milestone_msg("error")
-    EXTRACTED_FILES = milestone_msg("path", "tmpdir")
+    EXTRACTED_FILES = milestone_msg("path")
     NOT_INSTALLED = milestone()
     UNINSTALLING = milestone()
     PIP_INSTALLING = milestone()
@@ -467,51 +467,50 @@ class PackageManager():
 
         # ダウンロードと展開を行う
         localpath = None
-        for status in package_extraction(pkg):
-            print(repr(status))
-            if status == PackageManager.EXTRACTED_FILES:
-                localpath = status.path
-                if localpath is None:
-                    return
+        with package_extraction(pkg) as extractor:
+            for status in extractor:
+                if status == PackageManager.EXTRACTED_FILES:
+                    localpath = status.path
+                    if localpath is None:
+                        return
 
-                # pipにインストールさせる
-                yield PackageManager.PIP_INSTALLING
-                print("installing:", os.path.exists(localpath))
+                    # pipにインストールさせる
+                    yield PackageManager.PIP_INSTALLING
 
-                if not newinstall:
-                    if pkg.name not in self.database:
-                        newinstall = True
+                    if not newinstall:
+                        if pkg.name not in self.database:
+                            newinstall = True
 
-                options = options or ()
-                if newinstall:
-                    yield from run_pip(
-                        installtarget=localpath, 
-                        installdir=self.dir if pkg.is_installation_separated() else None,
-                        options=options
-                    )
+                    options = options or ()
+                    if newinstall:
+                        yield from run_pip(
+                            installtarget=localpath, 
+                            installdir=self.dir if pkg.is_installation_separated() else None,
+                            options=options
+                        )
 
-                    # pipが作成したデータを見に行く
-                    distinfo: Dict[str, str] = {}
-                    if pkg.is_installation_separated():
-                        distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
+                        # pipが作成したデータを見に行く
+                        distinfo: Dict[str, str] = {}
+                        if pkg.is_installation_separated():
+                            distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
 
-                    # データベースに書き込む
-                    self.add_database(pkg, **distinfo)
+                        # データベースに書き込む
+                        self.add_database(pkg, **distinfo)
 
+                    else:
+                        isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)   
+                        yield from run_pip(
+                            installtarget=localpath, 
+                            installdir=self.dir if isseparate else None,
+                            options=[*options, "--upgrade"]
+                        )
+
+                        # データベースに書き込む
+                        self.add_database(pkg)
+                
                 else:
-                    isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)   
-                    yield from run_pip(
-                        installtarget=localpath, 
-                        installdir=self.dir if isseparate else None,
-                        options=[*options, "--upgrade"]
-                    )
-
-                    # データベースに書き込む
-                    self.add_database(pkg)
-            
-            else:
-                yield status
-                continue
+                    yield status
+                    continue
         
         # インストール完了後、パッケージの情報を修正する
         if "toplevel" in self.database[pkg.name]:
@@ -584,42 +583,90 @@ class PackageManager():
 #
 #
 #
-def package_extraction(pkg: Package):
-    from machaon.types.shell import TemporaryDirectory
-    def opentempdir():
-        return TemporaryDirectory()
+#
+#
+class LocalPackageExtraction:
+    def __init__(self, rep):
+        self.rep = rep
+
+    def __enter__(self):
+        return self
     
+    def __exit__(self, et, ev, tb):
+        pass
+    
+    def __iter__(self):
+        # 単にパスを取得する
+        localpath = self.rep.get_local_path()
+        yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
+
+
+class ArchivePackageExtraction:
+    def __init__(self, rep):
+        self.rep = rep
+        from machaon.types.shell import TemporaryDirectory
+        self.tempdir = TemporaryDirectory()
+        self._enter = False
+
+    def __enter__(self):
+        self.tempdir.__enter__()
+        self._enter = True
+        return self
+
+    def __exit__(self, et, ev, tb):
+        self.tempdir.__exit__(et, ev, tb)
+        self._enter = False
+
+    def must_be_entered(self):
+        if not self._enter:
+            raise ValueError("Not Entered")
+
+    def __iter__(self):
+        self.must_be_entered()
+        
+        arcfilepath = self.rep.get_arcfilepath(self.tempdir.get())
+        out = self.tempdir.path() / "content"
+        out.makedirs()
+        localpath = self.rep.extract(arcfilepath, out.get())
+        yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
+    
+
+class RemotePackageExtraction(ArchivePackageExtraction):
+    def __init__(self, rep):
+        super().__init__(rep)
+        
+    def __iter__(self):
+        self.must_be_entered()
+        
+        # リモートアーカイブをダウンロードする
+        try:
+            total = self.rep.query_download_size()
+            yield PackageManager.DOWNLOAD_START.bind(total=total)
+
+            arcfilepath = self.rep.get_arcfilepath(self.tempdir.get())
+            for size in self.rep.download_iter(arcfilepath):
+                yield PackageManager.DOWNLOADING.bind(size=size, total=total)
+                
+            yield PackageManager.DOWNLOAD_END.bind(total=total)
+
+        except RepositoryURLError as e:
+            yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
+            return
+        
+        # ローカルアーカイブの処理を行う
+        yield from super().__iter__()
+    
+
+
+def package_extraction(pkg: Package):
     rep = pkg.get_source()
     if isinstance(rep, RepositoryArchive):
-        # ダウンロードする
-        with opentempdir() as tmpdir:
-            try:
-                total = rep.query_download_size()
-                yield PackageManager.DOWNLOAD_START.bind(total=total)
-
-                arcfilepath = rep.get_arcfilepath(tmpdir.get())
-                for size in rep.download_iter(arcfilepath):
-                    yield PackageManager.DOWNLOADING.bind(size=size, total=total)
-                    
-                yield PackageManager.DOWNLOAD_END.bind(total=total)
-
-            except RepositoryURLError as e:
-                yield PackageManager.DOWNLOAD_ERROR.bind(error=e.get_basic())
-                return
-
-    localpath = None
-    if isinstance(rep, BasicArchive):
-        # ローカルに展開する
-        with opentempdir() as tmpdir:
-            arcfilepath = rep.get_arcfilepath(tmpdir.get())
-            out = tmpdir.path() / "content"
-            out.makedirs()
-            localpath = rep.extract(arcfilepath, out.get())
-            yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
+        return RemotePackageExtraction(rep)
+    elif isinstance(rep, BasicArchive):
+        return ArchivePackageExtraction(rep)
     else:
-        # 単にパスを取得する
-        localpath = rep.get_local_path()
-        yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
+        return LocalPackageExtraction(rep)
+
 
 
 def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):

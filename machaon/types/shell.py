@@ -944,13 +944,11 @@ class TemporaryDirectory():
     def prepare(self):
         if self.dir is None:
             self.dir = self.make()
-            print(self.dir, self.dir.exists())
     
     def cleanup(self):
         if self.dir is not None:
             self.deletes(self.dir)
             self.dir = None
-            print("'clean'")
     
     def get(self):
         if self.dir is None:
