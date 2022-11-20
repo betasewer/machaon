@@ -513,7 +513,7 @@ class Path:
             Sheet[Path](name, filetype, modtime, size):
         """
         if not self.isdir():
-            return [Path(self._path)]
+            return []
         return [x for x in self.listdir() if x.isfile()]
     
     def listdirall(self):
@@ -523,7 +523,7 @@ class Path:
             Sheet[Path](name, filetype, modtime, size):
         """
         if not self.isdir():
-            return [Path(self._path)]
+            return []
         items = [Path(os.path.join(self._path,x)) for x in os.listdir(self._path)]
         return items
 
@@ -973,6 +973,18 @@ class TemporaryDirectory():
                 pass
             else:
                 raise
+
+    #
+    #
+    #
+    def writefile(self, bits, ext=None, prefix="tmp"):
+        """ パスを参照可能な一時ファイルを作成 """
+        p = (self.dir / prefix).new_random_name()
+        if ext:
+            p = p.with_ext(ext)
+        with open(p, "wb") as fo:
+            fo.write(bits)
+        return p
 
 
 class UserTemporaryDirectory(TemporaryDirectory):

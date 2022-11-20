@@ -99,6 +99,10 @@ class AppRoot:
         p = os.path.join(self.basicdir, "log")
         return Path(p).makedirs()
 
+    def get_temp_dir(self, **kwargs):
+        from machaon.types.shell import UserTemporaryDirectory
+        return UserTemporaryDirectory(self.basicdir, **kwargs)
+
     def get_external_applist(self):
         return os.path.join(self.basicdir, "apps.ini")
     

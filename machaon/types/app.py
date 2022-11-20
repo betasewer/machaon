@@ -355,12 +355,14 @@ class RootObject:
             app.post("message", "最新の状態です")
             if not forceinstall:
                 return
-        elif status != "unknown":
-            app.post("message", "より新しいバージョンが存在します")
-        else:
+        elif status == "unknown":
             app.post("error", "不明：パッケージの状態の取得に失敗")
             if not forceinstall:
                 return
+        elif status == "notfound" or status == "none":
+            pass
+        else:
+            app.post("message", "より新しいバージョンが存在します")
 
         # ダウンロードしてインストールする
         def operation(pkg, _options):
