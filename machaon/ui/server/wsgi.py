@@ -90,8 +90,11 @@ class WSGIRequest:
         if urlencoding:
             return urllib.parse.unquote_plus(bits.decode("ascii"), encoding=urlencoding)
         return bits
-
     
+    def read_urlencoded_values(self, *, encoding=None):
+        bits = self.read_input()
+        return urllib.parse.parse_qsl(bits.decode("ascii"), encoding=encoding)
+
     #
     # envの更新
     #
