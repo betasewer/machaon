@@ -18,25 +18,19 @@ class WSGIRequest:
         self._uri = wsgiutil.request_uri(self._env)
         self._uriparts = urllib.parse.urlsplit(self._uri, allow_fragments=False)
 
-    def response(self, status_name, header):
+    def response(self, status_code_or_name, header):
         """ レスポンスを返す """
-        status = getattr(HTTPStatus, status_name)
-        code = "{} {}".format(status.value, status.phrase)
-        self._start_response(code, header)
-
-    def response_and_status_message(self, status_code_or_name):
-        """ レスポンスを返し表示用メッセージを作成する簡易ヘルパー """
         if isinstance(status_code_or_name, str):
             status = getattr(HTTPStatus, status_code_or_name)
         elif isinstance(status_code_or_name, HTTPStatus):
             status = status_code_or_name
         else:
             raise TypeError(status_code_or_name)
-
         code = "{} {}".format(status.value, status.phrase)
-        self._start_response(code, [('Content-type', 'text/html; charset=utf-8')])
-        message = "<html><body><h2>{} {}</h2><p>{}.</p></body>".format(status.value, status.phrase, status.description)
-        return message.encode("utf-8")
+        self._start_response(code, header)
+
+    def status_message_html(self, status: HTTPStatus):
+        return "<html><body><h2>{} {}</h2><p>{}.</p></body>".format(status.value, status.phrase, status.description)
 
     @property
     def app(self):

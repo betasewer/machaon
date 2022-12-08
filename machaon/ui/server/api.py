@@ -197,25 +197,30 @@ class ApiServerApp:
         for slot in self.get_slots():
             cast = slot.cast(method, paths)
             if cast is not None:
-                result = slot.invoke(self, req, cast)
+                retval = slot.invoke(self, req, cast)
                 break
         else:
-            yield req.response_and_status_message("NOT_FOUND")
-            return 
+            retval = HTTPStatus.NOT_FOUND
 
         # データを返す
-        if isinstance(result, HTTPStatus):
+        if isinstance(retval, HTTPStatus):
             # ステータスコード
-            yield req.response_and_status_message(result)
-            return
-        elif not isinstance(result, ApiResult):
+            status = retval
+            bits = req.status_message_html(retval).encode("utf-8")
+            result = ApiResult(bits, ('Content-type', 'text/html; charset=utf-8')) # html
+        elif isinstance(retval, ApiResult):
+            # ApiResult
+            status = HTTPStatus.OK
+            result = retval
+        else:
             # json
-            bits = json.dumps(result).encode("utf-8")
+            status = HTTPStatus.OK
+            bits = json.dumps(retval).encode("utf-8")
             result = ApiResult(bits, ('Content-type', 'application/json; charset=utf-8')) # utf-8のjson形式
         
         # ヘッダ
         header = result.create_header()
-        req.response("OK", header)
+        req.response(status, header)
         yield result.bits
 
     @classmethod
