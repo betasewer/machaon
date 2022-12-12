@@ -67,6 +67,7 @@ def popen_capture(cmds, *, encoding=None, **popenargs):
     readthread = threading.Thread(None, target=stdoutreader.read, args=(proc.stdout, shell_encoding), daemon=True, name="POpenCapture_StdIOReader")
     readthread.start()
     
+    inputerrorbit = False
     while True:
         # 入力を待つ
         inputmsg = yield PopenMessage(mode=POPEN_WAITINPUT)
@@ -78,12 +79,13 @@ def popen_capture(cmds, *, encoding=None, **popenargs):
                 stdoutreader.stop()
                 yield PopenMessage(mode=POPEN_KILLED) # send用に吐く最後のメッセージ
                 break
-            elif inputmsg.value is not None:
-                proc.stdin.write((inputmsg.value+'\n').encode(shell_encoding))
+            elif not inputerrorbit and inputmsg.value is not None: 
+                bits = (inputmsg.value+'\n').encode(shell_encoding)
                 try:
+                    proc.stdin.write(bits)
                     proc.stdin.flush()
                 except Exception as e: # 入力待ちが終わった後で入力するとエラーが起きる
-                    pass
+                    inputerrorbit = True # 一度エラーが起きたらその後は入力を無視する
                     #yield PopenMessage(value=e, mode=POPEN_INPUT_ERROR)
         
         # 出力を取り出す
