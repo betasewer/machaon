@@ -228,6 +228,10 @@ class ApiServerApp:
         """ APIの返り値で、バイト列を直接記述する """
         return ApiResult(bits, *headers)
 
+    @property
+    def app(self):
+        return self.request.app if self.request else None
+
     #
     # 派生クラスで、ApiSlot.defineをメソッド定義に用いてスロットを定義する
     #
