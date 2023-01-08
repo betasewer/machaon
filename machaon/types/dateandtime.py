@@ -749,7 +749,7 @@ class YearLowMonth:
         y = complete_year_low(digits[0])
         m = digits[1]
         d = day if day is not None else 1
-        return datetime.datetime(y, m, d)
+        return datetime.date(y, m, d)
 
 class YearLowDate:
     """ @type subtype
@@ -769,5 +769,5 @@ class YearLowDate:
         y = complete_year_low(digits[0])
         m = digits[1]
         d = digits[2]
-        return datetime.datetime(y, m, d)
+        return datetime.date(y, m, d)
     

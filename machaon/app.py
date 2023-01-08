@@ -84,16 +84,16 @@ class AppRoot:
         return self.typemodule
     
     def get_basic_dir(self):
-        return self.basicdir
+        return Path(self.basicdir)
     
     def get_package_dir(self):
-        return os.path.join(self.basicdir, "packages")
+        return Path(os.path.join(self.basicdir, "packages"))
     
     def get_store_dir(self):
-        return os.path.join(self.basicdir, "store")
+        return Path(os.path.join(self.basicdir, "store"))
     
     def get_credential_dir(self):
-        return os.path.join(self.basicdir, "credential")
+        return Path(os.path.join(self.basicdir, "credential"))
     
     def get_log_dir(self):
         p = os.path.join(self.basicdir, "log")
