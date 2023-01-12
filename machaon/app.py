@@ -87,40 +87,39 @@ class AppRoot:
         return Path(self.basicdir)
     
     def get_package_dir(self):
-        return Path(os.path.join(self.basicdir, "packages"))
+        return Path(self.basicdir) / "packages"
     
     def get_store_dir(self):
-        return Path(os.path.join(self.basicdir, "store"))
+        return Path(self.basicdir) / "store"
     
     def get_credential_dir(self):
-        return Path(os.path.join(self.basicdir, "credential"))
+        return Path(self.basicdir) / "credential"
     
     def get_log_dir(self):
-        p = os.path.join(self.basicdir, "log")
-        return Path(p).makedirs()
+        # デフォルトで存在しないディレクトリ
+        return (Path(self.basicdir) / "log").makedirs()
 
     def get_temp_dir(self, **kwargs):
         from machaon.types.shell import UserTemporaryDirectory
         return UserTemporaryDirectory(self.basicdir, **kwargs)
 
     def get_external_applist(self):
-        return os.path.join(self.basicdir, "apps.ini")
+        return self.get_basic_dir() / "apps.ini"
     
     def get_GUID_names_file(self):
-        p = os.path.join(self.basicdir, "guid.ini")
-        if os.path.exists(p):
+        p = self.get_basic_dir() / "guid.ini"
+        if p.exists():
             return p
         return None
     
     def get_keybind_file(self):
-        p = os.path.join(self.basicdir, "keybind.ini")
-        if os.path.exists(p):
+        p = self.get_basic_dir() / "keybind.ini"
+        if p.exists():
             return p
         return None
 
     def get_local_dir(self, appname):
-        p = os.path.join(self.basicdir, "local", appname)
-        return Path(p).makedirs()
+        return (self.get_basic_dir() / "local" / appname).makedirs()
 
     def get_local_config(self, appname, filename, *, fallback=False):
         p = self.get_local_dir(appname) / filename
@@ -163,6 +162,7 @@ class AppRoot:
         # パッケージマネージャの初期化
         package_dir = self.get_package_dir()
         self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
+        self.pkgmanager.load_database()
         self.pkgmanager.add_to_import_path()
 
         # 標準モジュールをロードする

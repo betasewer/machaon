@@ -52,6 +52,9 @@ class Path:
         if self._stat is None:
             self._stat = os.stat(self._path)
         return self._stat
+
+    def normalize(self):
+        return Path(self.normpath)
         
     #
     #
@@ -762,7 +765,7 @@ class Path:
         elif value == "machaon" and approot:
             p = approot.get_basic_dir()
         elif value == "store" and approot:
-            p = os.path.join(approot.get_basic_dir(), "store")
+            p = approot.get_basic_dir() / "store"
         else:
             name, _, param  = value.partition(":")
             p = shellpath().get_known_path(name, param, approot)

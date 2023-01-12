@@ -10,9 +10,13 @@ from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
 from machaon.core.type.typemodule import TypeModule
 from machaon.core.importer import module_loader, PyBasicModuleLoader
+from machaon.types.shell import Path
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
 from machaon.package.archive import BasicArchive
+
+
+
 
 #
 class DatabaseNotLoadedError(Exception):
@@ -115,7 +119,7 @@ class Package():
 
     def is_type_modules(self) -> bool:
         return self._type == PACKAGE_TYPE_MODULES or self._type == PACKAGE_TYPE_SINGLE_MODULE
-    
+
     def is_dependency_modules(self) -> bool:
         return self._type == PACKAGE_TYPE_DEPENDENCY
     
@@ -390,13 +394,15 @@ class PackageManager():
 
     def __init__(self, directory, databasepath):
         self.dir = directory
+        if not isinstance(self.dir, Path):
+            self.dir = Path(directory)
         self.database = None # type: configparser.ConfigParser
         self._dbpath = databasepath
-        self.load_database()
 
     def add_to_import_path(self):
-        if self.dir not in sys.path:
-            sys.path.insert(0, self.dir)
+        p = self.dir.get()
+        if p not in sys.path:
+            sys.path.insert(0, p)
     
     def load_database(self, force=False):
         if not force and self.database is not None:
@@ -427,7 +433,7 @@ class PackageManager():
         if toplevel is not None:
             self.database.set(pkg.name, "toplevel", toplevel)
         if infodir is not None:
-            self.database.set(pkg.name, "infodir", infodir)
+            self.database.set(pkg.name, "infodir", str(infodir))
             
         self.save_database()
     
@@ -439,8 +445,7 @@ class PackageManager():
     def save_database(self):
         if self.database is None:
             raise DatabaseNotLoadedError()
-        if not os.path.isdir(self.dir):
-            os.makedirs(self.dir)
+        self.dir.makedirs()
         with open(self._dbpath, "w", encoding="utf-8") as fo:
             self.database.write(fo)
         #print("save setting file '{}'".format(self._dbpath))
@@ -531,10 +536,10 @@ class PackageManager():
             yield PackageManager.UNINSTALLING
             toplevel = self.database.get(pkg.name, "toplevel", fallback=None)
             if toplevel:
-                shutil.rmtree(os.path.join(self.dir, toplevel))
+                (self.dir / toplevel).rmtree()
             infodir = self.database.get(pkg.name, "infodir", fallback=None)
             if infodir:
-                shutil.rmtree(os.path.join(self.dir, infodir))
+                (self.dir / infodir).rmtree()
         else:
             # pipにアンインストールさせる
             yield PackageManager.PIP_UNINSTALLING
@@ -554,14 +559,14 @@ class PackageManager():
             raise ValueError("Bad Entry")
         return entry["hash"]
 
-    def get_installed_location(self, pkg) -> str:
+    def get_installed_location(self, pkg) -> Path:
         """ パッケージがインストールされたパス """
         if not self.is_installed(pkg.name):
             return None
         if self.database.get(pkg.name, "separate"):
             toplevel = self.database.get(pkg.name, "toplevel")
             if toplevel:
-                return os.path.join(self.dir, toplevel)
+                return self.dir / toplevel
         else:
             raise NotImplementedError()
     
@@ -679,7 +684,7 @@ def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=(
         cmd.extend(["uninstall", uninstalltarget])
     
     if installdir is not None:
-        cmd.extend(["-t", installdir])
+        cmd.extend(["-t", os.fspath(installdir)])
     
     if options:
         cmd.extend(options)
@@ -697,33 +702,33 @@ def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=(
 #
 #
 #
-def _read_pip_dist_info(directory, pkg_name):
+def _read_pip_dist_info(directory: Path, pkg_name):
     """ pipがdist-infoフォルダに収めたパッケージの情報を読みとる """
     pkg_name = canonicalize_package_name(pkg_name)
     infodir = None
-    for d in os.listdir(directory):
-        if d.endswith(".dist-info"):
-            p = os.path.join(directory, d, "METADATA")
-        elif d.endswith(".egg-info"):
-            p = os.path.join(directory, d, "PKG-INFO")
+    for d in directory.listdirall():
+        if not d.isdir():
+            continue
+
+        if d.name().endswith(".dist-info"):
+            p = d / "METADATA"
+        elif d.name().endswith(".egg-info"):
+            p = d / "PKG-INFO"
         else:
             continue
         
-        if not os.path.isfile(p):
+        if not p.isfile():
             continue
         
-        def _readfilelines(p):
-            with open(p, "r", encoding="utf-8") as fi:
-                yield from fi
-            
         namedata = None
-        for l in _readfilelines(p):
-            key, _, value = [x.strip() for x in l.partition(":")]
-            if key == "Name":
-                namedata = value
-                break
-        else:
-            continue
+        with open(p, "r", encoding="utf-8") as fi:
+            for l in fi:
+                key, _, value = [x.strip() for x in l.partition(":")]
+                if key == "Name":
+                    namedata = value
+                    break
+            else:
+                continue
 
         if namedata and canonicalize_package_name(namedata) == pkg_name:
             infodir = d
@@ -735,7 +740,7 @@ def _read_pip_dist_info(directory, pkg_name):
     distinfo = {}
     distinfo["infodir"] = infodir
     
-    p = os.path.join(directory, infodir, "top_level.txt")
+    p = infodir / "top_level.txt"
     with open(p, "r", encoding="utf-8") as fi:
         distinfo["toplevel"] = fi.read().strip()
     
@@ -750,23 +755,5 @@ def canonicalize_package_name(name):
 class PipDistInfoFolderNotFound(Exception):
     pass
 
-
-#
-#
-#
-"""
-{
-    package_name : str
-    types : [
-        {
-            typename :
-
-        }
-
-    ]
-
-}
-
-"""
 
 

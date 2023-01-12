@@ -68,24 +68,3 @@ def test_load_submodules_types():
     assert tm.get("Path", scope="ion") is not None
     assert tm.get("Path", scope="ion").get_describer_qualname() == "machaon.types.shell.Path"
 
-
-@pytest.mark.skip()
-def test_package_setup(approot):
-    pkg = approot.add_package(
-        "test",
-        "bitbucket:betasewer/test_module",
-        module="hello"
-    )
-    
-    approot.update_package(pkg)
-    assert approot.cmdengine.commandsets[0].match("test.helloworld")
-    spi.printout()
-
-    command_package(spi, "remove", False, 0)
-    assert isinstance(approot.cmdengine.commandsets[0], NotYetInstalledCommandSet)
-    assert not approot.cmdengine.commandsets[0].match("test.helloworld")
-    spi.printout()
-
-    command_package(spi, "update", False, 0)
-    assert approot.cmdengine.commandsets[0].match("test.helloworld")
-    spi.printout()

@@ -4,6 +4,7 @@ import os
 from machaon.core.importer import PyModuleLoader
 from machaon.package.package import PackageManager, create_module_package
 from machaon.types.package import AppPackageType
+from machaon.types.shell import Path
 from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
 
 logo = """
@@ -327,8 +328,7 @@ class RootObject:
         Params:
             path(Path): 新たにmachaonが配備されるディレクトリ
         """
-        from machaon.types.shell import Path
-        transfer_deployed_directory(app, Path(self.root.get_basic_dir()), path)
+        transfer_deployed_directory(app, self.root.get_basic_dir(), path)
     
     def machaon_update(self, context, app, forceinstall=False):
         """ @task context
@@ -341,10 +341,10 @@ class RootObject:
         location = curmodule.load_filepath()
         if location is None:
             raise ValueError("インストール先が不明です")
-        
-        installdir = os.path.normpath(os.path.join(os.path.dirname(location), ".."))
-        lock = os.path.normpath(os.path.join(installdir, "..", ".machaon-update-lock"))
-        if os.path.isfile(lock):
+
+        installdir = (Path(location).dir() / "..").normalize()
+        lock = (installdir / ".." / ".machaon-update-lock").normalize()
+        if lock.exists():
             raise ValueError("{}: 上書きしないようにロックされています".format(lock))
 
         # パッケージを定義する
