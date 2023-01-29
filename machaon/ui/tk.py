@@ -751,7 +751,8 @@ class tkLauncher(Launcher):
             bar = "[{}{}] {}% ({}/{})".format("", width*"-", 0, 0, view.total)
         elif command == "end":
             if view.is_marquee():
-                bar = "[{}{}] ({})".format(width*"o", "", view.progress+1)
+                prog = view.progress+1 if view.progress else 0
+                bar = "[{}{}] ({})".format(width*"o", "", prog)
             else:
                 bar = "[{}{}] {}% ({}/{})".format(width*"o", "", 100, view.total, view.total)
         else:
