@@ -13,6 +13,13 @@ class Meta:
         """ この型のオブジェクトを作成する """
         return self._describer.constructor(self._describer, *args)
 
+    def try_constructor(self, *args, default=None):
+        """ 例外を許容する """
+        try:
+            return self.constructor(*args)
+        except:
+            return default
+
     def stringify(self, value):
         """ この型のオブジェクトを引数にとり、文字列として返す """
         if self._trait:
@@ -21,7 +28,7 @@ class Meta:
             return self._describer.stringify(value)
     
     def pprint(self, app, value):
-        """ この型のオブジェクトを引数にとり、文字列として返す """
+        """ この型のオブジェクトを引数にとり、文字列として表示する """
         if self._trait:
             return self._describer.pprint(self._describer, value, app)
         else:
