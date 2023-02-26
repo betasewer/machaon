@@ -408,7 +408,7 @@ class Path:
             return not Path(p).is_redundant()
         except ValueError:
             return False # Windowsでドライブが異なる場合
-
+        
     def is_redundant(self):
         """ @method
         '.'または'..'が含まれているか。
@@ -420,6 +420,27 @@ class Path:
                 return True
         return False
 
+    def is_absolute(self):
+        """ @method
+        絶対パスか。
+        Returns:
+            bool:
+        """
+        return os.path.isabs(self._path)
+
+    def is_same(self, right):
+        """ @method
+        同じファイルまたはディレクトリを指しているか。
+        Params:
+            right(Path):
+        Returns:
+            bool:
+        """
+        return os.path.samefile(self.get(), right.get())
+
+    #
+    # パスの生成
+    #
     def new_increment(self, suffixformat=None, start=1):
         """ @method
         存在しないパスになるまで、元のパスにサフィックスを付して新たに生成する。
@@ -477,16 +498,6 @@ class Path:
         else:
             raise ValueError("Too many same name dir: {}".format(self._path)) 
             
-    def is_same(self, right):
-        """ @method
-        同じファイルまたはディレクトリを指しているか。
-        Params:
-            right(Path):
-        Returns:
-            bool:
-        """
-        return os.path.samefile(self.get(), right.get())
-
 
     #
     # パス調査
