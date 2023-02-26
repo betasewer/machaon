@@ -73,29 +73,33 @@ class ApiSlot:
 
 class ApiParam:
     """ apiのパラメータ型 """
-    def __init__(self, name, valtype, ismulti):
+    def __init__(self, name, valtype, isvariable=False, isdict=False):
         self.name = name
         self.valtype = valtype
-        self.ismulti = ismulti
+        self.isvariable = isvariable
+        self.isdict = isdict
     
     @classmethod
     def parse(cls, nameexpr, valexpr):
+        isvariable = False
+        isdict = False
         if valexpr:
             valtype = {"str":str, "int":int, "float":float, "bool":boolarg}.get(valexpr)
             if valtype is None:
                 raise ValueError(valexpr + 'は不明なビルトイン型です')
         else:
             valtype = str
-        ismulti = False
+        
         if nameexpr.startswith("*"):
             nameexpr = nameexpr[1:]
-            ismulti = True
-        return ApiParam(nameexpr, valtype, ismulti)    
+            isvariable = True
+        
+        return ApiParam(nameexpr, valtype, isvariable, isdict)    
 
     def store(self, kwargs, value):
         k = self.name
         v = self.valtype(value)
-        if self.ismulti:
+        if self.isvariable:
             if k not in kwargs:
                 kwargs[k] = []
             kwargs[k].append(v)
@@ -137,6 +141,65 @@ class ApiResult:
         return header
 
 
+class ApiSlotRegister:
+    def __init__(self):
+        self.slots = []
+        self._method = None
+        self._common_paramsig = None
+
+    def match_slot(self, method, paths):
+        """ 
+        適合するスロットを返す 
+        先頭のもののみ
+        """
+        for slot in self.slots:
+            cast = slot.cast(method, paths)
+            if cast is not None:
+                return slot, cast
+        return None, None
+             
+    def __call__(self, route, paramsig=None, *, method=None, blob=False):
+        """ 
+        スロットを登録する 
+        """
+        parts = split_url_path(route)
+        method = self._method or "GET"
+        self._method = None
+        if self._common_paramsig:
+            if paramsig:
+                paramsig = paramsig + "&" + self._common_paramsig
+            else:
+                paramsig = self._common_paramsig
+         
+        def _deco(fn):
+            slot = ApiSlot(method, parts, fn, paramsig, blob=blob)
+            self.slots.append(slot)
+            return slot
+        return _deco
+
+    @property
+    def get(self):
+        self._method = "GET"
+        return self
+        
+    @property
+    def post(self):
+        self._method = "POST"
+        return self
+
+    @property
+    def put(self):
+        self._method = "PUT"
+        return self
+
+    @property
+    def delete(self):
+        self._method = "DELETE"
+        return self
+
+    def set_common_params(self, paramsig):
+        self._common_paramsig = paramsig
+
 
 class ApiServerApp:
     """ apiを実装する """
@@ -144,47 +207,16 @@ class ApiServerApp:
         super().__init__()
         self.request = None
 
-    _slots = []
-
-    @classmethod
-    def slot(cls, route, paramsig=None, *, method=None, blob=False):
-        """ スロット定義デコレータ 
-        Params:
-            route(str): apiのエントリポイント
-            paramsig(str): クエリパラメータのシグニチャをクエリパラメータの形式で記述する
-            content_type(str): ブロブを返す場合に指定する。
-        """
-        parts = split_url_path(route)
-        method = method or "GET"
-        def _deco(fn):
-            slot = ApiSlot(method, parts, fn, paramsig, blob=blob)
-            cls._slots.append(slot)
-            return slot
-
-        _deco.get = cls.get_slot
-        _deco.post = cls.post_slot
-        _deco.put = cls.put_slot
-        _deco.delete = cls.delete_slot
-        return _deco
-    
-    @classmethod
-    def get_slot(cls, *args, **kwargs):
-        return cls.slot(*args, method="GET", **kwargs)
-    
-    @classmethod
-    def post_slot(cls, *args, **kwargs):
-        return cls.slot(*args, method="POST", **kwargs)
-        
-    @classmethod
-    def put_slot(cls, *args, **kwargs):
-        return cls.slot(*args, method="PUT", **kwargs)
-        
-    @classmethod
-    def delete_slot(cls, *args, **kwargs):
-        return cls.slot(*args, method="DELETE", **kwargs)
+    """ スロット定義オブジェクト
+    Params:
+        route(str): apiのエントリポイント
+        paramsig(str): クエリパラメータのシグニチャをクエリパラメータの形式で記述する
+        content_type(str): ブロブを返す場合に指定する。
+    """
+    slot = ApiSlotRegister()
 
     def get_slots(self):
-        return type(self)._slots
+        return type(self).slot.slots
 
     def run(self, req):
         """ リクエストを処理する """
@@ -193,12 +225,9 @@ class ApiServerApp:
         paths = split_url_path(req.path) # 前後の空の要素を取り除く
 
         # apiを探して実行する
-        slot = None
-        for slot in self.get_slots():
-            cast = slot.cast(method, paths)
-            if cast is not None:
-                retval = slot.invoke(self, req, cast)
-                break
+        slot, slotcast = self.slot.match_slot(method, paths)
+        if slot is not None:
+            retval = slot.invoke(self, req, slotcast)
         else:
             retval = HTTPStatus.NOT_FOUND
 
