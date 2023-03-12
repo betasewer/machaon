@@ -707,6 +707,7 @@ TOKEN_BLOCK_BEGIN = 0x02
 TOKEN_BLOCK_END = 0x04
 TOKEN_ALL_BLOCK_END = 0x08
 TOKEN_STRING = 0x10
+TOKEN_SYNTACTIC = 0x20
 TOKEN_FIRSTTERM = 0x40
 TOKEN_BLOCK_SELECTOR_MOD = 0x100
 
@@ -721,6 +722,10 @@ EXPECT_RECIEVER = TERM_TYPE_RECIEVER
 EXPECT_SELECTOR = TERM_TYPE_SELECTOR
 EXPECT_ARGUMENT = TERM_TYPE_ARGUMENT
 
+# 構文上の命令
+SYNTAX_CODE_END_TRAILING_ARGS = 1
+SYNTAX_CODE_DISCARD_MESSAGE = 2
+
 #
 #
 #
@@ -732,7 +737,8 @@ CHAR_END_BLOCK_TRARGS = 5
 CHAR_WAIT_USER_QUOTER = 6
 CHAR_BEGIN_LINE_QUOTER = 7
 CHAR_BLOCK_SELECTOR_MOD = 8
-CHAR_SPACE = 10
+CHAR_END_TRAILING_ARGS = 9
+CHAR_SPACE = 100
 
 class SpecialChar():
     """ コード付きの文字 """
@@ -886,7 +892,7 @@ class MessageCharBuffer():
                 yield CHAR_WAIT_USER_QUOTER
             elif teststring(pch, ch, SIGIL_LINE_QUOTER):
                 # 行末までの引用符
-                self.begin_quote("->", None)
+                self.begin_quote(SIGIL_LINE_QUOTER, None)
                 yield CHAR_BEGIN_LINE_QUOTER
             else:
                 # それ以外のメッセージを構成する文字
@@ -917,14 +923,20 @@ class MessageTokenizer():
         return s
 
     def new_token(self, s, tokentype=0):
-        if s:
+        # 単語で区切られた構文記号
+        if s == SIGIL_END_TRAILING_ARGS:
+            tokentype = TOKEN_SYNTACTIC
+            s = SYNTAX_CODE_END_TRAILING_ARGS
+        elif s == SIGIL_DISCARD_MESSAGE:
+            tokentype = TOKEN_SYNTACTIC
+            s = SYNTAX_CODE_DISCARD_MESSAGE
+        elif s:
             tokentype |= TOKEN_TERM
-
+        
         if self._wait_firstterm: 
             tokentype |= TOKEN_FIRSTTERM
             if tokentype & TOKEN_TERM:
                 self._wait_firstterm = False
-        
         return (s, tokentype)
     
     def read_token(self, source):
@@ -972,10 +984,11 @@ class MessageTokenizer():
         
         # バッファに残っている文字を処理する
         buf.flush()
+        term = buf.last()
         if buf.quoting():
-            yield token(buf.last(), TOKEN_ALL_BLOCK_END|TOKEN_STRING)
+            yield token(term, TOKEN_ALL_BLOCK_END|TOKEN_STRING)
         else:
-            yield token(buf.last(), TOKEN_ALL_BLOCK_END)
+            yield token(term, TOKEN_ALL_BLOCK_END)
 
 
 #
@@ -1167,22 +1180,22 @@ class MessageEngine():
 
         # 特殊な記号
         if not isstringtoken:
-            # 引数リストの終わり
-            if token == SIGIL_END_TRAILING_ARGS:
-                if expect == EXPECT_ARGUMENT:
-                    code.add(self.ast_POP_BLOCK)
-                    return code
-            # メッセージの連鎖をリセットする
-            if token == SIGIL_DISCARD_MESSAGE:
-                if expect == EXPECT_NOTHING:
-                    code.add(self.ast_DISCARD_LAST_BLOCK_MESSAGE)
-                    return code
-                raise BadExpressionError("メッセージの要素が足りません")
+            if tokentype == TOKEN_SYNTACTIC:
+                # 引数リストの終わり
+                if token == SYNTAX_CODE_END_TRAILING_ARGS:
+                    if expect == EXPECT_ARGUMENT:
+                        code.add(self.ast_POP_BLOCK)
+                        return code
+                # メッセージの連鎖をリセットする
+                if token == SYNTAX_CODE_DISCARD_MESSAGE:
+                    if expect == EXPECT_NOTHING:
+                        code.add(self.ast_DISCARD_LAST_BLOCK_MESSAGE)
+                        return code
+                    raise BadExpressionError("メッセージの要素が足りません")
             # 現在のブロックセレクタに適用するモディファイア
-            if tokentype == TOKEN_BLOCK_SELECTOR_MOD:
+            elif tokentype == TOKEN_BLOCK_SELECTOR_MOD:
                 code.add(self.ast_MODIFY_NEXT_BLOCK_SELECTOR, token)
                 return code
-
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:

@@ -13,6 +13,7 @@ def message_test(source, context, lhs, rhs, tester=None):
             spi.printout()
             print("--- instructions ----------------")
             print(put_instructions(context))
+            print("\n".join([x["message-expression"] for x in context.get_invocations()]))
             return False
         lhs = lhs.value
 
@@ -26,6 +27,7 @@ def message_test(source, context, lhs, rhs, tester=None):
         print("")
         print("--- instructions ----------------")
         print(put_instructions(context))
+        print("\n".join([x["message-expression"] for x in context.get_invocations()]))
         if context.is_failed():
             error = context.new_invocation_error_object()
             spi = TempSpirit()

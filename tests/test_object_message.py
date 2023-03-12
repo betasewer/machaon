@@ -282,6 +282,11 @@ def test_string_literals():
     ptest("--/0x7F/ Int", 0x7F)
     ptest("--/3+5j/ Complex", 3+5j)
 
+def test_parameter_list_end():
+    ptest("--|{}/{}/{}| format: 1999 7 31 :. slice: 0 5", "1999/")
+    ptest("--|{}/{}/{}| format: 1999 7 31 :. . 1 + 1", 2)
+
+
 #@run
 def test_constructor():
     ptest("1 Int", 1)
@@ -297,7 +302,7 @@ def test_constructor():
                return False
         return True
 
-    ptest("1 /+ 2 /+ 3 Sheet: Int positive negative ; row_values 1", [2,-2], q=deep_equals)
+    ptest("1 /+ 2 /+ 3 Sheet: Int positive negative :. row_values 1", [2,-2], q=deep_equals)
 
     # ブロック型
     def type_equals(l, r):
@@ -318,6 +323,7 @@ def test_object_ref():
 def test_unfinished_block_is_ok():    
     ptest("1", 1) # identity メッセージをおぎなう
     ptest("((7 mul 8)) add ((9 mul 10)) ", 7*8+9*10) # 二重括弧は不完全なメッセージ式として補完される
+
 
 #
 def test_paren_block():
@@ -353,3 +359,23 @@ def test_message_as_selector_multi_blocks():
     # ブロックが3つ以上続く
     l = ptest("(10 (ad + d) 2) ('Str' Type) (mu + l) (10 / 5 floor)", "1212")
 
+
+def test_python_fn_selector():
+    import sys
+    # モジュールから関数・定数をインポートする
+    ptest("9 (math.sqrt py)", 3)
+    ptest("_ (sys.version py)", sys.version)
+    ptest("_ (sys.version py): 1 2 3", sys.version) # 定数の場合、余計な引数は無視される
+
+    # 引数無しの関数を呼び出す
+    import datetime
+    ptest("__ignored_param__ (datetime pymod #> datetime #> today void)", None, q=lambda l,r:isinstance(l, datetime.datetime))
+    import platform
+    ptest("__ignored_param__ (platform pymod #> python-version void)", platform.python_version())
+
+    # クラスを直接生成する
+    ptest("2000 (datetime.datetime py): 8 31", datetime.datetime(2000, 8, 31)) # Invocationに包む
+    ptest("2000 (datetime pymod #> datetime): 8 31", datetime.datetime(2000, 8, 31)) # クラスオブジェクトがセレクタ
+    import argparse
+    ptest("_ (argparse pymod #> ArgumentParser void)", None, q=lambda l,r:isinstance(l,argparse.ArgumentParser)) # クラスオブジェクトがセレクタ
+    

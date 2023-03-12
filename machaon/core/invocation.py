@@ -90,10 +90,16 @@ class InvocationEntry():
         """ アクションを実行し、返り値を保存する """
         context.begin_invocation(self)
 
-        from machaon.process import ProcessInterrupted
+        args = self.args
+        kwargs = self.kwargs
+        if "IGNORE_ARGS" in self.invocation.modifier:
+            args = ()
+            kwargs = {}
+
         result = None
+        from machaon.process import ProcessInterrupted
         try:
-            result = self.action(*self.args, **self.kwargs)
+            result = self.action(*args, **kwargs)
         except ProcessInterrupted as e:
             raise e
         except Exception as e:
@@ -406,22 +412,25 @@ class FunctionInvocation(BasicInvocation):
         if callable(function):
             self.fn = function
         else:
-            self.fn = ImmediateValue(function, "<unnamed>")
+            self.fn = ImmediateValue(function, None)
         self.minarg = minarg
         self.maxarg = maxarg
 
     def get_method_name(self):
-        return normalize_method_name(self.fn.__name__)
-    
-    def get_method_doc(self):
-        return self.fn.__doc__
-    
-    def display(self):
         if(hasattr(self.fn, "get_action_name")):
             name = self.fn.get_action_name()
         else:
-            name = full_qualified_name(self.fn)
-        return ("Function", name, self.modifier_name())
+            name = full_qualified_name(self.fn) or "<unnamed>"
+        return normalize_method_name(name)
+    
+    def get_method_doc(self):
+        if isinstance(self.fn, ImmediateValue):
+            return repr(self.fn)
+        else:
+            return getattr(self.fn, "__doc__", "<no document>")
+    
+    def display(self):
+        return ("Function", self.get_method_name(), self.modifier_name())
     
     def prepare_invoke(self, context, *argobjects):
         args = [resolve_object_value(x) for x in argobjects] # そのまま実行

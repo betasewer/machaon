@@ -414,8 +414,10 @@ class Method:
         Returns:
             int: 個数。Noneで無限を示す
         """
-        if self.flags & METHOD_PARAMETER_UNSPECIFIED:
+        if self.flags & METHOD_LOADED == 0:
             raise UnloadedMethod(self.name)
+        if self.flags & METHOD_PARAMETER_UNSPECIFIED:
+            return None 
         cnt = 0
         for p in self.params:
             if p.is_variable():
@@ -432,8 +434,10 @@ class Method:
         Returns:
             int: 個数
         """
-        if self.flags & METHOD_PARAMETER_UNSPECIFIED:
+        if self.flags & METHOD_LOADED == 0:
             raise UnloadedMethod(self.name)
+        if self.flags & METHOD_PARAMETER_UNSPECIFIED:
+            return 0
         cnt = 0
         for p in self.params:
             if p.is_variable_oneormore():
@@ -629,26 +633,24 @@ class Method:
         except ValueError:
             # ビルトイン関数なので情報を取れなかった
             self.flags |= METHOD_PARAMETER_UNSPECIFIED
-            self.flags |= METHOD_LOADED
-            return 
-        
-        # 引数
-        for i, p in enumerate(sig.parameters.values()):
-            if i==0 and self_to_be_bound:
-                continue # 第一引数を飛ばす
-            
-            typename = "Any" # 型注釈から推定できるかもしれないが、不明とする
-            default, f = pick_parameter_default_value(p)        
+        else:
+            # 引数
+            for i, p in enumerate(sig.parameters.values()):
+                if i==0 and self_to_be_bound:
+                    continue # 第一引数を飛ばす
+                
+                typename = "Any" # 型注釈から推定できるかもしれないが、不明とする
+                default, f = pick_parameter_default_value(p)        
 
-            if f & PARAMETER_KEYWORD:
-                self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                break # キーワード引数には未対応
+                if f & PARAMETER_KEYWORD:
+                    self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                    break # キーワード引数には未対応
 
-            self.add_parameter(p.name, typename, "", default, flags=f)
+                self.add_parameter(p.name, typename, "", default, flags=f)
         
         target = getattr(fn, "__name__", None)
         if target is None:
-            target = repr("<function name cannot be retrieved>")
+            target = repr(fn)
 
         self._action = action or fn
         self.target = target
@@ -724,12 +726,14 @@ class Method:
                 raise ValueError("InstanceBoundAction must be specified when METHOD_INVOKEAS_BOUND_METHOD or METHOD_INVOKEAS_PROPERTY is set")
             ami = self.get_required_argument_min()
             amx = self.get_acceptable_argument_max()
+            amx = 0xFFFF if amx is None else amx
             from machaon.core.invocation import InstanceMethodInvocation
             return InstanceMethodInvocation(self._action.target, mods, ami, amx)
 
         elif bit == METHOD_INVOKEAS_FUNCTION or bit == METHOD_INVOKEAS_BOUND_FUNCTION:
             ami = self.get_required_argument_min()
             amx = self.get_acceptable_argument_max()
+            amx = 0xFFFF if amx is None else amx
             from machaon.core.invocation import FunctionInvocation
             return FunctionInvocation(self._action, mods, ami, amx)
 
@@ -1269,26 +1273,29 @@ def make_method_from_dict(di):
 # インスタンスメソッド
 #
 #
-class InstanceBoundAction():
+class InstanceBoundAction:
     def __init__(self, target):
         self.target = target
 
     def __call__(self, *args):
         raise ValueError("未解決のアクションのため呼び出せません")
 
-class ImmediateValue():
+class ImmediateValue:
     def __init__(self, value, name):
         self.value = value
         self.name = name
 
     def __repr__(self):
-        return "<ImmediateValue '{}'>".format(self.name)
+        name = self.name or repr(self.value)
+        return "<ImmediateValue '{}'>".format(name)
     
     def get_action_name(self):
-        return "ImmediateValue<{}>".format(self.name)
+        name = self.name or repr(self.value)
+        return "ImmediateValue<{}>".format(name)
 
     def __call__(self, *args):
         return self.value
+
         
 #
 def classdict_invokeas(value):

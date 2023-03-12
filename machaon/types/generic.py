@@ -454,6 +454,7 @@ class GenericMethods:
         Returns:
             Any:
         """
+        key = normalize_method_target(key)
         return getattr(left, key)
     
     def slice(self, left, start, stop):
@@ -626,22 +627,21 @@ class GenericMethods:
         else:
             return ObjectTuple([left, right])
     
-    def pyinvoke(self, selfarg, context, symbol, *args):
+    def void(self, left, context):
         """ @method reciever-param context
-        外部モジュールの関数を評価する。
+        セレクタを引数無しの呼び出しに変換する。
         Params:
-            selfarg(Object): 引数1
-            symbol(str): シンボル
-            *args(Any): 引数
+            left(Any): 任意のセレクタオブジェクト
         Returns:
             Any:
         """
-        from machaon.core.importer import attribute_loader
-        loader = attribute_loader(symbol)
-        imported = loader(fallback=False)
-        if not callable(imported):
-            raise ValueError("'{}'は呼び出し可能な関数ではありません".format(symbol))
-        return imported(selfarg.value, *args) # 関数実行
+        from machaon.core.invocation import BasicInvocation, FunctionInvocation
+        if isinstance(left, BasicInvocation):
+            left.set_modifier("IGNORE_ARGS")
+            return left
+        else:
+            return FunctionInvocation(left, {"IGNORE_ARGS"}, 0, 0)
+
 
 class GenericMethodValue():
     def __init__(self):

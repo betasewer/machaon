@@ -4,7 +4,7 @@ from machaon.core.type.alltype import (
     TypeDecl, TypeInstance, instantiate_type, parse_type_declaration, METHODS_BOUND_TYPE_INSTANCE
 )
 from machaon.types.fundamental import fundamental_types
-from machaon.core.method import RETURN_SELF, Method, MethodResult
+from machaon.core.method import RETURN_SELF, Method, MethodResult, METHOD_LOADED
 from machaon.core.context import instant_context
 
 from machaon.macatest import run
@@ -264,7 +264,7 @@ def test_load_from_docstring():
         p1 (Float)
         p2 (Complex)
     """
-    m = Method()
+    m = Method(flags=METHOD_LOADED)
     m.parse_syntax_from_docstring(doc)
     assert m.get_required_argument_min() == 2
     assert m.get_acceptable_argument_max() == 2

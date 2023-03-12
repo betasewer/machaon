@@ -2,7 +2,6 @@ import re
 import string
 from machaon.core.function import parse_sequential_function
 
-from machaon.core.message import BadExpressionError, select_method, select_method_by_object
 
 class StrType():
     """ @type trait [Str]
@@ -721,6 +720,16 @@ class StrType():
         loader = attribute_loader(expr)
         return FunctionInvocation(loader())
     
+    def load_python_module(self, expr):
+        """ @method alias-name [pymod]
+        Pythonのモジュールとして読み込み、モジュールオブジェクトを返す。
+        Returns:
+            Any:
+        """
+        from machaon.core.importer import module_loader
+        loader = module_loader(expr)
+        return loader.load_module()
+
     def run_command(self, string, app, *params):
         """ @task
         シェルのコマンドを実行し、終わるまで待つ。入出力をキャプチャする。
