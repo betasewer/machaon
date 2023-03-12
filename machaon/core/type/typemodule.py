@@ -461,16 +461,8 @@ class TypeModule():
         """
         return self._children.get(scopename)
 
-    def add_scope(self, scopename, other):
-        """ 追加する 
-        Params:
-            scopename(str): 
-            other(TypeModule):
-        """
-        return self.update_scope(scopename, other, addonly=True)
-    
     def update_scope(self, scopename, other, *, addonly=False):
-        """ 追加する 
+        """ 追加または上書きする 
         Params:
             scopename(str): 
             other(TypeModule):
@@ -487,7 +479,7 @@ class TypeModule():
     def add_fundamentals(self):
         """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
-        self.add_scope(CORE_SCOPE, fundamental_types())
+        self.update_scope(CORE_SCOPE, fundamental_types())
     
     def add_default_modules(self, names=None):
         """ 標準モジュールの型を追加する """
@@ -586,3 +578,5 @@ class TypeModule():
     # 遅延登録
     def definitions(self):
         return self.DefinitionSyntax(self)
+
+

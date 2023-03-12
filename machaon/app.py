@@ -284,7 +284,7 @@ class AppRoot:
         mod = package.load_type_module()
         if mod is None:
             return False
-        self.typemodule.add_scope(package.scope, mod)
+        self.typemodule.update_scope(package.scope, mod)
 
         return package.is_load_succeeded()
     

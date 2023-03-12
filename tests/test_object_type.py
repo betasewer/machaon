@@ -175,7 +175,7 @@ def test_scoped_define():
 
     types = TypeModule()
     types.add_fundamentals()
-    types.add_scope("spec", newtypes)
+    types.update_scope("spec", newtypes, addonly=True)
     str_t = types.get("Str", scope=CORE_SCOPE)
     assert str_t.get_describer_qualname() == "machaon.types.string.StrType"
     assert types.get("Str", scope="spec") is spec_str_t
@@ -300,7 +300,7 @@ def test_typemodule_move():
     new_typeset.define(typename="AltString")
     new_typeset.define(Dummy_Rabbit, typename="Second-Rabbit")
 
-    fundamental_type.add_scope(None, new_typeset)
+    fundamental_type.update_scope(None, new_typeset)
     
     cxt = instant_context()
     cxt.type_module = fundamental_type
