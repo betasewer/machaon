@@ -71,6 +71,21 @@ class ApiSlot:
         return "/".join(self.parts)
 
 
+class ApiOptionsSlot:
+    def __init__(self, fn):
+        self.fn = fn
+
+    def cast(self, method, pathparts):
+        if method == "OPTIONS":
+            return ApiCast([])
+        return None
+
+    def invoke(self, server, request, cast):
+        """ APIを呼び出す """
+        return self.fn(server)
+
+
+
 class ApiParam:
     """ apiのパラメータ型 """
     def __init__(self, name, valtype, isvariable=False, isdict=False):
@@ -122,14 +137,17 @@ class ApiCast:
 
 class ApiResult:
     def __init__(self, bits, *headers):
-        self.bits = bits
+        self.bits = bits or bytes()
         self.headers = []
         for ent in headers:
             if ent[1] is None:
                 continue
             self.headers.append(ent)
 
-    def create_header(self):    
+    def get_header(self):
+        return self.headers
+
+    def create_result_header(self):    
         content_length = len(self.bits)
         header = [
             ('Access-Control-Allow-Origin', '*'),  # 許可するアクセス
@@ -158,11 +176,10 @@ class ApiSlotRegister:
                 return slot, cast
         return None, None
              
-    def __call__(self, route, paramsig=None, *, method=None, blob=False):
+    def __call__(self, route=None, paramsig=None, *, method=None, blob=False):
         """ 
         スロットを登録する 
         """
-        parts = split_url_path(route)
         method = self._method or "GET"
         self._method = None
         if self._common_paramsig:
@@ -172,7 +189,13 @@ class ApiSlotRegister:
                 paramsig = self._common_paramsig
          
         def _deco(fn):
-            slot = ApiSlot(method, parts, fn, paramsig, blob=blob)
+            if method == "OPTIONS":
+                slot = ApiOptionsSlot(fn)
+            elif route:
+                parts = split_url_path(route)
+                slot = ApiSlot(method, parts, fn, paramsig, blob=blob)
+            else:
+                raise ValueError("")
             self.slots.append(slot)
             return slot
         return _deco
@@ -195,6 +218,11 @@ class ApiSlotRegister:
     @property
     def delete(self):
         self._method = "DELETE"
+        return self
+    
+    @property
+    def options(self):
+        self._method = "OPTIONS"
         return self
 
     def set_common_params(self, paramsig):
@@ -237,18 +265,20 @@ class ApiServerApp:
             status = retval
             bits = req.status_message_html(retval).encode("utf-8")
             result = ApiResult(bits, ('Content-type', 'text/html; charset=utf-8')) # html
+            header = result.create_result_header()
         elif isinstance(retval, ApiResult):
             # ApiResult
             status = HTTPStatus.OK
             result = retval
+            header = result.create_result_header()
         else:
             # json
             status = HTTPStatus.OK
             bits = json.dumps(retval).encode("utf-8")
             result = ApiResult(bits, ('Content-type', 'application/json; charset=utf-8')) # utf-8のjson形式
+            header = result.create_result_header()
         
         # ヘッダ
-        header = result.create_header()
         req.response(status, header)
         yield result.bits
 
@@ -260,6 +290,9 @@ class ApiServerApp:
     @property
     def app(self):
         return self.request.app if self.request else None
+    
+    def result(self, bits=None):
+        return ApiResult(bits)
 
     #
     # 派生クラスで、ApiSlot.defineをメソッド定義に用いてスロットを定義する

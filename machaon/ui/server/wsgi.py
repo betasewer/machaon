@@ -88,6 +88,13 @@ class WSGIRequest:
     def read_urlencoded_values(self, *, encoding=None):
         bits = self.read_input()
         return urllib.parse.parse_qsl(bits.decode("ascii"), encoding=encoding)
+    
+    def read_json(self, *, encoding=None):
+        bits = self.read_input()
+        text = bits.decode(encoding or "utf-8")
+        import json
+        return json.loads(text)
+
 
     #
     # envの更新
