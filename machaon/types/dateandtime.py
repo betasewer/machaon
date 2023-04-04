@@ -598,14 +598,20 @@ class TimeType:
 # Date:
 # サブタイプ
 #
-def split_by_nondigit(s):
+def digits_split_by_nondigit(s, required=None):
     parts = [""]
     for ch in s:
         if ch.isdigit():
             parts[-1] += ch
         else:
             parts.append("")
-    return parts
+    digits = [int(x) for x in parts if len(x)>0]
+    if required is not None:
+        if len(digits) < required:
+            raise ValueError("日付の要素の数が足りません({}個必要): {}".format(required, s))
+        digits = digits[0:required]
+    return digits
+
 
 class DateSeparated:
     """ @type subtype [Sep]
@@ -616,17 +622,30 @@ class DateSeparated:
     def constructor(self, s):
         """ @meta """
         if isinstance(s, str):
-            parts = split_by_nondigit(s)
-            vs = [int(x) for x in parts if len(x)>0]
-            if len(vs)<3:
-                raise ValueError("要素の数が足りません:" + s)
-            return datetime.date(vs[0], vs[1], vs[2])
+            y, m, d = digits_split_by_nondigit(s, 3)
+            return datetime.date(y, m, d)
         else:
             return DateType.constructor(DateType, s)
 
     def stringify(self, d):
         """ @meta """
         return d.strftime("%Y/%m/%d")
+    
+
+class MonthSeparated:
+    """ @type subtype
+    年と月の区切られた組み合わせ。
+    BaseType:
+        Date:
+    """
+    def constructor(self, s, day=None):
+        """ @meta """
+        if isinstance(s, str):
+            y, m = digits_split_by_nondigit(s, 2)
+            d = day if day is not None else 1
+            return datetime.date(y, m, d)
+        else:
+            return DateType.constructor(DateType, s)
 
 class Date8:
     """ @type subtype
@@ -741,13 +760,8 @@ class YearLowMonth:
     """
     def constructor(self, s, day=None):
         """ @meta """
-        parts = split_by_nondigit(s)
-        digits = [int(x) for x in parts]
-        if len(digits) < 2:
-            raise ValueError("年と月の区切りが不明です")
-        
-        y = complete_year_low(digits[0])
-        m = digits[1]
+        yv, m = digits_split_by_nondigit(s, 2)        
+        y = complete_year_low(yv)
         d = day if day is not None else 1
         return datetime.date(y, m, d)
 
@@ -761,13 +775,8 @@ class YearLowDate:
     """
     def constructor(self, s):
         """ @meta """
-        parts = split_by_nondigit(s)
-        digits = [int(x) for x in parts]
-        if len(digits) < 3:
-            raise ValueError("年と月の区切りが不明です")
-        
-        y = complete_year_low(digits[0])
-        m = digits[1]
-        d = digits[2]
+        yv, m, d = digits_split_by_nondigit(s, 3) 
+        y = complete_year_low(yv)
         return datetime.date(y, m, d)
-    
+
+

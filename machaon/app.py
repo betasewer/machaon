@@ -294,6 +294,13 @@ class AppRoot:
             self.typemodule.remove_scope(package.scope)
         return True
 
+    def reload(self):
+        """  """
+        for pkg in self.pkgs:
+            pkg.reload()
+        self.typemodule.reload()
+        return True
+    
     def check_pkg_loading(self):
         """ パッケージの読み込みが終わったら呼び出す """
         self.typemodule.check_loading()
