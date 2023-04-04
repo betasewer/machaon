@@ -41,7 +41,50 @@ class Meta:
             return dest.stringify(o)
         else:
             return self.stringify(o)
+
     
+class MetaChoice:
+    def __init__(self, types):
+        self._choice = list(types)
+
+    def select_constructor(self, *args):
+        v = None
+        for t in self._choice:
+            try:
+                v = t.constructor(*args)
+            except:
+                continue
+            else:
+                return t, v
+        return None, None
+
+    def constructor(self, *args):
+        t, v = self.select_constructor(*args)
+        if t is None:
+            raise ValueError("No match constructor for ({})".format(args))
+        return v
+
+    def try_constructor(self, *args, default=None):
+        t, v = self.select_constructor(*args)
+        if t is None:
+            return default
+        else:
+            return v
+
+    def convert_stringify(self, *args, dest=None, default=None):
+        """ この型のオブジェクトを作成し、そのまま文字列にして返す """
+        t, v = self.select_constructor(*args)
+        if dest is not None:
+            if t is None:
+                v = default
+            return dest.stringify(v)
+        else:
+            if t is None:
+                raise ValueError("No match constructor for ({})".format(args))
+            return t.stringify(v)
+
+
+
 
 class DefinedMeta:
     def get(self, describer, **kwargs):
@@ -53,6 +96,9 @@ class DefinedMeta:
 
     def __call__(self, describer, **kwargs):
         return self.get(describer, **kwargs)
+    
+    def choice(self, *types):
+        return MetaChoice(types)
 
     #
     # ショートカット
@@ -66,7 +112,11 @@ class DefinedMeta:
     LocaleInt       = _shortcut("machaon.types.numeric.LocaleInt")
     LocaleFloat     = _shortcut("machaon.types.numeric.LocaleFloat")
     # dateandtime
+    Date            = _shortcut("machaon.types.dateandtime.DateType")
+    Datetime        = _shortcut("machaon.types.dateandtime.DatetimeType")
+    Time            = _shortcut("machaon.types.dateandtime.TimeType")
     DateSeparated   = _shortcut("machaon.types.dateandtime.DateSeparated")
+    MonthSeparated  = _shortcut("machaon.types.dateandtime.MonthSeparated")
     Date8           = _shortcut("machaon.types.dateandtime.Date8")
     Date4           = _shortcut("machaon.types.dateandtime.Date4")
     Month           = _shortcut("machaon.types.dateandtime.Month")
@@ -76,3 +126,6 @@ class DefinedMeta:
 
 
 meta = DefinedMeta()
+
+
+
