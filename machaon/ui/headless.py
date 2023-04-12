@@ -20,9 +20,10 @@ class LoggingLauncher(Launcher):
         self._title = args.get("title", "machaon-app")
         self._logger = None
         self._loggersetup = {k:args.get(k) for k in ("loghandler", "logfileperiod", "logfile", "logdir")}
-        self._nobreakbuf = []
         # handler : logging.Handler
         # fileperiod : str(daily|monthly)
+        self._nobreakbuf = []
+        self._logpath = None
 
     #
     # ログファイル設定
@@ -33,10 +34,10 @@ class LoggingLauncher(Launcher):
             # ハンドラを直接指定
             self.setup_logger(self._loggersetup["loghandler"])
         else:
-            logpath = self.get_logfile_path()
-            if logpath is not None:
+            self._logpath = self.build_logfile_path()
+            if self._logpath is not None:
                 # ログファイルハンドラを指定
-                self.setup_file_logger(logpath)
+                self.setup_file_logger()
             else:
                 # ヌルハンドラを指定
                 self.setup_logger(logging.NullHandler())
@@ -48,8 +49,11 @@ class LoggingLauncher(Launcher):
         self._logger.setLevel(logging.INFO)
         self._logger.addHandler(handler)
 
-    def setup_file_logger(self, logpath):
-        f = logging.FileHandler(logpath, encoding="utf-8")
+    def setup_file_logger(self):
+        if self._logpath is None:
+            raise ValueError("ログファイルの名前が指定されていません")
+        
+        f = logging.FileHandler(self._logpath, encoding="utf-8")
         
         # カスタムログレコードの生成を設定する
         super_factory = logging.getLogRecordFactory()
@@ -76,6 +80,9 @@ class LoggingLauncher(Launcher):
         return self._logger
 
     def get_logfile_path(self):
+        return self._logpath
+
+    def build_logfile_path(self):
         filename = None
 
         period = self._loggersetup["logfileperiod"]
