@@ -3,6 +3,8 @@ from http import HTTPStatus
 import json
 import urllib.parse
 
+from machaon.ui.server.wsgi import WSGIRequest
+
 def split_url_path(url):
     """ 前後の空の要素を取り除く """
     return [x for x in url.split("/") if x]
@@ -233,7 +235,7 @@ class ApiServerApp:
     """ apiを実装する """
     def __init__(self):
         super().__init__()
-        self.request = None
+        self.request: WSGIRequest = None
 
     """ スロット定義オブジェクト
     Params:

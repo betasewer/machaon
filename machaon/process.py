@@ -609,6 +609,34 @@ class TempSpirit(Spirit):
             self.update_progress_display(progress)
         return True
     
+
+class LoggingSpirit(Spirit):
+    def __init__(self, logger, app=None):
+        super().__init__(app, process=None)
+        self._logger = logger
+
+    def post_message(self, msg):
+        import logging
+        def put_log(m):
+            if m.tag == "error":
+                self._logger.log(logging.ERROR, m.text)
+            elif m.tag == "warn":
+                self._logger.log(logging.WARN, m.text)
+            else:
+                self._logger.log(logging.INFO, m.text)
+        
+        if msg.is_embeded():
+            for m in msg.expand():
+                put_log(m)
+        else:
+            put_log(msg)
+    
+    def interruption_point(self, *, nowait=False, progress=None, noexception=False):
+        # プログレスバーの更新のみを行う
+        if progress and self.progbars:
+            self.update_progress_display(progress)
+        return True
+    
 #
 #  メッセージクラス
 #
