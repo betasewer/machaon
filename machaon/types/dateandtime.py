@@ -85,6 +85,9 @@ class DatetimeType():
             elif klass == "iso":
                 return datetime.datetime.fromisoformat(s)
         
+        if "T" in s:
+            return datetime.datetime.fromisoformat(s)
+        
         # 2009/12/01/12:50.49
         parts = s.split("/")
         if len(parts) >= 3:
