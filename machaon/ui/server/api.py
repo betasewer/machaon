@@ -40,6 +40,8 @@ class ApiSlot:
         for l, r in zip(self.parts, pathparts):
             if l == "?":
                 params.append(urllib.parse.unquote(r))
+            elif l == "??":
+                params.append(urllib.parse.unquote(urllib.parse.unquote(r)))
             elif l != r:
                 return None
         
