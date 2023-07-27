@@ -268,6 +268,33 @@ class PyBasicModuleLoader:
 
         return modules
         
+    def load_all_filepaths(self):
+        from machaon.types.shell import Path
+        yield Path(self.load_filepath())
+        for loader in self.get_all_submodule_loaders():
+            yield Path(loader.load_filepath())
+            
+    def show_latest_files(self, app, full=False):
+        """ @task
+        パッケージ内のファイルをタイムスタンプ順に表示する。
+        """
+        import datetime
+        from collections import defaultdict
+        stack = defaultdict(list)
+        for fp in self.load_all_filepaths():
+            t = fp.modtime().timestamp()
+            stack[t].append(fp)
+        
+        li = sorted(stack.keys(), reverse=True)
+        for kt in li[:-1 if not full else None]:
+            app.post("message", "[{}更新]".format(datetime.datetime.fromtimestamp(kt)))
+            for fp in stack[kt]:
+                app.post("message", "  {}".format(fp))
+                
+        if not full:
+            app.post("message", "[{}更新]".format(datetime.datetime.fromtimestamp(li[-1])))
+            app.post("message", "  {}個のファイル".format(len(stack[li[-1]])))
+        
     def is_package(self):
         """ パッケージかどうか判定する """
         return self.module.__spec__.submodule_search_locations is not None
