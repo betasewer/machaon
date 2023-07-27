@@ -1,4 +1,3 @@
-
 import os
 import shutil
 import sys
@@ -226,7 +225,10 @@ class Package():
         if not self.once_loaded():
             raise ValueError("Not loaded yet")
         return len(self._modules)
-
+        
+    def get_initial_module(self):
+        return module_loader(self.entrypoint)
+        
     #
     # ロード状態
     #
