@@ -132,6 +132,15 @@ class InvocationContext:
         if elem:
             return elem.object
         return None
+        
+    def get_previous_object(self, delta) -> Optional[Object]:
+        proc = self.spirit.get_process()
+        if proc is None:
+            return None
+        dest = proc.get_index() - delta
+        if dest < 1:
+            return None
+        return self.get_object(str(dest))
 
     def get_selected_objects(self) -> List[Object]:
         li = [] # type: List[Object]
@@ -159,29 +168,20 @@ class InvocationContext:
         self.subject_object = None
     
     #    
-    def select_type(self, typecode, *, scope=None) -> Optional[TypeProxy]:
+    def select_type(self, typecode, describername=None) -> Optional[TypeProxy]:
         """ 型名を渡し、型定義を取得する。関連するパッケージをロードする """
         if isinstance(typecode, TypeProxy):
             return typecode
-        
-        if scope is None:
-            if isinstance(typecode, str) and SIGIL_SCOPE_RESOLUTION in typecode:
-                typecode, _, scope = typecode.rpartition(SIGIL_SCOPE_RESOLUTION)
-        if scope:
-            # 関連パッケージをロードする
-            package = self.root.get_package(scope, fallback=False)
-            self.root.load_pkg(package)
-        
-        t = self.type_module.get(typecode, scope=scope)
+        t = self.type_module.select(typecode, describername)
         if t is None:
             return None
         return t
 
-    def get_type(self, typename, *, scope=None) -> TypeProxy:
+    def get_type(self, typecode) -> TypeProxy:
         """ 型名を渡し、型定義を取得する """
-        t = self.type_module.get(typename, scope=scope)
+        t = self.type_module.get(typecode)
         if t is None:
-            raise BadTypename(typename)
+            raise BadTypename(typecode)
         return t
     
     def get_py_type(self, type) -> PythonType:
@@ -237,7 +237,7 @@ class InvocationContext:
         """ 型をインスタンス化する """
         return instantiate_type(conversion, self, *args)
     
-    def new_object(self, value: Any, *args, type=None, conversion=None) -> Object:
+    def new_object(self, value: Any, *args, type=None, conversion=None, module=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 
         Params:
             value(Any): 値; Noneの場合、デフォルトコンストラクタを呼び出す
@@ -253,7 +253,7 @@ class InvocationContext:
                 return extension.load(basic.type).new_object(basic.value)
 
         if type and not isinstance(type, TypeAny):
-            t = self.select_type(type)
+            t = self.select_type(type, module)
             if t is None:
                 if isinstance(type, str):
                     raise BadTypename(type)
@@ -617,7 +617,8 @@ def instant_context(subject=None):
     if _instant_context_types is None:
         t = TypeModule()
         t.add_fundamentals()
-        t.add_default_modules()        
+        t.add_default_modules(reporterror=True)
+        t.check_loading()
         _instant_context_types = t
 
     from machaon.process import TempSpirit

@@ -1,5 +1,10 @@
 from machaon.core.symbol import full_qualified_name
 
+TYPE_NONETYPE               = 0x0001
+TYPE_OBJCOLTYPE             = 0x0002
+TYPE_TYPETYPE               = 0x0004
+TYPE_FUNTYPE                = 0x0008
+
 METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
 METHODS_BOUND_TYPE_INSTANCE = 2
 
@@ -42,7 +47,7 @@ class TypeProxy:
         Params:
             mixin(Int): ミキシン実装のインデックス
         Returns:
-            Any:
+            TypeDescriber:
         """
         raise NotImplementedError()
 
@@ -52,10 +57,7 @@ class TypeProxy:
             Str:
         """
         describer = self.get_describer(mixin)
-        if isinstance(describer, type):
-            return full_qualified_name(describer)
-        else:
-            return str(describer)
+        return describer.get_full_qualname()
     
     def get_document(self):
         """
@@ -326,5 +328,21 @@ class TypeConversionError(Exception):
     def __str__(self):
         srctype, desttype = self.args
         return "'{}'型の引数に'{}'型の値を代入できません".format(desttype, full_qualified_name(srctype))
+
+# 型宣言における間違い
+class BadTypeDeclaration(Exception):
+    pass
+
+# メソッド宣言における間違い
+class BadMemberDeclaration(Exception):
+    pass
+
+# メソッド実装を読み込めない
+class BadMethodDelegation(Exception):
+    pass
+
+# サポートされない
+class UnsupportedMethod(Exception):
+    pass
 
 

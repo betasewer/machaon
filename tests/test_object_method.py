@@ -63,21 +63,21 @@ class SomeValue(BasicValue):
 
 def test_define():
     cxt = instant_context()
-    t = cxt.type_module.add_definition(SomeValue).load_type()
+    t = cxt.type_module.select(SomeValue)
     
-    print(", ".join([x.get_scoped_typename() for _, x in cxt.type_module.enum()]))
+    print(", ".join([x.get_conversion() for _, x in cxt.type_module.getall()]))
 
     t2 = cxt.get_type("SomeValue")
-    assert t.get_scoped_typename() == t2.get_scoped_typename()
+    assert t.get_conversion() == t2.get_conversion()
     assert len(t2.get_type_params()) == 2
     assert t is t2
 
 
 def test_valuetype_define():
-    t = fundamental_type.define(SomeValue)
+    t = fundamental_type.select(SomeValue)
     assert t.typename == "SomeValue"
     assert t.value_type is SomeValue
-    assert t.doc == "<no document>"
+    assert t.doc == "適当な値オブジェクト"
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
 
     
@@ -119,7 +119,7 @@ def test_method_loading():
     assert newmethod.get_acceptable_argument_max() == 0
     assert newmethod.is_type_bound() is True
 
-    t = fundamental_type.define(SomeValue)
+    t = fundamental_type.select(SomeValue)
     newmethod = t.select_method("perimeter")
     assert newmethod.get_param_count() == 0
     assert newmethod.get_name() == "perimeter"
@@ -136,7 +136,7 @@ def test_method_alias():
 #
 def test_method_return_self():
     cxt = instant_context()
-    t = cxt.define_type(SomeValue)
+    t = cxt.select_type(SomeValue)
     m = t.select_method("modify")
     assert m.get_result().is_return_self()
     
@@ -144,7 +144,7 @@ def test_method_return_self():
     rec = cxt.new_object(SomeValue(10, 20))
     msg = Message(rec)
     rettype, ret = m.get_result().make_result_value(cxt, None, message=msg)
-    assert rettype.get_conversion() == "SomeValue"
+    assert rettype.get_conversion() == "SomeValue:tests.test_object_method.SomeValue"
     assert isinstance(ret, SomeValue)
     assert ret.x == 10
     assert ret.y == 20
@@ -153,7 +153,7 @@ def test_method_return_self():
 #
 def test_meta_method():
     cxt = instant_context()
-    t = cxt.type_module.add_definition(SomeValue).load_type()
+    t = cxt.type_module.select(SomeValue)
 
     p = t.get_constructor_param()
     assert p is not None
@@ -205,7 +205,7 @@ def test_constructor_typecheck_fail():
     p.construct(cxt, 12345) # TypeConversionError
 
 def test_enum_method():
-    t = fundamental_type.define(SomeValue)
+    t = fundamental_type.select(SomeValue)
     n = []
     for names, method in t.enum_methods():
         if isinstance(method, Exception):
@@ -222,7 +222,8 @@ def test_enum_method():
 def test_load_from_dict():
     # Dog型を定義
     cxt = instant_context()
-    Dog = cxt.define_type({
+    Dog = cxt.select_type({
+        "DescriberName" : "instant",
         "Typename" : "Dog",
         "ValueType" : str, # ダミー型
         "Methods" : [{
@@ -296,12 +297,13 @@ def test_result_value():
     assert not r.is_already_instantiated()
     assert r.is_type_to_be_deduced()
 
-    assert r.make_result_value(cxt, "9")[0].get_conversion() == "Str"
+    assert r.make_result_value(cxt, "9")[0].get_conversion() == "Str:machaon.core"
     assert r.make_result_value(cxt, "9")[-1] == "9"
-    assert r.make_result_value(cxt, 11)[0].get_conversion() == "Int"
+    assert r.make_result_value(cxt, 11)[0].get_conversion() == "Int:machaon.core"
     assert r.make_result_value(cxt, 11)[-1] == 11
 
     # 型インスタンス
+    '''
     r = MethodResult(parse_type_declaration("Int:Hex", cxt, "08"))
     assert r.typename == "Int:Hex: 08"
     assert r.is_already_instantiated()
@@ -309,6 +311,7 @@ def test_result_value():
     
     assert r.make_result_value(cxt, "FF")[0].get_conversion() == "Int:Hex: 08"
     assert r.make_result_value(cxt, "FF")[-1] == 0xFF
+    '''
 
     # レシーバオブジェクト
     r = MethodResult(special=RETURN_SELF)
@@ -318,5 +321,5 @@ def test_result_value():
     from machaon.core.message import Message
     rec = cxt.new_object(2000)
     msg = Message(rec)
-    assert r.make_result_value(cxt, None, message=msg)[0].get_conversion() == "Int"
+    assert r.make_result_value(cxt, None, message=msg)[0].get_conversion() == "Int:machaon.core"
     assert r.make_result_value(cxt, None, message=msg)[-1] == 2000

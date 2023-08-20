@@ -17,7 +17,7 @@ def pkgdir():
 
 def approot():
     app = AppRoot()
-    app.initialize(ui=None, package_dir=pkgdir())
+    app.initialize(ui=None, package_dir=pkgdir(), ignore_args=True)
     return app
     
 def test_load_singlemodule_fundamental():
@@ -46,7 +46,7 @@ def test_load_singlemodule_fundamental():
 
 def test_load_submodules_types():
     root = approot()
-    pkg = create_package("types", "package:machaon.types", scope="ion")
+    pkg = create_package("types", "package:machaon.types")
 
     assert not pkg.once_loaded()
     assert not pkg.is_load_succeeded()
@@ -62,9 +62,9 @@ def test_load_submodules_types():
 
     tm = root.get_type_module()
 
-    assert tm.get("RootObject", scope="ion") is not None
-    assert tm.get("RootObject", scope="ion").get_describer_qualname() == "machaon.types.app.RootObject"
+    assert tm.get("RootObject") is not None
+    assert tm.get("RootObject").get_describer_qualname() == "machaon.types.app.RootObject"
 
-    assert tm.get("Path", scope="ion") is not None
-    assert tm.get("Path", scope="ion").get_describer_qualname() == "machaon.types.shell.Path"
+    assert tm.get("Path") is not None
+    assert tm.get("Path").get_describer_qualname() == "machaon.types.shell.Path"
 

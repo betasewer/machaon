@@ -48,7 +48,8 @@ def test_parse_function():
         
         assert message_test(s, context, returned.get_typename(), "Function")
 
-        fundamental_type.define({
+        fundamental_type.select({
+            "DescriberName" : "instant",
             "Typename" : "Dog",
             "ValueType" : str,
             "Methods" : [{
@@ -236,8 +237,8 @@ def test_message_sequential_function():
             "operator" : "Str",
         })
     
-    assert fn.memberspecs["values"].get_conversion() == "Tuple: Int"
-    assert fn.memberspecs["operator"].get_conversion() == "Str"
+    assert fn.memberspecs["values"].get_conversion() == "Tuple:machaon.core: Int:machaon.core"
+    assert fn.memberspecs["operator"].get_conversion() == "Str:machaon.core"
     r = fn({"values" : [7,8,9], "operator" : "+"})
     assert isinstance(r, int)
     assert r == 7+8+9

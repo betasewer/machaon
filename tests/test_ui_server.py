@@ -8,7 +8,7 @@ def test_batch_launcher(tmpdir):
 
     logdir = tmpdir.mkdir("log")
     app = create_app(
-        title="testrun", ui="batch", logdir=logdir, logfileperiod="monthly"
+        title="testrun", ui="batch", logdir=logdir, logfileperiod="monthly", ignore_args=True
         ).packages(
         )["docxx"](
             "github:betasewer/python-docx-xtended:docxx"

@@ -23,7 +23,10 @@ def message_test(source, context, lhs, rhs, tester=None):
         tester = equals
 
     if not tester(lhs, rhs):
-        print("Assertion is failed: {}(({}) => {}, {})".format(tester.__name__, source, lhs, rhs))
+        print("Assertion is failed: {}(".format(tester.__name__))
+        print("    {},".format(lhs))
+        print("    {}".format(rhs))
+        print(") message: ({})".format(source))
         print("")
         print("--- instructions ----------------")
         print(put_instructions(context))

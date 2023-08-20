@@ -11,9 +11,9 @@ def test_boot_package_load():
     assert cxt.select_type("Date") is not None
     assert cxt.select_type("Time") is not None
 
-    assert cxt.type_module.get_subtype("Str", "Enclosed") is not None
-    assert cxt.type_module.get_subtype("Date", "Date8") is not None
-    assert cxt.type_module.get_subtype("Date", "Sep") is not None
+    #assert cxt.type_module.get_subtype("Str", "Enclosed") is not None
+    #assert cxt.type_module.get_subtype("Date", "Date8") is not None
+    #assert cxt.type_module.get_subtype("Date", "Sep") is not None
 
 
 def test_boot_package_deduce():

@@ -1,4 +1,3 @@
-
 import os
 import shutil
 import sys
@@ -198,7 +197,7 @@ class Package():
             return self._loadfail(e)
 
         if not self.is_type_modules():
-            return
+            return None
 
         if not modules:
             return self._loadfail(PackageLoadError("モジュールを1つも読み込めませんでした"))
@@ -208,8 +207,8 @@ class Package():
                 notfounddepends = [n for n,x in modloader.get_using_extra_packages() if not module_loader(x).exists()]
                 if notfounddepends:
                     raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfounddepends)))
-                for typedef in modloader.scan_type_definitions():
-                    typemod.define(typedef)
+                for typedesc in modloader.scan_type_describers():
+                    typemod.define(typedesc)
             except Exception as e:
                 self._loadfail(PackageModuleLoadError(e, str(modloader)))
                 continue
@@ -226,7 +225,10 @@ class Package():
         if not self.once_loaded():
             raise ValueError("Not loaded yet")
         return len(self._modules)
-
+        
+    def get_initial_module(self):
+        return module_loader(self.entrypoint)
+        
     #
     # ロード状態
     #

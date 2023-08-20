@@ -386,6 +386,23 @@ class RootObject:
         apppkg = AppPackageType()
         for pkg in self.root.enum_packages():
             apppkg.update(pkg, context, app)
+            
+    def latest_package_files(self, context, app, full=False):
+        """ @task context
+        パッケージ内のファイルをタイムスタンプごとに表示する。
+        Params:
+                full?(bool):
+        """
+        maca = PyModuleLoader("machaon")
+        app.post("message", "machaon")
+        maca.show_latest_files(app, full)
+        app.post("message", "")
+        
+        for pkg in self.root.enum_packages():
+            app.post("message", pkg.name)
+            pkg.get_initial_module().show_latest_files(app, full)
+            app.post("message", "")
+
 
     def stringify(self):
         """ @meta """

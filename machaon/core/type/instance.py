@@ -57,7 +57,7 @@ class TypeInstance(RedirectProxy):
 
     def get_conversion(self):
         n = ""
-        n += self.type.typename
+        n += self.type.get_conversion()
         if self._args:
             strs = []
             for a in self._args:

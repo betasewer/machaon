@@ -301,14 +301,14 @@ class tkLauncher(Launcher):
         self.btnpanel = self.addframe(self.frame)
         
         # チャンバーパネル
-        histlist = tk.Text(self.btnpanel, relief="solid", height=1)
+        histlist = tk.Text(self.btnpanel, relief="solid", height=1, width=30)
         histlist.tag_configure("chamberlink")
         histlist.tag_bind("chamberlink", "<Enter>", lambda e: histlist.config(cursor="hand2"))
         histlist.tag_bind("chamberlink", "<Leave>", lambda e: histlist.config(cursor=""))
         histlist.tag_bind("chamberlink", "<Button-1>", self.chamber_menu_click)
         histlist.mark_unset("insert")
         self.chambermenu = histlist
-        self.chambermenu.pack(side=tk.LEFT)
+        self.chambermenu.pack(side=tk.LEFT,  expand=False)
         
         righties = [
             self.addbutton(self.btnpanel, text=u"停止", command=lambda:self.break_chamber_process(), width=4),
@@ -333,7 +333,11 @@ class tkLauncher(Launcher):
         # テーマの適用
         #self.root.overrideredirect(True)
         import machaon.ui.theme
-        self.apply_theme(machaon.ui.theme.light_terminal_theme())
+        if machaon.platforms.is_osx():
+            deftheme = machaon.ui.theme.white_terminal_theme()
+        else:
+            deftheme = machaon.ui.theme.light_terminal_theme()
+        self.apply_theme(deftheme)
 
         # 入力イベントの定義
         self.keymap.define_ui_handlers(self)
@@ -672,7 +676,7 @@ class tkLauncher(Launcher):
         """ ドラッグドロップパネルを開くボタンを設置する """
         # ボタンを追加
         button = self.addbutton(self.btnpanel, text="", command=handler)
-        button.pack(side=tk.LEFT, padx=3)
+        button.pack(side=tk.RIGHT, padx=3)
         # キーバインドを追加
         command = self.keymap.get("DragAndDropPanelToggle")
         @command.handler
@@ -1048,21 +1052,22 @@ class tkLauncher(Launcher):
         col_bla = theme.getval("color.black")
         col_gry = theme.getval("color.gray", theme.getval("color.grey"))
 
+        framebg = theme.getval("color.framebackground", bg)
         insecbg = theme.getval("color.inactivesectionbackground", bg)
         self.focusbg = (secbg, insecbg)
-
-        style.configure("TButton", relief="flat", background=bg, foreground=msg)
+    
+        style.configure("TButton", relief="flat", background=framebg, foreground=msg)
         style.map("TButton", 
-            lightcolor=[("pressed", bg)],
-            background=[("disabled", bg), ("pressed", bg), ("active", highlight)],
-            darkcolor=[("pressed", bg)],
+            lightcolor=[("pressed", framebg)],
+            background=[("disabled", framebg), ("pressed", framebg), ("active", highlight)],
+            darkcolor=[("pressed", framebg)],
             bordercolor=[("alternate", label)]
         )
-        style.configure("TCheckbutton", background=bg, foreground=msg)
+        style.configure("TCheckbutton", background=framebg, foreground=msg)
         style.map("TCheckbutton", 
-            background=[("disabled", bg), ("pressed", bg), ("active", highlight)],
+            background=[("disabled", framebg), ("pressed", framebg), ("active", highlight)],
         )
-        style.configure("TFrame", background=bg)
+        style.configure("TFrame", background=framebg)
 
         self.rootframe.configure(style="TFrame")
         for typename, wid in self.tkwidgets:
@@ -1097,13 +1102,7 @@ class tkLauncher(Launcher):
         self.log.tag_configure("yellow", foreground=col_yel)
         self.log.tag_configure("magenta", foreground=col_mag)
 
-        #self.objdesk.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=1)
-        #self.objdesk.tag_configure("message", foreground=msg)
-        #self.objdesk.tag_configure("object-frame", foreground="#888888")
-        #self.objdesk.tag_configure("object-metadata", foreground=msg_inp)
-        #self.objdesk.tag_configure("object-selection", foreground=msg_wan)
-
-        self.chambermenu.configure(background=bg, selectbackground=highlight, font=logfont, borderwidth=0)
+        self.chambermenu.configure(background=framebg, font=logfont, borderwidth=0)
         self.chambermenu.tag_configure("chamber", foreground=msg)
         self.chambermenu.tag_configure("running", foreground=msg_inp)
         self.chambermenu.tag_configure("active", foreground=msg_em)

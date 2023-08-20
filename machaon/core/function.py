@@ -1,5 +1,5 @@
 from machaon.core.symbol import (
-    SIGIL_TYPE_INDICATOR
+    SIGIL_RETURN_TYPE_INDICATOR
 )
 from machaon.core.message import (
     MessageEngine, select_method, select_method_by_object, Message, EvalContext, ResultStackRef
@@ -148,7 +148,7 @@ def parse_function_message(expression):
     """
     # 式の型指定子と式本体に分ける
     spl = expression.split(maxsplit=2)
-    if len(spl) > 2 and spl[1] == SIGIL_TYPE_INDICATOR:
+    if len(spl) > 2 and spl[1] == SIGIL_RETURN_TYPE_INDICATOR:
         typeconv = spl[0]
         body = spl[2]
     else:
@@ -263,7 +263,7 @@ def parse_sequential_function(expression, context, argspec=None):
 
 
 
-class FunctionType():
+class FunctionType:
     """ @type [Function]
     1引数をとるメッセージ。
     ValueType:

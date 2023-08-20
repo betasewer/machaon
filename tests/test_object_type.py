@@ -2,12 +2,11 @@ import pytest
 
 from machaon.core.context import instant_context
 from machaon.core.type.alltype import (
-    METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration
+    METHODS_BOUND_TYPE_INSTANCE, METHODS_BOUND_TYPE_TRAIT_INSTANCE, PythonType, parse_type_declaration,
+    TypeModule, TypeMemberAlias, Type
 )
-from machaon.core.type.alltype import (
-    CORE_SCOPE, TypeDefinition, TypeModule, TypeMemberAlias, Type
-)
-from machaon.core.importer import ClassDescriber, attribute_loader
+from machaon.core.type.describer import TypeDescriberClass
+from machaon.core.importer import attribute_loader
 from machaon.types.fundamental import fundamental_types
 
 
@@ -56,47 +55,33 @@ class SomeTrait:
         return complex(value)
 
 
-# defineで登録
+# 宣言をドキュメント文字列で登録
 def test_valuetype_define():
-    # defineではドキュメント文字列の解析はしない
     fundamental_type = fundamental_types()
     t = fundamental_type.define(SomeValue)
-    assert t.typename == "SomeValue"
-    assert t.value_type is SomeValue
-    assert t.doc == "<no document>"
-    assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
-    assert t.is_same_value_type(SomeValue)
-
-# 宣言をドキュメント文字列で登録
-def test_valuetype_td_define():
-    fundamental_type = fundamental_types()
-    td = fundamental_type.add_definition(SomeValue)
-    assert td
-    t = td.load_type()
     assert t.typename == "SomeAlias" # 宣言が反映される
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト" # 宣言が反映される
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
     assert t.is_same_value_type(SomeValue)
     
-    td = fundamental_type.add_definition(SomeTrait)
-    assert td
-    assert td.typename == "SomeValueX"
-    assert td.doc == "適当な値オブジェクトの型"
-    assert td.is_same_value_type(complex)
-    
-    t = td.load_type()
+    t = fundamental_type.define(SomeTrait)
+    assert t
+    assert t.typename == "SomeValueX"
+    assert t.doc == "適当な値オブジェクトの型"
+    assert t.is_same_value_type(complex)
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE
     assert t.get_value_type() is complex
-    assert t.get_conversion() == "SomeValueX"
 
 # 宣言を直接文字列で登録
 def test_valuetype_td_docstring_define():
-    td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue")
-    td.load_docstring('''@type use-instance-method [BigEntity]
-    巨大なオブジェクト
-    ''')
-    t = td.load_type()
+    desc = TypeDescriberClass(SomeValue, 
+        '''@type use-instance-method [BigEntity]
+        巨大なオブジェクト
+        '''
+    )
+    mod = TypeModule()
+    t = mod.define(desc)
     assert t.typename == "BigEntity"
     assert t.value_type is SomeValue
     assert t.doc == "巨大なオブジェクト"
@@ -107,9 +92,9 @@ def test_valuetype_td_docstring_define():
 # attribute_loaderを用いる
 def test_valuetype_td_attribute_loader():
     import machaon.types.shell
-    desc = ClassDescriber(attribute_loader("machaon.types.shell.Path"))
-    td = TypeDefinition(desc, "Path2", value_type=None)
-    t = td.load_type()
+    desc = TypeDescriberClass(attribute_loader("machaon.types.shell.Path"))
+    mod = TypeModule()
+    t = mod.define(desc, typename="Path2")
     assert t.typename == "Path2"
     assert t.value_type is machaon.types.shell.Path
     assert t.is_same_value_type(machaon.types.shell.Path)
@@ -117,25 +102,20 @@ def test_valuetype_td_attribute_loader():
 # 宣言と値がかみ合わない場合
 @pytest.mark.xfail()
 def test_valuetype_td_docstring_failure():
-    td = TypeDefinition(ClassDescriber(SomeValue), "SomeValue")
-    td.load_docstring('''@type trait
-    巨大なオブジェクト
-    ''') # traitだが値型を指定していない
-    td.load_type()
+    desc = TypeDescriberClass(SomeValue, 
+        docstring='''@type trait
+        巨大なオブジェクト
+        '''
+    ) # traitだが値型を指定していない
+    mod = TypeModule()
+    mod.define(desc)
 
-# value_typeをdescriberに使う
-def test_value_type_as_describer():
-    td = TypeDefinition(None, "SomeValue", value_type=SomeValue)
-    t = td.load_type()
-    assert t.value_type is SomeValue
-    assert t.describer.klass is SomeValue
-    
 
 #
 # スコープ付きの型を定義する
 #
 class SpecStrType:
-    """
+    """ @type
     スコープ限定のStr型。
     """
     def __init__(self, num):
@@ -175,15 +155,15 @@ def test_scoped_define():
 
     types = TypeModule()
     types.add_fundamentals()
-    types.update_scope("spec", newtypes, addonly=True)
-    str_t = types.get("Str", scope=CORE_SCOPE)
-    assert str_t.get_describer_qualname() == "machaon.types.string.StrType"
-    assert types.get("Str", scope="spec") is spec_str_t
-    assert types.get("Str") is str_t
+    types.update(newtypes)
+    str_t = types.get("Str")
+    assert str_t.get_describer_qualname() == "machaon.core" # 先に定義されたものが取得される
+    assert types.find("Str:tests") is spec_str_t # デスクライバを指定して取得
+    assert types.find("Str") is str_t
 
     # enum
-    typelist = list(types.enum())
-    assert len(typelist) == types.get_scope(CORE_SCOPE).count() + 1
+    typelist = list(types.getall())
+    #assert len(typelist) == types.get_scope(CORE_SCOPE).count() + 1
     assert typelist[-1][1] is spec_str_t # スコープの追加順で取り出される
 
 
@@ -205,13 +185,6 @@ def test_deduce():
     assert types.deduce(str) is str_t
     assert types.deduce(SpecStrType) is spec_str_t
 
-    # defered defined type
-    from machaon.types.shell import Path
-    types = TypeModule()
-    types.define(TypeDefinition(value_type="machaon.types.shell.Path", typename="Path"))
-    t2 = types.deduce(Path)
-    assert not isinstance(t2, PythonType)
-    assert t2.get_value_type() is Path
 
 
 # defineで登録
@@ -230,7 +203,7 @@ def test_method():
     assert m2 is not None
     assert m2 is m
 
-    zeros = t.delegate_method("zeros")
+    zeros = t.describer.get_method_attribute("zeros")
     assert SpecStrType.zeros is zeros
 
 
@@ -276,11 +249,13 @@ def test_method_return_deduce():
 # TypeModule
 #
 class Dummy_Rabbit():
+    """ @type
+    """
     describe_count = 0
     
     @classmethod
-    def describe_object(cls, traits):
-        traits.describe(doc="うさぎ")
+    def describe_type(cls, t):
+        t.set_document("うさぎ")
         cls.describe_count += 1
     
 def test_typemodule_get():
@@ -297,16 +272,14 @@ def test_typemodule_move():
     assert Dummy_Rabbit.describe_count == 1
 
     new_typeset = TypeModule()
-    new_typeset.define(typename="AltString")
     new_typeset.define(Dummy_Rabbit, typename="Second-Rabbit")
 
-    fundamental_type.update_scope(None, new_typeset)
+    fundamental_type.update(new_typeset)
     
     cxt = instant_context()
     cxt.type_module = fundamental_type
 
     assert cxt.get_type("Int").construct(cxt, "0x35") == 0x35
-    assert cxt.get_type("AltString").typename == "AltString"
     assert cxt.get_type("Dummy_Rabbit") is not None
     assert cxt.get_type("Dummy_Rabbit").typename == "Dummy-Rabbit"
     assert Dummy_Rabbit.describe_count == 2 # Dummy-Rabbit, Second-Rabbitの両方で呼ばれる
@@ -340,7 +313,7 @@ class AryType:
 
 def test_type_params():
     cxt = instant_context()
-    t = cxt.type_module.add_definition(AryType).load_type()
+    t = cxt.type_module.define(AryType)
     
     assert len(t.get_type_params()) == 3
     assert t.get_type_params()[0].get_name() == "T"

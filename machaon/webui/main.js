@@ -144,8 +144,8 @@ const common_mixin = {
 //
 var App = {
 // 定数
-//starturl: "http://192.168.10.201:51000",
-starturl: "http://localhost:32100",
+starturl: "http://192.168.10.201:32100",
+//starturl: "http://localhost:32100",
 vue: {
 	el: '#main',
     components: {},

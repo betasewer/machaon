@@ -3,7 +3,8 @@ from typing import Any, Tuple
 from machaon.core.object import Object
 from machaon.core.symbol import (
     SIGIL_PYMODULE_DOT,
-    BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
+    BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames,
+    QualTypename
 )
 from machaon.core.type.basic import TypeProxy, instantiate_args
 
@@ -16,9 +17,15 @@ class TypeDecl:
         self.typename = typename
         self.declargs = declargs or []
         self.ctorargs = ctorargs or []
+        self.describername = None
     
     def __str__(self):
         return self.to_string()
+
+    def with_describer_name(self, name):
+        """ 実装名を指示する """
+        self.describername = name
+        return self
     
     def to_string(self):
         """ 型宣言を復元する 
@@ -31,7 +38,7 @@ class TypeDecl:
             return self.typename.get_conversion()
 
         elems = ""
-        elems += self.typename
+        elems += QualTypename(self.typename, self.describername).stringify()
         if self.declargs:
             elems += "["
             elems += ",".join([x.to_string() for x in self.declargs])
@@ -143,9 +150,9 @@ class TypeDecl:
             # 型名を置換する
             typename = py_anon_redirection.get(self.typename.lower(), self.typename)
             # 型オブジェクトを取得
-            td = context.select_type(typename)
+            td = context.select_type(typename, self.describername) # モジュールから型を読み込む
             if td is None:
-                raise BadTypename(typename)                
+                raise BadTypename(typename)
             targs = self.instantiate_args(td.get_type_params(), context, args)
             if targs:
                 return TypeInstance(td, targs)
@@ -230,8 +237,8 @@ def parse_type_declaration(decl, inst_context=None, *inst_args):
     if not decl:
         raise BadTypename("<emtpy string>")
     
-    from machaon.core.type.declparser import _parse_typedecl
-    d = _parse_typedecl(decl)
+    from machaon.core.type.declparser import parse_typedecl
+    d = parse_typedecl(decl)
     
     if inst_args:
         return TypeInstanceDecl(d.instance(inst_context, inst_args))

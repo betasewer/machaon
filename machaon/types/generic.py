@@ -1,47 +1,67 @@
-from pydoc import resolve
+
 from machaon.core.type.type import TYPE_DELAY_LOAD_METHODS, Type
 from machaon.core.symbol import normalize_method_name, normalize_method_target
-from machaon.core.method import make_method_prototype
+from machaon.core.method import make_method_prototype_from_doc, parse_doc_declaration
 from machaon.core.invocation import TypeMethodInvocation
-from machaon.core.importer import ClassDescriber
+from machaon.core.type.describer import TypeDescriberClass
 
 #
 # どんな型にも共通のメソッドを提供
 #
+class GenericMethodResovler:
+    def __init__(self) -> None:
+        self.describer = TypeDescriberClass(GenericMethods)
+        self.describer.set_full_qualname("machaon.core")
+        _GenericMethodsType = Type(self.describer)
+        _GenericMethodsType.load(nodescribe=True, typename="GenericMethods", value_type=self.TypeValue)
+        self._t = _GenericMethodsType
+
+    @property
+    def type(self):
+        return self._t
+
+    class TypeValue:
+        def __init__(self):
+            raise TypeError("Should not be constructed")
+        
+    def resolve(self, name):
+        """
+        ほかの型と異なり、一度に全メソッドを読み込まず、要求が来るたびに該当メソッドだけを読み込む。
+        メソッドが無い場合は、GenericMethodsのメンバ名のなかから実装を探し出し、読み込みを行う。
+        したがって、関数本体でのエイリアス名の指定は無効である。
+        """
+        method = self.type.select_method(name)
+        if method is None:
+            # ロードする
+            attrname = normalize_method_target(name)
+            attr = self.describer.get_method_attribute(attrname)
+            if attr is None:
+                return None
+
+            decl = parse_doc_declaration(attr, ("method", "task"))
+            if decl is None:
+                return None
+            
+            method, _aliases = make_method_prototype_from_doc(decl, attrname)
+            if method is None:
+                return None
+            
+            method.load(self.type)
+            self.type.add_method(method)
+
+        return method
+
+
 def resolve_generic_method(name):
     if name in operators:
         name = operators[name]
-
-    """
-    ほかの型と異なり、一度に全メソッドを読み込まず、要求が来るたびに該当メソッドだけを読み込む。
-    メソッドが無い場合は、GenericMethodsのメンバ名のなかから実装を探し出し、読み込みを行う。
-    したがって、関数本体でのエイリアス名の指定は無効である。
-    """
-    method = _GenericMethodsType.select_method(name)
-    if method is None:
-        # ロードする
-        attrname = normalize_method_target(name)
-        attr = getattr(GenericMethods, attrname, None)
-        if attr is None:
-            return None
-
-        method, aliases = make_method_prototype(attr, attrname)
-        if method is None:
-            return None
-        
-        method.load(_GenericMethodsType)
-
-        _GenericMethodsType.add_method(method)
-        for aliasname in aliases:
-            _GenericMethodsType.add_member_alias(aliasname, name)
-
-    return method
+    return _GenericMethodResolver.resolve(name)
 
 def resolve_generic_method_invocation(name, modbits=None):
     method = resolve_generic_method(name)
     if method is None:
         return None
-    return TypeMethodInvocation(_GenericMethodsType, method, modbits)
+    return TypeMethodInvocation(_GenericMethodResolver.type, method, modbits)
 
 
 #
@@ -642,22 +662,5 @@ class GenericMethods:
         else:
             return FunctionInvocation(left, {"IGNORE_ARGS"}, 0, 0)
 
+_GenericMethodResolver = GenericMethodResovler()
 
-class GenericMethodValue():
-    def __init__(self):
-        raise TypeError("Should not be constructed")
-
-# メソッドオブジェクトのキャッシュ
-_GenericMethodsType = Type(
-    ClassDescriber(lambda:GenericMethods), 
-    name="GenericMethods", 
-    value_type=GenericMethodValue
-)
-_GenericMethodsType.load(loadbits=TYPE_DELAY_LOAD_METHODS)
-
-
-#
-#
-# ジェネリックなサブタイプ
-#
-#

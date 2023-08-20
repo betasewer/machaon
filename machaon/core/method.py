@@ -4,7 +4,6 @@ from typing import (
     Optional, Tuple, Generator
 )
 
-from machaon.core.importer import ClassDescriber
 from machaon.core.type.basic import METHODS_BOUND_TYPE_TRAIT_INSTANCE, TypeProxy
 from machaon.core.type.decl import TypeInstanceDecl
 
@@ -13,7 +12,7 @@ import inspect
 
 from machaon.core.object import Object
 from machaon.core.symbol import normalize_method_target, normalize_method_name
-from machaon.core.docstring import parse_doc_declaration
+from machaon.core.docstring import parse_doc_declaration, DocStringDefinition
 from machaon.core.type.decl import (
     TypeDecl, parse_type_declaration, split_typename_and_value
 )
@@ -246,10 +245,7 @@ class Method:
             Any: クラス型か辞書型
         """
         d = this_type.get_describer(self.mixin)
-        if isinstance(d, ClassDescriber):
-            return d.klass
-        else:
-            return d
+        return d.get_value()
 
     def get_describer_qualname(self, this_type):
         """ @method
@@ -259,7 +255,7 @@ class Method:
         Returns:
             Str:
         """
-        return this_type.get_describer_qualname(self.mixin)
+        return this_type.get_describer(self.mixin).get_full_qualname()
     
     def make_type_instance(self, this_type):
         """ 型を拘束する場合の実行時のインスタンスを得る """
@@ -475,7 +471,7 @@ class Method:
                 # クラスに定義されたメソッドが実装となる
                 if this_type is None:
                     raise ValueError("this_type is needed unless METHOD_EXTERNAL_TARGET is specified")
-                typefn = this_type.delegate_method(self.target, self.mixin)
+                typefn = this_type.get_describer(self.mixin).get_method_attribute(self.target)
                 if typefn is not None:
                     callobj = typefn
                     source = "{}:{}".format(this_type.get_conversion(), self.name)
@@ -526,7 +522,7 @@ class Method:
         return self._action is not None
     
     def is_mixin(self):
-        return self.mixin is not None
+        return self.mixin is not None and self.mixin > 0
 
     def parse_syntax_from_docstring(self, doc: str, function: Callable = None):
         """ 
@@ -543,9 +539,10 @@ class Method:
             self.load_declaration_properties(decl.props)
         
         # 定義部
-        sections = decl.create_parser((
+        sections = DocStringDefinition.parse(decl, (
             "Params Parameters Arguments Args",
             "Returns", 
+            "With",
         ))
 
         # 説明文
@@ -1120,12 +1117,15 @@ def parse_result_line(line):
 #
 #
 #
-class MetaMethod():
+class MetaMethod:
     def __init__(self, target, flags=0, ctorparam=None):
         self.target = target
         self.flags = flags
         self._ctorparam = ctorparam
     
+    def get_type(self):
+        return self.target
+
     def get_action_target(self):
         return self.target
     
@@ -1167,7 +1167,7 @@ class MetaMethod():
         第1引数は変数名を省略可能（value）
         追加引数においては、型がTypeなら型引数、そうでないなら追加コンストラクタ引数とみなす
         """
-        sections = decl.create_parser((
+        sections = DocStringDefinition.parse(decl, (
             "Params Parameters",
         ))
 
@@ -1229,43 +1229,50 @@ class MetaMethod():
         return args
 
 
-meta_method_prototypes = { x.get_action_target():x for x in (
+def make_method_prototype_from_doc(decl, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
+    """ 
+    ドキュメントを解析して空のメソッドオブジェクトを構築 
+    Params:
+        decl(DocStringDeclaration): ドキュメント宣言
+        attrname(str): 属性名
+        *mixinkey(str): mixinクラスへの参照名
+    """ 
+    mname = decl.name or attrname
+    method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey, flags=METHOD_FROM_USER_DEFINITION)
+    method.load_declaration_properties(decl.props)
+    return method, decl.aliases
+
+def make_metamethod_from_doc(decl, attrname):
+    """ 
+    ドキュメントを解析してメタメソッドオブジェクトを構築 
+    Params:
+        decl(DocStringDeclaration): ドキュメント宣言
+        attrname(str): 属性名
+    """ 
+    protometh = meta_method_prototypes.get(attrname)
+    if protometh is None:
+        return None
+    meth = protometh.new(decl)
+    return meth
+
+def make_method_from_dict(name, di, mixinkey=None):
+    """
+    辞書による定義からメソッドを作成する
+    """
+    if name is None:
+        raise BadMethodDeclaration("メソッド名を指定してください")
+    mth = Method(name, flags=METHOD_FROM_USER_DEFINITION, mixin=mixinkey)
+    mth.load_from_dict(di)
+    return mth
+
+
+meta_method_prototypes = { x.get_type():x for x in (
     MetaMethod("constructor", METHOD_TYPE_BOUND),
     MetaMethod("stringify"),
     MetaMethod("summarize"),
     MetaMethod("pprint"),
     MetaMethod("reflux"),
 )}
-
-
-def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
-    """ 
-    ドキュメントを解析して空のメソッドオブジェクトを構築 
-    Params:
-        attr(Any): ドキュメントの付された関数オブジェクト
-        attrname(str): 属性名
-        *mixinkey(str): mixinクラスへの参照名
-    """ 
-    decl = parse_doc_declaration(attr, ("method", "task"))
-    if decl is None:
-        return None, []
-
-    mname = decl.name or attrname
-    method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey, flags=METHOD_FROM_USER_DEFINITION)
-    method.load_declaration_properties(decl.props)
-    return method, decl.aliases
-
-def make_method_from_dict(di):
-    """
-    辞書による定義からメソッドを作成する
-    
-    """
-    name = di.pop("Name", None)
-    if name is None:
-        raise BadMethodDeclaration("Name でメソッド名を指定してください")
-    mth = Method(name, flags=METHOD_FROM_USER_DEFINITION)
-    mth.load_from_dict(di)
-    return mth
 
 
 #

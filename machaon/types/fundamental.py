@@ -320,40 +320,38 @@ class NotFound(Exception):
 # ----------------------------------------------------------
 def fundamental_types():
     module = TypeModule()
-    for qualname in [
-        "machaon.types.fundamental.TypeType",       # Type
-        "machaon.types.fundamental.BoolType",       # Bool
-        "machaon.types.string.StrType",             # Str
-        "machaon.types.numeric.IntType",            # Int
-        "machaon.types.numeric.FloatType",          # Float
-        "machaon.types.numeric.ComplexType",        # Complex
-        "machaon.core.function.FunctionType",       # Function
-        "machaon.types.tuple.ObjectTuple",          # Tuple
-        "machaon.types.sheet.Sheet",                # Sheet
+    for fulltypename in [
+        "Type:machaon.types.fundamental.TypeType",       # Type
+        "Bool:machaon.types.fundamental.BoolType",       # Bool
+        "Str:machaon.types.string.StrType",              # Str
+        "Int:machaon.types.numeric.IntType",             # Int
+        "Float:machaon.types.numeric.FloatType",         # Float
+        "Complex:machaon.types.numeric.ComplexType",     # Complex
+        "Function:machaon.core.function.FunctionType",   # Function
+        "Tuple:machaon.types.tuple.ObjectTuple",         # Tuple
+        "Sheet:machaon.types.sheet.Sheet",               # Sheet
         # エラー型
-        "machaon.types.stacktrace.ErrorObject",     # Error
-        "machaon.types.stacktrace.TracebackObject", # TracebackObject
-        "machaon.types.stacktrace.FrameObject",     # FrameObject
-        "machaon.core.context.InvocationContext",   # Context
-        "machaon.process.Process",                  # Process
-        "machaon.types.package.Module",             # PyModule
+        "Error:machaon.types.stacktrace.ErrorObject",      # Error
+        "TracebackObject:machaon.types.stacktrace.TracebackObject", # TracebackObject
+        "FrameObject:machaon.types.stacktrace.FrameObject",         # FrameObject
+        "Context:machaon.core.context.InvocationContext",  # Context
+        "Process:machaon.process.Process",                 # Process
+        "PyModule:machaon.types.package.Module",           # PyModule
         # システム型
-        "machaon.core.method.Method",               # Method
-        "machaon.types.package.AppPackageType",     # Package
-        "machaon.core.persistence.StoredMessage",   # Stored
-        "machaon.ui.theme.ShellTheme",              # ShellTheme
-        "machaon.types.app.RootObject",             # RootObject
+        "Method:machaon.core.method.Method",               # Method
+        "Package:machaon.types.package.AppPackageType",    # Package
+        "Stored:machaon.core.persistence.StoredMessage",   # Stored
+        "ShellTheme:machaon.ui.theme.ShellTheme",          # ShellTheme
+        "RootObject:machaon.types.app.RootObject",         # RootObject
     ]:
-        module.add_definition(qualname)
+        module.define(fulltypename, describername="machaon.core")
 
     # None
-    td = module.add_definition("machaon.types.fundamental.NoneType")
-    td.value_type = type(None)
-    td.bits |= TYPE_NONETYPE
+    module.define("None:machaon.types.fundamental.NoneType", value_type=type(None), bits=TYPE_NONETYPE)
 
     # ObjectCollection
-    td = module.add_definition("machaon.core.object.ObjectCollection")
-    td.bits |= TYPE_OBJCOLTYPE
+    from machaon.core.type.fundamental import ObjectCollectionType
+    module.define("ObjectCollection:machaon.core.object.ObjectCollection", bits=TYPE_OBJCOLTYPE, typeclass=ObjectCollectionType)
 
     return module
 

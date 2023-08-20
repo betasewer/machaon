@@ -1,5 +1,5 @@
 from machaon.core.symbol import (
-    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
+    SIGIL_MODULE_INDICATOR, SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
     BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
 )
 from machaon.core.type.decl import TypeDecl
@@ -18,20 +18,24 @@ class TypeDeclError(Exception):
 
 #
 # 型宣言パーサコンビネータ 
-# <body> ::= <subtype> | <subtype> "|" <subtype>
-# <subtype> ::= <expr> | <expr> ":" <expr>
-# <expr> ::= <type100> | <type110> | <type111> | <type101> | <type100a>
-# <type100> ::= <name>
-# <type110> ::= <name> "[" <typeargs> "]"
-# <type111> ::= <name> "[" <typeargs> "]" "(" <ctorargs> ")"
-# <type101> ::= <name> "[]"  "(" <ctorargs> ")"
-# <type100a> ::= <name> "[]"
-# <typeargs> ::= <body> | <body> "," <typeargs>
-# <ctorargs> ::= <ctorvalue> | <ctorvalue> "," <ctorargs>
-# <name> ::= ([a-z] | [A-Z] | [0-9] | '_' | '/' | '.')+
-# <ctorvalue> ::= [^,\[\]\(\)\|]+  
 #
-def _parse_typedecl(decl):
+'''
+<body> ::= <fulltypename> | <fulltypename> "|" <fulltypename>
+<fulltypename> ::= <subtype> | <subtype> ":" <moduleexpr>
+<subtype> ::= <expr> | <expr> "+" <expr>
+<expr> ::= <type100> | <type110> | <type111> | <type101> | <type100a>
+<type100> ::= <name>
+<type110> ::= <name> "[" <typeargs> "]"
+<type111> ::= <name> "[" <typeargs> "]" "(" <ctorargs> ")"
+<type101> ::= <name> "[]"  "(" <ctorargs> ")"
+<type100a> ::= <name> "[]"
+<typeargs> ::= <body> | <body> "," <typeargs>
+<ctorargs> ::= <ctorvalue> | <ctorvalue> "," <ctorargs>
+<name> ::= ([a-z] | [A-Z] | [0-9] | "_" | "/" | ".")+
+<ctorvalue> ::= ([a-z] | [A-Z] | [0-9] | "_" | "/" | "." | ":")+
+<moduleexpr> ::= <name>
+'''
+def parse_typedecl(decl):
     """ 開始地点 """
     itr = _typedecl_Iterator(decl)
     decl = _typedecl_body(itr)
@@ -43,7 +47,7 @@ def _parse_typedecl(decl):
 def _typedecl_body(itr):
     union = []
     while not itr.eos():
-        expr = _typedecl_subtype(itr)
+        expr = _typedecl_fulltypename(itr)
         union.append(expr)
         ch, pos = itr.advance()
         if itr.eos():
@@ -59,6 +63,27 @@ def _typedecl_body(itr):
         raise TypeDeclError(itr, "型がありません")
     else:
         return TypeDecl("Union", union)
+
+def _typedecl_fulltypename(itr):
+    targettype = None
+    describername = None
+    targettype = _typedecl_subtype(itr)
+
+    while not itr.eos():
+        ch, pos = itr.advance()
+        if itr.eos():
+            break
+        elif ch == SIGIL_MODULE_INDICATOR:
+            describername = _typedecl_name(itr)
+        else:
+            itr.back(pos)
+            break
+
+    if targettype is None:
+        raise TypeDeclError(itr, "モジュールに対する型が指定されていません")
+    if describername is not None:
+        targettype.with_describer_name(describername)
+    return targettype
 
 def _typedecl_subtype(itr):
     # サブタイプの記述

@@ -14,11 +14,11 @@ def test_straight_select():
 
     tm = select_method("reg-match", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "Str:reg-match", "")
+    assert tm.display() == ("TypeMethod", "Str:machaon.core:reg-match", "")
 
     gm = select_method("+", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:add", "")
+    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:add", "")
 
 
 def test_modified_select():
@@ -26,19 +26,19 @@ def test_modified_select():
 
     tm = select_method("!reg-search", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "Str:reg-search", "negate-result")
+    assert tm.display() == ("TypeMethod", "Str:machaon.core:reg-search", "negate-result")
 
     gm = select_method("~in", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:is-in", "reverse-args")
+    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:is-in", "reverse-args")
 
     gm = select_method("`identical", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:identical", "basic-reciever")
+    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:identical", "basic-reciever")
     
     gm = select_method("join?", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Str:join", "show-help")
+    assert gm.display() == ("TypeMethod", "Str:machaon.core:join", "show-help")
 
 
 def test_pytype_method_select():
@@ -50,7 +50,7 @@ def test_pytype_method_select():
 
     gm = select_method("<", AnyType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:less", "")
+    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:less", "")
 
 
 def test_objcol_select():
@@ -99,12 +99,12 @@ def test_extend_select():
     # 元の型のTypeMethod
     dm = select_method("startswith", exttype, reciever=base)
     assert dm
-    assert dm.display() == ("TypeMethod", "Str:startswith", "")
+    assert dm.display() == ("TypeMethod", "Str:machaon.core:startswith", "")
     assert dm._invoke(cxt, base, "基") is True
 
     # Generic TypeMethod
     gm = select_method("=", exttype, reciever=base)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:identical", "")
+    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:identical", "")
     assert gm._invoke(cxt, base) == base
 

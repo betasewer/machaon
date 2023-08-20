@@ -1,36 +1,31 @@
 from typing import Union
 
 from machaon.core.symbol import (
-    BadTypename, normalize_typename, full_qualified_name
+    BadTypename, normalize_typename, full_qualified_name, QualTypename
 )
 from machaon.core.type.type import (
-    TYPE_OBJCOLTYPE, Type, TYPE_MIXIN, TYPE_SUBTYPE, TYPE_TYPETRAIT_DESCRIBER, TYPE_USE_INSTANCE_METHOD,
+    TYPE_OBJCOLTYPE, Type, TYPE_TYPETRAIT_DESCRIBER, TYPE_USE_INSTANCE_METHOD,
     BadTypeDeclaration
 )
 from machaon.core.type.instance import UnspecifiedTypeParam
 
-from machaon.core.method import (
-    PARAMETER_REQUIRED, MethodParameter,
-    parse_type_declaration, parse_result_line, parse_parameter_line, 
-)
-from machaon.core.importer import ClassDescriber, attribute_loader
+from machaon.core.type.describer import TypeDescriber, TypeDescriberClass, TypeDescriberDict
+from machaon.core.importer import attribute_loader
 from machaon.core.docstring import parse_doc_declaration
 
 
-class BadTypeDescription(Exception):
-    """ 型定義の記述に誤りがある """
 
-
-class TypeDefinition():
+class TypeDefinition:
     """
     クラス文字列から型をロードする
     """
     def __init__(self, 
-        describer: Union[str, ClassDescriber] = None, 
+        describer: Union[str, TypeDescriber] = None, 
         typename: str = None, 
         value_type = None, 
         doc = "", 
         bits = 0,
+        modulename = None,
         # 直接設定可能
         mixinto = None,
         subtypeof = None,
@@ -42,27 +37,34 @@ class TypeDefinition():
             if isinstance(value_type, str):
                 describer = value_type
             elif value_type is not None:
-                describer = ClassDescriber(value_type)
+                describer = TypeDescriberClass(value_type)
             else:
-                raise BadTypeDescription("value_typeかdescriberを、クラスまたは文字列で与えてください")
+                raise BadTypeDeclaration("value_typeかdescriberを、クラスまたは文字列で与えてください")
 
-        if not isinstance(describer, (str, ClassDescriber)):
-            raise TypeError("describer type must be 'str' or 'core.importer.ClassDescriber'")
         if isinstance(describer, str):
-            describer = ClassDescriber(attribute_loader(describer))
+            describer = TypeDescriberClass(attribute_loader(describer))
+        elif isinstance(describer, dict):
+            describer = TypeDescriberDict(describer)
+        elif isinstance(describer, type):
+            describer = TypeDescriberClass(describer)
+        elif isinstance(describer, TypeDescriber):
+            pass
+        else:
+            raise BadTypeDeclaration("'describer' must be instance of 'str', 'dict', 'type' or 'TypeDescriber', but given '{}'".format(describer))
+        
         self.describer = describer
 
         self.typename = typename
         if typename and not isinstance(typename, str):
-            raise BadTypeDescription("型名を文字列で指定してください")     
+            raise BadTypeDeclaration("型名を文字列で指定してください")     
+        self.modulename = modulename
         
         self.doc = doc
         if self.doc:
             self.doc = self.doc.strip()
         self.bits = bits
         self.params = [] # 型パラメータ
-        self.memberaliases = [] 
-        self.scope = None
+        self.memberaliases = []
 
         self._t = None
 
@@ -101,16 +103,24 @@ class TypeDefinition():
         elif isinstance(self.value_type, str):
             return self.value_type
         else:
-            raise BadTypeDescription("Cannot resolve value_type qualname")
+            return full_qualified_name(self.value_type)
+            # raise BadTypeDescription("Cannot resolve value_type qualname from '{}'".format(self.value_type))
 
     def get_describer(self):
         return self.describer
 
     def get_describer_qualname(self):
         return self.describer.get_full_qualname()
-        
+
     def get_all_describers(self):
         return [self.describer, *self._mixins]
+    
+    def get_qual_typename(self):
+        if self.modulename:
+            describer = self.modulename + "." + self.typename
+        else:
+            describer = self.get_describer_qualname()
+        return QualTypename(self.typename, describer)
 
     def is_same_value_type(self, vt):
         # TypeModule.deduceで使用 - ロードせずに名前で一致を判定する
@@ -178,8 +188,8 @@ class TypeDefinition():
             value_type=self.value_type,
             params=self.params,
             doc=self.doc,
-            scope=self.scope,
-            bits=self.bits
+            bits=self.bits,
+            modulename=self.modulename
         )
         try:
             self._t.load()
@@ -199,109 +209,24 @@ class TypeDefinition():
             self._t.mixin_load(describer)
         else:
             self._mixins.append(describer)
-    
-    def load_docstring(self, doc=None):
-        """
-        型定義の解析
-        """
-        """ @type trait use-instance-method subtype mixin [name aliases...]
-        detailed description...
-        .......................
-
-        ValueType:
-            <Typename>
-        Params:
-            name(typeconversion): description...
-        MemberAlias:
-            long: (mode ftype modtime size name)
-            short: (ftype name)
-            link: path
-        MixinType:
-            <Typename> (mixin target type)
-        BaseType:
-            <Typename> (subtype base type)
-        """
-        if doc is None:
-            doc = self.get_describer().get_docstring()
-            if doc is None:
-                return False
-        
-        decl = parse_doc_declaration(doc, ("type",))
-        if decl is None:
-            return False
-            
-        # 定義部をパースする
-        sections = decl.create_parser(("ValueType", "Params", "MemberAlias", "BaseType", "MixinType"))
-        
-        # Mixin宣言はあらかじめ読み込む
-        if "mixin" in decl.props:
-            self.bits |= TYPE_MIXIN
-            mixin = sections.get_value("MixinType")
-            if mixin is None:
-                raise BadTypeDescription("mixin対象を'MixinType'で指定してください")
-            self._sub_target = mixin.rstrip(":") # コロンがついていてもよしとする
-            return True
-
-        # Subtype宣言も
-        elif "subtype" in decl.props:
-            self.bits |= TYPE_SUBTYPE
-            base = sections.get_value("BaseType")
-            if base is None:
-                raise BadTypeDescription("ベースクラスを'BaseType'で指定してください")
-            self._sub_target = base.rstrip(":") # コロンがついていてもよしとする
-
-        else:
-            if "use-instance-method" in decl.props:
-                self.bits |= TYPE_USE_INSTANCE_METHOD
-            if "trait" in decl.props:
-                self.bits |= TYPE_TYPETRAIT_DESCRIBER
-
-        decltypename = decl.get_first_alias()
-        if decltypename:
-            self.typename = decltypename
-        
-        document = ""
-        document += sections.get_string("Document")
-        if document:
-            self.doc = document.strip()
-
-        valtypename = sections.get_value("ValueType")
-        if valtypename:
-            self.value_type = valtypename.rstrip(":") # コロンがついていてもよしとする
-        
-        # 型引数
-        for line in sections.get_lines("Params"):
-            typename, name, doc, flags = parse_parameter_line(line.strip())
-            typedecl = parse_type_declaration(typename)
-
-            # 全てオプショナル引数にする
-            flags &= ~PARAMETER_REQUIRED 
-            if typename == "Type":
-                default = UnspecifiedTypeParam # デフォルト値
-            else:
-                default = None
-
-            p = MethodParameter(name, typedecl, doc, default, flags)
-            self.params.append(p)
-
-        aliases = sections.get_lines("MemberAlias")
-        for alias in aliases:
-            name, _, dest = [x.strip() for x in alias.partition(":")]
-            if not name or not dest:
-                raise BadTypeDescription()
-
-            if dest[0] == "(" and dest[-1] == ")":
-                row = dest[1:-1].split()
-                self.memberaliases.append((name, row))
-
-        return True
 
     @classmethod
-    def new(cls, describer, classname=None):       
+    def new(cls, describer, *, modulename=None, typename=None, value_type=None, doc="", bits=0):       
         """ クラス定義から読み込み前の型定義を作成する """ 
-        if not isinstance(describer, (str, ClassDescriber)):
-            describer = ClassDescriber(describer)
-        td = TypeDefinition(describer, classname)
+        if isinstance(describer, TypeDefinition):
+            td = describer
+        else:
+            if isinstance(describer, str):
+                # 実装付きの型名、あるいは実装名
+                qualname = QualTypename.parse(describer)
+                if qualname.is_qualified():
+                    describer = qualname
+            if isinstance(describer, QualTypename):
+                # 実装付きの型名
+                typename = describer.typename
+                describer = describer.describer
+
+            td = TypeDefinition(describer, modulename=modulename, typename=typename, value_type=value_type, doc=doc, bits=bits)
         if not td.load_docstring():
             raise BadTypeDescription("Fail to load declaration")
         return td
@@ -309,3 +234,10 @@ class TypeDefinition():
 # ダミーの値型に使用
 class _SubtypeBaseValueType:
     pass
+
+
+
+
+
+
+

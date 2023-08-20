@@ -182,7 +182,7 @@ class AppPackageType:
             *options(Str):
         """
         self.display_update(package, context, app, options=options)
-
+        
     # 
     def display_download_and_install(self, app, package:Package, operation, options=None):
         for state in operation(package, options):

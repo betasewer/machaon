@@ -7,6 +7,7 @@ from machaon.core.symbol import (
     SIGIL_OBJECT_ID,
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
+    SIGIL_OBJECT_PREVIOUS,
     SIGIL_LINE_QUOTER,
     SIGIL_BEGIN_USER_QUOTER,
     SIGIL_SELECTOR_REVERSE_MESSAGE,
@@ -15,9 +16,9 @@ from machaon.core.symbol import (
     SIGIL_SELECTOR_TRAILING_ARGS,
     SIGIL_SELECTOR_CONSUME_ARGS,
     SIGIL_SELECTOR_SHOW_HELP,
+    SIGIL_MODULE_INDICATOR,
     SIGIL_END_TRAILING_ARGS,
     SIGIL_DISCARD_MESSAGE,
-    SIGIL_TYPE_INDICATOR,
     QUOTE_ENDPARENS,
     is_triming_control_char,
     is_modifiable_selector,
@@ -34,6 +35,7 @@ from machaon.core.invocation import (
     Bind1stInvocation,
 )
 from machaon.core.type.declparser import TypeDeclError
+from machaon.core.type.typemodule import TypeModuleError
 
 
 #
@@ -333,8 +335,6 @@ class Message:
         fn = FunctionInfo(inventry.action)
         return "{}{}".format(self.selector.get_method_name(), fn.display_parameters())
 
-
-
 #
 #
 #
@@ -408,7 +408,7 @@ class BasicRef:
         self._lastvalue = None
 
     def is_resolved(self):
-        raise NotImplementedError()
+        return True
 
 class ResultStackRef(BasicRef):
     """ スタックにおかれた計算結果への参照 """
@@ -430,9 +430,6 @@ class SubjectRef(BasicRef):
             raise BadExpressionError("無名関数の引数を参照しましたが、与えられていません")
         return subject
 
-    def is_resolved(self):
-        return True
-
 class ObjectRef(BasicRef):
     """ 任意のオブジェクトへの参照 """
     def __init__(self, ident, lastvalue=None):
@@ -445,9 +442,21 @@ class ObjectRef(BasicRef):
             raise BadExpressionError("オブジェクト'{}'は存在しません".format(self._ident))
         return obj
 
-    def is_resolved(self):
-        return True
+class PreviousObjectRef(BasicRef):
+    """ 任意のオブジェクトへの参照 """
+    def __init__(self, ident, lastvalue=None):
+        super().__init__(lastvalue)
+        self._ident = ident
+    
+    def do_pick(self, evalcontext):
+        obj = evalcontext.context.get_previous_object(self._ident)
+        if obj is None:
+            raise BadExpressionError("参照'{}'に対応するオブジェクトは存在しません".format(self._ident))
+        return obj
 
+#
+#
+#
 class SelectorResolver():
     """ セレクタを解決する """
     def __init__(self, selector):
@@ -478,8 +487,8 @@ def select_type(context, typeexpr):
     """
     try:
         tt = context.instantiate_type(typeexpr)
-    except (BadTypename, TypeDeclError):
-        return None
+    except (BadTypename, TypeDeclError, AttributeError, TypeModuleError):
+        return None # 型定義が見つからなかった
     return context.get_type("Type").new_object(tt)
 
 def select_literal(context, literal):
@@ -1242,6 +1251,17 @@ class MessageEngine():
                     code.add(self.arg_ROOT_MEMBER)
                 return new_block_bits(code)
                 
+            elif objid[0] == SIGIL_OBJECT_PREVIOUS:
+                # 逆順のインデックスによるオブジェクトの参照
+                memberid = objid[1:]
+                if memberid == "":
+                    memberid = "1"
+                if memberid.isdigit():
+                    index = int(memberid) # 数値を取得する
+                    code.add(self.arg_REF_PREVIOUS, index)
+                else:
+                    code.add(self.arg_REF_NAME, objid)
+                
             elif objid.isdigit():
                 # 数値名称のオブジェクト
                 objid = str(int(objid)) # 数値表現を正規化
@@ -1454,6 +1474,11 @@ class MessageEngine():
     def arg_REF_NAME(self, context, name):
         """ """
         return ObjectRef(name)
+
+    @_ast_ARG
+    def arg_REF_PREVIOUS(self, context, name):
+        """ """
+        return PreviousObjectRef(name)
 
     @_ast_ARG
     def arg_STRING(self, context, value):

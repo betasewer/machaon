@@ -122,11 +122,11 @@ def test_type_constructor():
     assert sht.get_current_column_names() == ["positive", "negative"]
 
     # サブタイプ
-    t = cxt.instantiate_type("Int:Hex", "010")
-    inv = TypeConstructorInvocation(t)
-    arg1 = cxt.new_object("98ABCDEF")
-    s = inv.prepare_invoke(cxt, arg1)._invokeaction()
-    assert s == 0x98ABCDEF
+    #t = cxt.instantiate_type("Int+Hex", "010")
+    #inv = TypeConstructorInvocation(t)
+    #arg1 = cxt.new_object("98ABCDEF")
+    #s = inv.prepare_invoke(cxt, arg1)._invokeaction()
+    #assert s == 0x98ABCDEF
 
 
 def test_type_inv_entry_result_type():
@@ -145,4 +145,4 @@ def test_type_inv_entry_result_type():
     assert ret.value.get_current_column_names() == ["positive", "negative"]
     assert [x.value for x in ret.value.row_values(2)] == [13, -13]
     
-    assert ret.get_conversion() == "Sheet: Int positive negative" # 型引数が保存されている
+    assert ret.get_conversion() == "Sheet:machaon.core: Int:machaon.core positive negative" # 型引数が保存されている

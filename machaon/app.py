@@ -284,7 +284,7 @@ class AppRoot:
         mod = package.load_type_module()
         if mod is None:
             return False
-        self.typemodule.update_scope(package.scope, mod)
+        self.typemodule.update(mod)
 
         return package.is_load_succeeded()
     
@@ -493,7 +493,7 @@ class AppRoot:
         if pr is not None:
             return pr
         # ほかのチャンバーから検索する
-        for chm in self.get_chambers():
+        for chm in self.chambers().get_chambers():
             if chm is actchm:
                 continue
             pr = chm.get_process(index)

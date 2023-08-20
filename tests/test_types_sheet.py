@@ -12,7 +12,8 @@ from machaon.types.sheet import Sheet, ItemItselfColumn
 from machaon.macatest import run
 
 class Employee():
-    """
+    """ @type
+    従業員
     """
     def __init__(self, name, postcode="000-0000"):
         self._name = name
@@ -67,7 +68,7 @@ def test_type():
     sh = cxt.new_object(datas, *columns, conversion="Sheet[Employee]")
 
     assert isinstance(sh.type, TypeInstance)
-    assert sh.type.get_args()[0].get_conversion() == "Employee"
+    assert sh.type.get_args()[0].get_conversion() == "Employee:tests.test_types_sheet.Employee"
     assert sh.type.get_args()[1] == "name"
     assert sh.type.get_args()[2] == "postcode"
 
@@ -304,7 +305,7 @@ def hotelrooms(name, rooms=None):
     h = Hotel(name)
     cxt = instant_context()
     rooms = rooms if rooms is not None else h.rooms()
-    o = Sheet.constructor(Sheet, cxt, rooms, cxt.define_type(Room))
+    o = Sheet.constructor(Sheet, cxt, rooms, cxt.select_type(Room))
     return o, cxt
 
 def heterovalues():

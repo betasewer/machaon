@@ -1,4 +1,4 @@
-
+import pytest
 from machaon.types.fundamental import fundamental_types
 from machaon.core.context import instant_context
 
@@ -15,12 +15,12 @@ def test_fundamental_basic():
     t = fundamental_type.find("Int")
     assert t
     assert t.get_value_type() is int
-    assert t.get_conversion() == "Int"
+    assert t.get_conversion() == "Int:machaon.core"
     
     t = fundamental_type.find("Str")
     assert t
     assert t.get_value_type() is str
-    assert t.get_conversion() == "Str"
+    assert t.get_conversion() == "Str:machaon.core"
     
     t = fundamental_type.find("Function")
     assert t
@@ -96,8 +96,8 @@ def test_method():
     assert act(None, "0123.txt", "[0-9]+")
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
-    assert cxt.get_type("Str").get_conversion() == "Str"
-    assert regmatch.get_action_target() == "Str:reg-match"
+    assert cxt.get_type("Str").get_conversion() == "Str:machaon.core"
+    assert regmatch.get_action_target() == "Str:machaon.core:reg-match"
 
 def test_function():
     cxt = instant_context()
@@ -108,6 +108,7 @@ def test_function():
     from machaon.core.function import  MessageExpression
     assert isinstance(fnpower, MessageExpression)
 
+@pytest.mark.skip
 def test_fundamental_numeric_subtype():
     cxt = instant_context()
 

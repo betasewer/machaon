@@ -931,10 +931,10 @@ class TextPath:
 
 
 class PlatformPath(shellpath().PlatformPath):
-    """ @type mixin
+    """ @mixin
     プラットフォーム独自のパス機能を提供するミキシン
     MixinType:
-        Path:
+        Path:machaon.types.shell:
     """
 
 #
