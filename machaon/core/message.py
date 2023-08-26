@@ -16,7 +16,8 @@ from machaon.core.symbol import (
     SIGIL_SELECTOR_TRAILING_ARGS,
     SIGIL_SELECTOR_CONSUME_ARGS,
     SIGIL_SELECTOR_SHOW_HELP,
-    SIGIL_MODULE_INDICATOR,
+    SIGIL_OPERATOR_MEMBER_AT,
+    SIGIL_CONSTRUCTOR_SELECTOR,
     SIGIL_END_TRAILING_ARGS,
     SIGIL_DISCARD_MESSAGE,
     QUOTE_ENDPARENS,
@@ -465,14 +466,14 @@ class SelectorResolver():
     def resolve(self, evalcontext, reciever):
         if isinstance(reciever, BasicRef):
             reciever = reciever.pick_object(evalcontext)
-        return select_method(self.selector, reciever.type, reciever=reciever.value)
+        return select_method(self.selector, reciever.type, reciever=reciever.value, context=evalcontext.context)
 
 class ObjectSelectorResolver(SelectorResolver):
     """ 文字列ではないセレクタ名を解決する """
     def resolve(self, evalcontext, reciever):
         if isinstance(reciever, BasicRef):
             reciever = reciever.pick_object(evalcontext)
-        return select_method_by_object(self.selector, reciever.type, reciever=reciever.value)
+        return select_method_by_object(self.selector, reciever.type, reciever=reciever.value, context=evalcontext.context)
 
 
 #
@@ -511,7 +512,7 @@ def select_literal(context, literal):
     return Object(context.get_type(typename), value)
 
 # メソッド
-def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
+def select_method(name, typetraits=None, *, reciever=None, modbits=None, context=None) -> BasicInvocation:
     # モディファイアを分離する
     if modbits is None:
         if isinstance(name, AffixedSelector):
@@ -524,17 +525,30 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     # 逆転モディファイアには専用の呼び出しを使う
     if "REVERSE_MESSAGE" in modbits:
         return ReversedMessageInvocation(name, typetraits, reciever, modbits)
-
+    
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
             return select_index_method(int(name), typetraits, reciever, modbits)
 
-    # 大文字のメソッドは型変換コンストラクタ
+    # コンストラクタセパレータがある
+    if SIGIL_CONSTRUCTOR_SELECTOR in name and context:
+        method, sep, typedecl = name.partition(SIGIL_CONSTRUCTOR_SELECTOR)
+        if sep and typedecl[0].isupper(): # 型らしき文字が続く
+            method = expand_constructor_syntax(method, typedecl)
+            return select_type_method(typedecl, method, modbits, reciever=reciever, context=context)
+        
+    # 先頭に型らしき大文字の識別子が来た
     if name[0].isupper():
-        return select_type_constructor(name, modbits)
+        typedecl, sep, method = name.partition(SIGIL_OPERATOR_MEMBER_AT)
+        if sep:
+            # セパレータが含まれている場合、外部メソッド呼び出し
+            return select_type_method(typedecl, method, modbits, reciever=reciever, context=context)
+        else:
+            # 型変換コンストラクタ
+            return select_type_constructor(name, modbits, context=context)
 
-    # 型メソッド
+    # この型のメソッド
     using_type_method = typetraits is not None
     if using_type_method:
         # 型メソッドを参照
@@ -557,20 +571,18 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     return InstanceMethodInvocation(name, modifier=modbits)
 
 
-def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
+def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None, context=None) -> BasicInvocation:
     # 逆転モディファイアには専用の呼び出しを使う
     #if "REVERSE_MESSAGE" in modbits:
-
     tn = obj.get_typename()
     v = obj.value
-
     from machaon.core.function import FunctionExpression
     if tn == "Int" or tn == "Float":
         return select_index_method(int(v), typetraits, reciever, modbits)
     elif tn == "Type":
         return select_type_constructor(v, modbits)
     elif tn == "Str": 
-        return select_method(v, typetraits, reciever=reciever, modbits=modbits)
+        return select_method(v, typetraits, reciever=reciever, modbits=modbits, context=context)
     elif isinstance(v, BasicInvocation):
         return v
     elif tn == "Function" or isinstance(v, FunctionExpression):
@@ -584,14 +596,24 @@ def select_index_method(value, typetraits, reciever, modbits):
     inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
     return Bind1stInvocation(inv, value, "Int", modbits)
 
-def select_type_constructor(name, modbits):
+def select_type_constructor(name, modbits, context=None):
     return TypeConstructorInvocation(name, modbits)
+
+def select_type_method(typedecl, name, modbits, reciever=None, context=None):
+    if context is not None:
+        tdef = context.instantiate_type(typedecl)
+        return select_method(name, tdef, modbits=modbits, reciever=reciever, context=context)
+    else:
+        raise ValueError("context is not defined at this timing")
 
 def select_py_callable(fn):
     # Pythonの任意の関数
     from machaon.core.method import (make_method_from_value, METHOD_INVOKEAS_BOUND_FUNCTION)
     mth = make_method_from_value(fn, "<unnamed>", METHOD_INVOKEAS_BOUND_FUNCTION) # 第一引数はレシーバオブジェクト
     return mth.make_invocation()
+
+def expand_constructor_syntax(methodname, typename):
+    return "from-" + methodname
 
 
 #
@@ -912,7 +934,7 @@ class MessageCharBuffer():
 
     def get_read_length(self):
         return self._readlength
-    
+
 
 class MessageTokenizer():
     """ 

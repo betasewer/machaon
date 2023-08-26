@@ -88,61 +88,41 @@ def test_type_constructor():
     sht = inv.prepare_invoke(cxt, arg1)._invokeaction()
     assert [x.value for x in sht.row_values(0)] == ["0"]
 
-    # 引数あり + TypeDecl + 引数で指定
-    inv = TypeConstructorInvocation("Sheet")
+    # 引数あり + TypeDecl
+    inv = TypeConstructorInvocation("Sheet[Int]")
     arg1 = cxt.new_object(["1","2","3"], type="Tuple")
-    arg2 = cxt.new_object("Int", type="Type")
-    arg3 = cxt.new_object("positive")
-    arg4 = cxt.new_object("negative")
-    sht = inv.prepare_invoke(cxt, arg1, arg2, arg3, arg4)._invokeaction()
+    arg2 = cxt.new_object("positive")
+    arg3 = cxt.new_object("negative")
+    sht = inv.prepare_invoke(cxt, arg1, arg2, arg3)._invokeaction()
     assert [x.value for x in sht.row_values(0)] == [1, -1]
     assert sht.get_current_column_names() == ["positive", "negative"]
 
-    # 引数あり + TypeDecl + TypeDeclで指定
-    inv = TypeConstructorInvocation("Sheet[Int](positive,negative)")
-    arg1 = cxt.new_object(["4","5","6"], type="Tuple")
-    sht = inv.prepare_invoke(cxt, arg1)._invokeaction()
-    assert sht.get_current_column_names() == ["positive", "negative"]
-    assert [x.value for x in sht.row_values(0)] == [4, -4]
-
-    # 引数あり + TypeDecl + 引数とTypeDeclの両方で指定
-    inv = TypeConstructorInvocation("Sheet[Int](positive)")
-    arg1 = cxt.new_object(["7","8","9"], type="Tuple")
-    arg2 = cxt.new_object("negative") 
-    sht = inv.prepare_invoke(cxt, arg1, arg2)._invokeaction()
-    assert sht.get_current_column_names() == ["positive", "negative"] # 追加される
-    assert [x.value for x in sht.row_values(0)] == [7, -7]
-
     # 引数あり + TypeInstanceで指定
-    t = cxt.instantiate_type("Sheet", "Int", "positive", "negative")
+    t = cxt.instantiate_type("Sheet", "Int")
     inv = TypeConstructorInvocation(t)
     arg1 = cxt.new_object(["11","12","13"], type="Tuple")
-    sht = inv.prepare_invoke(cxt, arg1)._invokeaction()
+    arg2 = cxt.new_object("positive")
+    arg3 = cxt.new_object("negative")
+    sht = inv.prepare_invoke(cxt, arg1, arg2, arg3)._invokeaction()
     assert [x.value for x in sht.row_values(2)] == [13, -13]
     assert sht.get_current_column_names() == ["positive", "negative"]
 
-    # サブタイプ
-    #t = cxt.instantiate_type("Int+Hex", "010")
-    #inv = TypeConstructorInvocation(t)
-    #arg1 = cxt.new_object("98ABCDEF")
-    #s = inv.prepare_invoke(cxt, arg1)._invokeaction()
-    #assert s == 0x98ABCDEF
 
 
 def test_type_inv_entry_result_type():
     cxt = instant_context()
 
     # 実行時の型引数がついた型を正しく返す
-    t = cxt.instantiate_type("Sheet")
+    t = cxt.instantiate_type("Sheet[Int]")
     inv = TypeConstructorInvocation(t)
     arg1 = cxt.new_object(["11","12","13"], type="Tuple")
-    arg2 = cxt.new_object("Int", type="Type")
-    arg3 = cxt.new_object("positive")
-    arg4 = cxt.new_object("negative")
-    entry = inv.prepare_invoke(cxt, arg1, arg2, arg3, arg4)
+    arg2 = cxt.new_object("positive")
+    arg3 = cxt.new_object("negative")
+    entry = inv.prepare_invoke(cxt, arg1, arg2, arg3)
     ret = entry.invoke(cxt)
 
+    assert not ret.is_error()
     assert ret.value.get_current_column_names() == ["positive", "negative"]
     assert [x.value for x in ret.value.row_values(2)] == [13, -13]
     
-    assert ret.get_conversion() == "Sheet:machaon.core: Int:machaon.core positive negative" # 型引数が保存されている
+    assert ret.get_conversion() == "Sheet:machaon.core: Int:machaon.core" # 型引数が保存されている

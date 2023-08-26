@@ -80,6 +80,13 @@ class TypeProxy:
 
     def instantiate_params(self):
         raise NotImplementedError()
+    
+    def instantiate_args(self, context, argvals, *, params=None): # paramsはテスト用
+        """ 引数を型チェックし生成する """
+        from machaon.core.method import Method
+        method = Method(params=self.instantiate_params() if params is None else params)
+        argvals = method.make_argument_row(context, argvals, construct=True)
+        return argvals
 
     # メソッド関連
     def select_method(self, name):
@@ -116,25 +123,29 @@ class TypeProxy:
         raise NotImplementedError()
 
     # 特殊メソッド
-    def constructor(self, context, value):
+    def constructor(self, context, args):
         """ オブジェクトを構築する """
         raise NotImplementedError()
     
-    def construct(self, context, value):
+    def construct(self, context, value, *args):
         """ オブジェクトを構築して値を返す """
+        # 同じ型ならコンストラクタを呼ばない
         if self.check_value_type(type(value)):
-            return value # 変換の必要なし
-        ret = self.constructor(context, value)
+            return value
+        # コンストラクタを呼び出す
+        # TODO: Noneが渡された場合、デフォルトコンストラクタに分岐？
+        ret = self.constructor(context, (value, *args))
+        # 返り値を検査する
         if not self.check_value_type(type(ret)):
             raise ConstructorReturnTypeError(self, type(ret))
         return ret
 
-    def construct_obj(self, context, value):
+    def construct_obj(self, context, value, *args):
         """ Objectのインスタンスを返す """
         from machaon.core.object import Object
         if isinstance(value, Object):
             value = value.value
-        convval = self.construct(context, value)
+        convval = self.construct(context, value, *args)
         return self.new_object(convval)
     
     def new_object(self, value, *, object_type=None):
@@ -236,8 +247,8 @@ class RedirectProxy(TypeProxy):
     def is_selectable_instance_method(self):
         return self.redirect().is_selectable_instance_method()
 
-    def constructor(self, context, value):
-        return self.redirect().constructor(context, value)
+    def constructor(self, context, args, typeargs=None):
+        return self.redirect().constructor(context, args, typeargs)
 
     def stringify_value(self, value):
         return self.redirect().stringify_value(value)
@@ -290,20 +301,6 @@ class DefaultProxy(TypeProxy):
     def is_function_type(self):
         return False
 
-
-#
-#
-#
-def instantiate_args(thistype, params, context, argvals):
-    """ 引数を型チェックし生成する """
-    from machaon.core.method import Method
-    method = Method(params=params)
-    if not method.check_param_count(len(argvals)):
-        raise TypeError("引数より多くの型引数が与えられました: {} ({})".format(str(thistype), ",".join([str(x) for x in argvals])))
-
-    if argvals:
-        argvals = method.make_argument_row(context, argvals, construct=True)
-    return argvals
 
 #
 # エラー

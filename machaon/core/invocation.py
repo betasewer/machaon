@@ -166,7 +166,7 @@ def parameter_spec(t, i):
     spec = t.get_parameter_spec(i)
     if spec is not None:
         return spec
-    return MethodParameter("param")
+    return MethodParameter("param") # デフォルトのパラメータスペックを返す
 
 #
 #
@@ -242,7 +242,7 @@ class TypeMethodInvocation(BasicInvocation):
     def __init__(self, type, method, modifier=None):
         super().__init__(modifier)
         self.type = type
-        self.method = method
+        self.method: Method = method
     
     def get_method(self):
         return self.method
@@ -256,10 +256,6 @@ class TypeMethodInvocation(BasicInvocation):
     def display(self):
         return ("TypeMethod", self.method.get_action_target(), self.modifier_name())
     
-    def query_method(self, this_type):
-        self.method.load(this_type)
-        return self.method
-    
     def is_task(self):
         return self.method.is_task()
 
@@ -270,7 +266,7 @@ class TypeMethodInvocation(BasicInvocation):
         selfobj, *argobjs = argobjects
         
         # メソッドの実装を読み込む
-        self.method.load(self.type)
+        self.method.load_from_type(self.type)
 
         args = []
         if self.method.is_type_bound():
@@ -401,7 +397,7 @@ class InstanceMethodInvocation(BasicInvocation):
         instance, *args = a
         method = self.resolve_bound_method(instance)
         return InvocationEntry(self, method, args, {})
-    
+
 
 class FunctionInvocation(BasicInvocation):
     """
@@ -510,13 +506,12 @@ class TypeConstructorInvocation(BasicInvocation):
         return False
 
     def prepare_invoke(self, context, *argobjects):
-        argobj, *args = argobjects
         # 型の実装を取得する
-        t = self._type.instance(context, [x.value for x in args]) # Objectをはがし、引数の型変換を行う
-        # 変換コンストラクタの呼び出しを作成
-        argvalue = t.get_typedef().get_constructor_param().make_argument_value(context, argobj)
+        t = self._type.instance(context)
+        # コンストラクタ引数を作成
         result_spec = MethodResult(TypeInstanceDecl(t))
-        return InvocationEntry(self, t.construct, (context, argvalue), {}, result_spec)
+        argvals = [x.value for x in argobjects] # オブジェクトを剝がす
+        return InvocationEntry(self, t.construct, (context, *argvals), {}, result_spec)
     
     def get_action(self):
         raise ValueError("型変換関数の実体は取得できません")

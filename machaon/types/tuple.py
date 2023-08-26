@@ -48,7 +48,7 @@ class ObjectTuple():
     """ @type [Tuple]
     任意の型のオブジェクトを格納する配列。
     Params:
-        itemtype?(Type): 同一の要素型
+        itemtype(Type): 同一の要素型
     """
     def __init__(self, objects=None):
         self.objects = objects or []
@@ -354,7 +354,7 @@ class ObjectTuple():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, itemtype=None):
+    def constructor(self, context, itemtype, value):
         """ @meta context
         Params:
             Any:
@@ -367,7 +367,7 @@ class ObjectTuple():
         objs = [context.new_object(x, type=itemtype) for x in value]
         return ObjectTuple(objs)
     
-    def summarize(self, itemtype=None):
+    def summarize(self, itemtype):
         """ @meta """
         if len(self.objects) < 5:
             summ = [o.summarize() for o in self.objects]
@@ -377,7 +377,7 @@ class ObjectTuple():
             summ2 = [o.summarize() for o in self.objects[-2:]]
             return "{}".format(", ".join(summ1) + "..." + ", ".join(summ2))
 
-    def pprint(self, app, itemtype=None):
+    def pprint(self, itemtype, app):
         """ @meta """
         if len(self.objects) == 0:
             text = "空です" + "\n"

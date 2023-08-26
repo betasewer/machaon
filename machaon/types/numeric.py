@@ -41,9 +41,9 @@ class IntType(NumericType):
         int
     """
     def constructor(self, s):
-        """ @meta 
+        """ @meta [from_dec_literal]
         Params:
-            Any:
+            s(Any):
         """
         return int(s, 0)
     
@@ -82,7 +82,7 @@ class FloatType(NumericType):
         float
     """
     def constructor(self, s):
-        """ @meta 
+        """ @meta
         Params:
             Any:
         """
@@ -167,129 +167,134 @@ class ComplexType():
 
 #
 #
-# サブタイプ
+# 外部メソッド
 #
-#
-
-#
-# N進数
-#
-def formatstr(fmt, type):
-    if fmt[-1].lower() != type:
-        fmt += type
-    return "{:" + fmt + "}"
-
-class Hex:
-    """ @type subtype
-    16進数に変換する。
-    BaseType:
-        Int
-    Params:
-        format?(str): 書式指定
+class IntRepresent:
+    """ @mixin
+    MixinType:
+        Int:machaon.core:
     """
-    def constructor(self, v, fmt=None):
-        """ @meta """
-        return int(v, 16)
-
-    def stringify(self, v, fmt="X"):
-        """ @meta """
-        return formatstr(fmt,"x").format(v)
-
-class Oct:
-    """ @type subtype
-    8進数に変換する。
-    BaseType:
-        Int
-    Params:
-        format?(str): 書式指定
-    """
-    def constructor(self, v, fmt=None):
-        """ @meta """
-        return int(v, 8)
-
-    def stringify(self, v, fmt="o"):
-        """ @meta """
-        return formatstr(fmt,"o").format(v)
-
-class Bin:
-    """ @type subtype
-    2進数に変換する。
-    BaseType:
-        Int
-    Params:
-        format?(str): 書式指定
-    """
-    def constructor(self, v, fmt=None):
-        """ @meta """
-        return int(v, 2)
-
-    def stringify(self, v, fmt="b"):
-        """ @meta """
-        return formatstr(fmt,"b").format(v)
-
-class Dec:
-    """ @type subtype
-    緩いルールで10進数に変換する。
-    BaseType:
-        Int
-    Params:
-        format?(str): 書式指定
-    """
-    def constructor(self, v, fmt=None):
-        """ @meta """
-        return int(v, 10)
-
-    def stringify(self, v):
-        """ @meta """
-        return "{}".format(v)
-
-#
-# ロケール
-#
-class LocaleNumeric:
-    _set = False
+    #
+    # N進数
+    #
+    def from_hex(self, value):
+        """@method external
+        16進数から変換する。
+        Params:
+            value(Str):
+        """
+        return int(value, 16)
     
-    @classmethod
-    def _setlocale(cls):
-        if not cls._set:
-            locale.setlocale(locale.LC_ALL, '')
-            cls._set = True
+    def hex(self, value):
+        """ @method
+        16進数文字に変換する。
+        Returns:
+            Str:
+        """
+        return "{:x}".format(value)
+    
+    def from_oct(self, value):
+        """@method external
+        8進数から変換する。
+        Params:
+            value(Str):
+        """
+        return int(value, 8)
+    
+    def oct(self, value):
+        """ @method
+        8進数文字に変換する。
+        Returns:
+            Str:
+        """
+        return "{:o}".format(value)
+    
+    def from_bin(self, value):
+        """@method external
+        2進数から変換する。
+        Params:
+            value(Str):
+        """
+        return int(value, 2)
 
-class LocaleInt(LocaleNumeric):
-    """ @type subtype [Locale] 
-    システムロケールの数値形で表現された整数。
-    BaseType:
-        Int:
-    Params:
-        nogrouping?(str): 
-    """
-    def constructor(self, s, nogrouping=None):
-        """ @meta """
-        LocaleInt._setlocale()
+    def bin(self, value):
+        """ @method
+        2進数文字に変換する。
+        Returns:
+            Str:
+        """
+        return "{:b}".format(value)
+    
+    def from_dec(self, value):
+        """@method external
+        緩いルールの10進数から変換する。
+        Params:
+            value(Str):
+        """
+        return int(value, 10)
+
+    #
+    # ロケール
+    #
+    def from_locale(self, s, localename=''):
+        """ @method external
+        ロケールの数値表現から変換する。
+        Params:
+            s(Str):
+            localename?(Str): 省略でシステムロケール
+        """
+        locale.setlocale(locale.LC_NUMERIC, localename)
         return locale.atoi(s)
-
-    def stringify(self, v, nogrouping=None):
-        """ @meta """
-        LocaleInt._setlocale()
-        return locale.format_string("%d", v, grouping=not bool(nogrouping))
     
-class LocaleFloat(LocaleNumeric):
-    """ @type subtype [Locale] 
-    システムロケールの数値形で表現された浮動小数点数。
-    BaseType:
-        Float:
-    Params:
-        nogrouping?(str): 
+    def locale(self, value, localename='', nogrouping=False):
+        """ @method
+        ロケールの数値表現へと変換する。
+        Params:
+            localename?(Str): 省略でシステムロケール
+            nogrouping?(bool):
+        Returns:
+            Str:
+        """
+        locale.setlocale(locale.LC_NUMERIC, localename)
+        return locale.format_string("%d", value, grouping=not nogrouping)
+
+
+class FloatRepresent:
+    """ @mixin
+    MixinType:
+        Float:machaon.core:
     """
-    def constructor(self, s, nogrouping=None):
-        """ @meta """
-        LocaleInt._setlocale()
+    #
+    # ロケール
+    #
+    def from_locale(self, s, localename=''):
+        """ @method external
+        ロケールの数値表現を変換する。
+        Params:
+            s(Str):
+            localename?(Str): 省略でシステムロケール
+        """
+        locale.setlocale(locale.LC_NUMERIC, localename)
         return locale.atof(s)
+    
+    def locale(self, value, localename='', nogrouping=False):
+        """ @method
+        ロケールの数値表現へと変換する。
+        Params:
+            localename?(Str): 省略でシステムロケール
+            nogrouping?(bool):
+        Returns:
+            Str:
+        """
+        locale.setlocale(locale.LC_NUMERIC, localename)
+        return locale.format_string("%f", value, grouping=not nogrouping)
+    
 
-    def stringify(self, v, nogrouping=None):
-        """ @meta """
-        LocaleInt._setlocale()
-        return locale.format_string("%f", v, grouping=not bool(nogrouping))
-    
-    
+
+# "ABC" Int:machaon.core#hex
+# "ABC" Int:machaon.core>>hex
+# "ABC" math#pi
+# "ABC" hex->Int 
+
+
 

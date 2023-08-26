@@ -1,9 +1,10 @@
 
 from machaon.core.type.type import TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
 from machaon.core.type.typemodule import TypeModule
-from machaon.core.type.decl import parse_type_declaration
+from machaon.core.type.decl import parse_type_declaration, TypeDecl
 from machaon.core.type.pytype import PythonType
-from machaon.core.type.extend import SubType
+
+from machaon.core.symbol import QualTypename
 
 from machaon.core.object import Object
 
@@ -21,10 +22,17 @@ class TypeType:
     def constructor(self, context, value):
         """ @meta context
         Params:
-            Str: 型名 / クラスの完全な名前(qualname)
+            value(Any): 型表現 / 型の完全な名前(qualname) / パース済みの型宣言
         """
-        decl = parse_type_declaration(value)
-        return decl.instance(context)
+        if isinstance(value, str):
+            decl = parse_type_declaration(value)
+            return decl.instance(context)
+        elif isinstance(value, QualTypename):
+            return context.select_type(value)
+        elif isinstance(value, TypeDecl):
+            return value.instance(context)
+        else:
+            raise TypeError("型の表現あるいは完全な型名が必要です")
 
     def stringify(self, v):
         """ @meta """
@@ -36,27 +44,22 @@ class TypeType:
     #
     # メソッド
     #
-    def new(self, type):
-        '''@method
-        引数無しでコンストラクタを実行する。
-        Returns:
-            Object: オブジェクト
-        '''
-        vt = type.get_value_type()
-        value = vt()
-        return Object(type, value)
-    
-    def ctor(self, type, context, s):
+    def new(self, type, context, *args):
         '''@method context
-        文字列からインスタンスを作成する。
+        コンストラクタを実行する。
         Params:
-            s(Str):
+            *args(Any): 引数
         Returns:
             Object: オブジェクト
         '''
-        value = type.construct(context, s)
-        return Object(type, value)
-
+        if not args:
+            vt = type.get_value_type()
+            value = vt()
+            return Object(type, value)
+        else:
+            value = type.construct(context, *args)
+            return Object(type, value)
+    
     def instance(self, type, context, *args):
         """ @method context
         型引数を束縛した型インスタンスを作成する。
@@ -79,14 +82,17 @@ class TypeType:
         app.post("message", "\n".join(docs))
         # メソッドの表示
         meths = self.methods(typ, context, app, value)
-        meths_sheet = context.new_object(meths, conversion="Sheet[Method](names,doc,signature,source)")
+        meths_sheet = context.new_object(meths, conversion="Sheet[Method]")
+        meths_sheet.value.view(context, "names", "signature", "doc")
         meths_sheet.pprint(app)
 
     def methods(self, typ, context, app, instance=None):
         '''@task context
         使用可能なメソッドを列挙する。
         Returns:
-            Sheet[Method](names,doc,signature,source): メソッドのリスト
+            Sheet[Method]: メソッドのリスト
+        Decorates:
+            @ view: names doc signature source
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
@@ -99,18 +105,11 @@ class TypeType:
                         "names" : context.new_object(names),
                         "doc" : "!{}: {}".format(type(meth).__name__, meth),
                         "signature" : "",
-                        "source" : ""
                     })
                 else:
-                    source = "user"
-                    if meth.is_from_class_member():
-                        source = "class"
-                    elif meth.is_from_instance_member():
-                        source = "instance"
                     helps.append({
                         "#extend" : context.new_object(meth, type="Method"),
                         "names" : context.new_object(names),
-                        "source" : context.new_object(source),
                     })
         return helps
     
@@ -124,40 +123,6 @@ class TypeType:
         """
         return type.select_method(name)
 
-    def subtype(self, typ, context, name):
-        ''' @method context [sub]
-        サブタイプを取得する。
-        Params:
-            name(str):
-        Returns:
-            Type:
-        '''
-        sub = context.type_module.get_subtype(typ, name)
-        if sub is not None:
-            return SubType(typ, sub)
-        return None
-
-    def subtypes(self, typ, context, app):
-        ''' @task context [subs]
-        サブタイプを列挙する。
-        Returns:
-            Sheet[ObjectCollection](name,doc,scope,location): メソッドのリスト
-        '''
-        with app.progress_display():
-            for scopename, name, t, error in context.type_module.enum_subtypes_of(typ, geterror=True):            
-                app.interruption_point(progress=1)
-                entry = {
-                    "name" : name,
-                }
-                if error is not None:
-                    entry["doc"] = "!!!" + error.summarize()
-                    entry["type"] = error
-                else:
-                    entry["doc"] = t.doc
-                    entry["scope"] = scopename
-                    entry["location"] = t.get_describer_qualname()
-                yield entry
-    
     def name(self, type):
         ''' @method
         型名。
@@ -206,7 +171,9 @@ class TypeType:
         ''' @method
         mixinを含めたすべての実装場所を示す文字列を返す。
         Returns:
-            Sheet[](name, describer):
+            Sheet[]:
+        Decorates:
+            @ view: name describer:
         '''
         return [{"name": x.get_full_qualname(), "describer": x} for x in type.get_all_describers()]
 

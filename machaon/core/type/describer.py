@@ -109,7 +109,7 @@ class TypeDescriber:
 class TypeDescriberClass(TypeDescriber):
     '''
     クラスに定義された実装
-    """ @type trait use-instance-method subtype [name aliases...]
+    """ @type trait use-instance-method [name aliases...]
     detailed description...
     .......................
     ValueType:
@@ -122,8 +122,6 @@ class TypeDescriberClass(TypeDescriber):
         link: path
     MixinType:
         <Typename> (mixin target type)
-    BaseType:
-        <Typename> (subtype base type)
     """
     '''
     def __init__(self, resolver, docstring=None):

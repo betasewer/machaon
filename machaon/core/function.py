@@ -271,7 +271,7 @@ class FunctionType:
     Params:
         qualifier(Str): None|(seq)uential
     """
-    def constructor(self, context, s, qualifier=None):
+    def constructor(self, context, qualifier, s):
         """ @meta context
         Params:
             Str:
@@ -283,7 +283,7 @@ class FunctionType:
             f = parse_sequential_function(s, context)
         return f
 
-    def stringify(self, f):
+    def stringify(self, qualifier, f):
         """ @meta """
         return f.get_expression()
     

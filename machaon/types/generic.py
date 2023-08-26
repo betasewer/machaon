@@ -13,7 +13,7 @@ class GenericMethodResovler:
         self.describer = TypeDescriberClass(GenericMethods)
         self.describer.set_full_qualname("machaon.core")
         _GenericMethodsType = Type(self.describer)
-        _GenericMethodsType.load(nodescribe=True, typename="GenericMethods", value_type=self.TypeValue)
+        _GenericMethodsType.load(nodescribe=True, typename="Generic", value_type=self.TypeValue)
         self._t = _GenericMethodsType
 
     @property
@@ -46,7 +46,7 @@ class GenericMethodResovler:
             if method is None:
                 return None
             
-            method.load(self.type)
+            method.load_from_type(self.type)
             self.type.add_method(method)
 
         return method
@@ -113,7 +113,7 @@ class GenericMethods:
 
     # 比較
     def equal(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項==演算子。（等しい）
         Arguments:
             left(Any): 
@@ -124,7 +124,7 @@ class GenericMethods:
         return left == right
 
     def not_equal(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項!=演算子。（等しくない）
         Arguments:
             left(Any): 
@@ -135,7 +135,7 @@ class GenericMethods:
         return left != right
     
     def less_equal(self, left, right):  
-        """ @method reciever-param
+        """ @method external
         二項<=演算子。（以下）
         Arguments:
             left(Any): 
@@ -146,7 +146,7 @@ class GenericMethods:
         return left <= right
         
     def less(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項<演算子。（より小さい）
         Arguments:
             left(Any): 
@@ -157,7 +157,7 @@ class GenericMethods:
         return left < right
         
     def greater_equal(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項>=演算子。（以上）
         Arguments:
             left(Any): 
@@ -168,7 +168,7 @@ class GenericMethods:
         return left >= right
         
     def greater(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項>演算子。（より大きい）
         Arguments:
             left(Any): 
@@ -179,7 +179,7 @@ class GenericMethods:
         return left > right
     
     def compare(self, left, right):
-        """ @method reciever-param
+        """ @method external
         Arguments:
             left(Any): 
             right(Any): 
@@ -194,7 +194,7 @@ class GenericMethods:
             return -1
     
     def is_between(self, left, min, max):
-        """ @method reciever-param
+        """ @method external
         Params:
             left(Any):
             min(Any): 下端（含む）
@@ -205,7 +205,7 @@ class GenericMethods:
         return min <= left and left <= max
     
     def is_(self, left, right):
-        """ @method reciever-param
+        """ @method external
         is演算子。（同一オブジェクト）
         Arguments:
             left(Any): 
@@ -216,7 +216,7 @@ class GenericMethods:
         return left is right
         
     def is_not(self, left, right):
-        """ @method reciever-param
+        """ @method external
         is not演算子。（同一オブジェクトでない）
         Arguments:
             left(Any): 
@@ -227,7 +227,7 @@ class GenericMethods:
         return left is not right
 
     def is_none(self, left) -> bool:
-        """ @method reciever-param
+        """ @method external
         Noneである。
         Arguments:
             left(Any): 
@@ -237,7 +237,7 @@ class GenericMethods:
         return left is None
 
     def truth(self, left) -> bool:
-        """ @method reciever-param
+        """ @method external
         A が真か。
         Arguments:
             left(Any): 
@@ -247,7 +247,7 @@ class GenericMethods:
         return bool(left)
     
     def falsy(self, left) -> bool:
-        """ @method reciever-param
+        """ @method external
         A が偽か。
         Arguments:
             left(Any): 
@@ -258,7 +258,7 @@ class GenericMethods:
 
     # 数学
     def add(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項+演算子。（加算）
         Arguments:
             left(Any): 
@@ -269,7 +269,7 @@ class GenericMethods:
         return left + right
 
     def sub(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項-演算子。（減算）
         Arguments:
             left(Any): 
@@ -280,7 +280,7 @@ class GenericMethods:
         return left - right
 
     def mul(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項*演算子。（乗算）
         Arguments:
             left(Any): 
@@ -291,7 +291,7 @@ class GenericMethods:
         return left * right
         
     def matmul(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項@演算子。（行列乗算）
         Arguments:
             left(Any): 
@@ -302,7 +302,7 @@ class GenericMethods:
         return left @ right
 
     def div(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項/演算子。（除算）
         Arguments:
             left(Any): 
@@ -313,7 +313,7 @@ class GenericMethods:
         return left / right
         
     def floordiv(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項//演算子。（整数除算）
         Arguments:
             left(Any): 
@@ -324,7 +324,7 @@ class GenericMethods:
         return left // right
 
     def mod(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項%演算子。（剰余）
         Arguments:
             left(Any): 
@@ -335,7 +335,7 @@ class GenericMethods:
         return left % right
 
     def negative(self, left): 
-        """ @method reciever-param
+        """ @method external
         単項-演算子。（符号反転）
         Arguments:
             left(Any): 
@@ -345,7 +345,7 @@ class GenericMethods:
         return -left
 
     def positive(self, left):
-        """ @method reciever-param
+        """ @method external
         単項+演算子。（符号そのまま）
         Arguments:
             left(Any):
@@ -355,7 +355,7 @@ class GenericMethods:
         return +left
 
     def pow(self, left, right):
-        """ @method reciever-param
+        """ @method external
         べき乗の計算。
         Arguments:
             left(Any): 底
@@ -367,7 +367,7 @@ class GenericMethods:
 
     # ビット演算
     def bitand(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項&演算子。（ビット論理積）
         Arguments:
             left(Any): 
@@ -378,7 +378,7 @@ class GenericMethods:
         return left & right
 
     def bitor(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項|演算子。（ビット論理和）
         Arguments:
             left(Any): 
@@ -389,7 +389,7 @@ class GenericMethods:
         return left | right
         
     def bitxor(self, left, right):        
-        """ @method reciever-param
+        """ @method external
         二項^演算子。（ビット排他論理和）
         Arguments:
             left(Any): 
@@ -400,7 +400,7 @@ class GenericMethods:
         return left ^ right
         
     def bitinv(self, left):   
-        """ @method reciever-param
+        """ @method external
         単項~演算子。（ビット否定）
         Arguments:
             left(Any):
@@ -410,7 +410,7 @@ class GenericMethods:
         return ~left
         
     def lshift(self, left, right): 
-        """ @method reciever-param
+        """ @method external
         二項<<演算子。（ビット左シフト）
         Arguments:
             left(Any):
@@ -421,7 +421,7 @@ class GenericMethods:
         return left << right
         
     def rshift(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項>>演算子。（ビット右シフト）
         Arguments:
             left(Any):
@@ -433,7 +433,7 @@ class GenericMethods:
         
     # リスト関数
     def is_in(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項in演算子。（集合に含まれるか）
         Arguments:
             left(Any): 対象
@@ -444,7 +444,7 @@ class GenericMethods:
         return left in right
 
     def contains(self, left, right):
-        """ @method reciever-param
+        """ @method external
         二項in演算子の逆。（集合が含むか）
         Arguments:
             left(Any): 母集団
@@ -455,7 +455,7 @@ class GenericMethods:
         return right in left 
 
     def at(self, left, index):
-        """ @method reciever-param
+        """ @method external
         添え字演算子。（要素アクセス）
         Arguments:
             left(Any): 配列
@@ -466,7 +466,7 @@ class GenericMethods:
         return left[index]
         
     def attrat(self, left, key):
-        """ @method reciever-param
+        """ @method external
         属性にアクセスする。
         Arguments:
             left(Any): 配列
@@ -478,7 +478,7 @@ class GenericMethods:
         return getattr(left, key)
     
     def slice(self, left, start, stop):
-        """ @method reciever-param
+        """ @method external
         添え字演算子。（要素アクセス）
         Arguments:
             left(Any): 配列
@@ -491,7 +491,7 @@ class GenericMethods:
     
     # その他の組み込み関数
     def length(self, left):
-        """ @method reciever-param
+        """ @method external
         長さを求める。
         Arguments:
             left(Any):
@@ -501,7 +501,7 @@ class GenericMethods:
         return len(left)
 
     def truth_then(self, left, context, if_, else_):
-        """ @method reciever-param context 
+        """ @method external context 
         leftを真理値として評価して真であればif_を、偽であればelse_を実行する。
         Arguments:
             left(Object): 
@@ -514,7 +514,7 @@ class GenericMethods:
         return body.run(left, context)
 
     def falsy_then(self, left, context, if_, else_):
-        """ @method reciever-param context 
+        """ @method external context 
         leftを真理値として評価して偽であればif_を、真であればelse_を実行する。
         Arguments:
             left(Object): 
@@ -527,7 +527,7 @@ class GenericMethods:
         return body.run(left, context)
         
     def test_then(self, left, context, cond, if_, else_):
-        """ @method reciever-param context 
+        """ @method external context 
         値を条件式で判定し、その結果でif節またはelse節を実行する。
         Arguments:
             left(Object): 
@@ -544,7 +544,7 @@ class GenericMethods:
 
     # オブジェクト
     def identical(self, obj):
-        """ @method reciever-param
+        """ @method external
         同一のオブジェクトを返す。
         Arguments:
             obj(Object): 対象
@@ -554,7 +554,7 @@ class GenericMethods:
         return obj
     
     def pretty(self, obj):
-        """ @method reciever-param
+        """ @method external
         オブジェクトの詳細表示を返す。
         Arguments:
             obj(Object): 対象
@@ -566,7 +566,7 @@ class GenericMethods:
         return obj.to_pretty()
 
     def type(self, obj):
-        """ @method reciever-param
+        """ @method external
         オブジェクトの型を返す。
         Arguments:
             obj(Object): 対象
@@ -576,7 +576,7 @@ class GenericMethods:
         return obj.type
         
     def help(self, obj, context):
-        """ @method reciever-param context
+        """ @method external context
         オブジェクトの説明、メソッドを表示する。
         Arguments:
             obj(Object): 対象
@@ -584,8 +584,8 @@ class GenericMethods:
         from machaon.types.fundamental import TypeType
         return TypeType().help(obj.type, context, context.spirit, obj.value)
     
-    def stringify(self, obj, context):
-        """ @method reciever-param context
+    def stringify(self, obj):
+        """ @method external
         stringifyメソッドで文字列に変換する。
         Arguments:
             obj(Object): オブジェクト
@@ -595,7 +595,7 @@ class GenericMethods:
         return obj.stringify()
 
     def bind(self, left, context, right):
-        """ @method reciever-param context
+        """ @method external context
         オブジェクトを変数に束縛する。
         Arguments:
             left(Object): オブジェクト
@@ -607,7 +607,7 @@ class GenericMethods:
         return left
         
     def cast(self, left, right):
-        """ @method reciever-param
+        """ @method external
         コンストラクタを介さずに型を変更する。
         Arguments:
             left(Any): 値
@@ -620,7 +620,7 @@ class GenericMethods:
         return o
         
     def cast_raw(self, left, context):
-        """ @method reciever-param context
+        """ @method external context
         オブジェクトの型をPythonTypeに変える。
         Arguments:
             left(Any): 値
@@ -632,8 +632,8 @@ class GenericMethods:
         o = Object(pytype, left)
         return o
         
-    def tuplepush(self, left, context, right):
-        """ @method reciever-param context
+    def tuplepush(self, left, right):
+        """ @method external
         タプルに追加する。
         Arguments:
             left(Object): タプルもしくは要素
@@ -647,8 +647,8 @@ class GenericMethods:
         else:
             return ObjectTuple([left, right])
     
-    def void(self, left, context):
-        """ @method reciever-param context
+    def void(self, left):
+        """ @method external
         セレクタを引数無しの呼び出しに変換する。
         Params:
             left(Any): 任意のセレクタオブジェクト

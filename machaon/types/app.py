@@ -106,7 +106,7 @@ class RootObject:
             Sheet[](name, doc, describer): 型のリスト
         """
         with spirit.progress_display():
-            for name, t, error in self.context.type_module.enum(geterror=True):
+            for name, t, error in self.context.type_module.getall(geterror=True):
                 spirit.interruption_point(progress=1)
                 entry = {
                     "name" : name,
@@ -119,28 +119,6 @@ class RootObject:
                     entry["describer"] = t.get_describer_qualname()
                 yield entry
         
-    def subtypes(self, spirit):
-        """ @task
-        使用可能な型を列挙する。
-        Params:
-        Returns:
-            Sheet[ObjectCollection](name, doc, scope, location): 型のリスト
-        """
-        with spirit.progress_display():
-            for scopename, name, t, error in self.context.type_module.enum_all_subtypes(geterror=True):
-                spirit.interruption_point(progress=1)
-                entry = {
-                    "name" : name,
-                }
-                if error is not None:
-                    entry["doc"] = "!!!" + error.summarize()
-                    entry["type"] = error
-                else:
-                    entry["doc"] = t.doc
-                    entry["scope"] = scopename
-                    entry["location"] = t.get_describer_qualname()
-                yield entry
-    
     def vars(self):
         """@method
         全ての変数を取得する。
@@ -305,7 +283,9 @@ class RootObject:
         """ @method 
         UIのカラーテーマの一覧を表示する。
         Returns:
-            Sheet[ShellTheme](name):
+            Sheet[ShellTheme]:
+        Decorates:
+            @ view: name
         """
         from machaon.ui.theme import theme_constructors
         for ctor in theme_constructors.values():

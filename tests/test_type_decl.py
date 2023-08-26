@@ -1,7 +1,7 @@
 import pytest
 
 from machaon.core.type.alltype import (
-    SubType, TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, 
+    TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, 
     PythonType, ExtendedType, get_type_extension_loader, Type
 )
 from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation
@@ -20,38 +20,29 @@ def equalparse(s,r):
 def test_decl_disp():
     assert TypeDecl("Int").to_string() == "Int"
     assert TypeDecl("List", [TypeDecl("Str")]).to_string() == "List[Str]"
-    assert TypeDecl("Sheet", [TypeDecl("Room")], ["number", "type"]).to_string() == "Sheet[Room](number,type)"
-    assert TypeDecl("Hotel", [TypeDecl("Sheet", [TypeDecl("Room")], ["number", "type"])], ["name"]).to_string() == "Hotel[Sheet[Room](number,type)](name)"
-    assert TypeDecl("Sheet", [], ["type"]).to_string() == "Sheet[](type)"
+    assert TypeDecl("Sheet", [TypeDecl("Room")]).to_string() == "Sheet[Room]"
+    assert TypeDecl("Hotel", [TypeDecl("Room"), TypeDecl("Sheet", [TypeDecl("Room")]), TypeDecl("name")]).to_string() == "Hotel[Room,Sheet[Room],name]"
+    assert TypeDecl("Sheet", [TypeDecl("sub"), TypeDecl("mul")]).to_string() == "Sheet[sub,mul]"
+    assert TypeDecl("Sheet", []).to_string() == "Sheet"
 
 def test_decl_parse():
     reflectparse("Int")
     reflectparse("Tuple[Str]")
-    reflectparse("Sheet[Room](number,type)")
-    reflectparse("Hotel[Sheet[Room](number,type)](name)")
-    reflectparse("Sheet[](type)")
+    reflectparse("Sheet[Room]")
+    reflectparse("Hotel[Sheet[Room]]")
+    equalparse("Sheet[]", "Sheet")
     reflectparse("Generator[Int,None,None]")
-    reflectparse("Generator[Sheet[Room](number,type),Sheet[Room](number,type),Sheet[Room](number,type)]")
+    reflectparse("Generator[Sheet[Room],Sheet[Room],Sheet[Room]]")
     reflectparse("Tuple[Tuple[Tuple[Int]]]")
 
     equalparse("Sheet[Int|Str]", "Sheet[Union[Int,Str]]")
     equalparse("Tuple[Int|Str]|Sheet[Int|Str]", "Union[Tuple[Union[Int,Str]],Sheet[Union[Int,Str]]]")
 
     # 空白は削除される
-    equalparse("Sheet[Room](number, type)", "Sheet[Room](number,type)")
+    equalparse("Sheet[Room, Int, Float]", "Sheet[Room,Int,Float]")
     
-    # コンストラクタ引数で|[]を使用可能
-    reflectparse("Sheet[Room](number|type[])")
-
-    # サブタイプ
-    equalparse("Int+Kanji", "$Sub[Int,Kanji]")
-    equalparse("Int+Zen[](a,b)", "$Sub[Int,Zen[](a,b)]")
-    equalparse(
-        "Sheet[Int+Kanji, Str+Alpha]", 
-        "Sheet[$Sub[Int,Kanji],$Sub[Str,Alpha]]")
-    equalparse(
-        "Sheet[Function[](seq)|Int+Hex|None, Str+Alpha]", 
-        "Sheet[Union[Function[](seq),$Sub[Int,Hex],None],$Sub[Str,Alpha]]")
+    reflectparse("Sheet[Room,'What','Is_This']")
+    reflectparse("Sheet[Room,Wh$at,Im&&ena]") # 型名に使用できない文字が含まれる
 
 
 @pytest.mark.xfail
@@ -81,41 +72,41 @@ def test_decl_instance():
     assert isinstance(parse_("Sheet").instance(cxt), TypeInstance) # Anyが束縛される
     
     # declで束縛
-    d = parse_("Sheet[Int](@, length)").instance(cxt)
+    d = parse_("Sheet[Int]").instance(cxt)
     assert isinstance(d, TypeInstance)
     assert d is not cxt.get_type("Sheet")
     assert d.get_typedef() is cxt.get_type("Sheet")
-    assert len(d.get_args()) == 3
+    assert len(d.get_args()) == 1
     assert d.get_args()[0] is cxt.get_type("Int")
-    assert d.get_args()[1] == "@"
-    assert d.get_args()[2] == "length"
     assert d.get_typename() == "Sheet"
-    assert d.get_conversion() == "Sheet:machaon.core: Int:machaon.core @ length"
+    assert d.get_conversion() == "Sheet:machaon.core: Int:machaon.core"
     
     # declとinstanceで束縛
-    d = parse_("Sheet[Int]").instance(cxt, ["length", "@"])
-    assert len(d.get_args()) == 3
+    d = parse_("Sheet[]").instance(cxt, ["Int"])
+    assert len(d.get_args()) == 1
     assert d.get_args()[0] is cxt.get_type("Int")
-    assert d.get_args()[1] == "length"
-    assert d.get_args()[2] == "@"
-    assert d.get_conversion() == "Sheet:machaon.core: Int:machaon.core length @" 
+    assert d.get_conversion() == "Sheet:machaon.core: Int:machaon.core" 
+    
+    # default
+    from machaon.core.type.instance import TypeAny
+    d = parse_("Sheet[]").instance(cxt)
+    assert len(d.get_args()) == 1
+    assert isinstance(d.get_args()[0], TypeAny)
+    assert d.get_conversion() == "Sheet:machaon.core: Any" 
 
 def test_decl_instantiate_args():
     cxt = instant_context()
     t = cxt.get_type("Sheet")
 
-    d = parse_type_declaration("Sheet[Str](length)")
-    args = d.instantiate_args(t.get_type_params(), cxt)
-    assert len(args) == 2
+    d = parse_type_declaration("Sheet[Str]")
+    args = d.instance(cxt).get_args()
+    assert len(args) == 1
     assert args[0].get_conversion() == "Str:machaon.core"
-    assert args[1] == "length"
     
-    d = parse_type_declaration("Sheet[](mul,sub)")
-    args = d.instantiate_args(t.get_type_params(), cxt)
-    assert len(args) == 3
+    d = parse_type_declaration("Sheet[]")
+    args = d.instance(cxt).get_args()
+    assert len(args) == 1
     assert args[0].get_conversion() == "Any"
-    assert args[1] == "mul"
-    assert args[2] == "sub"
 
 def test_decl_syntax_check():
     cxt = instant_context()
@@ -144,10 +135,6 @@ def test_decl_syntax_check():
     assert t.check_value_type(bytes)
     assert not t.check_value_type(str)
 
-    #t = instance("Int+Hex")
-    #assert isinstance(t, SubType)
-    #assert t.check_value_type(int)
-    #assert not t.check_value_type(float)
 
 
 #
@@ -216,7 +203,7 @@ def test_enummethods_pythontype():
     assert m.make_invocation().get_min_arity() == 2
     assert m.make_invocation().get_max_arity() == 2
     assert m.make_invocation()._invoke(cxt, instance, 2, 3) == instance.method2(2, 3)
-    assert m.get_signature() == "x y -> Any"
+    assert m.get_signature() == "@ Any Any -> Any"
     
     name, m = methods[1]
     assert name == ["method0"]
@@ -225,7 +212,7 @@ def test_enummethods_pythontype():
     assert m.make_invocation().get_min_arity() == 0
     assert m.make_invocation().get_max_arity() == 0
     assert m.make_invocation()._invoke(cxt, instance) == instance.method0()
-    assert m.get_signature() == "-> Any"
+    assert m.get_signature() == "@ -> Any"
     
     # classmethod
     name, m = methods[2]
@@ -236,7 +223,7 @@ def test_enummethods_pythontype():
     assert m.make_invocation().get_min_arity() == 2
     assert m.make_invocation().get_max_arity() == 2
     assert m.make_invocation()._invoke(cxt, 4, 5) == PyType.clsmethod2(4, 5)
-    assert m.get_signature() == "x y -> Any"
+    assert m.get_signature() == "@ Any Any -> Any"
     
     # staticmethod
     name, m = methods[3]
@@ -247,7 +234,7 @@ def test_enummethods_pythontype():
     assert m.make_invocation().get_min_arity() == 2
     assert m.make_invocation().get_max_arity() == 2
     assert m.make_invocation()._invoke(cxt, 4, 5) == PyType.stmethod2(4, 5)
-    assert m.get_signature() == "x y -> Any"
+    assert m.get_signature() == "@ Any Any -> Any"
     
     # class value
     name, m = methods[4]
@@ -257,7 +244,7 @@ def test_enummethods_pythontype():
     assert m.make_invocation().get_min_arity() == 0
     assert m.make_invocation().get_max_arity() == 0
     assert m.make_invocation()._invoke(cxt, instance) == PyType.const
-    assert m.get_signature() == "-> Int"
+    assert m.get_signature() == "@ -> Int"
     
     # property
     name, m = methods[5]
@@ -265,7 +252,7 @@ def test_enummethods_pythontype():
     assert m.get_param_count() == 0
     assert isinstance(m.make_invocation(), InstanceMethodInvocation)
     assert m.make_invocation()._invoke(cxt, instance) == instance.prop
-    assert m.get_signature() == "-> Any"
+    assert m.get_signature() == "@ -> Any"
     
     # instance value
     inv = InstanceMethodInvocation("ivalue")
@@ -399,58 +386,6 @@ def test_enummethods_pythontype_2():
     assert isinstance(m.make_invocation(), InstanceMethodInvocation)
     assert m.make_invocation()._invoke(cxt, instance) == instance.second
 
-
-#
-#  subtype
-#
-class Hex:
-    def constructor(self, s):
-        """ @meta """
-        return int(s, 16)
-    
-    def stringify(self, v):
-        """ @meta """
-        return hex(v)
-        
-class Oct:
-    def constructor(self, s):
-        """ @meta """
-        return int(s, 8)
-    
-    def stringify(self, v):
-        """ @meta """
-        return oct(v)
-
-from machaon.macatest import run
-        
-
-@pytest.mark.skip()
-def test_int_subtype():
-    cxt = instant_context()
-    
-    t = cxt.get_subtype("Int", "Hex")
-    assert t
-
-    x = cxt.instantiate_type("Int:Hex")
-    assert isinstance(x, SubType)
-    assert x.select_method("abs")
-    assert x.select_method("abs").get_name() == "abs"
-
-    assert isinstance(x.construct(cxt, "0F"), int)
-    assert x.construct(cxt, "FF") == 0xFF
-    assert x.construct(cxt, 0x24) == 0x24
-    assert x.stringify_value(0x20) == "20"
-
-    x = cxt.instantiate_type("Int:Oct")
-    assert isinstance(x, SubType)
-    assert x.construct(cxt, "54") == 0o54
-    assert x.stringify_value(0o43) == "43"
-    
-    x = cxt.instantiate_type("Int:Hex", "08")
-    assert isinstance(x, SubType)
-    assert x.construct(cxt, "FF") == 0xFF
-    assert x.stringify_value(0xFF) == "000000ff"
-    
 
 def test_extension():
     cxt = instant_context()

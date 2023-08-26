@@ -57,7 +57,11 @@ def runmain(*, fn):
 
 def parse_test(context, s, rhs, *, q=None):
     parser = MessageEngine(s)
-    lhso = parser.run_here(context)
+    try:
+        lhso = parser.run_here(context)
+    except Exception as e:
+        put_instructions(context, "; ")
+        raise e
     assert message_test(s, context, lhso.value, rhs, q)
     return put_instructions(context, "; ")
 

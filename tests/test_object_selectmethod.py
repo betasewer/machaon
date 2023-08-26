@@ -14,11 +14,11 @@ def test_straight_select():
 
     tm = select_method("reg-match", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "Str:machaon.core:reg-match", "")
+    assert tm.display() == ("TypeMethod", "Str:machaon.core#reg-match", "")
 
     gm = select_method("+", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:add", "")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#add", "")
 
 
 def test_modified_select():
@@ -26,19 +26,19 @@ def test_modified_select():
 
     tm = select_method("!reg-search", StrType)
     assert tm
-    assert tm.display() == ("TypeMethod", "Str:machaon.core:reg-search", "negate-result")
+    assert tm.display() == ("TypeMethod", "Str:machaon.core#reg-search", "negate-result")
 
     gm = select_method("~in", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:is-in", "reverse-args")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#is-in", "reverse-args")
 
     gm = select_method("`identical", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:identical", "basic-reciever")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identical", "basic-reciever")
     
     gm = select_method("join?", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Str:machaon.core:join", "show-help")
+    assert gm.display() == ("TypeMethod", "Str:machaon.core#join", "show-help")
 
 
 def test_pytype_method_select():
@@ -50,7 +50,7 @@ def test_pytype_method_select():
 
     gm = select_method("<", AnyType)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:less", "")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#less", "")
 
 
 def test_objcol_select():
@@ -99,12 +99,43 @@ def test_extend_select():
     # 元の型のTypeMethod
     dm = select_method("startswith", exttype, reciever=base)
     assert dm
-    assert dm.display() == ("TypeMethod", "Str:machaon.core:startswith", "")
+    assert dm.display() == ("TypeMethod", "Str:machaon.core#startswith", "")
     assert dm._invoke(cxt, base, "基") is True
 
     # Generic TypeMethod
     gm = select_method("=", exttype, reciever=base)
     assert gm
-    assert gm.display() == ("TypeMethod", "GenericMethods:machaon.core:identical", "")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identical", "")
     assert gm._invoke(cxt, base) == base
 
+
+def test_explicit_type_method_select():
+    cxt = instant_context()
+
+    sub = cxt.new_object("0xABC", type="Str")
+    hex = select_method("Int#from-hex", sub.type, reciever=sub, context=cxt)
+    assert hex
+    assert hex.display() == ("TypeMethod", "Int:machaon.core#from-hex", "")
+    assert hex._invoke(cxt, sub) == 0xABC
+
+    sub = cxt.new_object("1010111", type="Str")
+    hex = select_method("Int#from-bin", sub.type, reciever=sub, context=cxt)
+    assert hex
+    assert hex.display() == ("TypeMethod", "Int:machaon.core#from-bin", "")
+    assert hex._invoke(cxt, sub) == 0b1010111
+
+    # コンストラクタ構文
+    sub = cxt.new_object("04321", type="Str")
+    hex = select_method("oct>>Int", sub.type, reciever=sub, context=cxt)
+    assert hex
+    assert hex.display() == ("TypeMethod", "Int:machaon.core#from-oct", "")
+    assert hex._invoke(cxt, sub) == 0o04321
+
+
+@pytest.mark.xfail
+def test_call_external_method_as_member():
+    cxt = instant_context()
+
+    sub = cxt.new_object(0xABC, type="Int")
+    hex = select_method("hex", sub.type, reciever=sub, context=cxt)
+    assert hex._invoke(cxt, sub) # 型エラー

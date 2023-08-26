@@ -303,7 +303,9 @@ class AppPackageType:
         """ @task
         パッケージに定義された型を収集しログを表示する。登録はしない。
         Returns:
-            Sheet[ObjectCollection](typename, qualname, error):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: typename qualname error
         """
         elems = []
         for mod in package.load_module_loaders():
@@ -315,7 +317,9 @@ class AppPackageType:
         """ @method [extra]
         このパッケージが追加で依存するモジュール名。
         Returns:
-            Sheet[ObjectCollection](name, ready):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: name ready
         """
         return [{"name":x, "ready":y} for x, y in package.check_required_modules_ready().items()]
 
@@ -401,7 +405,9 @@ class Module():
         """ @task
         このモジュールに定義された型を収集しログを表示する。登録はしない。
         Returns:
-            Sheet[ObjectCollection](typename, qualname, error):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: typename qualname error
         """
         mod = self.mloader()
         elems = list(mod.scan_print_type_definitions(app))

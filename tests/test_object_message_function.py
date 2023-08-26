@@ -83,11 +83,11 @@ def test_parse_function():
         assert message_test(fn.get_expression(), subcontext, lhso, rhs[0])
 
     lucky = {}
-    ltest("Function ctor -> @ name == lucky", lucky, True)
-    ltest("Function ctor -> @ type startswith: Golden", lucky, True)
-    ltest("Function ctor -> @ age * 10", lucky, 30)
-    ltest("Function ctor -> (@ age * 5 == 25) || (@ name == lucky)", lucky, True)
-    ltest("Function ctor -> 32 * 45 ", lucky, 32 * 45)
+    ltest("Function new: -> @ name == lucky", lucky, True)
+    ltest("Function new: -> @ type startswith: Golden", lucky, True)
+    ltest("Function new: -> @ age * 10", lucky, 30)
+    ltest("Function new: -> (@ age * 5 == 25) || (@ name == lucky)", lucky, True)
+    ltest("Function new: -> 32 * 45 ", lucky, 32 * 45)
 
 
 #

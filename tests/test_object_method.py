@@ -25,7 +25,6 @@ class SomeValue(BasicValue):
     適当な値オブジェクト
     Params:
         T(Type):
-        param1(int):
     """
     def __init__(self, x, y, itemtype=None):
         self.x = x
@@ -50,14 +49,15 @@ class SomeValue(BasicValue):
         self.x = a+b
         self.y = a-b
     
-    def constructor(self, value, T, param1):
+    def constructor(self, T, x, y):
         """ @meta 
         Params:
-            int:
+            x(int):
+            y(int):
         """
-        return SomeValue(value, value*param1, T)
+        return SomeValue(x, y, T)
     
-    def stringify(self):
+    def stringify(self, T):
         """ @meta noarg """
         return "({},{})".format(self.x, self.y)
 
@@ -69,7 +69,7 @@ def test_define():
 
     t2 = cxt.get_type("SomeValue")
     assert t.get_conversion() == t2.get_conversion()
-    assert len(t2.get_type_params()) == 2
+    assert len(t2.get_type_params()) == 1
     assert t is t2
 
 
@@ -114,9 +114,9 @@ def test_method_loading():
     assert newmethod
     assert newmethod.is_loaded()
     assert newmethod.get_name() == "new"
-    assert newmethod.get_param_count() == 0
+    assert newmethod.get_param_count() == 1
     assert newmethod.get_required_argument_min() == 0
-    assert newmethod.get_acceptable_argument_max() == 0
+    assert newmethod.get_acceptable_argument_max() is None
     assert newmethod.is_type_bound() is True
 
     t = fundamental_type.select(SomeValue)
@@ -155,43 +155,43 @@ def test_meta_method():
     cxt = instant_context()
     t = cxt.type_module.select(SomeValue)
 
-    p = t.get_constructor_param()
-    assert p is not None
-    assert p.get_typename() == "int"
+    m = t.get_constructor()
+    assert m is not None
+    assert m.get_param(0).get_typename() == "int"
+    assert m.get_param(0).get_name() == "x"
+    assert m.get_param(1).get_name() == "y"
 
     ps = t.get_type_params()
-    assert len(ps) == 2
+    assert len(ps) == 1
     assert ps[0].get_typename() == "Type"
-    assert ps[1].get_typename() == "int"
+    assert ps[0].get_name() == "T"
 
-    ti = t.instantiate(cxt, ["Any", 2])
-    assert len(ti.get_args()) == 2
+    ti = t.instantiate(cxt, ["Any"])
+    assert len(ti.get_args()) == 1
     assert ti.get_args()[0].get_typename() == "Any"
-    assert ti.get_args()[1] == 2
 
     meta = ti.get_typedef().get_meta_method("constructor")
-    cargs = meta.prepare_invoke_args(cxt, ti.get_typedef().get_type_params(), 999, ti.get_args())
-    assert len(cargs) == 3
-    assert cargs[0] == 999
-    assert cargs[1].get_typename() == "Any"
-    assert cargs[2] == 2
+    ca1, ca2 = meta.prepare_invoke_args(cxt, [10, 15], ti.get_args())
+    assert len(ca1 + ca2) == 3
+    assert ca1[0].get_typename() == "Any"
+    assert ca2[0] == 10
+    assert ca2[1] == 15
 
     from machaon.core.type.instance import TypeAny
 
-    v = ti.construct(cxt, 3)
+    v = ti.construct(cxt, 3, 6)
     assert isinstance(v, SomeValue)
     assert v.x == 3
     assert v.y == 6
     assert isinstance(v.itemtype, TypeAny)
 
-    t = instantiate_type("SomeValue[Str](42)", cxt)
+    t = instantiate_type("SomeValue[Str]", cxt)
     assert isinstance(t, TypeInstance)
-    assert t.get_args()[0].get_conversion() == "Str"
-    assert t.get_args()[1] == 42
-    v = t.construct(cxt, 11)
+    assert t.get_args()[0].get_conversion() == "Str:machaon.core"
+    v = t.construct(cxt, 11, 22)
     assert isinstance(v, SomeValue)
     assert v.x == 11
-    assert v.y == 11 * 42
+    assert v.y == 22
     assert v.itemtype is cxt.get_type("Str")
 
     v = t.stringify_value(SomeValue(1,2))

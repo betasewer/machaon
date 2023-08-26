@@ -1,11 +1,24 @@
 import pytest
 from machaon.types.fundamental import fundamental_types
 from machaon.core.context import instant_context
+from machaon.core.type.decl import parse_type_declaration
 
 fundamental_type = fundamental_types()
 
 def run(fn):
     fn()
+
+
+def test_fundamental_typetype_construct():
+    cxt = instant_context()
+
+    t = fundamental_type.find("Type")
+    assert t
+    assert t.construct(cxt, "Int")
+    assert t.construct(cxt, "Int").get_conversion() == "Int:machaon.core"
+    assert t.construct(cxt, parse_type_declaration("Bool"))
+    assert t.construct(cxt, parse_type_declaration("Bool")).get_conversion() == "Bool:machaon.core"
+
 
 def test_fundamental_basic():
     t = fundamental_type.find("Bool")
@@ -48,15 +61,17 @@ def test_fundamental_metamethod_resolve():
     assert len(t.get_type_params()) == 0
     fns = t.resolve_meta_method("constructor", cxt, "0", None)
     assert fns is not None
-    assert len(fns[1:]) == 1 # 引数1
+    assert len(fns[2:]) == 2 # トレイト型＋引数1
 
     t = fundamental_type.find("Function")
     assert t
     assert len(t.get_type_params()) == 1
     fns = t.resolve_meta_method("constructor", cxt, "0", None)
     assert fns is not None
-    assert len(fns[1:]) == 2 # 引数2 (contextあり)
-    assert fns[1] is cxt
+    assert len(fns[2:]) == 4 # トレイト型＋コンテキスト＋型引数＋引数1
+    assert fns[3] is cxt
+    assert fns[4] is None
+    assert fns[5] == '0'
 
 
 def test_fundamental_construct():
@@ -97,7 +112,7 @@ def test_method():
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
     assert cxt.get_type("Str").get_conversion() == "Str:machaon.core"
-    assert regmatch.get_action_target() == "Str:machaon.core:reg-match"
+    assert regmatch.get_action_target() == "Str:machaon.core#reg-match"
 
 def test_function():
     cxt = instant_context()
@@ -108,14 +123,11 @@ def test_function():
     from machaon.core.function import  MessageExpression
     assert isinstance(fnpower, MessageExpression)
 
-@pytest.mark.skip
-def test_fundamental_numeric_subtype():
+
+def test_typetype_help():
     cxt = instant_context()
 
-    ht = cxt.type_module.get_subtype("Int", "Hex")
-    assert len(ht.get_type_params()) == 1
-
-    t = cxt.instantiate_type("Int:Hex", "08X")
-    assert t.construct(cxt, "ABCD") == 0xABCD
-    assert t.stringify_value(0xABCD) == "0000ABCD"
+    from machaon.types.fundamental import TypeType
+    inttype = cxt.select_type("Int")
+    TypeType().help(inttype, cxt, cxt.spirit, None)
 

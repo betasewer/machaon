@@ -63,7 +63,9 @@ class Path:
         """ @method spirit
         場所の名前のリスト。
         Returns:
-            Sheet[ObjectCollection](name, path):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: name path
         """
         res = []
         for k, v in shellpath().known_paths(spirit.get_root()):
@@ -506,7 +508,9 @@ class Path:
         """ @method [ls]
         ディレクトリに含まれるファイルとサブディレクトリの一覧を返す。
         Returns:
-            Sheet[Path](name, filetype, modtime, size):
+            Sheet[Path]:
+        Decorates:
+            @ view: name extension modtime size
         """
         return [x for x in self.listdirall() if x.exists() and not x.ishidden()]
     
@@ -514,7 +518,9 @@ class Path:
         """ @method [lsd]
         ディレクトリに含まれるサブディレクトリの一覧を返す。
         Returns:
-            Sheet[Path](name, filetype, modtime, size):
+            Sheet[Path]:
+        Decorates:
+            @ view: name extension modtime size
         """
         if not self.isdir():
             return []
@@ -524,7 +530,9 @@ class Path:
         """ @method [lsf]
         ディレクトリに含まれるファイルの一覧を返す。
         Returns:
-            Sheet[Path](name, filetype, modtime, size):
+            Sheet[Path]:
+        Decorates:
+            @ view: name extension modtime size
         """
         if not self.isdir():
             return []
@@ -534,7 +542,9 @@ class Path:
         """ @method [lsa]
         隠しファイルも含めた全てのファイルとサブディレクトリの一覧を返す。
         Returns:
-            Sheet[Path](name, filetype, modtime, size):
+            Sheet[Path]:
+        Decorates:
+            @ view: name extension modtime size
         """
         if not self.isdir():
             return []
@@ -545,7 +555,9 @@ class Path:
         """ @method
         サブディレクトリのファイルを再帰的に辿る。
         Returns:
-            Sheet[Path](name, filetype, modtime, size):
+            Sheet[Path]:
+        Decorates:
+            @ view: name extension modtime size
         """
         for dirpath, dirnames, filenames in os.walk(self._path):
             for filename in filenames:
@@ -555,7 +567,9 @@ class Path:
         """ @method
         サブディレクトリを再帰的に辿る。
         Returns:
-            Sheet[Path](name, filetype, modtime, size):
+            Sheet[Path]:
+        Decorates:
+            @ view: name extension modtime size
         """
         for dirpath, dirnames, filenames in os.walk(self._path):
             for dirname in dirnames:
@@ -576,7 +590,9 @@ class Path:
             predicate(Function[](seq)): 述語関数
             depth?(int): 探索する階層の限界
         Returns:
-            Sheet[Path](name, extension, modtime, size):
+            Sheet[Path]
+        Decorates:
+            @ view: name extension modtime size
         """
         predicate.set_subject_type("Path")
         basedir = self.dir().path()

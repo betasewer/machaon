@@ -300,8 +300,11 @@ class AryType:
         self.p1 = p1
         self.p2 = p2
 
-    def constructor(self, value, T, p1, p2=None):
-        """ @meta """
+    def constructor(self, T, p1, p2, value):
+        """ @meta 
+        Params:
+            Int:
+        """
         return AryType(value, p1, p2)
 
     def stringify(self, T, p1, p2=None):
@@ -323,19 +326,17 @@ def test_type_params():
     assert t.get_type_params()[2].get_name() == "param2"
     assert t.get_type_params()[2].get_typename() == "int"
 
-    decl = parse_type_declaration("AryType[](42)")
-    assert len(decl.declargs) == 0
-    assert len(decl.ctorargs) == 1
-
-    from machaon.core.type.instance import TypeAny
+    decl = parse_type_declaration("AryType[Int,98,23]")
+    assert len(decl.declargs) == 3
 
     t = decl.instance(cxt)
-    assert len(t.get_args()) == 2
-    assert isinstance(t.get_args()[0], TypeAny)
-    assert t.get_args()[1] == 42
-    v = t.construct(cxt, 111)
+    assert len(t.get_args()) == 3
+    assert t.get_args()[0].get_typename() == "Int"
+    assert t.get_args()[1] == 98
+    assert t.get_args()[2] == 23
+    v = t.construct(cxt, 101)
 
-    assert v.get() == (111, 42, None)
+    assert v.get() == (101, 98, 23)
 
     # stringify
-    assert t.stringify_value(v) == str([111, "Any", 42, None])
+    assert t.stringify_value(v) == str([101, "Int:machaon.core", 98, 23])

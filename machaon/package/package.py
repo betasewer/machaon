@@ -295,7 +295,7 @@ class Package():
         
         self._loaded.clear()
 
-def create_package(name, package, modules=None, **kwargs):
+def create_package(name, package, module=None, **kwargs):
     """
     文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
     """

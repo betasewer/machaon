@@ -267,7 +267,10 @@ class ObjectCollection():
             yield self._items[ids[-1]].value
 
     def constructor(self, context, value):
-        """ @meta context """
+        """ @meta context 
+        Params:
+            value(Any):
+        """
         col = ObjectCollection()
         for k, v in value.items():
             if not isinstance(v, Object):

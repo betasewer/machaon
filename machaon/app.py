@@ -166,7 +166,9 @@ class AppRoot:
         self.pkgmanager.add_to_import_path()
 
         # 標準モジュールをロードする
-        self.typemodule.add_default_modules()
+        pkg = self.add_package(Package("machaon", None))
+        for err in self.typemodule.add_default_module_types():
+            pkg._loadfail(err)
 
         # ホットキーの監視を有効化する
         if KeyController.available and not self._startupignores.get("hotkey"):
@@ -204,8 +206,10 @@ class AppRoot:
             if not isinstance(name, Package):
                 raise ValueError("'package'引数を指定してください")
             newpkg = name
-        else:
+        elif isinstance(name, str):
             newpkg = create_package(name, package, modules, type=type, separate=separate, hashval=hashval)
+        else:
+            raise TypeError("name, package")
 
         for pkg in self.pkgs:
             if pkg.name == newpkg.name:

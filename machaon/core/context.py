@@ -226,13 +226,6 @@ class InvocationContext:
         """ 新しい型を作成するが、モジュールに登録しない """
         return Type(describer).load()
 
-    def get_subtype(self, typecode, subtypename) -> Type:
-        """ サブタイプを取得する """
-        t = self.type_module.get_subtype(typecode, subtypename)
-        if t is None:
-            raise BadTypename((typecode, subtypename))
-        return t
-
     def instantiate_type(self, conversion, *args) -> TypeProxy:
         """ 型をインスタンス化する """
         return instantiate_type(conversion, self, *args)
@@ -262,11 +255,11 @@ class InvocationContext:
             if value is None and not args:
                 convobj = t.construct_obj(self, None) # デフォルトコンストラクタ
             else:
-                convobj = t.construct_obj(self, value)
+                convobj = t.construct_obj(self, value, *args)
             return convobj
         elif conversion:
-            tins = self.instantiate_type(conversion, *args)
-            return tins.construct_obj(self, value)
+            tins = self.instantiate_type(conversion)
+            return tins.construct_obj(self, value, *args)
         else:
             if isinstance(value, Object):
                 return value
@@ -451,7 +444,9 @@ class InvocationContext:
         """ @method alias-name [invocations invs]
         呼び出された関数のリスト。
         Returns:
-            Sheet[](message-expression, result):
+            Sheet[]:
+        Decolates:
+            @ view: message-expression result
         """ 
         vals = []
         for inv in self.invocations:
@@ -617,7 +612,9 @@ def instant_context(subject=None):
     if _instant_context_types is None:
         t = TypeModule()
         t.add_fundamentals()
-        t.add_default_modules(reporterror=True)
+        errs = t.add_default_module_types()
+        if errs:
+            raise errs[0]
         t.check_loading()
         _instant_context_types = t
 

@@ -289,7 +289,7 @@ def test_parameter_list_end():
 
 #@run
 def test_constructor():
-    ptest("1 Int", 1)
+    ptest("1 Int", 1) # コンストラクタは呼ばれない
     ptest("1 Int + (2 Int)", 3)
     ptest("10 Int + ((20 Int) Float)", 30.0)
 
@@ -302,15 +302,13 @@ def test_constructor():
                return False
         return True
 
-    ptest("1 /+ 2 /+ 3 Sheet: Int positive negative :. row_values 1", [2,-2], q=deep_equals)
+    ptest("1 /+ 2 /+ 3 (Sheet: Int): positive negative :. row_values 1", [2,-2], q=deep_equals)
 
     # ブロック型
     def type_equals(l, r):
-        if not isinstance(l,TypeProxy):
-            return False
         return l.get_conversion() == r
 
-    ptest("Sheet: Int positive negative", "Sheet: Int positive negative", q=type_equals)
+    ptest("Sheet[Int] =", "Sheet:machaon.core: Int:machaon.core", q=type_equals)
 
 
 def test_object_ref():

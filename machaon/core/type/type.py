@@ -11,7 +11,6 @@ from machaon.core.type.basic import (
     TypeProxy, 
     METHODS_BOUND_TYPE_TRAIT_INSTANCE,
     METHODS_BOUND_TYPE_INSTANCE, 
-    instantiate_args,
     BadTypeDeclaration,
     BadMethodDelegation,
     BadMemberDeclaration,
@@ -104,14 +103,14 @@ class Type(TypeProxy):
         t._describers = self._describers.copy()
         return t
 
-    def instantiate(self, context, args):
-        """ 型引数を型変換し、束縛したインスタンスを生成する """
-        targs = instantiate_args(self, self.instantiate_params(), context, args)
-        return TypeInstance(self, targs)
-
     def instantiate_params(self):
         """ 後ろに続く再束縛引数 """
         return self.get_type_params() # 型引数と同じ
+
+    def instantiate(self, context, args):
+        """ 型引数を型変換し、束縛したインスタンスを生成する """
+        targs = self.instantiate_args(context, args)
+        return TypeInstance(self, targs)
 
     #
     #
@@ -166,7 +165,7 @@ class Type(TypeProxy):
         meth = self.resolve_method(name)
         if meth:
             try:
-                meth.load(self)
+                meth.load_from_type(self)
             except Exception as e:
                 raise MethodLoadError(e, meth.name).with_traceback(e.__traceback__)
         return meth
@@ -184,7 +183,7 @@ class Type(TypeProxy):
         self.load_method_prototypes()
         for name, meth in self._methods.items():
             try:
-                meth.load(self)
+                meth.load_from_type(self)
             except Exception as e:
                 yield [name], MethodLoadError(e, name)
             else:
@@ -252,10 +251,6 @@ class Type(TypeProxy):
     #
     # 型引数
     #
-    def get_constructor_param(self):
-        meta = self.get_meta_method("constructor")
-        return meta.get_param()
-
     def get_type_params(self):
         return self._params
     
@@ -265,9 +260,9 @@ class Type(TypeProxy):
         flags &= ~PARAMETER_REQUIRED
         # デフォルト値
         if typedecl.typename == "Type":
-            default = UnspecifiedTypeParam # 型引数のデフォルト値
+            default = UnspecifiedTypeParam # 型引数のデフォルト値 = Any
         else:
-            default = None
+            default = None # 非型引数はNone
         
         p = MethodParameter(name, typedecl, doc, default, flags)
         self._params.append(p)
@@ -287,80 +282,82 @@ class Type(TypeProxy):
         name = method.get_type()
         self._metamethods[name] = method
 
-    def resolve_meta_method(self, name, context, value, typeargs, *moreargs):
+    def resolve_meta_method(self, name, context, args, typeargs=None, *, nodefault=False):
         """ メソッドと引数の並びを解決する """
         self.load_method_prototypes() # メソッド定義を読み込む
         fn = self.get_meta_method(name)
-        args = fn.prepare_invoke_args(context, self._params, value, typeargs or [], *moreargs)
-        return (fn, *args)
 
-    def invoke_meta_method(self, method, *args, **kwargs):
+        if typeargs is None:
+            typeargs = self.instantiate_args(context, ()) # デフォルト型引数を生成する
+        argpre, argpost = fn.prepare_invoke_args(context, args, typeargs)
+        
+        action = self.get_describer().get_metamethod_attribute(fn.get_action_target())
+        if nodefault and action is None:
+            return None
+        elif action is None:
+            action = getattr(self, "default_"+fn.get_action_target())
+        else:
+            # メタメソッドの指定によって引数を調整する
+            if fn.is_type_bound():
+                args = (self, *argpre, *argpost)
+            elif self.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
+                args = (self, *argpre, *argpost)
+            else:
+                selfval = argpost[0]
+                args = (selfval, *argpre, *argpost[1:])
+        return (fn, action, *args)
+
+    def invoke_meta_method(self, method, action, *args):
         """ 
         内部実装で使うメソッドを実行する
-        Params:
-            method(MetaMethod): メソッド
-            *args
-            **kwargs
         Returns:
             Any: 実行したメソッドの返り値
         """
-        fn = self.get_describer().get_metamethod_attribute(method.get_action_target())
-        if fn is None:
-            fn = getattr(self, "default_"+method.get_action_target())
-        else:
-            # メタメソッドの指定によって引数を調整する
-            if method.is_type_bound():
-                args = (self, *args)
-            else:
-                bt = self.get_methods_bound_type()
-                if bt == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
-                    args = (self, *args)
-
         try:
-            return fn(*args, **kwargs)
+            return action(*args)
         except Exception as e:
             raise BadMetaMethod(e, self, method) from e
 
-    def constructor(self, context, value, args=None):
+    def constructor(self, context, args, typeargs=None):
         """ 
         コンストラクタ。
         実装メソッド:
             constructor
         """
-        fns = self.resolve_meta_method("constructor", context, value, args)
+        fns = self.resolve_meta_method("constructor", context, args, typeargs)
         return self.invoke_meta_method(*fns)
 
-    def stringify_value(self, value, args=None) -> str:
+    def stringify_value(self, value, typeargs=None) -> str:
         """ 
         値を文字列に変換する。
         実装メソッド:
             stringify
         """
-        fns = self.resolve_meta_method("stringify", None, value, args)
+        fns = self.resolve_meta_method("stringify", None, (value,), typeargs)
         s = self.invoke_meta_method(*fns)
         if not isinstance(s, str):
             raise TypeError("stringifyの返り値が文字列ではありません:{}".format(s))
         return s
 
-    def summarize_value(self, value, args=None):
+    def summarize_value(self, value, typeargs=None):
         """ 
         値を短い文字列に変換する。
         実装メソッド:
             summarize
         """
-        fns = self.resolve_meta_method("summarize", None, value, args)
+        fns = self.resolve_meta_method("summarize", None, (value,), typeargs)
         s = self.invoke_meta_method(*fns)
         if not isinstance(s, str):
             raise TypeError("summarizeの返り値が文字列ではありません:{}".format(s))
         return s
 
-    def pprint_value(self, app, value, args=None):
+    def pprint_value(self, app, value, typeargs=None):
         """ 
         値を画面に表示する。
         実装メソッド:
             pprint
         """
-        fns = self.resolve_meta_method("pprint", None, value, args, app)
+        fns = self.resolve_meta_method("pprint", None, (value,app), typeargs)
         try:
             self.invoke_meta_method(*fns)
         except Exception as e:
@@ -403,6 +400,12 @@ class Type(TypeProxy):
         """ stringifyに流す """
         return self.stringify_value(value, args)
     
+    def get_constructor(self) -> Method:
+        """ コンストラクタメソッドを返す """
+        self.load_method_prototypes() # メソッド定義を読み込む
+        fns = self.get_meta_method("constructor")
+        return fns.get_method()
+
     #
     # 型定義構文用のメソッド
     #
@@ -515,16 +518,11 @@ class Type(TypeProxy):
     @classmethod
     def new(cls, describer, typename=None, **kwargs):
         """ クラス定義から即座に型定義を読み込み型インスタンスを作成する """
-        if isinstance(describer, tuple):
-            from machaon.core.type.extend import SubType
-            basetype = cls.new(describer[0])
-            subtype = cls.new(describer[1], typename)
-            return SubType(basetype, subtype)
-        else:    
-            from machaon.core.type.typedef_ import TypeDefinition
-            td = TypeDefinition.new(describer, typename=typename, **kwargs)
-            td.proto_define()
-            return td.load_type()
+        from machaon.core.type.describer import create_type_describer
+        desc = create_type_describer(describer)
+        t = cls(desc)
+        t.load(typename=typename, **kwargs)
+        return t
 
 #
 #

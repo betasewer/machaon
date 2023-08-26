@@ -297,7 +297,7 @@ class TypeModule:
         """ Mixin実装を追加する """
         qt = QualTypename.parse(target)
         if not qt.is_qualified():
-            raise ValueError("mixin対象の型名はデスクライバで修飾してください")
+            raise ValueError("{}: mixin対象の型名'{}'はデスクライバで修飾してください".format(describer.get_full_qualname(), target))
         t = self.find(qt)
         if t is not None:
             t.mixin_method_prototypes(describer)
@@ -314,7 +314,7 @@ class TypeModule:
             if fulltypename.startswith(key): # 前方一致
                 for mixin in mixins:
                     target.mixin_method_prototypes(mixin)
-            mixins.clear()
+                mixins.clear()
 
     #
     # モジュールを操作する
@@ -324,25 +324,25 @@ class TypeModule:
         from machaon.types.fundamental import fundamental_types
         self.update(fundamental_types())
     
-    def add_package_types(self, pkg, *, reporterror=False):
+    def add_package_types(self, pkg):
         """ パッケージに定義された全ての型を追加する """
         mod = pkg.load_type_module()
-        if reporterror and pkg.get_load_errors():
-            for err in pkg.get_load_errors():
-                raise err # 最初のエラーを再送する
         if mod is None:
             return False
         self.update(mod)
         return True
 
-    def add_default_modules(self, names=None, *, reporterror=False):
+    def add_default_module_types(self, names=None):
         """ 標準モジュールの型を追加する """
+        errors = []
         from machaon.package.package import create_module_package
         from machaon.core.symbol import DefaultModuleNames
         names = names or DefaultModuleNames
         for module in names:
             pkg = create_module_package("machaon." + module)
-            self.add_package_types(pkg, reporterror=reporterror)
+            self.add_package_types(pkg)
+            errors.extend(pkg.get_load_errors())
+        return errors
 
     def update(self, other):
         """ 
@@ -357,6 +357,9 @@ class TypeModule:
             li.extend(v)
         self._lib_describer.update(other._lib_describer)
         self._lib_valuetype.update(other._lib_valuetype)
+        # mixinを全ての型に試し、残りのリストを引き取る
+        for fulltypename, type in self._defs.items():
+            other._inject_reserved_mixins(fulltypename, type)
         for k, v in other._reserved_mixins.items():
             li = self._reserved_mixins.setdefault(k, [])
             li.extend(v)
