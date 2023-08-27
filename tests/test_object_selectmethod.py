@@ -28,9 +28,9 @@ def test_modified_select():
     assert tm
     assert tm.display() == ("TypeMethod", "Str:machaon.core#reg-search", "negate-result")
 
-    gm = select_method("~in", StrType)
+    gm = select_method("in>", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#is-in", "reverse-args")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#is-in", "consume-args")
 
     gm = select_method("`identical", StrType)
     assert gm

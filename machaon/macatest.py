@@ -69,3 +69,15 @@ def parse_instr(context, s):
     parser = MessageEngine(s)
     parser.run_here(context)
     return put_instructions(context, "; ")
+
+#
+#
+#
+def sequence_equals(l, r):
+    if len(l) != len(r):
+        return False
+    for ll, rr in zip(l, r):
+        if ll != rr:
+            return False
+    return True
+

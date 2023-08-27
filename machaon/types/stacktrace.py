@@ -332,7 +332,9 @@ class TracebackObject():
         """ @method
         現在の実行箇所までのバイトコード
         Returns:
-            Sheet[ObjectCollection](op, arg, location):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: op arg location
         """
         return self.frame().instructions(self._tb.tb_lasti)
 
@@ -485,7 +487,9 @@ class FrameObject:
         """ @method
         バイトコードの命令を表示する
         Returns:
-            Sheet[ObjectCollection](op, arg, location):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: op arg location
         """
         check_cpython()
         lines = []

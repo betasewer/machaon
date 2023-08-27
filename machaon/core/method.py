@@ -305,7 +305,9 @@ class Method:
         """ @method alias-name [params]
         仮引数のリスト
         Returns:
-            Sheet[MethodParameter](name, typename, doc):
+            Sheet[MethodParameter]:
+        Decorates:
+            @ view: name typename doc
         """
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
@@ -410,6 +412,12 @@ class Method:
         if self.result is None:
             raise UnloadedMethod(self.name)
         return self.result
+    
+    def set_result_decorator(self, expr):
+        """ 返り値デコレータをセットする """
+        if self.result is None:
+            raise UnloadedMethod("返り値がロードされていません")
+        self.result.set_decorator(expr)
     
     def get_acceptable_argument_max(self) -> Union[int, None]:
         """
@@ -544,7 +552,7 @@ class Method:
         sections = DocStringDefinition.parse(decl, (
             "Params Parameters Arguments Args",
             "Returns", 
-            "With",
+            "Decorates Deco",
         ))
 
         # 説明文
@@ -589,6 +597,11 @@ class Method:
         for line in sections.get_lines("Returns"):
             typename, doc, flags = parse_result_line(line.strip())
             self.add_result(typename, doc)
+
+        # 戻り値デコレータ
+        decoexpr = sections.get_string("Decorates")
+        if decoexpr:
+            self.set_result_decorator(decoexpr.strip())
         
     def load_declaration_properties(self, props: Sequence[str]):
         """
@@ -983,6 +996,7 @@ class MethodResult:
         self.typedecl = typedecl or TypeDecl()
         self.doc = doc
         self.special = special
+        self.decorator = None
 
     def __str__(self):
         line = "Return [{}]".format(self.typename)
@@ -1009,6 +1023,9 @@ class MethodResult:
 
     def get_typedecl(self):
         return self.typedecl
+    
+    def set_decorator(self, expr):
+        self.decorator = expr
 
     def make_result_value(self, context, value, *, message=None, negate=False):
         """ 型を検査しつつオブジェクトから返り値となる値を得る 
@@ -1060,7 +1077,17 @@ class MethodResult:
         # 返り値型に値が適合しない場合は、型変換を行う
         if not rettype.check_value_type(type(value)):
             value = rettype.construct(context, value)
-        
+
+        # デコレータを適用する
+        if self.decorator is not None:
+            if isinstance(self.decorator, str): # コンパイルする
+                from machaon.core.function import parse_sequential_function
+                self.decorator = parse_sequential_function(self.decorator, context, argspec=rettype)
+            
+            value = self.decorator(value)
+            if not rettype.check_value_type(type(value)): # 必要なら、さらに型変換を行う
+                value = rettype.construct(context, value)
+
         return (rettype, value)
 
 

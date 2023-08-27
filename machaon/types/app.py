@@ -103,7 +103,9 @@ class RootObject:
         使用可能な型を列挙する。
         Params:
         Returns:
-            Sheet[](name, doc, describer): 型のリスト
+            Sheet[]: 型のリスト
+        Decorates:
+            @ view: name doc describer
         """
         with spirit.progress_display():
             for name, t, error in self.context.type_module.getall(geterror=True):
@@ -140,7 +142,9 @@ class RootObject:
         """ @method
         パッケージを取得する。
         Returns:
-            Sheet[Package](name, source, scope, status): パッケージリスト
+            Sheet[Package]: パッケージリスト
+        Decorates:
+            @ view: name source scope status
         """
         return list(self.root.enum_packages())
     
@@ -209,7 +213,9 @@ class RootObject:
         """ @method
         ショートカットキーの一覧を表示する。 
         Returns:
-            Sheet[](key, command):
+            Sheet[]:
+        Decorates:
+            @ view: key command
         """
         # ショートカットキー
         keymap = self.root.get_ui().get_keymap()

@@ -522,10 +522,6 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
         name = s.selector()
         modbits = s.affixes()
 
-    # 逆転モディファイアには専用の呼び出しを使う
-    if "REVERSE_MESSAGE" in modbits:
-        return ReversedMessageInvocation(name, typetraits, reciever, modbits)
-    
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
@@ -655,7 +651,7 @@ class AffixedSelector:
     prefixes = [
         ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
         ("REVERSE_MESSAGE", SIGIL_SELECTOR_REVERSE_MESSAGE),
-        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER),
+        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER), 
     ]
     suffixes = [
         ("TRAILING_ARGS", SIGIL_SELECTOR_TRAILING_ARGS),

@@ -5,7 +5,7 @@ import pytest
 import re
 from machaon.core.type.decl import TypeProxy
 
-from machaon.macatest import parse_test, put_instructions, run, parse_instr
+from machaon.macatest import parse_test, put_instructions, run, parse_instr, sequence_equals
 
 from machaon.core.message import (
     MessageCharBuffer, MessageEngine, MessageTokenizer
@@ -294,15 +294,7 @@ def test_constructor():
     ptest("10 Int + ((20 Int) Float)", 30.0)
 
     # 引数あり
-    def deep_equals(l, r):
-        if len(l) != len(r):
-            return False
-        for ll, rr in zip(l, r):
-           if ll != rr:
-               return False
-        return True
-
-    ptest("1 /+ 2 /+ 3 (Sheet: Int): positive negative :. row_values 1", [2,-2], q=deep_equals)
+    ptest("1 /+ 2 /+ 3 (Sheet: Int): positive negative :. row_values 1", [2,-2], q=sequence_equals)
 
     # ブロック型
     def type_equals(l, r):

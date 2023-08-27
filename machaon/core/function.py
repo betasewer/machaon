@@ -6,7 +6,7 @@ from machaon.core.message import (
 )
 from machaon.core.object import Object
 from machaon.core.invocation import BasicInvocation
-from machaon.platforms import is_windows
+from machaon.core.type.basic import TypeProxy
 
 #
 # api
@@ -212,6 +212,8 @@ class SequentialMessageExpression(FunctionExpression):
 
         elif isinstance(argspec, str):
             self._subjecttype = self.context.instantiate_type(argspec)
+        elif isinstance(argspec, TypeProxy):
+            self._subjecttype = argspec
 
     def get_expression(self) -> str:
         return self.f.get_expression()

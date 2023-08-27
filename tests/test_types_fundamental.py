@@ -2,6 +2,7 @@ import pytest
 from machaon.types.fundamental import fundamental_types
 from machaon.core.context import instant_context
 from machaon.core.type.decl import parse_type_declaration
+from machaon.macatest import sequence_equals
 
 fundamental_type = fundamental_types()
 
@@ -124,10 +125,20 @@ def test_function():
     assert isinstance(fnpower, MessageExpression)
 
 
-def test_typetype_help():
+def test_typetype_methods():
     cxt = instant_context()
 
     from machaon.types.fundamental import TypeType
     inttype = cxt.select_type("Int")
     TypeType().help(inttype, cxt, cxt.spirit, None)
 
+    from machaon.types.sheet import Sheet
+    t = cxt.select_type("Type")
+    entry = t.select_method("methods").make_invocation(type=t)._prepare(cxt, t)
+    ret = entry.invoke(cxt)
+    assert ret
+    assert ret.get_typename() == "Sheet"
+    assert sequence_equals(ret.value.get_current_column_names(), ("names", "doc", "signature", "source"))
+    assert sequence_equals(ret.value.get_current_column_names(), ("names", "doc", "signature", "source"))
+
+    

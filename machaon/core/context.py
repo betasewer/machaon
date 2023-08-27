@@ -445,7 +445,7 @@ class InvocationContext:
         呼び出された関数のリスト。
         Returns:
             Sheet[]:
-        Decolates:
+        Decorates:
             @ view: message-expression result
         """ 
         vals = []
@@ -460,7 +460,9 @@ class InvocationContext:
         """ @task alias-name [errors]
         サブコンテキストも含めたすべてのエラーを表示する。
         Returns:
-            Sheet[](context-id, message-expression, error):
+            Sheet[]:
+        Decorates:
+            @ view: context-id message-expression error
         """
         errors = []
 
@@ -492,7 +494,9 @@ class InvocationContext:
         """ @method alias-name [instructions instrs]
         コンパイルされた内部命令
         Returns:
-            Sheet[ObjectCollection](instruction, options, arg-instruction, arg-values):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: instruction options arg-instruction arg-values
         """
         for code, *values in self._log:
             if code == LOG_MESSAGE_CODE:
@@ -532,7 +536,9 @@ class InvocationContext:
         """ @method alias-name [sub-contexts subs]
         サブコンテキストの一覧。
         Returns:
-            Sheet[Context](is-failed, message, last-result):
+            Sheet[Context]:
+        Decorates:
+            @ view: is-failed message last-result
         """
         rets = []
         submessages = [x for x in self._log if x[0] == LOG_MESSAGE_BEGIN_SUB]

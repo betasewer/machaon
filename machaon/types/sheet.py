@@ -628,7 +628,7 @@ class Sheet():
         """ @method context
         列を表示する。
         Params:
-            *columns(Tuple[Any]): カラム表現
+            *columns(Any): カラム表現
         """
         self._apply_view(context, columns, None)
     
@@ -636,7 +636,7 @@ class Sheet():
         """ @method context alias-name [view+]
         列を追加する。同名の既に存在する列は追加しない。
         Params:
-            *columns(Tuple[Any]): カラム表現
+            *columns(Any): カラム表現
         """
         # 空のデータからは空のビューしか作られない
         new_columns = []
