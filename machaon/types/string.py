@@ -624,7 +624,33 @@ class StrType():
                 buf.append(ch)
         
         return "".join(buf)
+    
+    def desuffix(self, s, value):
+        """ @method
+        接尾辞を取り除く。
+        Params:
+            value(Str):
+        Returns:
+            Str:
+        """
+        i = s.rfind(value)
+        if i == -1 or i > (len(s) - len(value)):
+            raise ValueError("'{}'には接尾辞'{}'がありません".format(s, value))
+        return s[:i]
 
+    def deprefix(self, s, value):
+        """ @method
+        接頭辞を取り除く。
+        Params:
+            value(Str):
+        Returns:
+            Str:
+        """
+        i = s.find(value)
+        if i != 0:
+            raise ValueError("'{}'には接頭辞'{}'がありません".format(s, value))
+        return s[len(value):]
+    
     # 
     # コード実行
     #
@@ -754,95 +780,6 @@ class StrType():
     #
     # コンストラクタ
     #
-
-        
-
-#
-# サブタイプ
-#
-class Postfixed:
-    """ @type subtype
-    固定の接尾辞を付された文字列。
-    BaseType:
-        Str:
-    Params:
-        postfix(Str):
-    """
-    def constructor(self, s, postfix):
-        """ @meta
-        Params:
-            Str:
-        """
-        i = s.rfind(postfix)
-        if i == -1 or i > (len(s) - len(postfix)):
-            raise ValueError("'{}'には接尾辞'{}'がありません".format(s, postfix))
-        return s[:i]
-        
-    def reflux(self, s, postfix):
-        """ @meta """
-        return s + postfix
-
-
-class Prefixed:
-    """ @type subtype
-    固定の接頭辞を付された文字列。
-    BaseType:
-        Str:
-    Params:
-        prefix(Str):
-    """
-    def constructor(self, s, prefix):
-        """ @meta
-        Params:
-            Str:
-        """
-        i = s.find(prefix)
-        if i != 0:
-            raise ValueError("'{}'には接頭辞'{}'がありません".format(s, prefix))
-        return s[len(prefix):]
-
-    def reflux(self, s, prefix):
-        """ @meta """
-        return prefix + s
-
-class Enclosed:
-    """ @type subtype
-    前後に文字列を付された文字列。
-    BaseType:
-        Str:
-    Params:
-        prefix(Str):
-        postfix(Str):
-    """
-    def constructor(self, s, prefix, postfix):
-        """ @meta
-        Params:
-            s(Str):
-        """
-        try:
-            rstrip = Postfixed.constructor(Postfixed, s, postfix)
-            strip = Prefixed.constructor(Prefixed, rstrip, prefix)
-        except Exception as e:
-            raise ValueError("'{}'は'{}'と'{}'で囲まれていません".format(s, prefix, postfix)) from e
-        return strip
-        
-    def reflux(self, s, prefix, postfix):
-        """ @meta """
-        return prefix + s + postfix
-
-
-class EnclosedRelax:
-    """ type subtype alias
-    BaseType:
-        Str:
-    Alias:
-        Enclosed[]({prefix},{postfix}) + Postfixed[]({postfix}) + Prefixed[]({prefix}) + Identity
-    Params:
-        prefix(Str):
-        postfix(Str):
-    """
-
-    
 
 
     

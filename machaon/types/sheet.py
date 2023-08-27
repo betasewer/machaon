@@ -663,7 +663,7 @@ class Sheet():
         """ @task context
         アイテムに関数を適用し、タプルとして返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Tuple:
         """
@@ -677,7 +677,7 @@ class Sheet():
         """ @task context
         アイテムに関数を適用し、偽でない返り値のみをタプルとして返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Tuple:
         """
@@ -705,7 +705,7 @@ class Sheet():
         """ @task context [%]
         行に関数を適用する。
         Params:
-            predicate(Function[](seq)): 関数
+            predicate(Function[seq]): 関数
         """
         for entry in self.rows:
             subject = self.row_to_object(context, *entry)
@@ -715,7 +715,7 @@ class Sheet():
         """ @task context [&]
         行を絞り込む。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         """
         # 関数を行に適用する
         def fn(entry):
@@ -731,7 +731,7 @@ class Sheet():
         """ @task context
         行の順番を並べ替える。
         Params:
-            sorter?(Function[](seq)): 並べ替え関数
+            sorter?(Function[seq]): 並べ替え関数
         """
         if sorter is not None:
             def sortkey(entry):

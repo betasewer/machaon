@@ -587,7 +587,7 @@ class Path:
         """ @task context
         ファイルを再帰的に検索する。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
             depth?(int): 探索する階層の限界
         Returns:
             Sheet[Path]

@@ -157,7 +157,7 @@ class ObjectTuple():
         """ @task context [&]
         行を絞り込む。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         """
         # 関数を行に適用する
         def fn(subject):
@@ -169,7 +169,7 @@ class ObjectTuple():
         """ @task context
         行の順番を並べ替える。
         Params:
-            key(Function[](seq)): 並べ替え関数
+            key(Function[seq]): 並べ替え関数
         """
         def sortkey(subject):
             return key.run(subject).value
@@ -180,7 +180,7 @@ class ObjectTuple():
         """ @task context [%]
         値に関数を適用する。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         """
         for o in self.objects:
             predicate.run(o, context)
@@ -189,7 +189,7 @@ class ObjectTuple():
         """ @task context
         値に関数を適用し、新しいタプルとして返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Tuple: 新しいタプル
         """
@@ -228,7 +228,7 @@ class ObjectTuple():
         """ @task context alias-name [all]
         すべての要素に関数を適用し、論理積をとる。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Any: 結果
         """
@@ -241,7 +241,7 @@ class ObjectTuple():
         """ @task context alias-name [any]
         すべての要素に関数を適用し、論理和をとる。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Any: 結果
         """

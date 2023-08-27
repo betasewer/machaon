@@ -161,7 +161,7 @@ class BasicContextFile(BasicLoadFile):
         ファイルを開いて操作を行い、閉じる。
         Params:
             mode(Str): r/w
-            selector(Function[](seq)):
+            selector(Function[seq]):
         """
         with self.open(mode):
             selector(self)

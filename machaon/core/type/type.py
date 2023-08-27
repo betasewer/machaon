@@ -364,15 +364,6 @@ class Type(TypeProxy):
             app.post("error", "オブジェクトの表示中にエラーが発生:")
             app.post("message", e)
 
-    def reflux_value(self, value, args=None):
-        """
-        コンストラクタを呼び出せる別の型の値に変換する。
-        実装メソッド:
-            reflux
-        """
-        fns = self.resolve_meta_method("reflux", None, value, args)
-        return self.invoke_meta_method(*fns)
-
     # デフォルト定義
     def default_constructor(self, value, *args):
         """ 定義が無い場合、単純に生成する """
@@ -396,10 +387,6 @@ class Type(TypeProxy):
         s = self.stringify_value(value, args)
         app.post("message", s)
 
-    def default_reflux(self, value, *args):
-        """ stringifyに流す """
-        return self.stringify_value(value, args)
-    
     def get_constructor(self) -> Method:
         """ コンストラクタメソッドを返す """
         self.load_method_prototypes() # メソッド定義を読み込む

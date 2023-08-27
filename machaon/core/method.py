@@ -1289,7 +1289,6 @@ meta_method_prototypes = { x.get_type():x for x in (
     MetaMethod("stringify"),
     MetaMethod("summarize"),
     MetaMethod("pprint"),
-    MetaMethod("reflux"),
 )}
 
 

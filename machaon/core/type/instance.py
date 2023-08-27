@@ -83,9 +83,6 @@ class TypeInstance(RedirectProxy):
     def pprint_value(self, spirit, value):
         return self.type.pprint_value(spirit, value, self._args)
     
-    def reflux_value(self, value):
-        return self.type.reflux_value(value, self._args)
-
     def get_args(self):
         return self._args
 
@@ -133,8 +130,6 @@ class TypeAny(DefaultProxy):
     def pprint_value(self, app, value):
         raise TypeAnyInstantiateError()
 
-    def reflux_value(self, value):
-        raise TypeAnyInstantiateError()
     
 
 class TypeAnyInstantiateError(Exception):
@@ -203,9 +198,6 @@ class TypeUnion(DefaultProxy):
         t = self.select_value_type(type(value))
         return t.pprint_value(app, value)
 
-    def reflux_value(self, value):
-        t = self.select_value_type(type(value))
-        return t.reflux_value(value)
 
 # 型引数のデフォルト値
 UnspecifiedTypeParam = TypeAny()

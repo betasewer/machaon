@@ -180,9 +180,6 @@ class TypeProxy:
     def pprint_value(self, app, value):
         raise NotImplementedError()
 
-    def reflux_value(self, value):
-        raise NotImplementedError()
-    
     # 基本型の判定
     def is_none_type(self):
         raise NotImplementedError()
@@ -258,9 +255,6 @@ class RedirectProxy(TypeProxy):
 
     def pprint_value(self, spirit, value):
         return self.redirect().pprint_value(spirit, value)
-    
-    def reflux_value(self, value):
-        return self.redirect().reflux_value(value)
     
     def is_none_type(self):
         return self.redirect().is_none_type()

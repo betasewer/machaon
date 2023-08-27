@@ -90,7 +90,5 @@ class PythonType(DefaultProxy):
     def pprint_value(self, app, value):
         app.post("message", self.summarize_value(value))
 
-    def reflux_value(self, value):
-        raise ValueError("reflux実装はPythonTypeでは提供されません")
 
 
