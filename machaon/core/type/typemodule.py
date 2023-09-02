@@ -36,7 +36,7 @@ class TypeModule:
     def __init__(self):
         self._defs: Dict[str, Type] = {} # fulltypename -> Type
         self._lib_typename: Dict[str, List[str]] = {} # typename -> fulltypename[]
-        self._lib_describer: Dict[str, List[str]] = {} # describer -> fulltypename
+        self._lib_describer: Dict[str, str] = {} # describer -> fulltypename
         self._lib_valuetype: Dict[str, str] = {} # valuetypename -> fulltypename
         self._reserved_mixins: Dict[str, List[TypeDescriber]] = {}
 
@@ -77,9 +77,9 @@ class TypeModule:
             if tn is not None:
                 tdef = self._defs[tn]
         elif code == TYPECODE_DESCRIBERNAME:
-            tns = self._lib_describer.get(value, [])
-            if tns:
-                tdef = self._defs[tns[0]]
+            tn = self._lib_describer.get(value)
+            if tn is not None:
+                tdef = self._defs[tn]
         
         if tdef is not None:
             if noload:
@@ -281,8 +281,9 @@ class TypeModule:
         if not tqualname.is_qualified():
             raise TypeModuleError("型'{}'のデスクライバクラス名が指定されていません".format(tqualname))
         typename:str = tqualname.typename
-        describername:str = tqualname.describer
         qualname:str = tqualname.stringify()
+        describername:str = tqualname.describer
+        original_describername:str = type.get_describer().get_value_full_qualname()
 
         # フルスコープ型名の辞書をチェックする
         if qualname in self._defs:
@@ -297,12 +298,18 @@ class TypeModule:
             if describername in descs:
                 if fallback: return
                 raise TypeModuleError("型'{}'はこのモジュールに既に存在します".format(qualname))
-        else:
-            self._lib_typename[typename] = []
 
+        # デスクライバの辞書をチェックする
+        if original_describername in self._lib_describer:
+            tn = self._lib_describer[original_describername]
+            return self._defs[tn] # デスクライバの重複はエラーにしない
+
+        # 型の登録を開始する
         self._defs[qualname] = type
-        self._lib_typename[typename].append(describername)
-        self._lib_describer.setdefault(describername, []).append(qualname)
+        self._lib_typename.setdefault(typename, []).append(describername)
+
+        # デスクライバは本名で登録する
+        self._lib_describer[original_describername] = qualname
 
         # 値型は最初に登録されたものを優先する
         if valuetypename not in self._lib_valuetype:
@@ -356,7 +363,11 @@ class TypeModule:
         names = names or DefaultModuleNames
         with ErrorSet("標準モジュールの型を追加") as errs:
             for module in names:
-                errs.try_(self.use_module_or_package_types, "machaon."+module)
+                try:
+                    name = "machaon."+module
+                    self.use_module_or_package_types(name, fallback=True)
+                except Exception as e:
+                    errs.add(e, value=name)
 
     def use_module_or_package_types(self, name, fallback=False):
         """ モジュールあるいはパッケージ内の型を追加する """
