@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import os
-from machaon.core.importer import PyModuleLoader
 from machaon.package.package import PackageManager, create_module_package
 from machaon.types.package import AppPackageType
 from machaon.types.shell import Path
@@ -43,12 +42,12 @@ class RootObject:
             spirit.post("message", "言語エンジンを準備します")
         self.root.boot_core(spirit)
 
+        # パッケージ定義をロードする
         if not self.root.is_ignored_at_startup("packages"):
             if isfullform:
                 spirit.post("message", "パッケージをロードします")
-            for pkg in self.root.enum_packages():
+            for pkg in self.root.package_manager().getall():
                 spirit.post("message", "{}".format(pkg.name), nobreak=True)
-                self.root.load_pkg(pkg)
                 status = AppPackageType().status(pkg, spirit)
                 spirit.post("message", " -> {}".format(status))
 
@@ -57,6 +56,7 @@ class RootObject:
             except Exception as e:
                 spirit.post("error", str(e))
 
+        # 変数をロードする
         count = self.root.load_startup_variables(self.context)
         if count > 0:
             spirit.post("message", "{}個の変数がロード済みです".format(count))
@@ -72,31 +72,12 @@ class RootObject:
         Params:
             +names(Str):
         """
-        defmods = []
-        pkgs = []
         from machaon.core.symbol import DefaultModuleNames
         for name in names:
-            if name in DefaultModuleNames:
-                defmods.append(name)
-            else:
-                pkg = self.root.get_package(name)
-                if pkg is None:
-                    # パッケージを追加する
-                    pkg = create_module_package(name)
-                    self.root.add_package(pkg)
-                pkgs.append(pkg)
-        
-        # 読み込みを行う
-        if defmods:
-            app.post("message", "標準モジュール = '{}'".format(", ".join(defmods)))
-            self.root.get_type_module().add_default_modules(defmods)
-        
-        for pkg in pkgs:
-            app.post("message", "パッケージ = '{}' ".format(pkg.name), nobreak=True)
-            self.root.load_pkg(pkg)
-            app.post("message", " -> {}".format(AppPackageType().status(pkg, app)))
-        
-        self.root.check_pkg_loading()
+            if name in DefaultModuleNames: # デフォルトモジュールを除外する
+                continue
+            self.root.typemodule.use_module_or_package_types(name, fallback=True)
+        self.root.typemodule.check_loading()
 
     def types(self, spirit):
         """ @task
@@ -144,9 +125,9 @@ class RootObject:
         Returns:
             Sheet[Package]: パッケージリスト
         Decorates:
-            @ view: name source scope status
+            @ view: name source entrypoint status
         """
-        return list(self.root.enum_packages())
+        return list(self.root.package_manager().getall())
     
     def startup_errors(self):
         """ @method
@@ -154,7 +135,7 @@ class RootObject:
         Returns:
             Sheet[Error]: エラーリスト
         """
-        for pkg in self.root.enum_packages():
+        for pkg in self.root.package_manager().getall():
             yield from pkg.get_load_errors()
     
     def context_(self):
@@ -322,47 +303,24 @@ class RootObject:
         Params:
             forceinstall?(bool): 
         """
-        # インストールディレクトリ
-        curmodule = PyModuleLoader("machaon")
-        location = curmodule.load_filepath()
-        if location is None:
-            raise ValueError("インストール先が不明です")
-
-        installdir = (Path(location).dir() / "..").normalize()
-        lock = (installdir / ".." / ".machaon-update-lock").normalize()
-        if lock.exists():
-            raise ValueError("{}: 上書きしないようにロックされています".format(lock))
-
         # パッケージを定義する
-        from machaon.package.package import create_package, package_extraction, run_pip
-        pkg = create_package("machaon", "github:betasewer/machaon")
-        status = self.root.query_package_status(pkg)
+        pkg = self.root.package_manager().get_core_package()
+        status = self.root.package_manager().query_update_status(pkg)
         if status == "latest":
             app.post("message", "最新の状態です")
             if not forceinstall:
                 return
-        elif status == "unknown":
+        elif status == "none":
+            pass
+        elif status is None:
             app.post("error", "不明：パッケージの状態の取得に失敗")
             if not forceinstall:
                 return
-        elif status == "notfound" or status == "none":
-            pass
         else:
             app.post("message", "より新しいバージョンが存在します")
 
         # ダウンロードしてインストールする
-        def operation(pkg, _options):
-            with package_extraction(pkg) as extraction:
-                for status in extraction:
-                    if status == PackageManager.EXTRACTED_FILES:
-                        if status.path is None:
-                            return
-                        yield PackageManager.PIP_INSTALLING
-                        yield from run_pip(installtarget=status.path, installdir=installdir, options=["--upgrade"])
-                    else:
-                        yield status
-        
-        if AppPackageType().display_download_and_install(app, pkg, operation):
+        if AppPackageType().display_download_and_install(app, pkg, lambda _:self.root.package_manager().update_core):
             app.post("message", "machaonを更新しました。次回起動時に反映されます")
 
     def update_all(self, context, app):
@@ -370,7 +328,7 @@ class RootObject:
         すべてのパッケージに更新を適用する。
         """
         apppkg = AppPackageType()
-        for pkg in self.root.enum_packages():
+        for pkg in self.root.package_manager().getall():
             apppkg.update(pkg, context, app)
             
     def latest_package_files(self, context, app, full=False):
@@ -379,12 +337,13 @@ class RootObject:
         Params:
                 full?(bool):
         """
+        from machaon.core.importer import PyModuleLoader
         maca = PyModuleLoader("machaon")
         app.post("message", "machaon")
         maca.show_latest_files(app, full)
         app.post("message", "")
         
-        for pkg in self.root.enum_packages():
+        for pkg in self.root.package_manager().getall():
             app.post("message", pkg.name)
             pkg.get_initial_module().show_latest_files(app, full)
             app.post("message", "")
@@ -434,3 +393,5 @@ class RootObject:
             .rectangle(coord=(50,50,200,250), color="#FF0000", stipple="grey50")
             .rectangle(coord=(10,100,90,300), color="#0000FF")
         )
+
+

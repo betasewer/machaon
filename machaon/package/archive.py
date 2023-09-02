@@ -18,12 +18,6 @@ class BasicArchive():
         self._arc = None
         self._arcroot = None
     
-    def add_credential(self, _cred) -> None:
-        pass
-    
-    def match_credential(self, _cred) -> bool:
-        return False
-    
     def get_name(self) -> str:
         raise NotImplementedError()
     
@@ -130,11 +124,6 @@ class DummyArchive():
     """
     アーカイブではない
     """
-    def add_credential(self, _cred):
-        pass
-    
-    def match_credential(self, _cred):
-        return False
 
 class LocalFile(DummyArchive):
     """

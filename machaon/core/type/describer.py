@@ -16,7 +16,7 @@ from machaon.core.method import (
     parse_type_declaration, parse_result_line, parse_parameter_line, 
 )
 from machaon.core.importer import (
-    enum_attributes, attribute_loader
+    enum_attributes, attribute_loader, module_loader
 )
 
 DESCRIBE_TYPE_UNKNOWN = 0
@@ -161,11 +161,9 @@ class TypeDescriberClass(TypeDescriber):
         if self._doc is not None:
             return self._doc
         else:
-            d = getattr(self.klass, "__doc__", None)
-            if d is None:
-                raise ValueError("{}: ドキュメント文字が存在しません".format(self.get_full_qualname()))
-            return d
-    
+            doc = getattr(self.klass, "__doc__", None)
+            return doc if doc else ""
+
     def describe_type(self, type):
         """ 
         型オブジェクトを構築する
@@ -380,3 +378,18 @@ def create_type_describer(describer, *, name=None):
 
     return describer
 
+
+def detect_describer_name_type(klass_or_module_or_package):
+    """ デスクライバ名の差す対象を分析する
+    Returns:
+        ModuleLoader|str:
+        bool: Tでクラス名、Fでモジュールまたはパッケージ
+    """
+    mod = module_loader(klass_or_module_or_package)
+    if mod.exists():
+        return mod, False
+    elif "." in klass_or_module_or_package:
+        return klass_or_module_or_package, True
+    else:
+        return None, False
+    

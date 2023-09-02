@@ -84,7 +84,7 @@ class ErrorObject():
         excep = self.get_error()
         return traceback.format_exception_only(type(excep), excep)[0]
         
-    def short_display(self):
+    def short_display(self, firstframedelta=0):
         """ @method 
         例外名と、最初と最後のフレームのみを表示する。
         Returns:
@@ -99,17 +99,17 @@ class ErrorObject():
         excep2 = self.cause().get_error()
         if excep1 is excep2:
             frames = traceback.extract_tb(excep1.__traceback__)
-            first = frames[0]
+            first = frames[firstframedelta]
             last = frames[-1]
         else:
             frames1 = traceback.extract_tb(excep1.__traceback__)
-            first = frames1[0]
+            first = frames1[firstframedelta]
             frames2 = traceback.extract_tb(excep2.__traceback__)
             last = frames2[-1]
         
-        lines.extend([x.rstrip() for x in traceback.format_list([first])])
-        lines.append("    ...    ")
         lines.extend([x.rstrip() for x in traceback.format_list([last])])
+        lines.append("    ...    ")
+        lines.extend([x.rstrip() for x in traceback.format_list([first])])
         return "\n".join(lines)
     
     def cause(self):

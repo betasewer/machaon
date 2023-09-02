@@ -7,8 +7,9 @@ from machaon.core.symbol import (
 )
 from machaon.core.type.decl import TypeProxy
 from machaon.core.type.type import Type
-from machaon.core.type.describer import TypeDescriber, create_type_describer
-
+from machaon.core.type.describer import TypeDescriber, create_type_describer, detect_describer_name_type
+from machaon.core.error import ErrorSet
+from machaon.core.importer import module_loader, attribute_loader
 
 #
 # 型定義モジュールのエラー 
@@ -35,7 +36,7 @@ class TypeModule:
     def __init__(self):
         self._defs: Dict[str, Type] = {} # fulltypename -> Type
         self._lib_typename: Dict[str, List[str]] = {} # typename -> fulltypename[]
-        self._lib_describer: Dict[str, str] = {} # describer -> fulltypename
+        self._lib_describer: Dict[str, List[str]] = {} # describer -> fulltypename
         self._lib_valuetype: Dict[str, str] = {} # valuetypename -> fulltypename
         self._reserved_mixins: Dict[str, List[TypeDescriber]] = {}
 
@@ -76,9 +77,9 @@ class TypeModule:
             if tn is not None:
                 tdef = self._defs[tn]
         elif code == TYPECODE_DESCRIBERNAME:
-            tn = self._lib_describer.get(value)
-            if tn is not None:
-                tdef = self._defs[tn]
+            tns = self._lib_describer.get(value, [])
+            if tns:
+                tdef = self._defs[tns[0]]
         
         if tdef is not None:
             if noload:
@@ -201,21 +202,37 @@ class TypeModule:
             Type:
         """
         if isinstance(typecode, str):  
-            # 型名      
+            # 型名
             t = self._select_type(normalize_typename(typecode), TYPECODE_TYPENAME, module=describername)
             if t is not None:
-                # mixinのロードを確認する
                 if describername is not None:
-                    if all(describername != x.get_full_qualname() for x in t.get_all_describers()):
-                        mxtd = create_type_describer(describername)
-                        t.mixin_method_prototypes(mxtd)
+                    target, isklass = detect_describer_name_type(describername)
+                    if target is not None and isklass:                        
+                        # mixinで追加ロードすべきか確認する
+                        self.inject_type_mixin(target, t)
                 return t
-            else:
-                # 対象モジュールから定義をロードする
-                if describername is None:
-                    raise BadTypename("型'{}'は存在しません。定義クラスの指定があればロード可能です".format(typecode))
-                return self.define(describername, typename=typecode)
-        
+            
+            # 対象モジュールから定義をロードする
+            if describername is None:
+                raise BadTypename("型'{}'は存在しません。定義クラス・モジュール・パッケージの指定があればロード可能です".format(typecode))
+            
+            target, isklass = detect_describer_name_type(describername)
+            if target is None:
+                raise TypeModuleError("デスクライバ'{}'はクラス名、モジュール名、パッケージ名のいずれでもありません".format(describername))
+            if isklass: # クラス
+                return self.define(target, typename=typecode)
+            else: # モジュール or パッケージの全ての型をロードする
+                err = None
+                try:
+                    self.use_module_or_package_types(target, fallback=True)
+                except Exception as e:
+                    err = e
+                # 型名で探索
+                t = self._select_type(typecode, TYPECODE_TYPENAME, describername) 
+                if t is None:
+                    raise err # 型が見つからなかった場合のみ、エラーを投げる
+                return t
+    
         elif isinstance(typecode, type):
             # デスクライバクラス型
             t = self._select_type(full_qualified_name(typecode), TYPECODE_DESCRIBERNAME)
@@ -240,21 +257,22 @@ class TypeModule:
         doc = None,
         bits = 0,
         describername = None,
-        typeclass = None
+        typeclass = None,
+        fallback = False
     ) -> Type:
         """ 型定義を作成する """
         if isinstance(describer, Type):
-            return self._add_type(describer)
+            return self._add_type(describer, fallback=fallback)
     
         desc = create_type_describer(describer, name=describername)
         if desc.is_typedef():
             t = (typeclass or Type)(desc)
             t.load(typename=typename, value_type=value_type, doc=doc, bits=bits)
-            return self._add_type(t)
+            return self._add_type(t, fallback=fallback)
         elif desc.is_mixin():
             return self._add_type_mixin(desc, desc.get_mixin_target()) # ミキシンが予約された場合はNoneが返る
 
-    def _add_type(self, type):
+    def _add_type(self, type, *, fallback=False):
         """ 型をモジュールに追加する """
         if not type.is_loaded():
             raise ValueError("type must be loaded")
@@ -268,6 +286,7 @@ class TypeModule:
 
         # フルスコープ型名の辞書をチェックする
         if qualname in self._defs:
+            if fallback: return
             raise TypeModuleError("型'{}'はこのモジュールに既に存在します".format(qualname))
 
         valuetypename = type.get_value_type_qualname()
@@ -276,13 +295,14 @@ class TypeModule:
         if typename in self._lib_typename:
             descs = self._lib_typename[typename]
             if describername in descs:
+                if fallback: return
                 raise TypeModuleError("型'{}'はこのモジュールに既に存在します".format(qualname))
         else:
             self._lib_typename[typename] = []
 
         self._defs[qualname] = type
         self._lib_typename[typename].append(describername)
-        self._lib_describer[describername] = qualname
+        self._lib_describer.setdefault(describername, []).append(qualname)
 
         # 値型は最初に登録されたものを優先する
         if valuetypename not in self._lib_valuetype:
@@ -292,6 +312,12 @@ class TypeModule:
         self._inject_reserved_mixins(qualname, type)
 
         return type
+
+    def inject_type_mixin(self, describername, target_type: Type):
+        """ Mixin実装を追加する """
+        if all(describername != x.get_full_qualname() for x in target_type.get_all_describers()):
+            mxtd = create_type_describer(describername)
+            target_type.mixin_method_prototypes(mxtd)
 
     def _add_type_mixin(self, describer: TypeDescriber, target: str):
         """ Mixin実装を追加する """
@@ -307,7 +333,7 @@ class TypeModule:
             mixins = self._reserved_mixins.setdefault(target, [])
             mixins.append(describer)
             return None
-
+        
     def _inject_reserved_mixins(self, fulltypename: str, target: Type):
         """ 予約済みのmixin実装を型に追加し、リストから削除する """
         for key, mixins in self._reserved_mixins.items():
@@ -324,25 +350,27 @@ class TypeModule:
         from machaon.types.fundamental import fundamental_types
         self.update(fundamental_types())
     
-    def add_package_types(self, pkg):
-        """ パッケージに定義された全ての型を追加する """
-        mod = pkg.load_type_module()
-        if mod is None:
-            return False
-        self.update(mod)
-        return True
-
     def add_default_module_types(self, names=None):
         """ 標準モジュールの型を追加する """
-        errors = []
-        from machaon.package.package import create_module_package
         from machaon.core.symbol import DefaultModuleNames
         names = names or DefaultModuleNames
-        for module in names:
-            pkg = create_module_package("machaon." + module)
-            self.add_package_types(pkg)
-            errors.extend(pkg.get_load_errors())
-        return errors
+        with ErrorSet("標準モジュールの型を追加") as errs:
+            for module in names:
+                errs.try_(self.use_module_or_package_types, "machaon."+module)
+
+    def use_module_or_package_types(self, name, fallback=False):
+        """ モジュールあるいはパッケージ内の型を追加する """
+        if isinstance(name, str):
+            mod = module_loader(name)
+        else:
+            mod = name
+        with ErrorSet("'{}'に定義された全ての型をロード".format(name)) as errs:
+            for mod in mod.load_all_module_loaders():
+                for desc in mod.load_all_describers():
+                    try:
+                        self.define(desc, fallback=fallback) # 重複した場合は単にスルーする
+                    except Exception as e:
+                        errs.add(e, value=desc.get_full_qualname())
 
     def update(self, other):
         """ 

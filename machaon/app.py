@@ -6,10 +6,9 @@ import sys
 import shutil
 from collections import namedtuple
 
-from typing import Optional, List, Any, Text
-
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type.typemodule import TypeModule
+from machaon.core.error import ErrorSet
 from machaon.process import ProcessSentence, Spirit, TempSpirit, ProcessHive, ProcessChamber, ProcessSentence
 from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
 from machaon.platforms import is_osx, is_windows, shellpath
@@ -44,6 +43,7 @@ class AppRoot:
         self._startupmsgs = []
         self._startupvars = []
         self._startupignores = {}
+        self._startuperrors = ErrorSet("アプリケーション初期化")
 
     def initialize(self, *, ui, basic_dir=None, ignore_args=False, ignore_packages=None, ignore_hotkeys=None, **uiargs):
         """ 初期化前に初期設定を指定する """
@@ -93,7 +93,8 @@ class AppRoot:
         return Path(self.basicdir) / "store"
     
     def get_credential_dir(self):
-        return Path(self.basicdir) / "credential"
+        from machaon.package.auth import CredentialDir
+        return CredentialDir(Path(self.basicdir) / "credential")
     
     def get_log_dir(self):
         # デフォルトで存在しないディレクトリ
@@ -157,171 +158,43 @@ class AppRoot:
         """ コア機能を立ち上げる """
         if fundamentals: # 既に初期化済みでない場合はここで
             # 基本型をロードする
-            self.typemodule.add_fundamentals() 
+            try:
+                self.typemodule.add_fundamentals() 
+            except Exception as e:
+                self._startuperrors.add(e, message="基本型のロード")
 
         # パッケージマネージャの初期化
         package_dir = self.get_package_dir()
-        self.pkgmanager = PackageManager(package_dir, os.path.join(self.basicdir, "packages.ini"))
-        self.pkgmanager.load_database()
-        self.pkgmanager.add_to_import_path()
+        self.pkgmanager = PackageManager(package_dir, self.basicdir, os.path.join(self.basicdir, "packages.ini"), self.get_credential_dir())
+        try:
+            self.pkgmanager.load_packages()
+            self.pkgmanager.load_database()
+            self.pkgmanager.add_to_import_path()
+        except Exception as e:
+            self._startuperrors.add(e, message="パッケージマネージャの初期化")
 
         # 標準モジュールをロードする
-        pkg = self.add_package(Package("machaon", None))
-        for err in self.typemodule.add_default_module_types():
-            pkg._loadfail(err)
+        try:
+            self.typemodule.add_default_module_types()
+        except Exception as e:
+            self._startuperrors.add(e, message="標準モジュールのロード")
 
         # ホットキーの監視を有効化する
-        if KeyController.available and not self._startupignores.get("hotkey"):
-            self.keycontrol.start(self)
-            if spirit: spirit.post("message", "入力リスナーを立ち上げました")
+        if KeyController.available and not self.is_ignored_at_startup("hotkey"):
+            try:
+                self.keycontrol.start(self)
+                if spirit: 
+                    spirit.post("message", "入力リスナーを立ち上げました")
+            except Exception as e:
+                self._startuperrors.add(e, message="ホットキーの監視")
 
     #
     # クラスパッケージ
-    #
-    def add_package(self, 
-        name, 
-        package=None,
-        *,
-        modules=None,
-        locked=False,
-        private=False,
-        delayload=False, 
-        type=None,
-        separate=True,
-        hashval=None,
-    ):
-        """
-        パッケージ定義を追加する。
-        Params:
-            name(str): パッケージ名
-            package(str|Repository): モジュールを含むパッケージの記述 [リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
-            modules(str): ロードするモジュール名
-            private(bool): Trueの場合、認証情報を同時にロードする [locked]
-            delayload(bool): 参照時にロードする
-            type(int): モジュールの種類
-            separate(bool): site-packageにインストールしない
-            hashval(str): パッケージハッシュ値の指定
-        """
-        if package is None:
-            if not isinstance(name, Package):
-                raise ValueError("'package'引数を指定してください")
-            newpkg = name
-        elif isinstance(name, str):
-            newpkg = create_package(name, package, modules, type=type, separate=separate, hashval=hashval)
-        else:
-            raise TypeError("name, package")
-
-        for pkg in self.pkgs:
-            if pkg.name == newpkg.name:
-                if newpkg.is_undefined():
-                    pkg.assign_definition(newpkg)
-                else:
-                    newpkg = pkg
-                break
-        else:
-            self.pkgs.append(newpkg)
-        
-        if locked: private = True
-        if private:
-            src = newpkg.get_source()
-            from machaon.package.auth import create_credential
-            cred = create_credential(self, repository=src)
-            src.add_credential(cred)
-
-        return newpkg
-    
-    def add_dependency(self,
-        name,
-        package=None,
-        *,
-        locked=False,
-        separate=True,
-        hashval=None,
-    ):
-        """
-        依存パッケージを追加する。
-        Params:
-            name(str): パッケージ名
-            package(str|Repository): モジュールを含むパッケージの記述 [リモートリポジトリホスト|module|local|local-archive]:[ユーザー/リポジトリ|ファイルパス等]
-            locked(bool): Trueの場合、認証情報を同時にロードする
-            separate(bool): site-packageにインストールしない
-            hashval(str): パッケージハッシュ値の指定
-        """
-        from machaon.package.package import PACKAGE_TYPE_DEPENDENCY
-        spectype = PACKAGE_TYPE_DEPENDENCY
-        return self.add_package(name, package, locked=locked, type=spectype, separate=separate, hashval=hashval)
-
-    # パッケージ概要を取得する
-    def get_package(self, name, *, fallback=True):
-        for pkg in self.pkgs:
-            if pkg.name == name:
-                return pkg
-        if not fallback:
-            raise PackageNotFoundError(name)
-        return None
-    
-    def enum_packages(self):
-        for pkg in self.pkgs:
-            yield pkg
-    
+    #    
     # パッケージの追加・削除を行うマネージャ
     def package_manager(self):
         return self.pkgmanager
 
-    # パッケージにアップデートが必要か
-    def query_package_status(self, package: Package, *, isinstall=False):
-        if isinstall:
-            if not package.is_remote_source():
-                return "ready"
-            if self.pkgmanager.is_installed(package.name): # ローカルにあるかだけ確認
-                return "ready"
-            else:
-                return "none"
-        else:
-            return self.pkgmanager.query_status(package) # 通信して最新か確かめる
-
-    def load_pkg(self, package: Package, *, force=False):
-        """ パッケージオブジェクトから型をロードする """
-        if not force and package.is_load_succeeded():
-            return True
-        
-        mod = package.load_type_module()
-        if mod is None:
-            return False
-        self.typemodule.update(mod)
-
-        return package.is_load_succeeded()
-    
-    def unload_pkg(self, package):
-        """ パッケージオブジェクトの型スコープを削除する """
-        if package.once_loaded():
-            self.typemodule.remove_scope(package.scope)
-        return True
-
-    def reload(self):
-        """  """
-        for pkg in self.pkgs:
-            pkg.reload()
-        self.typemodule.reload()
-        return True
-    
-    def check_pkg_loading(self):
-        """ パッケージの読み込みが終わったら呼び出す """
-        self.typemodule.check_loading()
-
-    def add_credential(self, cred):
-        """ ダウンロードの認証情報をパッケージに追加する。 """
-        mark = False
-        for pkg in self.pkgs:
-            src = pkg.get_source()
-            if not src.match_credential(cred):
-                continue
-            src.add_credential(cred)
-            mark = True
-        
-        if not mark:
-            raise ValueError("'{}'の認証情報はどのパッケージにも設定されませんでした".format(cred.user()))
-    
     #
     # メッセージ
     #
@@ -618,12 +491,6 @@ class AppStarter:
     def _set_adder(self, adder):
         self._adder = adder
     
-    def packages(self):
-        @self._set_adder
-        def _add_pkg(args, kwargs, name):
-            self.root.add_package(name, *args, **kwargs)
-        return self
-
     def hotkeys(self):
         @self._set_adder
         def _add_hotkey(args, kwargs, label):

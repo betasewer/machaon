@@ -314,11 +314,11 @@ def fundamental_types():
         module.define(fulltypename, describername="machaon.core")
 
     # None
-    module.define("None:machaon.types.fundamental.NoneType", value_type=type(None), bits=TYPE_NONETYPE)
+    module.define("None:machaon.types.fundamental.NoneType", value_type=type(None), bits=TYPE_NONETYPE, describername="machaon.core")
 
     # ObjectCollection
     from machaon.core.type.fundamental import ObjectCollectionType
-    module.define("ObjectCollection:machaon.core.object.ObjectCollection", bits=TYPE_OBJCOLTYPE, typeclass=ObjectCollectionType)
+    module.define("ObjectCollection:machaon.core.object.ObjectCollection", bits=TYPE_OBJCOLTYPE, typeclass=ObjectCollectionType, describername="machaon.core")
 
     return module
 

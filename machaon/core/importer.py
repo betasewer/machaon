@@ -9,6 +9,7 @@ import traceback
 
 from machaon.core.docstring import parse_doc_declaration, get_doc_declaration_type, DocStringDefinition
 from machaon.core.symbol import full_qualified_name
+from machaon.core.error import ErrorSet
 
 def module_loader(expr=None, *, location=None):
     if location:
@@ -106,7 +107,7 @@ class PyBasicModuleLoader:
             return
         self._moduledoc = ModuleDocDefinition(self)
         self._moduledoc.load_declaration()
-
+        
     def get_package_extra_requirements(self):
         """ 追加の依存するmachaonパッケージ名 """
         return self._moduledoc.required_packages
@@ -118,7 +119,7 @@ class PyBasicModuleLoader:
     def get_using_extra_packages(self) -> List[Tuple[str, str]]:
         """ このモジュールが依存する外部パッケージ """
         return self._moduledoc.using_packages
-    
+
     def scan_type_describers(self):
         """ ソースコードの構文木を解析し、型を定義するクラスを取り出す
         Yields:
@@ -174,7 +175,7 @@ class PyBasicModuleLoader:
             List[PyBasicModuleLoader]:
         """
         modules = []
-        basepkg = self.module_name
+        basepkg = self.get_name()
         for pkgpath in self.load_package_directories(): # 開始モジュールのディレクトリから下降する
             # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
             skip_names = []
@@ -191,7 +192,38 @@ class PyBasicModuleLoader:
                 modules.append(loader)
 
         return modules
+
+    def load_all_module_loaders(self):
+        """ このモジュールとサブモジュール全てのローダーを返す """
+        modules = [self]
+        self.load_module_declaration()
+
+        defmods = self.get_package_defmodule_loaders()
+        if defmods:
+            modules.extend(defmods)
+        elif self.is_package():
+            modules.extend(self.get_all_submodule_loaders())
         
+        with ErrorSet("サブモジュールの宣言を解析中") as errs:
+            for mod in modules:
+                errs.try_(mod.load_module_declaration)
+
+        return modules
+    
+    def load_all_describers(self):
+        """ このモジュールにある全ての型定義を抽出する """
+        # 依存パッケージをチェックする
+        notfound_depends = []
+        for name in self.get_using_extra_packages():
+            if not module_loader(name).exists():
+                notfound_depends.append(name)
+        if notfound_depends:
+            raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfound_depends)))
+    
+        # 型定義を抽出するだけ
+        for typedesc in self.scan_type_describers():
+            yield typedesc
+    
     def show_latest_files(self, app, full=False):
         """ @task
         パッケージ内のファイルをタイムスタンプ順に表示する。
@@ -275,7 +307,7 @@ class ModuleDocDefinition:
         self.defined_modules = []
         self.using_types = []
         self.using_packages = []
-
+        
     def load_declaration(self):
         """ 宣言部を解析する """
         doc = ast.get_docstring(self._ast)
@@ -367,8 +399,11 @@ class PyModuleLoader(PyBasicModuleLoader):
         return self.module_name
 
     def exists(self):
-        spec = importlib.util.find_spec(self.module_name)
-        return spec is not None
+        try:
+            spec = importlib.util.find_spec(self.module_name)
+            return spec is not None
+        except:
+            return False
 
     def load_module(self):
         import sys
@@ -462,7 +497,7 @@ class PyModuleInstance(PyBasicModuleLoader):
         return "{} ({})".format(self._m.__name__, self.load_filepath())
 
 
-class AttributeLoader():
+class AttributeLoader:
     """
     モジュールの要素をロードする
     """
