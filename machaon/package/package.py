@@ -62,8 +62,6 @@ class Package:
 
         self._hash = hashval
         self._creds = None # 認証情報の入ったディレクトリ
-
-        self._extra_reqs: List[str] = None # 追加の依存パッケージ名
     
     @property
     def source_name(self):
@@ -127,15 +125,6 @@ class Package:
         
         return True
     
-    def check_required_modules_ready(self) -> Dict[str, bool]:
-        """ 依存するmachaonパッケージのロード状況 """
-        if self._extra_reqs is None:
-            self.load_declaration()
-        rets = {}
-        for module_name in self._extra_reqs:
-            rets[module_name] = module_loader(module_name).exists()
-        return rets
-    
     #
     # モジュールロード
     #
@@ -144,8 +133,6 @@ class Package:
         # モジュールのdocstringを読みに行く
         initial_module = self.get_initial_module()
         initial_module.load_module_declaration()
-        
-        self._extra_reqs = initial_module.get_package_extra_requirements()
         return initial_module
 
     def get_initial_module(self):

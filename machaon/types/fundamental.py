@@ -1,6 +1,5 @@
 
-from machaon.core.type.type import TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
-from machaon.core.type.typemodule import TypeModule
+
 from machaon.core.type.decl import parse_type_declaration, TypeDecl
 from machaon.core.type.pytype import PythonType
 
@@ -285,44 +284,41 @@ class NotFound(Exception):
 #  データ型登録
 #
 # ----------------------------------------------------------
+fundamental_typenames = [QualTypename.parse(x) for x in [
+    "Type:machaon.types.fundamental.TypeType",       # Type
+    "Bool:machaon.types.fundamental.BoolType",       # Bool
+    "Str:machaon.types.string.StrType",              # Str
+    "Int:machaon.types.numeric.IntType",             # Int
+    "Float:machaon.types.numeric.FloatType",         # Float
+    "Complex:machaon.types.numeric.ComplexType",     # Complex
+    "Function:machaon.core.function.FunctionType",   # Function
+    "Tuple:machaon.types.tuple.ObjectTuple",         # Tuple
+    "Sheet:machaon.types.sheet.Sheet",               # Sheet
+    # エラー型
+    "Error:machaon.types.stacktrace.ErrorObject",      # Error
+    "TracebackObject:machaon.types.stacktrace.TracebackObject", # TracebackObject
+    "FrameObject:machaon.types.stacktrace.FrameObject",         # FrameObject
+    "Context:machaon.core.context.InvocationContext",  # Context
+    "Process:machaon.process.Process",                 # Process
+    "PyModule:machaon.types.package.Module",           # PyModule
+    # システム型
+    "Method:machaon.core.method.Method",               # Method
+    "Package:machaon.types.package.AppPackageType",    # Package
+    "Stored:machaon.core.persistence.StoredMessage",   # Stored
+    "ShellTheme:machaon.ui.theme.ShellTheme",          # ShellTheme
+    "RootObject:machaon.types.app.RootObject",         # RootObject
+    # 特殊
+    "None:machaon.types.fundamental.NoneType",               # None
+    "ObjectCollection:machaon.core.object.ObjectCollection", # ObjectCollection
+]]
+
+fundamental_describer_name = "machaon.core"
+
 def fundamental_types():
+    from machaon.core.type.typemodule import TypeModule
     module = TypeModule()
-    for fulltypename in [
-        "Type:machaon.types.fundamental.TypeType",       # Type
-        "Bool:machaon.types.fundamental.BoolType",       # Bool
-        "Str:machaon.types.string.StrType",              # Str
-        "Int:machaon.types.numeric.IntType",             # Int
-        "Float:machaon.types.numeric.FloatType",         # Float
-        "Complex:machaon.types.numeric.ComplexType",     # Complex
-        "Function:machaon.core.function.FunctionType",   # Function
-        "Tuple:machaon.types.tuple.ObjectTuple",         # Tuple
-        "Sheet:machaon.types.sheet.Sheet",               # Sheet
-        # エラー型
-        "Error:machaon.types.stacktrace.ErrorObject",      # Error
-        "TracebackObject:machaon.types.stacktrace.TracebackObject", # TracebackObject
-        "FrameObject:machaon.types.stacktrace.FrameObject",         # FrameObject
-        "Context:machaon.core.context.InvocationContext",  # Context
-        "Process:machaon.process.Process",                 # Process
-        "PyModule:machaon.types.package.Module",           # PyModule
-        # システム型
-        "Method:machaon.core.method.Method",               # Method
-        "Package:machaon.types.package.AppPackageType",    # Package
-        "Stored:machaon.core.persistence.StoredMessage",   # Stored
-        "ShellTheme:machaon.ui.theme.ShellTheme",          # ShellTheme
-        "RootObject:machaon.types.app.RootObject",         # RootObject
-    ]:
-        module.define(fulltypename, describername="machaon.core")
-
-    # None
-    module.define("None:machaon.types.fundamental.NoneType", value_type=type(None), bits=TYPE_NONETYPE, describername="machaon.core")
-
-    # ObjectCollection
-    from machaon.core.type.fundamental import ObjectCollectionType
-    module.define("ObjectCollection:machaon.core.object.ObjectCollection", bits=TYPE_OBJCOLTYPE, typeclass=ObjectCollectionType, describername="machaon.core")
-
+    for fulltypename in fundamental_typenames:
+        module.define(fulltypename, describername=fundamental_describer_name)
     return module
-
-
-
 
 

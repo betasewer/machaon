@@ -11,11 +11,12 @@ import types
 import inspect
 
 from machaon.core.object import Object
-from machaon.core.symbol import normalize_method_target, normalize_method_name, SIGIL_OPERATOR_MEMBER_AT
+from machaon.core.symbol import normalize_method_target, normalize_method_name, SIGIL_OPERATOR_MEMBER_AT, normalize_typename
 from machaon.core.docstring import parse_doc_declaration, DocStringDefinition, DocStringDeclaration
 from machaon.core.type.decl import (
     TypeDecl, parse_type_declaration, split_typename_and_value
 )
+from machaon.core.type.declresolver import BasicTypenameResolver
 from machaon.core.type.basic import TypeConversionError, TypeProxy
 from machaon.core.type.extend import get_type_extension_loader
 
@@ -391,13 +392,14 @@ class Method:
             typedecl(str): 型宣言
             doc(str): *説明文
         """
-        decl = parse_type_declaration(typedecl)
-        r = MethodResult(decl, doc)
+        if isinstance(typedecl, str):
+            typedecl = parse_type_declaration(typedecl)
+        r = MethodResult(typedecl, doc)
         self.result = r
     
     def add_result_self(self, type):
         """ メソッドのselfオブジェクトを返す """
-        decl = TypeDecl(type)
+        decl = TypeDecl(type.get_qual_typename())
         r = MethodResult(decl, "selfオブジェクト", RETURN_SELF)
         self.result = r
 
@@ -496,7 +498,7 @@ class Method:
             callobj.describe_method(self)
         elif calldoc is not None:
             # callobjのdocstringsを解析する
-            self.parse_syntax_from_docstring(calldoc, callobj)
+            self.parse_syntax_from_docstring(calldoc, callobj, this_type)
         else:
             raise BadMethodDeclaration("メソッド定義がありません。メソッド 'describe_method' かドキュメント文字列で記述してください")
     
@@ -529,13 +531,18 @@ class Method:
     def is_mixin(self):
         return self.mixin is not None and self.mixin > 0
 
-    def parse_syntax_from_docstring(self, doc: str, function: Callable = None):
+    def parse_syntax_from_docstring(self, doc: str, function: Callable = None, this_type = None):
         """ 
         docstringの解析で引数を追加する。
         Params:
             doc(str): docstring
             function(Callable): *関数の実体。引数デフォルト値を得るのに使用する
         """
+        if this_type is not None:
+            tnresolver = this_type.get_describer(self.mixin).get_typename_resolver()
+        else:
+            tnresolver = BasicTypenameResolver()
+
         if isinstance(doc, DocStringDeclaration):
             # パース済みの宣言
             decl = doc
@@ -590,13 +597,15 @@ class Method:
                 flags |= pf
             else:
                 flags |= PARAMETER_REQUIRED
-        
-            self.add_parameter(name, typename, doc, default, flags=flags)
+
+            typedecl = tnresolver.parse_type_declaration(typename)
+            self.add_parameter(name, typedecl, doc, default, flags=flags)
 
         # 戻り値
         for line in sections.get_lines("Returns"):
             typename, doc, flags = parse_result_line(line.strip())
-            self.add_result(typename, doc)
+            typedecl = tnresolver.parse_type_declaration(typename)
+            self.add_result(typedecl, doc)
 
         # 戻り値デコレータ
         decoexpr = sections.get_string("Decorates")

@@ -56,12 +56,7 @@ class TypeModule:
         return len(self._defs)
     
     #
-    def _load_type(self, t: Type) -> Type:
-        """ 型定義をロードする """
-        #t.load_method_prototypes()
-        return t
-    
-    def _select_type(self, value:str, code:int, module:str=None, *, noload=False) -> Optional[Type]:
+    def _select_type(self, value:str, code:int, module:str=None) -> Optional[Type]:
         """ このライブラリから型定義を1つ取り出す """
         tdef = None
         if code == TYPECODE_FULLNAME:
@@ -82,10 +77,7 @@ class TypeModule:
                 tdef = self._defs[tn]
         
         if tdef is not None:
-            if noload:
-                return tdef
-            else:
-                return self._load_type(tdef)
+            return tdef
         else:
             return None
 
@@ -111,7 +103,7 @@ class TypeModule:
     def get(self, typecode: Any) -> Optional[TypeProxy]:
         """ 色々なデータから定義を探索する 
         Params:
-            typecode(Any): str=完全な型名・不完全な型名 | Type=型定義そのもの | <class>=型の値型
+            typecode(Any): str=修飾された完全な型名 | 修飾されていない不完全な型名 | Type=型定義そのもの | <class>=型の値型
         Returns:
             Optional[Type]:
         """
@@ -154,12 +146,12 @@ class TypeModule:
         for fullname, t in self._defs.items():
             if geterror:
                 try:
-                    yield fullname, self._load_type(t), None
+                    yield fullname, t, None
                 except Exception as e:
                     from machaon.types.stacktrace import ErrorObject
                     yield fullname, None, ErrorObject(e)
             else:
-                yield fullname, self._load_type(t)
+                yield fullname, t
 
     def deduce(self, value_type) -> Optional[TypeProxy]:
         """ 値型に適合する型を取得する
@@ -266,7 +258,7 @@ class TypeModule:
     
         desc = create_type_describer(describer, name=describername)
         if desc.is_typedef():
-            t = (typeclass or Type)(desc)
+            t = (typeclass or resolve_typeclass(desc.get_value_full_qualname()))(desc)
             t.load(typename=typename, value_type=value_type, doc=doc, bits=bits)
             return self._add_type(t, fallback=fallback)
         elif desc.is_mixin():
@@ -452,3 +444,12 @@ class TypeModule:
         return self.DefinitionSyntax(self)
 
 
+#
+#
+#
+def resolve_typeclass(describername):
+    from machaon.core.type.fundamental import NoneType, ObjectCollectionType
+    return {
+        "machaon.types.fundamental.NoneType" : NoneType,
+        "machaon.core.object.ObjectCollection" : ObjectCollectionType
+    }.get(describername, Type)

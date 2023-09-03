@@ -1,4 +1,3 @@
-from typing import Tuple
 
 #
 # 型名
@@ -15,13 +14,14 @@ class PythonBuiltinTypenames:
         "list", "tuple", "set", "bytes", 
     }
 
+SPECIAL_TYPE_NAMES = {
+    "Any", "Object"
+}
+
 def normalize_typename(name: str) -> str:
     if not name[0].isupper():
         if name in PythonBuiltinTypenames.literals:
             name = name.capitalize() # ドキュメントとしても使うために、Pythonの組み込み型に限り小文字でも可とする
-    bracket = name.find("[")
-    if bracket != -1:
-        name = name[:bracket]
     return name.replace("_","-")
 
 def is_valid_typename(name: str):
@@ -29,18 +29,6 @@ def is_valid_typename(name: str):
         if name not in PythonBuiltinTypenames.literals:
             return False
     return True
-
-def normalize_return_typename(name: str) -> Tuple[str, str]:
-    if "[" in name:
-        name1, _, name2 = name.partition("[")
-        typename = normalize_typename(name1)
-        name2 = name2.rstrip("]")
-        secondtypename = normalize_typename(name2) if name2 else ""
-    else:
-        typename = normalize_typename(name)
-        secondtypename = ""
-    
-    return typename, secondtypename
 
 # 型名の間違い
 class BadTypename(Exception):

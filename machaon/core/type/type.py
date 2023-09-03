@@ -14,10 +14,6 @@ from machaon.core.type.basic import (
     BadTypeDeclaration,
     BadMethodDelegation,
     BadMemberDeclaration,
-    TYPE_NONETYPE,
-    TYPE_TYPETYPE,
-    TYPE_OBJCOLTYPE,
-    TYPE_FUNTYPE,
 )
 from machaon.core.type.describer import (
     TypeDescriber
@@ -86,10 +82,6 @@ class Type(TypeProxy):
     def is_loaded(self):
         return self.flags & TYPE_LOADED > 0
     
-    def is_same_value_type(self, vt):
-        # TypeModule.deduceで使用
-        return self.value_type is vt
-    
     def copy(self):
         t = Type()
         t.typename = self.typename
@@ -123,19 +115,6 @@ class Type(TypeProxy):
 
     def check_value_type(self, valtype):
         return issubclass(valtype, self.value_type)
-
-    #
-    def is_none_type(self):
-        return self.flags & TYPE_NONETYPE > 0
-
-    def is_object_collection_type(self):
-        return self.flags & TYPE_OBJCOLTYPE > 0
-
-    def is_type_type(self):
-        return self.flags & TYPE_TYPETYPE > 0
-
-    def is_function_type(self):
-        return self.flags & TYPE_FUNTYPE > 0
 
     # 
     # メソッド呼び出し

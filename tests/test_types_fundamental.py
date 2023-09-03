@@ -50,7 +50,7 @@ def test_fundamental_basic():
     assert t
     from machaon.core.object import ObjectCollection
     assert t.get_value_type() is ObjectCollection
-    assert t.is_object_collection_type
+    assert t.is_object_collection_type()
 
 
 
@@ -106,7 +106,7 @@ def test_method():
     regmatch = cxt.get_type("Str").select_method("reg-match")
     assert regmatch is not None
     assert regmatch.name == "reg-match"
-    assert regmatch.get_result().get_typename() == "bool"
+    assert regmatch.get_result().get_typename() == "Bool:machaon.core"
 
     act = regmatch.get_action()
     assert act(None, "0123.txt", "[0-9]+")

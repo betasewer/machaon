@@ -34,13 +34,6 @@ class AppPackageType:
             if not is_installed:
                 errors.append("インストールの記録なし")
 
-            errexmodules = 0
-            for bit in package.check_required_modules_ready().values():
-                if not bit:
-                    errexmodules += 1
-            if errexmodules > 0:
-                errors.append("{}個の追加依存パッケージが不足".format(errexmodules))
-            
             if not errors:
                 return "準備完了"
             else:
@@ -194,9 +187,9 @@ class AppPackageType:
         self.display_download_and_install(app, package, operation, options)
 
         # 追加依存モジュールを表示する
-        for name, ready in package.check_required_modules_ready().items():
+        for name, ready in package.get_initial_module().check_extra_packages_ready().items():
             if not ready:
-                app.post("warn", "モジュール'{}'がありません。手動で追加する必要があります".format(name))
+                app.post("warn", "パッケージ'{}'がありません。手動で追加する必要があります".format(name))
 
         if operation.__name__ == "install":
             app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
@@ -231,16 +224,6 @@ class AppPackageType:
 
         app.post("message", "削除完了")
     
-    def extra_requires(self, package: Package):
-        """ @method [extra]
-        このパッケージが追加で依存するモジュール名。
-        Returns:
-            Sheet[ObjectCollection]:
-        Decorates:
-            @ view: name ready
-        """
-        return [{"name":x, "ready":y} for x, y in package.check_required_modules_ready().items()]
-
     def stringify(self, package):
         """ @meta """
         return "<Package {}>".format(package.name)
@@ -356,7 +339,7 @@ class Module():
         """ @task
         パッケージに定義された型を収集しログを表示する。登録はしない。
         Returns:
-            Sheet[ObjectCollection]:
+            Sheet[Dict]:
         Decorates:
             @ view: typename qualname error
         """
@@ -366,6 +349,17 @@ class Module():
             for df in modloader.scan_print_type_definitions(app):
                 elems.append(df)
         return elems
+    
+    def extra_requires(self):
+        """ @method [extra]
+        このモジュールが追加で依存するパッケージ名。
+        Returns:
+            Sheet[Dict]: 
+        Decorates:
+            @ view: name ready
+        """
+        mod = self.mloader()
+        return [{"name":x, "ready":y} for x, y in mod.check_extra_packages_ready().items()]
 
     def load_definition(self, context, name):
         """@task nospirit context
@@ -379,8 +373,7 @@ class Module():
         v = m.load_attr(name)
         if not isinstance(v, type):
             raise ValueError("'{}'はクラスではありません: {}".format(name, v))
-        d = context.type_module.add_definition(v)
-        return d.load_type() # 即座にロードする
+        return context.type_module.define(v)
 
 
 

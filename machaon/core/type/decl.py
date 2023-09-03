@@ -4,7 +4,7 @@ from machaon.core.object import Object
 from machaon.core.symbol import (
     SIGIL_PYMODULE_DOT,
     BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames,
-    QualTypename
+    normalize_typename, QualTypename
 )
 from machaon.core.type.basic import TypeProxy
 
@@ -22,13 +22,22 @@ class TypeDeclError(Exception):
 
 #
 # 型宣言
-# Typename[Typeparam1, param2...](ctorparam1, param2...)
+# Typename[Typeparam1, param2...]
 #
 class TypeDecl:
     def __init__(self, typename=None, args=None):
-        self.typename = typename
+        if typename is None:
+            self.typename = None
+            self.describername = None
+        elif isinstance(typename, str):
+            self.typename = normalize_typename(typename)
+            self.describername = None
+        elif isinstance(typename, QualTypename):
+            self.typename = typename.typename
+            self.describername = typename.describer
+        else:
+            raise TypeError("TypeDecl")
         self.declargs = args or []
-        self.describername = None
     
     def __str__(self):
         return self.to_string()
@@ -49,7 +58,10 @@ class TypeDecl:
             return self.typename.get_conversion()
 
         elems = ""
-        elems += QualTypename(self.typename, self.describername).stringify()
+        if self.describername is None:
+            elems += self.typename
+        else:
+            elems += QualTypename(self.typename, self.describername).stringify()
         if self.declargs:
             elems += "["
             elems += ",".join([x.to_string() for x in self.declargs])
@@ -60,16 +72,12 @@ class TypeDecl:
         """
         値を構築する
         """
-        if self.typename is None:
+        if self.typename is None or self.typename == "Any":
             # Any型を指す
             from machaon.core.type.instance import TypeAny
             return TypeAny()
         elif isinstance(self.typename, TypeProxy):
             return self.typename
-        elif self.typename == "Any":
-            # 型制約
-            from machaon.core.type.instance import TypeAny
-            return TypeAny()
         elif self.typename == "Union":
             # 型制約
             from machaon.core.type.instance import TypeUnion
@@ -98,6 +106,11 @@ class TypeDecl:
                 return TypeInstance(td, targs)
             else:
                 return td
+            
+    def resolve(self, resolver):
+        self.typename, self.describername = resolver(self.typename, self.describername)
+        for a in self.declargs:
+            a.resolve(resolver)
 
 
 #

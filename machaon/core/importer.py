@@ -8,7 +8,7 @@ import ast
 import traceback
 
 from machaon.core.docstring import parse_doc_declaration, get_doc_declaration_type, DocStringDefinition
-from machaon.core.symbol import full_qualified_name
+from machaon.core.symbol import full_qualified_name, QualTypename, normalize_typename
 from machaon.core.error import ErrorSet
 
 def module_loader(expr=None, *, location=None):
@@ -108,17 +108,33 @@ class PyBasicModuleLoader:
         self._moduledoc = ModuleDocDefinition(self)
         self._moduledoc.load_declaration()
         
-    def get_package_extra_requirements(self):
-        """ 追加の依存するmachaonパッケージ名 """
-        return self._moduledoc.required_packages
-
     def get_package_defmodule_loaders(self):
         """ このパッケージ中にて型定義が含まれるモジュールを明示する """
+        if not self.is_module_document_loaded():
+            raise ValueError("モジュール宣言が読み込まれていません")
         return self._moduledoc.defined_modules
 
     def get_using_extra_packages(self) -> List[Tuple[str, str]]:
         """ このモジュールが依存する外部パッケージ """
+        if not self.is_module_document_loaded():
+            raise ValueError("モジュール宣言が読み込まれていません")
         return self._moduledoc.using_packages
+
+    def check_extra_packages_ready(self):
+        """ 依存するパッケージのロード状況 
+        Returns:
+            str -> bool: パッケージ名 -> 存在するか
+        """
+        rets = {}
+        for pkgname, module_name in self.get_using_extra_packages():
+            rets[pkgname] = module_loader(module_name).exists()
+        return rets
+
+    def get_typename_resolver(self):
+        """ このモジュール内における型宣言のリゾルバを返す """
+        self.load_module_declaration()
+        from machaon.core.type.declresolver import ModuleTypenameResolver
+        return ModuleTypenameResolver(self.get_name(), self._moduledoc.using_types)
 
     def scan_type_describers(self):
         """ ソースコードの構文木を解析し、型を定義するクラスを取り出す
@@ -293,7 +309,17 @@ class PyBasicModuleLoader:
 
 
 class ModuleDocDefinition:
-    """ モジュールのドキュメントを解析する """
+    """ モジュールのドキュメントを解析する 
+    TypedefModules|DefModules:
+        このパッケージの中で型定義を含むモジュールの名前。行で区切る
+        パッケージの__init__.pyに記載する。
+    UsingType|Using:
+        このモジュールが依存するmachaonの型名。行で区切る
+        モジュールごとに記載する。
+    UsingPackage:
+        このモジュールが依存するpythonのパッケージの名前。行で区切る
+        モジュールごとに記載する。
+    """
     def __init__(self, module: PyBasicModuleLoader):
         source = module.load_source()
         if source is None:
@@ -303,7 +329,6 @@ class ModuleDocDefinition:
         #
         self._module = module
         self._ast = tree
-        self.required_packages = []
         self.defined_modules = []
         self.using_types = []
         self.using_packages = []
@@ -319,17 +344,10 @@ class ModuleDocDefinition:
             return
         
         defs = DocStringDefinition.parse(decl, (
-            "Extra-Requirements Extra-Req",
             "TypedefModules DefModules",
-            "UsingType",
+            "UsingType Using",
             "UsingPackage",
         ))
-        # 追加の依存するmachaonパッケージ名
-        for name in defs.get_string("Extra-Requirements").split(","):
-            package_name = name.strip()
-            if package_name:
-                self.required_packages.append(package_name)
-        
         # パッケージで、型定義が含まれるモジュールを明示する
         for line in defs.get_lines("TypedefModules"):
             module_name = line.strip()
@@ -339,12 +357,9 @@ class ModuleDocDefinition:
 
         # 参照する外部のmachaon型
         for line in defs.get_lines("UsingType"):
-            fulltypename = line.strip()
-            from machaon.core.type.describer import create_type_describer
-            d = create_type_describer(fulltypename)
-            if d.is_typedef():
-                self.using_types.append(d)
-            
+            fulltypename = QualTypename.parse(normalize_typename(line.strip()))
+            self.using_types.append(fulltypename)
+    
         # 参照する外部のパッケージ
         for line in defs.get_lines("UsingPackage"):
             packagename, sep, libname = line.partition(":")

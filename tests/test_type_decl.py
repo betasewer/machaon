@@ -41,7 +41,7 @@ def test_decl_parse():
     # 空白は削除される
     equalparse("Sheet[Room, Int, Float]", "Sheet[Room,Int,Float]")
     
-    reflectparse("Sheet[Room,'What','Is_This']")
+    reflectparse("Sheet[Room,'What','Is-This']")
     reflectparse("Sheet[Room,Wh$at,Im&&ena]") # 型名に使用できない文字が含まれる
 
 
@@ -93,6 +93,13 @@ def test_decl_instance():
     assert len(d.get_args()) == 1
     assert isinstance(d.get_args()[0], TypeAny)
     assert d.get_conversion() == "Sheet:machaon.core: Any" 
+
+    # Any
+    t = parse_("Any").instance(cxt)
+    assert t
+    assert isinstance(t, TypeAny)
+
+    
 
 def test_decl_instantiate_args():
     cxt = instant_context()

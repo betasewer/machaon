@@ -1,4 +1,4 @@
-from machaon.core.type.type import Type
+from machaon.core.type.type import Type, TypeProxy
 
 #
 #
@@ -45,3 +45,24 @@ class ObjectCollectionMemberGetter:
             return elem.object
         else:
             return None
+
+#
+#
+#
+class NoneType(Type):
+    """
+    None
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def get_value_type(self):
+        return type(None)
+    
+    def get_value_type_qualname(self):
+        return "NoneType"
+    
+    def check_value_type(self, t):
+        return t is type(None)
+
+

@@ -1,5 +1,5 @@
 from machaon.core.symbol import (
-    full_qualified_name, QualTypename
+    full_qualified_name, QualTypename, normalize_typename
 )
 from machaon.core.type.basic import (
     BadTypeDeclaration,
@@ -7,16 +7,16 @@ from machaon.core.type.basic import (
 from machaon.core.docstring import (
     parse_doc_declaration, DocStringDefinition, get_doc_declaration_type
 )
+from machaon.core.type.declresolver import BasicTypenameResolver
 from machaon.core.method import (
     Method, BadMethodDeclaration,
     make_method_prototype_from_doc, 
     make_metamethod_from_doc,
     make_method_from_dict,
-    METHOD_FROM_USER_DEFINITION,
-    parse_type_declaration, parse_result_line, parse_parameter_line, 
+    parse_result_line, parse_parameter_line, 
 )
 from machaon.core.importer import (
-    enum_attributes, attribute_loader, module_loader
+    enum_attributes, attribute_loader, module_loader, AttributeLoader
 )
 
 DESCRIBE_TYPE_UNKNOWN = 0
@@ -103,6 +103,10 @@ class TypeDescriber:
     def get_mixin_target(self):
         raise NotImplementedError()
     
+    # 型名解決
+    def get_typename_resolver(self):
+        raise NotImplementedError()
+    
     
     
 
@@ -129,14 +133,19 @@ class TypeDescriberClass(TypeDescriber):
         self._resolver = resolver
         self._resolved = None
         self._doc = docstring
+        self._typename_resolver = BasicTypenameResolver()
 
     @property
     def klass(self):
-        if self._resolved is None:
-            if isinstance(self._resolver, type):
-                self._resolved = self._resolver
-            else:
-                self._resolved = self._resolver()
+        if self._resolved is not None:
+            return self._resolved        
+        if isinstance(self._resolver, type):
+            self._resolved = self._resolver
+        elif isinstance(self._resolver, AttributeLoader):
+            self._resolved = self._resolver()
+            self._typename_resolver = self._resolver.module.get_typename_resolver()
+        else:
+            raise TypeError(self._resolver)
         return self._resolved
 
     def get_value_typename(self):
@@ -178,7 +187,7 @@ class TypeDescriberClass(TypeDescriber):
         if defs.is_declared("use-instance-method"):
             type.use_instance_method()
         if defs.is_declared("trait"):
-            type.use_typetrait_describer()
+            type.use_typetrait_describer() 
 
         decltypename = defs.get_first_alias()
         if decltypename:
@@ -200,7 +209,7 @@ class TypeDescriberClass(TypeDescriber):
         # 型引数
         for line in defs.get_lines("Params"):
             typename, name, doc, flags = parse_parameter_line(line.strip())
-            typedecl = parse_type_declaration(typename)
+            typedecl = BasicTypenameResolver().parse_type_declaration(typename) # 基本型のみなので解決は不要
             type.add_type_param(name, typedecl, doc, flags)
 
         for alias in defs.get_lines("MemberAlias"):
@@ -266,7 +275,13 @@ class TypeDescriberClass(TypeDescriber):
         if mixin is None:
             raise BadTypeDeclaration("mixin対象を'MixinType'で指定してください")
         t = mixin.rstrip(":") # コロンがついていてもよしとする
-        return t
+        # 型名を解決する
+        decl = self.get_typename_resolver().parse_type_declaration(t)
+        return decl.to_string()
+    
+    def get_typename_resolver(self):
+        """ リゾルバを返す """
+        return self._typename_resolver
 
 
 class TypeDescriberDict(TypeDescriber):
@@ -354,7 +369,7 @@ def create_type_describer(describer, *, name=None):
         # 実装付きの型名
         typename = describer.typename
         describer = describer.describer
-    
+
     if isinstance(describer, str):
         describer = TypeDescriberClass(attribute_loader(describer))
     elif isinstance(describer, dict):

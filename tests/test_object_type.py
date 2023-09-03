@@ -63,13 +63,12 @@ def test_valuetype_define():
     assert t.value_type is SomeValue
     assert t.doc == "適当な値オブジェクト" # 宣言が反映される
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
-    assert t.is_same_value_type(SomeValue)
+    assert t.get_value_type() is SomeValue
     
     t = fundamental_type.define(SomeTrait)
     assert t
     assert t.typename == "SomeValueX"
     assert t.doc == "適当な値オブジェクトの型"
-    assert t.is_same_value_type(complex)
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE
     assert t.get_value_type() is complex
 
@@ -87,7 +86,7 @@ def test_valuetype_td_docstring_define():
     assert t.doc == "巨大なオブジェクト"
     assert t.get_methods_bound_type() == METHODS_BOUND_TYPE_INSTANCE
     assert t.is_selectable_instance_method()
-    assert t.is_same_value_type(SomeValue)
+    assert t.get_value_type() is SomeValue
 
 # attribute_loaderを用いる
 def test_valuetype_td_attribute_loader():
@@ -97,7 +96,7 @@ def test_valuetype_td_attribute_loader():
     t = mod.define(desc, typename="Path2")
     assert t.typename == "Path2"
     assert t.value_type is machaon.types.shell.Path
-    assert t.is_same_value_type(machaon.types.shell.Path)
+    assert t.get_value_type() is machaon.types.shell.Path
 
 # 宣言と値がかみ合わない場合
 @pytest.mark.xfail()
@@ -322,9 +321,9 @@ def test_type_params():
     assert t.get_type_params()[0].get_name() == "T"
     assert t.get_type_params()[0].is_type()
     assert t.get_type_params()[1].get_name() == "param1"
-    assert t.get_type_params()[1].get_typename() == "int"
+    assert t.get_type_params()[1].get_typename() == "Int"
     assert t.get_type_params()[2].get_name() == "param2"
-    assert t.get_type_params()[2].get_typename() == "int"
+    assert t.get_type_params()[2].get_typename() == "Int"
 
     decl = parse_type_declaration("AryType[Int,98,23]")
     assert len(decl.declargs) == 3

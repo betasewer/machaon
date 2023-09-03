@@ -157,7 +157,7 @@ def test_meta_method():
 
     m = t.get_constructor()
     assert m is not None
-    assert m.get_param(0).get_typename() == "int"
+    assert m.get_param(0).get_typename() == "Int"
     assert m.get_param(0).get_name() == "x"
     assert m.get_param(1).get_name() == "y"
 

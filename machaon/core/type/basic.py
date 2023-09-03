@@ -1,10 +1,5 @@
 from machaon.core.symbol import full_qualified_name
 
-TYPE_NONETYPE               = 0x0001
-TYPE_OBJCOLTYPE             = 0x0002
-TYPE_TYPETYPE               = 0x0004
-TYPE_FUNTYPE                = 0x0008
-
 METHODS_BOUND_TYPE_TRAIT_INSTANCE = 1
 METHODS_BOUND_TYPE_INSTANCE = 2
 
@@ -179,19 +174,18 @@ class TypeProxy:
 
     def pprint_value(self, app, value):
         raise NotImplementedError()
-
-    # 基本型の判定
-    def is_none_type(self):
-        raise NotImplementedError()
-
-    def is_object_collection_type(self):
-        raise NotImplementedError()
-        
-    def is_type_type(self):
-        raise NotImplementedError()
     
-    def is_function_type(self):
-        raise NotImplementedError()
+    #
+    # 特殊型の判定
+    #
+    def is_none_type(self):
+        from machaon.core.type.fundamental import NoneType
+        return isinstance(self, NoneType)
+    
+    def is_object_collection_type(self):
+        from machaon.core.type.fundamental import ObjectCollectionType
+        return isinstance(self, ObjectCollectionType)
+
 
 
 class RedirectProxy(TypeProxy):
@@ -256,18 +250,6 @@ class RedirectProxy(TypeProxy):
     def pprint_value(self, spirit, value):
         return self.redirect().pprint_value(spirit, value)
     
-    def is_none_type(self):
-        return self.redirect().is_none_type()
-
-    def is_object_collection_type(self):
-        return self.redirect().is_object_collection_type()
-        
-    def is_type_type(self):
-        return self.redirect().is_type_type()
-
-    def is_function_type(self):
-        return self.redirect().is_function_type()
-
 
 class DefaultProxy(TypeProxy):
     # デフォルト値を提供する
@@ -281,18 +263,6 @@ class DefaultProxy(TypeProxy):
         return METHODS_BOUND_TYPE_INSTANCE
 
     def is_selectable_instance_method(self):
-        return False
-
-    def is_none_type(self):
-        return False
-
-    def is_object_collection_type(self):
-        return False
-        
-    def is_type_type(self):
-        return False
-
-    def is_function_type(self):
         return False
 
 
