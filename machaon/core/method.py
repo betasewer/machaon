@@ -397,10 +397,11 @@ class Method:
         r = MethodResult(typedecl, doc)
         self.result = r
     
-    def add_result_self(self, type):
+    def add_result_self(self, typedecl):
         """ メソッドのselfオブジェクトを返す """
-        decl = TypeDecl(type.get_qual_typename())
-        r = MethodResult(decl, "selfオブジェクト", RETURN_SELF)
+        if isinstance(typedecl, str):
+            typedecl = parse_type_declaration(typedecl)
+        r = MethodResult(typedecl, "selfオブジェクト", RETURN_SELF)
         self.result = r
 
     def get_result(self):
@@ -513,9 +514,9 @@ class Method:
         # 返り値が無い場合はレシーバ自身を返す
         if not self.result and this_type is not None:
             if self.is_external():
-                self.add_result(this_type)
+                self.add_result(TypeInstanceDecl(this_type))
             else:
-                self.add_result_self(this_type)
+                self.add_result_self(TypeInstanceDecl(this_type))
         
         if self.flags & METHOD_UNSPECIFIED_MASK:
             self._action = None
@@ -1006,6 +1007,8 @@ class MethodResult:
         self.doc = doc
         self.special = special
         self.decorator = None
+        if not isinstance(self.typedecl, TypeDecl):
+            raise TypeError("MethodResult.typedecl")
 
     def __str__(self):
         line = "Return [{}]".format(self.typename)
