@@ -443,16 +443,18 @@ class Type(TypeProxy):
         """ メソッド定義を読み込む """
         if self.flags & TYPE_LOADED_METHODS > 0:
             return
-        self.describer.describe_methods(self, 0)
+        for mixinkey, describer in enumerate(self._describers):
+            describer.describe_methods(self, mixinkey)
         self.flags |= TYPE_LOADED_METHODS
     
     def mixin_method_prototypes(self, describer):
         """ ミキシンのメソッド定義を読み込む """
-        # mixinクラスにIDを発行する
+        # 定義を追加する
         self._describers.append(describer)
-        index = len(self._describers)-1
-        # メソッド属性のみを読み込む
-        describer.describe_methods(self, index)
+        # 既に他のメソッドがロードされているなら、ただちに読み込む
+        if self.flags & TYPE_LOADED_METHODS > 0:
+            index = len(self._describers)-1
+            describer.describe_methods(self, index)
 
     #
     # load前に値を設定する。describe_typeから呼ばれる

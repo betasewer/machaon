@@ -78,8 +78,11 @@ class TypeProxy:
     
     def instantiate_args(self, context, argvals, *, params=None): # paramsはテスト用
         """ 引数を型チェックし生成する """
+        params = self.instantiate_params() if params is None else params
+        if not params and not argvals:
+            return []
         from machaon.core.method import Method
-        method = Method(params=self.instantiate_params() if params is None else params)
+        method = Method(params=params)
         argvals = method.make_argument_row(context, argvals, construct=True)
         return argvals
 

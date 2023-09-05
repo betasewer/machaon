@@ -507,9 +507,11 @@ def select_literal(context, literal):
     
     # 値をオブジェクトに変換する
     typename = type(value).__name__
-    if typename not in PythonBuiltinTypenames.literals:
-        raise BadExpressionError("Unsupported literal type: {}".format(typename))
-    return Object(context.get_type(typename), value)
+    if typename in PythonBuiltinTypenames.literals:
+        return Object(context.get_type(typename), value)
+    else:
+        return Object(context.get_type("Str"), literal) # エラーにしないで、元の文字列のままスルーする
+
 
 # メソッド
 def select_method(name, typetraits=None, *, reciever=None, modbits=None, context=None) -> BasicInvocation:
