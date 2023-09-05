@@ -11,8 +11,8 @@ from machaon.core.type.declresolver import BasicTypenameResolver
 from machaon.core.method import (
     Method, BadMethodDeclaration,
     make_method_prototype_from_doc, 
-    make_metamethod_from_doc,
     make_method_from_dict,
+    meta_methods,
     parse_result_line, parse_parameter_line, 
 )
 from machaon.core.importer import (
@@ -241,7 +241,7 @@ class TypeDescriberClass(TypeDescriber):
             # メタメソッド
             decl = parse_doc_declaration(attrval, ("meta",))
             if decl is not None:
-                method = make_metamethod_from_doc(decl, attrname)
+                method = meta_methods.get_prototype(attrname)
                 if method is None:
                     continue
                 type.add_meta_method(method)

@@ -500,7 +500,7 @@ class GenericMethods:
         """
         return len(left)
 
-    def truth_then(self, left, context, if_, else_):
+    def truth_then(self, context, left, if_, else_):
         """ @method external context 
         leftを真理値として評価して真であればif_を、偽であればelse_を実行する。
         Arguments:
@@ -513,7 +513,7 @@ class GenericMethods:
         body = if_ if left.test_truth() else else_
         return body.run(left, context)
 
-    def falsy_then(self, left, context, if_, else_):
+    def falsy_then(self, context, left, if_, else_):
         """ @method external context 
         leftを真理値として評価して偽であればif_を、真であればelse_を実行する。
         Arguments:
@@ -526,7 +526,7 @@ class GenericMethods:
         body = if_ if not left.test_truth() else else_
         return body.run(left, context)
         
-    def test_then(self, left, context, cond, if_, else_):
+    def test_then(self, context, left, cond, if_, else_):
         """ @method external context 
         値を条件式で判定し、その結果でif節またはelse節を実行する。
         Arguments:
@@ -575,7 +575,7 @@ class GenericMethods:
         """
         return obj.type
         
-    def help(self, obj, context):
+    def help(self, context, obj):
         """ @method external context
         オブジェクトの説明、メソッドを表示する。
         Arguments:
@@ -594,7 +594,7 @@ class GenericMethods:
         """
         return obj.stringify()
 
-    def bind(self, left, context, right):
+    def bind(self, context, left, right):
         """ @method external context
         オブジェクトを変数に束縛する。
         Arguments:
@@ -619,7 +619,7 @@ class GenericMethods:
         o = Object(right, left)
         return o
         
-    def cast_raw(self, left, context):
+    def cast_raw(self, context, left):
         """ @method external context
         オブジェクトの型をPythonTypeに変える。
         Arguments:

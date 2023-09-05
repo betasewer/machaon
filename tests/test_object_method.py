@@ -107,7 +107,7 @@ def test_method_loading():
     assert newmethod.params[0].is_required()
     assert newmethod.get_required_argument_min() == 1
     assert newmethod.get_acceptable_argument_max() == 1
-    assert newmethod.is_type_bound() is True
+    assert newmethod.is_type_value_bound() is True
 
     Type = fundamental_type.get("Type")
     newmethod = Type.select_method("new")
@@ -117,13 +117,13 @@ def test_method_loading():
     assert newmethod.get_param_count() == 1
     assert newmethod.get_required_argument_min() == 0
     assert newmethod.get_acceptable_argument_max() is None
-    assert newmethod.is_type_bound() is True
+    assert newmethod.is_type_value_bound() is True
 
     t = fundamental_type.select(SomeValue)
     newmethod = t.select_method("perimeter")
     assert newmethod.get_param_count() == 0
     assert newmethod.get_name() == "perimeter"
-    assert not newmethod.is_type_bound()
+    assert not newmethod.is_type_value_bound()
 
 #
 def test_method_alias():
@@ -157,9 +157,10 @@ def test_meta_method():
 
     m = t.get_constructor()
     assert m is not None
-    assert m.get_param(0).get_typename() == "Int"
-    assert m.get_param(0).get_name() == "x"
-    assert m.get_param(1).get_name() == "y"
+    assert m.is_loaded()
+    assert m.get_param(-1).get_typename() == "Int"
+    assert m.get_param(-1).get_name() == "x"
+    assert m.get_param(0).get_name() == "y"
 
     ps = t.get_type_params()
     assert len(ps) == 1
@@ -171,11 +172,12 @@ def test_meta_method():
     assert ti.get_args()[0].get_typename() == "Any"
 
     meta = ti.get_typedef().get_meta_method("constructor")
-    ca1, ca2 = meta.prepare_invoke_args(cxt, [10, 15], ti.get_args())
-    assert len(ca1 + ca2) == 3
-    assert ca1[0].get_typename() == "Any"
-    assert ca2[0] == 10
-    assert ca2[1] == 15
+    ca = meta.prepare_invoke_args([10, 15], selftype=ti.get_typedef(), context=cxt, typeargs=ti.get_args())
+    assert len(ca) == 4
+    assert ca[0] is SomeValue 
+    assert ca[1].get_typename() == "Any"
+    assert ca[2] == 10
+    assert ca[3] == 15
 
     from machaon.core.type.instance import TypeAny
 

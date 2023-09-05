@@ -84,12 +84,12 @@ class BasicLoadFile():
         raise NotImplementedError()
     
     #
-    def constructor(self, v):
+    def constructor(cls, v):
         """ @meta 
         Params:
             Path:
         """
-        return self.get_value_type()(v)
+        return cls(v)
 
     def stringify(self):
         """ @meta """

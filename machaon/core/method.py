@@ -27,35 +27,35 @@ from machaon.core.type.extend import get_type_extension_loader
 #
 
 #
-METHOD_CONTEXT_BOUND = 0x0001
-METHOD_SPIRIT_BOUND = 0x0002
-METHOD_TASK = 0x0004 | METHOD_SPIRIT_BOUND
-METHOD_TYPE_BOUND = 0x0010
-METHOD_CONSUME_TRAILING_PARAMS = 0x0020
-METHOD_BOUND_TRAILING = 0x0040
-METHOD_EXTERNAL = 0x0080
-METHOD_LOADED = 0x0100
-METHOD_DECL_LOADED = 0x0200
-METHOD_EXTERNAL = 0x0080 # レシーバオブジェクトもパラメータとして扱う
+METHOD_CONTEXT_BOUND            = 0x0001
+METHOD_SPIRIT_BOUND             = 0x0002
+METHOD_TASK                     = 0x0004 | METHOD_SPIRIT_BOUND
+METHOD_TYPE_BOUND               = 0x0008 # デスクライバのクラスがselfとして渡される
+METHOD_TYPEVAL_BOUND            = 0x0010 # デスクライバのインスタンスがselfとして渡される
+METHOD_EXTERNAL                 = 0x0020 # レシーバオブジェクトもパラメータとして扱う
+METHOD_BOUND_TRAILING           = 0x0040 # ?
+METHOD_LOADED                   = 0x0100
+METHOD_DECL_LOADED              = 0x0200
+METHOD_LOADBIT_MASK             = 0x0F00 
 
-METHOD_PARAMETER_UNSPECIFIED = 0x1000
-METHOD_RESULT_UNSPECIFIED = 0x2000
-METHOD_UNSPECIFIED_MASK = 0x3000
-METHOD_KEYWORD_PARAMETER = 0x4000
+METHOD_PARAMETER_UNSPECIFIED        = 0x1000
+METHOD_RESULT_UNSPECIFIED           = 0x2000
+METHOD_UNSPECIFIED_MASK             = 0x3000
+METHOD_KEYWORD_PARAMETER            = 0x4000
+METHOD_CONSUME_TRAILING_PARAMETERS  = 0x8000 # ?
 
-METHOD_INVOKEAS_FUNCTION = 0x10000          # レシーバを受け取らない関数
-METHOD_INVOKEAS_BOUND_METHOD = 0x20000      # インスタンスメソッド、レシーバを受け取る
-METHOD_INVOKEAS_PROPERTY = 0x30000          # インスタンスのプロパティ、レシーバのみを受け取る
-METHOD_INVOKEAS_BOUND_FUNCTION = 0x40000    # レシーバを第1引数に受け取る関数
-METHOD_INVOKEAS_IMMEDIATE_VALUE = 0x50000   # 値、レシーバを受け取らない
-METHOD_INVOKEAS_MASK = 0xF0000
+METHOD_INVOKEAS_FUNCTION            = 0x10000  # レシーバを受け取らない関数
+METHOD_INVOKEAS_BOUND_METHOD        = 0x20000  # インスタンスメソッド、レシーバを受け取る
+METHOD_INVOKEAS_PROPERTY            = 0x30000  # インスタンスのプロパティ、レシーバのみを受け取る
+METHOD_INVOKEAS_BOUND_FUNCTION      = 0x40000  # レシーバを第1引数に受け取る関数
+METHOD_INVOKEAS_IMMEDIATE_VALUE     = 0x50000  # 値、レシーバを受け取らない
+METHOD_INVOKEAS_MASK                = 0xF0000
 
-METHOD_FROM_CLASS_MEMBER    = 0x100000  # クラスメンバから得た定義
-METHOD_FROM_INSTANCE_MEMBER = 0x200000  # インスタンスメンバから得た定義
-METHOD_FROM_USER_DEFINITION = 0x400000  # コメントや辞書による定義 
-METHOD_DEFINITION_FROM_MASK = 0xF00000  
+METHOD_FROM_CLASS_MEMBER            = 0x100000  # クラスメンバから得た定義
+METHOD_FROM_INSTANCE_MEMBER         = 0x200000  # インスタンスメンバから得た定義
+METHOD_FROM_USER_DEFINITION         = 0x400000  # コメントや辞書による定義 
+METHOD_DEFINITION_FROM_MASK         = 0xF00000  
 
-METHOD_META_NOEXTRAPARAMS = 0x1000000
 
 #
 PARAMETER_REQUIRED = 0x0100
@@ -79,9 +79,9 @@ class MethodLoadError(Exception):
         return self.args[0]
     def name(self):
         return self.args[1]
-    
-    def child_exception(self):
-        return self.args[0]
+
+class MethodCallingError(Exception):
+    pass
 
 # メタメソッド呼び出し時のエラー
 class BadMetaMethod(Exception):
@@ -93,9 +93,6 @@ class BadMetaMethod(Exception):
         typename = self.args[1].get_typename()
         methname = self.args[2].get_action_target()
         return " {}.{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
-    
-    def child_exception(self):
-        return self.args[0]
 
 #
 class MethodParameterNoDefault:
@@ -133,8 +130,8 @@ class Method:
         Returns:
             Str:
         """
-        if self.flags & METHOD_LOADED == 0:
-            raise UnloadedMethod(self.name)
+        #if self.flags & METHOD_LOADED == 0:
+        #    raise UnloadedMethod(self.name)
         return self.name
     
     def get_doc(self):
@@ -161,13 +158,21 @@ class Method:
         """ 実装オブジェクト。 """
         return self._action
 
-    def is_type_bound(self):
+    def is_type_class_bound(self):
         """ @method
-        メソッドに型が渡されるか
+        メソッドにデスクライバクラスが渡されるか
         Returns:
             Bool:
         """
         return (self.flags & METHOD_TYPE_BOUND) > 0
+
+    def is_type_value_bound(self):
+        """ @method
+        メソッドにデスクライバインスタンスが渡されるか
+        Returns:
+            Bool:
+        """
+        return (self.flags & METHOD_TYPEVAL_BOUND) > 0
 
     def is_context_bound(self):
         """ @method
@@ -207,7 +212,7 @@ class Method:
         Returns:
             Bool:
         """
-        return (self.flags & METHOD_CONSUME_TRAILING_PARAMS) > 0
+        return (self.flags & METHOD_CONSUME_TRAILING_PARAMETERS) > 0
     
     def is_external(self):
         """ @method
@@ -355,9 +360,7 @@ class Method:
         argpairs: List[Tuple[MethodParameter, Any]] = []
         ihead = 0
         for i, tp in enumerate(self.params):
-            if self.is_external() and i == 0:
-                continue
-            elif tp.is_variable():
+            if tp.is_variable():
                 argpairs.extend((tp, x) for x in args[ihead:])
                 ihead = -1
             else:
@@ -464,7 +467,7 @@ class Method:
             cnt -= 1
         return cnt
     
-    def load_from_type(self, this_type: TypeProxy):
+    def load_from_type(self, this_type: TypeProxy, *, meta=False):
         """
         実装をロードする。
         """
@@ -475,16 +478,18 @@ class Method:
             self.target = normalize_method_target(self.name)
 
         # クラスに定義されたメソッドが実装となる
-        callobj = this_type.get_describer(self.mixin).get_method_attribute(self.target)
+        if meta:
+            callobj = this_type.get_describer(self.mixin).get_metamethod_attribute(self.target)
+        else:
+            callobj = this_type.get_describer(self.mixin).get_method_attribute(self.target)
         if callobj is None:
             raise BadMethodDeclaration("'{}'は型'{}'の属性として存在しません".format(self.target, this_type.get_conversion()))
         
         target_method = "{}{}{}".format(this_type.get_conversion(), SIGIL_OPERATOR_MEMBER_AT, self.name)
 
-        if this_type.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
-            self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
-        elif self.is_mixin():
-            self.flags |= METHOD_TYPE_BOUND
+        if this_type.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE or self.is_mixin():
+            self.flags &= ~METHOD_TYPE_BOUND
+            self.flags |= METHOD_TYPEVAL_BOUND
 
         # ドキュメント文字列を取り出す
         calldoc = getattr(callobj, "__doc__", None)
@@ -549,9 +554,9 @@ class Method:
             decl = doc
         else:
             # 1行目はメソッド宣言
-            decl = parse_doc_declaration(doc, ("method", "task"))
+            decl = parse_doc_declaration(doc, ("method", "task", "meta"))
             if decl is None:
-                raise BadMethodDeclaration("宣言の構文に誤りがあります")   
+                raise BadMethodDeclaration("宣言のタイプがメソッドではないか、ドキュメント文字列が取得できません")
         
         if self.flags & METHOD_DECL_LOADED == 0:         
             self.load_declaration_properties(decl.props)
@@ -578,24 +583,29 @@ class Method:
             typename, name, doc, flags = parse_parameter_line(line.strip(), i)
             
             if typename.endswith("..."):
-                self.flags |= METHOD_CONSUME_TRAILING_PARAMS
+                self.flags |= METHOD_CONSUME_TRAILING_PARAMETERS
                 typename = typename.rstrip(".")
             
             default = None
             if funcsig:
                 p = funcsig.parameters.get(name)
                 if p is None:
-                    raise BadMethodDeclaration("存在しない引数です：" + name)
-    
-                default, pf = pick_parameter_default_value(p)
-                if pf & PARAMETER_KEYWORD:
-                    # キーワード引数には未対応
-                    self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                    break 
-                if flags & PARAMETER_REQUIRED == 0 and pf & PARAMETER_REQUIRED:
-                    # オプション引数の設定が食い違う場合、オプション引数として扱う
-                    pf &= ~PARAMETER_REQUIRED
-                flags |= pf
+                    if decl.decltype == "meta":
+                        # メタメソッドでのみ、名前が食い違っても許す
+                        flags |= PARAMETER_REQUIRED
+                    else:
+                        raise BadMethodDeclaration("引数'{}'は宣言されていますが、関数に存在しません".format(name))
+
+                if p is not None:
+                    default, pf = pick_parameter_default_value(p)
+                    if pf & PARAMETER_KEYWORD:
+                        # キーワード引数には未対応
+                        self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                        break 
+                    if flags & PARAMETER_REQUIRED == 0 and pf & PARAMETER_REQUIRED:
+                        # オプション引数の設定が食い違う場合、オプション引数として扱う
+                        pf &= ~PARAMETER_REQUIRED
+                    flags |= pf
             else:
                 flags |= PARAMETER_REQUIRED
 
@@ -740,6 +750,13 @@ class Method:
         self.target = "<loaded from dict>"
         self.flags |= METHOD_LOADED
 
+    def load_default_meta(self, selftype):
+        """ デフォルトのメタメソッドの実装を型から読み込む """
+        target = "default_"+self.name
+        self._action = getattr(selftype, target)
+        self.target = target
+        self.flags |= METHOD_LOADED
+
     def make_invocation(self, mods=None, type=None):
         """ 適した呼び出しオブジェクトを作成する """
         def argminmax(i,x):
@@ -767,6 +784,74 @@ class Method:
                 raise ValueError("type argument must be specified")
             from machaon.core.invocation import TypeMethodInvocation
             return TypeMethodInvocation(type, self, mods)
+        
+    def prepare_invoke_args(self, args, *, selftype=None, context=None, typeargs=None):
+        """ 
+        メソッド実行時に渡す引数を準備する 
+        引数の順番：
+            <describer> traitメソッドである場合
+            <self> 外部メソッドでない場合
+            <context> context宣言がある場合
+            <spirit> spirit宣言がある場合
+            <typeargs...> 型引数
+            <args...> 引数
+        Params:
+            args(Object[]): 引数
+            selftype(Type):
+            context(InvocationContext):
+            typeargs(Any[]):
+        """
+        if self.flags & METHOD_LOADED == 0:
+            raise UnloadedMethod(self.name)
+        
+        ivargs = []
+        
+        external = self.is_external()
+
+        if self.is_type_value_bound(): # or (selftype and selftype.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE):
+            if selftype is not None:
+                desc = self.get_describer(selftype)
+                if isinstance(desc, type):
+                    desc = desc()    
+                ivargs.append(desc)
+            else:
+                raise MethodCallingError("trait実装のメソッドですが、selftypeが引数に渡されていません")
+        elif self.is_type_class_bound():
+            # 値の方がクラスよりも優先される
+            if selftype is not None:
+                desc = self.get_describer(selftype)
+                ivargs.append(desc)
+            else:
+                raise MethodCallingError("trait実装のメソッドですが、selftypeが引数に渡されていません")
+
+        if not external:
+            selfspec = MethodParameter("self") # デフォルトのパラメータスペック
+            selfarg, *args = args
+            ivargs.append(selfspec.make_argument_value(context, selfarg))
+
+        if self.is_context_bound(): 
+            if context is not None:
+                ivargs.append(context)
+            else:
+                raise MethodCallingError("contextを要求していますが、引数に渡されていません")
+        if self.is_spirit_bound():
+            if context is not None:
+                ivargs.append(context.spirit)
+            else:
+                raise MethodCallingError("spiritを要求していますが、引数にcontextが渡されていません")
+
+        # 型引数を集める
+        if typeargs is not None:
+            ivargs.extend(typeargs)
+        
+        # コンストラクタ引数を生成する
+        if context is not None:
+            argvalues = self.make_argument_row(context, args)
+            ivargs.extend(argvalues)
+        else:
+            ivargs.extend([x.value if isinstance(x,Object) else x for x in args])
+        
+        return ivargs
 
     def get_signature(self, *, fully=False, self_typename=None):
         """ @method alias-name [signature]
@@ -1180,85 +1265,6 @@ def parse_result_line(line):
     return typename, doc, 0
 
 
-#
-#
-#
-class MetaMethod:
-    def __init__(self, target, flags=0, meth=None):
-        self.target = target
-        self.flags = flags
-        self._meth: Method = meth
-    
-    def get_type(self):
-        return self.target
-
-    def get_action_target(self):
-        return self.target
-    
-    def new(self, decl):
-        """ 特殊メソッドを構築 
-        Params:
-            decl(DocStringDeclaration)
-        """
-        flags = self.flags
-        if "noarg" in decl.props or "noparam" in decl.props:
-            flags |= METHOD_META_NOEXTRAPARAMS
-        
-        meth = Method(self.target)
-        meth.parse_syntax_from_docstring(decl)
-        return MetaMethod(self.target, flags, meth)
-
-    def is_type_bound(self):
-        return (self.flags & METHOD_TYPE_BOUND) > 0
-    
-    def is_context_bound(self):
-        if self.flags & METHOD_CONTEXT_BOUND > 0:
-            return True
-        if self._meth is not None:
-            return self._meth.is_context_bound()
-        return False
-
-    def is_spirit_bound(self):
-        if self.flags & METHOD_SPIRIT_BOUND > 0:
-            return True
-        if self._meth is not None:
-            return self._meth.is_spirit_bound()
-        return False
-    
-    def has_no_extra_params(self):
-        return (self.flags & METHOD_META_NOEXTRAPARAMS) > 0
-
-    def get_method(self):
-        return self._meth
-    
-    def prepare_invoke_args(self, context, args, typeargs):
-        """ メソッド実行時に渡す引数を準備する """
-        argpre = []
-        if self.is_context_bound(): 
-            if context is not None:
-                argpre.append(context)
-            else:
-                raise ValueError("contextを要求していますが、引数に渡されていません")
-        if self.is_spirit_bound():
-            if context is not None:
-                argpre.append(context.spirit)
-            else:
-                raise ValueError("spiritを要求していますが、引数にcontextが渡されていません")
-
-        # 型引数を集める
-        argpre.extend(typeargs)
-        
-        # コンストラクタ引数を生成する
-        argpost = []
-        if context is not None and self._meth is not None:
-            argvalues = self._meth.make_argument_row(context, args)
-            argpost.extend(argvalues)
-        else:
-            argpost.extend([x.value if isinstance(x,Object) else x for x in args])
-        
-        return argpre, argpost
-
-
 def make_method_prototype_from_doc(decl, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
     """ 
     ドキュメントを解析して空のメソッドオブジェクトを構築 
@@ -1272,19 +1278,6 @@ def make_method_prototype_from_doc(decl, attrname, mixinkey=None) -> Tuple[Optio
     method.load_declaration_properties(decl.props)
     return method, decl.aliases
 
-def make_metamethod_from_doc(decl, attrname):
-    """ 
-    ドキュメントを解析してメタメソッドオブジェクトを構築 
-    Params:
-        decl(DocStringDeclaration): ドキュメント宣言
-        attrname(str): 属性名
-    """ 
-    protometh = meta_method_prototypes.get(attrname)
-    if protometh is None:
-        return None
-    meth = protometh.new(decl)
-    return meth
-
 def make_method_from_dict(name, di, mixinkey=None):
     """
     辞書による定義からメソッドを作成する
@@ -1296,13 +1289,43 @@ def make_method_from_dict(name, di, mixinkey=None):
     return mth
 
 
-meta_method_prototypes = { x.get_type():x for x in (
-    MetaMethod("constructor", METHOD_TYPE_BOUND),
-    MetaMethod("stringify"),
-    MetaMethod("summarize"),
-    MetaMethod("pprint"),
-)}
+class MetaMethods:
+    def __init__(self):
+        prototypes = [
+            Method("constructor", flags=METHOD_TYPE_BOUND|METHOD_EXTERNAL),
+            Method("stringify"),
+            Method("summarize"),
+            Method("pprint"),
+        ]
+        self.prototypes = {x.get_name():x for x in prototypes}
+        self.prototypes["constructor"].add_parameter("value", "Any")
 
+    def get_prototype(self, name):
+        """ 
+        空の新しいメタメソッドを返す 
+        Params:
+            decl(DocStringDeclaration): ドキュメント宣言
+            attrname(str): 属性名
+        """ 
+        protometh = self.prototypes.get(name)
+        if protometh is None:
+            return None
+        flags = protometh.flags & ~METHOD_LOADBIT_MASK # ロードフラグは引き継がないように
+        meta = Method(name, target=name, flags=flags)
+        return meta
+    
+    def load_default(self, name, selftype):
+        """ 
+        デフォルトのメタメソッドを取得する
+        """
+        protometh = self.prototypes.get(name)
+        if protometh is None:
+            raise MethodLoadError("meta method '{}' does not exist".format(name))
+        protometh.load_default_meta(selftype)
+        return protometh
+
+
+meta_methods = MetaMethods()
 
 #
 #

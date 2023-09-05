@@ -57,22 +57,51 @@ def test_fundamental_basic():
 def test_fundamental_metamethod_resolve():
     cxt = instant_context()
 
+    from machaon.types.numeric import IntType
     t = fundamental_type.find("Int")
     assert t
     assert len(t.get_type_params()) == 0
-    fns = t.resolve_meta_method("constructor", cxt, "0", None)
+    fns = t.resolve_meta_method("constructor", cxt, ["0"], None)
     assert fns is not None
-    assert len(fns[2:]) == 2 # トレイト型＋引数1
+    fn, *args = fns
+    assert not fn.is_type_class_bound() # トレイト実装にはデスクライバのインスタンスが渡される
+    assert fn.is_type_value_bound()
+    assert not fn.is_context_bound()
+    assert len(args) == 2 # トレイト型＋引数1
+    assert isinstance(args[0], IntType)
+    assert args[1] == "0"
 
+    from machaon.core.function import FunctionType
     t = fundamental_type.find("Function")
     assert t
     assert len(t.get_type_params()) == 1
-    fns = t.resolve_meta_method("constructor", cxt, "0", None)
+    fns = t.resolve_meta_method("constructor", cxt, ["0"], None)
     assert fns is not None
-    assert len(fns[2:]) == 4 # トレイト型＋コンテキスト＋型引数＋引数1
-    assert fns[3] is cxt
-    assert fns[4] is None
-    assert fns[5] == '0'
+    fn, *args = fns
+    assert not fn.is_type_class_bound()
+    assert fn.is_type_value_bound()
+    assert fn.is_context_bound()
+    assert len(args) == 4 # トレイト型＋コンテキスト＋型引数＋引数1
+    assert isinstance(args[0], FunctionType)
+    assert args[1] is cxt
+    assert args[2] is None
+    assert args[3] == '0'
+
+    from machaon.types.sheet import Sheet
+    t = fundamental_type.find("Sheet")
+    assert t
+    assert len(t.get_type_params()) == 1
+    fns = t.resolve_meta_method("constructor", cxt, [[1,2,3]], [fundamental_type.get("Int")])
+    assert fns is not None
+    fn, *args = fns
+    assert fn.is_type_class_bound()  # インスタンス実装にはデスクライバのクラスが渡される
+    assert not fn.is_type_value_bound()
+    assert fn.is_context_bound()
+    assert len(args) == 4 # トレイト型＋コンテキスト＋型引数＋引数1
+    assert args[0] is Sheet
+    assert args[1] is cxt
+    assert args[2].get_typename() == "Int"
+    assert args[3] == [1,2,3]
 
 
 def test_fundamental_construct():

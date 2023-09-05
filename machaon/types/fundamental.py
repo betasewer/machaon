@@ -73,17 +73,49 @@ class TypeType:
         """ @task context
         型の説明、メソッド一覧を表示する。
         """
+        typ = typ.get_typedef()
+
         docs = []
         docs.append("{} [{}]".format(typ.get_conversion(), type(typ).__name__))
         docs.extend(typ.get_document().splitlines())
-        docs.append("［実装］\n{}".format(typ.get_describer_qualname()))
-        docs.append("［メソッド］")
+        docs.append("［実装］")
+        docs.extend([x.get_value_full_qualname() for x in typ.get_all_describers()])
+        docs.append("")
         app.post("message", "\n".join(docs))
+
+        # 型引数の表示
+        if len(typ.get_type_params()) > 0:
+            app.post("message", "［型引数］")
+            meth = typ.view_type_params_as_method()
+            app.post("message", meth.get_signature() + "\n")
+
+        # コンストラクタの表示
+        app.post("message", "［コンストラクタ］")
+        meth = typ.get_constructor()
+        app.post("message", meth.get_signature() + "\n")
+
         # メソッドの表示
+        app.post("message", "［メソッド］")
         meths = self.methods(typ, context, app, value)
-        meths_sheet = context.new_object(meths, conversion="Sheet[Method]")
+        intr = []
+        extr = []
+        for meth in meths:
+            if meth["#extend"].value.is_external():
+                extr.append(meth)
+            else:
+                intr.append(meth)
+    
+        # 通常メソッド
+        meths_sheet = context.new_object(intr, conversion="Sheet[Method]")
         meths_sheet.value.view(context, "names", "signature", "doc")
         meths_sheet.pprint(app)
+
+        # 外部メソッド
+        if extr:
+            app.post("message", "［外部メソッド］")
+            meths_sheet = context.new_object(extr, conversion="Sheet[Method]")
+            meths_sheet.value.view(context, "names", "signature", "doc")
+            meths_sheet.pprint(app)
 
     def methods(self, typ, context, app, instance=None):
         '''@task context
@@ -185,7 +217,7 @@ class TypeType:
         return isinstance(type, PythonType)
     
 
-class NoneType():
+class NoneType:
     """ @type [None]
     PythonのNone型。 
     """
@@ -199,7 +231,8 @@ class NoneType():
         """ @meta """
         return "<None>"
 
-class BoolType():
+
+class BoolType:
     """ @type [Bool]
     PythonのBool型。 
     ValueType:

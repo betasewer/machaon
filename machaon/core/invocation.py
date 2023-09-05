@@ -162,12 +162,6 @@ def resolve_object_value(obj, spec=None):
     else:
         return obj.value
 
-def parameter_spec(t, i):
-    spec = t.get_parameter_spec(i)
-    if spec is not None:
-        return spec
-    return MethodParameter("param") # デフォルトのパラメータスペックを返す
-
 #
 #
 #
@@ -262,35 +256,13 @@ class TypeMethodInvocation(BasicInvocation):
     def is_parameter_consumer(self):
         return self.method.is_trailing_params_consumer()
 
-    def prepare_invoke(self, context, *argobjects):
-        selfobj, *argobjs = argobjects
-        
+    def prepare_invoke(self, context, *argobjects):      
         # メソッドの実装を読み込む
         self.method.load_from_type(self.type)
-
-        args = []
-        if self.method.is_type_bound():
-            # 型オブジェクトを渡す
-            args.append(self.method.make_type_instance(self.type))
-
-        # インスタンスを渡す
-        selfspec = parameter_spec(self, -1)
-        args.append(selfspec.make_argument_value(context, selfobj))
-
-        if self.method.is_context_bound():
-            # コンテクストを渡す
-            args.append(context)
-        
-        if self.method.is_spirit_bound():
-            # spiritを渡す
-            args.append(context.get_spirit())
-        
-        # 引数オブジェクトを整理する
-        args.extend(self.method.make_argument_row(context, argobjs))
-        
         action = self.method.get_action()
+        args = self.method.prepare_invoke_args(argobjects, selftype=self.type, context=context)
         result_spec = self.method.get_result()
-        return InvocationEntry(self, action, args, {}, result_spec)   
+        return InvocationEntry(self, action, args, {}, result_spec)
     
     def get_action(self):
         return self.method.get_action()

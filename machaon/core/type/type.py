@@ -23,8 +23,7 @@ from machaon.core.type.instance import (
 )
 from machaon.core.method import (
     PARAMETER_REQUIRED, BadMethodDeclaration, UnloadedMethod, MethodLoadError, BadMetaMethod, 
-    meta_method_prototypes, 
-    Method, MetaMethod, MethodParameter,
+    meta_methods, Method, MethodParameter,
 )
 
 TYPE_LOADED                 = 0x0100
@@ -47,7 +46,7 @@ class Type(TypeProxy):
         self.value_type: Callable = value_type
         self._methods: Dict[str, Method] = {}
         self._methodalias: Dict[str, List[TypeMemberAlias]] = defaultdict(list)
-        self._metamethods: Dict[str, MetaMethod] = {}
+        self._metamethods: Dict[str, Method] = {}
         self._params: List[MethodParameter] = params or []
         self._describers: List[TypeDescriber] = [describer]
     
@@ -246,52 +245,48 @@ class Type(TypeProxy):
         p = MethodParameter(name, typedecl, doc, default, flags)
         self._params.append(p)
 
+    def view_type_params_as_method(self):
+        """ 型引数をメソッドとして表現する """
+        from machaon.core.method import METHOD_EXTERNAL
+        meth = Method(self.typename, params=self._params, flags=METHOD_EXTERNAL)
+        return meth
+
     #
     # 特殊メソッド
     #
-    def get_meta_method(self, name):
+    def get_meta_method(self, name, *, nodefault=False):
         """ メタメソッドの定義を取得する """
         fn = self._metamethods.get(name)
-        if fn is None:
-            fn = meta_method_prototypes[name]
+        if fn is None and nodefault:
+            return None
+        elif fn is None:
+            fn = meta_methods.load_default(name, self)
         return fn
     
     def add_meta_method(self, method):
         """ メタメソッドの定義を追加する """
-        name = method.get_type()
-        self._metamethods[name] = method
+        self._metamethods[method.get_name()] = method
 
     def resolve_meta_method(self, name, context, args, typeargs=None, *, nodefault=False):
         """ メソッドと引数の並びを解決する """
         self.load_method_prototypes() # メソッド定義を読み込む
-        fn = self.get_meta_method(name)
+        fn: Method = self.get_meta_method(name, nodefault=nodefault)
+        if fn is None:
+            return None
+        fn.load_from_type(self, meta=True)
 
         if typeargs is None:
             typeargs = self.instantiate_args(context, ()) # デフォルト型引数を生成する
-        argpre, argpost = fn.prepare_invoke_args(context, args, typeargs)
-        
-        action = self.get_describer().get_metamethod_attribute(fn.get_action_target())
-        if nodefault and action is None:
-            return None
-        elif action is None:
-            action = getattr(self, "default_"+fn.get_action_target())
-        else:
-            # メタメソッドの指定によって引数を調整する
-            if fn.is_type_bound():
-                args = (self, *argpre, *argpost)
-            elif self.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
-                args = (self, *argpre, *argpost)
-            else:
-                selfval = argpost[0]
-                args = (selfval, *argpre, *argpost[1:])
-        return (fn, action, *args)
+        invargs = fn.prepare_invoke_args(args, selftype=self, context=context, typeargs=typeargs)
+        return (fn, *invargs)
 
-    def invoke_meta_method(self, method, action, *args):
+    def invoke_meta_method(self, method, *args):
         """ 
         内部実装で使うメソッドを実行する
         Returns:
             Any: 実行したメソッドの返り値
         """
+        action = method.get_action()
         try:
             return action(*args)
         except Exception as e:
@@ -370,7 +365,8 @@ class Type(TypeProxy):
         """ コンストラクタメソッドを返す """
         self.load_method_prototypes() # メソッド定義を読み込む
         fns = self.get_meta_method("constructor")
-        return fns.get_method()
+        fns.load_from_type(self, meta=True) # 直ちにロードする
+        return fns
 
     #
     # 型定義構文用のメソッド
