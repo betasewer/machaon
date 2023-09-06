@@ -10,12 +10,12 @@ from machaon.core.symbol import (
     SIGIL_OBJECT_PREVIOUS,
     SIGIL_LINE_QUOTER,
     SIGIL_BEGIN_USER_QUOTER,
-    SIGIL_SELECTOR_REVERSE_MESSAGE,
     SIGIL_SELECTOR_NEGATE_RESULT,
     SIGIL_SELECTOR_BASIC_RECIEVER,
     SIGIL_SELECTOR_TRAILING_ARGS,
     SIGIL_SELECTOR_CONSUME_ARGS,
     SIGIL_SELECTOR_SHOW_HELP,
+    SIGIL_SELECTOR_IGNORE_ARGS,
     SIGIL_OPERATOR_MEMBER_AT,
     SIGIL_CONSTRUCTOR_SELECTOR,
     SIGIL_END_TRAILING_ARGS,
@@ -652,13 +652,13 @@ def enum_selectable_method(typetraits, instance=None):
 class AffixedSelector:
     prefixes = [
         ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
-        ("REVERSE_MESSAGE", SIGIL_SELECTOR_REVERSE_MESSAGE),
         ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER), 
     ]
     suffixes = [
         ("TRAILING_ARGS", SIGIL_SELECTOR_TRAILING_ARGS),
         ("CONSUME_ARGS", SIGIL_SELECTOR_CONSUME_ARGS),
         ("SHOW_HELP", SIGIL_SELECTOR_SHOW_HELP),
+        ("IGNORE_ARGS", SIGIL_SELECTOR_IGNORE_ARGS),
     ]
 
     @classmethod
@@ -860,6 +860,7 @@ class MessageCharBuffer():
         consume = 0
         userquote_wait = False
         selector_prefixes = {x for _,x in AffixedSelector.prefixes}
+        selector_suffixes = {x for _,x in AffixedSelector.suffixes}
         for i in range(len(s)):
             self._readlength += 1
 
@@ -909,7 +910,8 @@ class MessageCharBuffer():
                 # ブロックを終了する
                 if nVOID:
                     yield CHAR_END_BLOCK
-                elif testchar(nch, SIGIL_SELECTOR_TRAILING_ARGS, SIGIL_SELECTOR_CONSUME_ARGS):
+                elif nch in selector_suffixes and testvoid(char(i+2), ")"):
+                    # モディファイア付きでブロックセレクタを終了する
                     yield SpecialChar(CHAR_BLOCK_SELECTOR_MOD, nch)
                     yield CHAR_END_BLOCK
                     consume += 1

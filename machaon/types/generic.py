@@ -689,22 +689,6 @@ class GenericMethods:
             return ObjectTuple(left.value.objects + [right])
         else:
             return ObjectTuple([left, right])
-    
-    @resolver.operator("void")
-    def void(self, left):
-        """ @method external
-        セレクタを引数無しの呼び出しに変換する。
-        Params:
-            left(Any): 任意のセレクタオブジェクト
-        Returns:
-            Any:
-        """
-        from machaon.core.invocation import BasicInvocation, FunctionInvocation
-        if isinstance(left, BasicInvocation):
-            left.set_modifier("IGNORE_ARGS")
-            return left
-        else:
-            return FunctionInvocation(left, {"IGNORE_ARGS"}, 0, 0)
 
 
 _GenericMethodResolver = GenericMethodResolver()

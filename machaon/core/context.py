@@ -3,9 +3,7 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.symbol import (
     BadTypename, 
-    normalize_method_target, normalize_method_name, 
     is_valid_object_bind_name, BadObjectBindName, full_qualified_name,
-    SIGIL_SCOPE_RESOLUTION,
 )
 from machaon.core.type.alltype import (
     TypeProxy, Type, TypeModule, TypeAny, instantiate_type, 
@@ -588,6 +586,8 @@ class InvocationContext:
 
     def constructor(self, context, value):
         """ @meta context 
+        Params:
+            value(Int|Str):
         """
         if isinstance(value, int):
             from machaon.process import Process

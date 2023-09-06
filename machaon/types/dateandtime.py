@@ -120,12 +120,22 @@ class DatetimeType:
         """
         return datetime.datetime.fromisoformat(value)
     
-    def now(self):
+    def now(self, tz=None):
+        """ @method external
+        現在の時刻を返す。
+        Params:
+            tz(Timezone): 
+        """
+        if not isinstance(tz, Timezone):
+            tz = None
+        return datetime.datetime.now(tz)
+
+    def utcnow(self):
         """ @method external
         現在の時刻を返す。
         """
-        return datetime.datetime.now()
-
+        return datetime.datetime.utcnow()
+    
     #
     # 取得
     #
@@ -225,20 +235,6 @@ class DatetimeType:
         """
         return d.timetz()
 
-    def now(self, _d, tz=None):
-        """ @method
-        現在の時刻を返す。
-        Params:
-            tz(Timezone): 
-        """ 
-        return datetime.datetime.now(tz)
-        
-    def utcnow(self, _d):
-        """ @method
-        現在の時刻を返す。
-        """ 
-        return datetime.datetime.utcnow()
-        
     #
     # timezone
     #
@@ -383,28 +379,28 @@ class DateType:
     #
     #
     def from_timestamp(self, s):
-        """ @meta external
+        """ @method external
         Params:
             s(Float):
         """
         return datetime.date.fromtimestamp(s)
     
     def from_iso(self, s):
-        """ @meta external
+        """ @method external
         Params:
             s(Str):
         """
         return datetime.date.fromisoformat(s)
     
     def from_ordinal(self, o):
-        """ @meta external
+        """ @method external
         Params:
             o(Int):
         """
         return datetime.date.fromordinal(o)
     
     def today(self):
-        """ @meta external
+        """ @method external
         今日の日付を表す。
         """
         return datetime.date.today()

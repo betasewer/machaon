@@ -92,9 +92,6 @@ class InvocationEntry():
 
         args = self.args
         kwargs = self.kwargs
-        if "IGNORE_ARGS" in self.invocation.modifier:
-            args = ()
-            kwargs = {}
 
         result = None
         from machaon.process import ProcessInterrupted
@@ -197,6 +194,9 @@ class BasicInvocation():
         if not m and straight:
             m.append("straight")
         return " ".join(m)
+
+    def is_modified_ignore_args(self):
+        return "IGNORE_ARGS" in self.modifier
 
     def _prepare(self, context, *argvalues) -> InvocationEntry:
         """ デバッグ用: ただちに呼び出しエントリを構築する """
@@ -367,6 +367,8 @@ class InstanceMethodInvocation(BasicInvocation):
     def prepare_invoke(self, context, *argobjects):
         a = [resolve_object_value(x) for x in argobjects]
         instance, *args = a
+        if self.is_modified_ignore_args():
+            args = ()
         method = self.resolve_bound_method(instance)
         return InvocationEntry(self, method, args, {})
 
@@ -401,7 +403,10 @@ class FunctionInvocation(BasicInvocation):
         return ("Function", self.get_method_name(), self.modifier_name())
     
     def prepare_invoke(self, context, *argobjects):
-        args = [resolve_object_value(x) for x in argobjects] # そのまま実行
+        if self.is_modified_ignore_args():
+            args = []
+        else:
+            args = [resolve_object_value(x) for x in argobjects]
         return InvocationEntry(self, self.fn, args, {})
     
     def get_action(self):
@@ -483,6 +488,7 @@ class TypeConstructorInvocation(BasicInvocation):
         # コンストラクタ引数を作成
         result_spec = MethodResult(TypeInstanceDecl(t))
         argvals = [x.value for x in argobjects] # オブジェクトを剝がす
+        # TODO: ignore-argsがついている場合、デフォルトコンストラクタを呼び出すべきか
         return InvocationEntry(self, t.construct, (context, *argvals), {}, result_spec)
     
     def get_action(self):

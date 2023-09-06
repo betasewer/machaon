@@ -105,7 +105,7 @@ def test_extend_select():
     # Generic TypeMethod
     gm = select_method("=", exttype, reciever=base)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identical", "")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identity", "")
     assert gm._invoke(cxt, base) == base
 
 

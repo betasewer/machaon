@@ -91,7 +91,7 @@ class BadMetaMethod(Exception):
         errtype = type(self.args[0]).__name__
         typename = self.args[1].get_typename()
         methname = self.args[2].get_action_target()
-        return " {}.{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
+        return " {}の{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
 
 #
 class MethodParameterNoDefault:
@@ -361,7 +361,8 @@ class Method:
         for i, tp in enumerate(self.params):
             if tp.is_variable():
                 argpairs.extend((tp, x) for x in args[ihead:])
-                ihead = -1
+                ihead = 0xFFFF
+                break
             else:
                 if ihead < len(args):
                     argpairs.append((tp, args[ihead]))
@@ -369,8 +370,12 @@ class Method:
                     argpairs.append((tp, MethodParameterDefault))
                 ihead += 1        
         
-        if ihead != -1 and ihead < len(args):
-            raise TypeError("引数'{}'より多くの型引数が与えられました: {}".format([x.get_name() for x,_ in argpairs], args))
+        if ihead < len(args) and not self.is_external_nullary():
+            if self.params:
+                pasig = "({})".format(", ".join(x.get_name() for x in self.params))
+            else:
+                pasig = "無し"
+            raise TypeError("引数{}に対し、余計に多くの引数が与えられました: {}".format(pasig, args))
 
         argvalues = []
         for i, (tp, valueo) in enumerate(argpairs):
@@ -428,7 +433,7 @@ class Method:
         """
         受け入れ可能な最大の引数の数を得る。
         Returns:
-            int: 個数。Noneで無限を示す
+            int: 個数。Noneで無限を示す。引数なし外部メソッドであれば-1を返す
         """
         if self.flags & METHOD_LOADED == 0:
             raise UnloadedMethod(self.name)
@@ -442,7 +447,7 @@ class Method:
         if self.is_external():
             cnt -= 1
         return cnt
-        
+
     # 必要な最小の引数の数を得る
     def get_required_argument_min(self) -> int:
         """
@@ -465,6 +470,10 @@ class Method:
         if self.is_external():
             cnt -= 1
         return cnt
+    
+    def is_nullary(self):
+        """ 引数が無い """
+        return len(self.params) == 0
     
     def load_from_type(self, this_type: TypeProxy, *, meta=False):
         """
@@ -842,14 +851,15 @@ class Method:
         # 型引数を集める
         if typeargs is not None:
             ivargs.extend(typeargs)
-        
-        # コンストラクタ引数を生成する
-        if context is not None:
-            argvalues = self.make_argument_row(context, args)
-            ivargs.extend(argvalues)
-        else:
-            ivargs.extend([x.value if isinstance(x,Object) else x for x in args])
-        
+
+        # 引数を生成する
+        if not external or not self.is_nullary():
+            if context is not None:
+                argvalues = self.make_argument_row(context, args)
+                ivargs.extend(argvalues)
+            else:
+                ivargs.extend([x.value if isinstance(x,Object) else x for x in args])
+            
         return ivargs
 
     def get_signature(self, *, fully=False):

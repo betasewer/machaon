@@ -1,6 +1,5 @@
 from machaon.core.symbol import (
-    SIGIL_MODULE_INDICATOR, SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
-    BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
+    SIGIL_MODULE_INDICATOR, SIGIL_PYMODULE_DOT
 )
 from machaon.core.type.decl import TypeDecl, TypeDeclError
 
@@ -142,7 +141,6 @@ def is_typename_continue_char(ch):
     return is_typename_first_char(ch) or (0x30 <= ord(ch) and ord(ch) <= 0x39) or ch in (SIGIL_PYMODULE_DOT,)
 
 def _typedecl_name(itr):
-    # Pythonの識別名で使える文字 + SIGIL_SCOPE_RESOLUTION + SIGIL_PYMODULE_DOT
     name = ""
     while not itr.eos():
         ch, pos = itr.advance()

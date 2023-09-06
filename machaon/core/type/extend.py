@@ -1,10 +1,6 @@
-from machaon.core.symbol import (
-    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
-    BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
-)
+
 from machaon.core.type.basic import DefaultProxy, RedirectProxy, ConstructorReturnTypeError
 
-        
 #
 #
 #
