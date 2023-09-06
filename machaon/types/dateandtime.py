@@ -51,7 +51,7 @@ def UTCOffset(utc_delta) -> datetime.tzinfo:
 # 
 #
 #
-class DatetimeType():
+class DatetimeType:
     """ @type trait [Datetime]
     日付と時刻
     ValueType:
@@ -67,9 +67,6 @@ class DatetimeType():
             mm?(Int): 分
             s?(Int): 秒
         """
-        if v is None:
-            return datetime.datetime.now()
-
         if isinstance(v, int):
             if m is None or d is None:
                 raise ValueError("指定された引数が足りません")
@@ -122,6 +119,12 @@ class DatetimeType():
             value(Str):
         """
         return datetime.datetime.fromisoformat(value)
+    
+    def now(self):
+        """ @method external
+        現在の時刻を返す。
+        """
+        return datetime.datetime.now()
 
     #
     # 取得
@@ -353,37 +356,58 @@ class DateType:
     ValueType:
         datetime.date
     """
-    def constructor(self, s):
-        """ @meta """
-        if s is None:
-            return datetime.datetime.now()
-
-        if isinstance(s, int):
-            return datetime.date.fromordinal(s)
-        elif isinstance(s, (list, tuple)):
-            if len(s) < 3:
-                raise ValueError("{}: 要素の数が足りません".format(s))
-            return datetime.date(s[0], s[1], s[2])
-
-        klass, sep, tail = s.partition("/")
-        klass = klass.lower()
-        if sep:
-            if klass == "posix":
-                return datetime.date.fromtimestamp(float(tail))
-            elif klass == "iso":
-                return datetime.date.fromisoformat(s)
+    def constructor(self, year=None, month=None, day=None):
+        """ @meta 
+        Params:
+            year(Int):
+            month(Int):
+            day(Int):
+        """
+        if isinstance(year, int):
+            return datetime.date(year, month, day)
         
         # 2009/12/01
-        parts = s.split("/")
-        if len(parts) >= 3:
-            y, m, d = parse_date(s)
-            return datetime.date(y, m, d)
+        if isinstance(year, str):
+            parts = year.split("/")
+            if len(parts) >= 3:
+                y, m, d = parse_date(year)
+                return datetime.date(y, m, d)
 
-        raise ValueError("不正な日付の形式です: " + s)
+        raise ValueError("不正な日付の形式です: " + year)
 
     def stringify(self, date):
         """ @meta """
         return date.strftime("%Y/%m/%d (%a) ")
+    
+    #
+    #
+    #
+    def from_timestamp(self, s):
+        """ @meta external
+        Params:
+            s(Float):
+        """
+        return datetime.date.fromtimestamp(s)
+    
+    def from_iso(self, s):
+        """ @meta external
+        Params:
+            s(Str):
+        """
+        return datetime.date.fromisoformat(s)
+    
+    def from_ordinal(self, o):
+        """ @meta external
+        Params:
+            o(Int):
+        """
+        return datetime.date.fromordinal(o)
+    
+    def today(self):
+        """ @meta external
+        今日の日付を表す。
+        """
+        return datetime.date.today()
 
     #
     # 取得
@@ -616,10 +640,8 @@ class TimeType:
             Str:
         """
         return d.strftime(format)
-#
-# Date:
-# サブタイプ
-#
+
+
 def digits_split_by_nondigit(s, required=None):
     parts = [""]
     for ch in s:

@@ -8,7 +8,7 @@ from machaon.core.type.describer import TypeDescriberClass
 #
 # どんな型にも共通のメソッドを提供
 #
-class GenericMethodResovler:
+class GenericMethodResolver:
     def __init__(self) -> None:
         self.describer = TypeDescriberClass(GenericMethods)
         self.describer.set_full_qualname("machaon.core")
@@ -30,10 +30,14 @@ class GenericMethodResovler:
         メソッドが無い場合は、GenericMethodsのメンバ名のなかから実装を探し出し、読み込みを行う。
         したがって、関数本体でのエイリアス名の指定は無効である。
         """
-        method = self.type.select_method(name)
+        fnname = self.operators.get(name)
+        if fnname is None:
+            return None
+
+        method = self.type.select_method(fnname)
         if method is None:
             # ロードする
-            attrname = normalize_method_target(name)
+            attrname = normalize_method_target(fnname)
             attr = self.describer.get_method_attribute(attrname)
             if attr is None:
                 return None
@@ -51,10 +55,19 @@ class GenericMethodResovler:
 
         return method
 
+    operators = {}
+
+    @classmethod
+    def operator(cls, *operators):
+        def _deco(fn):
+            for opr in operators:
+                cls.operators[normalize_method_name(opr)] = fn.__name__ 
+            return fn
+        return _deco
+    
+    
 
 def resolve_generic_method(name):
-    if name in operators:
-        name = operators[name]
     return _GenericMethodResolver.resolve(name)
 
 def resolve_generic_method_invocation(name, modbits=None):
@@ -68,13 +81,6 @@ def resolve_generic_method_invocation(name, modbits=None):
 # 演算子と実装の対応
 #
 operators = {
-    "==" : "equal",
-    "!=" : "not-equal",
-    "<=" : "less-equal",
-    "<" : "less",
-    ">=" : "greater-equal",
-    ">" : "greater",
-    "<=>" : "compare",
     "+" : "add",
     "-" : "sub",
     "*" : "mul",
@@ -110,8 +116,10 @@ class GenericMethods:
     エイリアス名はメソッドの設定で指定しても読み込まれません。
     operatorsに追加してください。
     """
+    resolver = GenericMethodResolver
 
     # 比較
+    @resolver.operator("==", "eq")
     def equal(self, left, right):
         """ @method external
         二項==演算子。（等しい）
@@ -123,6 +131,7 @@ class GenericMethods:
         """
         return left == right
 
+    @resolver.operator("!=", "ne")
     def not_equal(self, left, right):
         """ @method external
         二項!=演算子。（等しくない）
@@ -134,6 +143,7 @@ class GenericMethods:
         """
         return left != right
     
+    @resolver.operator("<=", "le")
     def less_equal(self, left, right):  
         """ @method external
         二項<=演算子。（以下）
@@ -145,6 +155,7 @@ class GenericMethods:
         """
         return left <= right
         
+    @resolver.operator("<", "lt")
     def less(self, left, right):
         """ @method external
         二項<演算子。（より小さい）
@@ -156,6 +167,7 @@ class GenericMethods:
         """
         return left < right
         
+    @resolver.operator(">=", "ge")
     def greater_equal(self, left, right):
         """ @method external
         二項>=演算子。（以上）
@@ -167,6 +179,7 @@ class GenericMethods:
         """
         return left >= right
         
+    @resolver.operator(">", "gt")
     def greater(self, left, right):
         """ @method external
         二項>演算子。（より大きい）
@@ -178,6 +191,7 @@ class GenericMethods:
         """
         return left > right
     
+    @resolver.operator("<=>", "compare")
     def compare(self, left, right):
         """ @method external
         Arguments:
@@ -193,6 +207,7 @@ class GenericMethods:
         else:
             return -1
     
+    @resolver.operator("between")
     def is_between(self, left, min, max):
         """ @method external
         Params:
@@ -203,7 +218,8 @@ class GenericMethods:
             Bool:
         """
         return min <= left and left <= max
-    
+
+    @resolver.operator("is")
     def is_(self, left, right):
         """ @method external
         is演算子。（同一オブジェクト）
@@ -215,6 +231,7 @@ class GenericMethods:
         """
         return left is right
         
+    @resolver.operator("is-not")
     def is_not(self, left, right):
         """ @method external
         is not演算子。（同一オブジェクトでない）
@@ -226,6 +243,7 @@ class GenericMethods:
         """
         return left is not right
 
+    @resolver.operator("is-none")
     def is_none(self, left) -> bool:
         """ @method external
         Noneである。
@@ -236,6 +254,7 @@ class GenericMethods:
         """
         return left is None
 
+    @resolver.operator("truthy")
     def truth(self, left) -> bool:
         """ @method external
         A が真か。
@@ -246,6 +265,7 @@ class GenericMethods:
         """
         return bool(left)
     
+    @resolver.operator("falsy", "not")
     def falsy(self, left) -> bool:
         """ @method external
         A が偽か。
@@ -257,6 +277,7 @@ class GenericMethods:
         return not left
 
     # 数学
+    @resolver.operator("+", "add")
     def add(self, left, right):
         """ @method external
         二項+演算子。（加算）
@@ -268,6 +289,7 @@ class GenericMethods:
         """
         return left + right
 
+    @resolver.operator("-", "sub")
     def sub(self, left, right):
         """ @method external
         二項-演算子。（減算）
@@ -279,6 +301,7 @@ class GenericMethods:
         """
         return left - right
 
+    @resolver.operator("*", "mul")
     def mul(self, left, right):
         """ @method external
         二項*演算子。（乗算）
@@ -290,6 +313,7 @@ class GenericMethods:
         """
         return left * right
         
+    @resolver.operator("@", "matmul")
     def matmul(self, left, right):
         """ @method external
         二項@演算子。（行列乗算）
@@ -301,6 +325,7 @@ class GenericMethods:
         """
         return left @ right
 
+    @resolver.operator("/", "div")
     def div(self, left, right):
         """ @method external
         二項/演算子。（除算）
@@ -312,6 +337,7 @@ class GenericMethods:
         """
         return left / right
         
+    @resolver.operator("//", "floordiv")
     def floordiv(self, left, right):
         """ @method external
         二項//演算子。（整数除算）
@@ -323,6 +349,7 @@ class GenericMethods:
         """
         return left // right
 
+    @resolver.operator("%", "mod")
     def mod(self, left, right):
         """ @method external
         二項%演算子。（剰余）
@@ -334,6 +361,7 @@ class GenericMethods:
         """
         return left % right
 
+    @resolver.operator("-=", "neg")
     def negative(self, left): 
         """ @method external
         単項-演算子。（符号反転）
@@ -344,6 +372,7 @@ class GenericMethods:
         """
         return -left
 
+    @resolver.operator("+=", "pos")
     def positive(self, left):
         """ @method external
         単項+演算子。（符号そのまま）
@@ -354,6 +383,7 @@ class GenericMethods:
         """
         return +left
 
+    @resolver.operator("**", "pow")
     def pow(self, left, right):
         """ @method external
         べき乗の計算。
@@ -366,6 +396,7 @@ class GenericMethods:
         return left ** right
 
     # ビット演算
+    @resolver.operator("&", "bitand")
     def bitand(self, left, right):
         """ @method external
         二項&演算子。（ビット論理積）
@@ -377,6 +408,7 @@ class GenericMethods:
         """
         return left & right
 
+    @resolver.operator("|", "bitor")
     def bitor(self, left, right):
         """ @method external
         二項|演算子。（ビット論理和）
@@ -388,6 +420,7 @@ class GenericMethods:
         """
         return left | right
         
+    @resolver.operator("^", "bitxor")
     def bitxor(self, left, right):        
         """ @method external
         二項^演算子。（ビット排他論理和）
@@ -398,7 +431,8 @@ class GenericMethods:
             Any:
         """
         return left ^ right
-        
+    
+    @resolver.operator("~", "bitinv")
     def bitinv(self, left):   
         """ @method external
         単項~演算子。（ビット否定）
@@ -408,7 +442,8 @@ class GenericMethods:
             Any:
         """
         return ~left
-        
+    
+    @resolver.operator(">>", "lshift")
     def lshift(self, left, right): 
         """ @method external
         二項<<演算子。（ビット左シフト）
@@ -419,7 +454,8 @@ class GenericMethods:
             Any:
         """
         return left << right
-        
+    
+    @resolver.operator("<<", "rshift")
     def rshift(self, left, right):
         """ @method external
         二項>>演算子。（ビット右シフト）
@@ -432,6 +468,7 @@ class GenericMethods:
         return left >> right
         
     # リスト関数
+    @resolver.operator("in")
     def is_in(self, left, right):
         """ @method external
         二項in演算子。（集合に含まれるか）
@@ -443,6 +480,7 @@ class GenericMethods:
         """
         return left in right
 
+    @resolver.operator("contains")
     def contains(self, left, right):
         """ @method external
         二項in演算子の逆。（集合が含むか）
@@ -454,6 +492,7 @@ class GenericMethods:
         """
         return right in left 
 
+    @resolver.operator("#", "at")
     def at(self, left, index):
         """ @method external
         添え字演算子。（要素アクセス）
@@ -465,6 +504,7 @@ class GenericMethods:
         """
         return left[index]
         
+    @resolver.operator("#>", "attrat")
     def attrat(self, left, key):
         """ @method external
         属性にアクセスする。
@@ -477,6 +517,7 @@ class GenericMethods:
         key = normalize_method_target(key)
         return getattr(left, key)
     
+    @resolver.operator("[:]", "slice") #
     def slice(self, left, start, stop):
         """ @method external
         添え字演算子。（要素アクセス）
@@ -490,6 +531,7 @@ class GenericMethods:
         return left[start:stop]
     
     # その他の組み込み関数
+    @resolver.operator("length", "len")
     def length(self, left):
         """ @method external
         長さを求める。
@@ -500,7 +542,8 @@ class GenericMethods:
         """
         return len(left)
 
-    def truth_then(self, context, left, if_, else_):
+    @resolver.operator("if-true")
+    def truthy_then(self, context, left, if_, else_):
         """ @method external context 
         leftを真理値として評価して真であればif_を、偽であればelse_を実行する。
         Arguments:
@@ -513,6 +556,7 @@ class GenericMethods:
         body = if_ if left.test_truth() else else_
         return body.run(left, context)
 
+    @resolver.operator("if-false")
     def falsy_then(self, context, left, if_, else_):
         """ @method external context 
         leftを真理値として評価して偽であればif_を、真であればelse_を実行する。
@@ -525,7 +569,8 @@ class GenericMethods:
         """
         body = if_ if not left.test_truth() else else_
         return body.run(left, context)
-        
+
+    @resolver.operator("test-then")
     def test_then(self, context, left, cond, if_, else_):
         """ @method external context 
         値を条件式で判定し、その結果でif節またはelse節を実行する。
@@ -543,7 +588,8 @@ class GenericMethods:
             return else_.run(left, context)
 
     # オブジェクト
-    def identical(self, obj):
+    @resolver.operator("=", "identity")
+    def identity(self, obj):
         """ @method external
         同一のオブジェクトを返す。
         Arguments:
@@ -553,6 +599,7 @@ class GenericMethods:
         """
         return obj
     
+    @resolver.operator("?", "pretty")
     def pretty(self, obj):
         """ @method external
         オブジェクトの詳細表示を返す。
@@ -565,6 +612,7 @@ class GenericMethods:
             return obj
         return obj.to_pretty()
 
+    @resolver.operator("type")
     def type(self, obj):
         """ @method external
         オブジェクトの型を返す。
@@ -575,6 +623,7 @@ class GenericMethods:
         """
         return obj.type
         
+    @resolver.operator("help")
     def help(self, context, obj):
         """ @method external context
         オブジェクトの説明、メソッドを表示する。
@@ -584,16 +633,7 @@ class GenericMethods:
         from machaon.types.fundamental import TypeType
         return TypeType().help(obj.type, context, context.spirit, obj.value)
     
-    def stringify(self, obj):
-        """ @method external
-        stringifyメソッドで文字列に変換する。
-        Arguments:
-            obj(Object): オブジェクト
-        Returns:
-            Str:
-        """
-        return obj.stringify()
-
+    @resolver.operator("=>", "bind")
     def bind(self, context, left, right):
         """ @method external context
         オブジェクトを変数に束縛する。
@@ -606,6 +646,7 @@ class GenericMethods:
         context.bind_object(right, left)
         return left
         
+    @resolver.operator("cast")
     def cast(self, left, right):
         """ @method external
         コンストラクタを介さずに型を変更する。
@@ -619,7 +660,8 @@ class GenericMethods:
         o = Object(right, left)
         return o
         
-    def cast_raw(self, context, left):
+    @resolver.operator("pycast")
+    def pycast(self, context, left):
         """ @method external context
         オブジェクトの型をPythonTypeに変える。
         Arguments:
@@ -632,6 +674,7 @@ class GenericMethods:
         o = Object(pytype, left)
         return o
         
+    @resolver.operator("/+", "tuplepush")
     def tuplepush(self, left, right):
         """ @method external
         タプルに追加する。
@@ -647,6 +690,7 @@ class GenericMethods:
         else:
             return ObjectTuple([left, right])
     
+    @resolver.operator("void")
     def void(self, left):
         """ @method external
         セレクタを引数無しの呼び出しに変換する。
@@ -662,5 +706,5 @@ class GenericMethods:
         else:
             return FunctionInvocation(left, {"IGNORE_ARGS"}, 0, 0)
 
-_GenericMethodResolver = GenericMethodResovler()
 
+_GenericMethodResolver = GenericMethodResolver()

@@ -3,7 +3,7 @@
 from machaon.core.type.decl import parse_type_declaration, TypeDecl
 from machaon.core.type.pytype import PythonType
 
-from machaon.core.symbol import QualTypename
+from machaon.core.symbol import QualTypename, full_qualified_name
 
 from machaon.core.object import Object
 
@@ -73,26 +73,35 @@ class TypeType:
         """ @task context
         型の説明、メソッド一覧を表示する。
         """
-        typ = typ.get_typedef()
-
         docs = []
         docs.append("{} [{}]".format(typ.get_conversion(), type(typ).__name__))
         docs.extend(typ.get_document().splitlines())
-        docs.append("［実装］")
-        docs.extend([x.get_value_full_qualname() for x in typ.get_all_describers()])
+
+        tdef = typ.get_typedef()
+        if tdef is not None:
+            docs.append("［実装］")
+            docs.extend([x.get_value_full_qualname() for x in tdef.get_all_describers()])
+        else:
+            vt = typ.get_value_type()
+            if vt:
+                docs.append("［値型］")
+                docs.append(full_qualified_name(vt))
         docs.append("")
         app.post("message", "\n".join(docs))
 
         # 型引数の表示
-        if len(typ.get_type_params()) > 0:
+        if tdef and len(tdef.get_type_params()) > 0:
             app.post("message", "［型引数］")
-            meth = typ.view_type_params_as_method()
+            from machaon.core.method import Method, METHOD_EXTERNAL
+            meth = Method(tdef.get_typename(), params=tdef.get_type_params(), flags=METHOD_EXTERNAL)
+            meth.add_result_self(tdef)
             app.post("message", meth.get_signature() + "\n")
 
         # コンストラクタの表示
-        app.post("message", "［コンストラクタ］")
-        meth = typ.get_constructor()
-        app.post("message", meth.get_signature() + "\n")
+        if tdef:
+            app.post("message", "［コンストラクタ］")
+            meth = typ.get_constructor()
+            app.post("message", meth.get_signature() + "\n")
 
         # メソッドの表示
         app.post("message", "［メソッド］")
@@ -217,20 +226,6 @@ class TypeType:
         return isinstance(type, PythonType)
     
 
-class NoneType:
-    """ @type [None]
-    PythonのNone型。 
-    """
-    def constructor(self, _s):
-        """ @meta 
-        いかなる引数もNoneに変換する
-        """
-        return None
-
-    def stringify(self, f):
-        """ @meta """
-        return "<None>"
-
 
 class BoolType:
     """ @type [Bool]
@@ -284,21 +279,6 @@ class BoolType:
     #
     # if
     #
-    def if_true(self, b, context, if_, else_):
-        """ @method context
-        文字列を評価し、真なら実行する。コンテキストを引き継ぐ。
-        @ == 32 if-true: "nekkedo" "hekkeo"
-        Params:
-            if_(Function): true 節
-            else_(Function): false 節 
-        Returns:
-            Object: 返り値
-        """
-        if b:
-            body = if_
-        else:
-            body = else_
-        return body.run_here(context) # コンテキストを引き継ぐ
 
 
 
@@ -341,7 +321,6 @@ fundamental_typenames = [QualTypename.parse(x) for x in [
     "ShellTheme:machaon.ui.theme.ShellTheme",          # ShellTheme
     "RootObject:machaon.types.app.RootObject",         # RootObject
     # 特殊
-    "None:machaon.types.fundamental.NoneType",               # None
     "ObjectCollection:machaon.core.object.ObjectCollection", # ObjectCollection
 ]]
 
@@ -352,6 +331,8 @@ def fundamental_types():
     module = TypeModule()
     for fulltypename in fundamental_typenames:
         module.define(fulltypename, describername=fundamental_describer_name)
+    from machaon.core.type.fundamental import NoneType
+    module.add_special_type(NoneType())
     return module
 
 

@@ -32,9 +32,9 @@ def test_modified_select():
     assert gm
     assert gm.display() == ("TypeMethod", "Generic:machaon.core#is-in", "consume-args")
 
-    gm = select_method("`identical", StrType)
+    gm = select_method("`identity", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identical", "basic-reciever")
+    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identity", "basic-reciever")
     
     gm = select_method("join?", StrType)
     assert gm

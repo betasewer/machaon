@@ -98,7 +98,7 @@ class RootObject:
                     entry["doc"] = "!!!型の読み込みに失敗!!!"
                     entry["describer"] = error
                 else:
-                    entry["doc"] = t.doc
+                    entry["doc"] = t.get_document()
                     entry["describer"] = t.get_describer_qualname()
                 yield entry
         

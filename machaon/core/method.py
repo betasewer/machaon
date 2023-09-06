@@ -1,4 +1,3 @@
-from subprocess import call
 from typing import (
     Any, Sequence, List, Dict, Union, Callable, 
     Optional, Tuple, Generator
@@ -395,14 +394,14 @@ class Method:
             typedecl(str): 型宣言
             doc(str): *説明文
         """
-        if isinstance(typedecl, str):
+        if not isinstance(typedecl, TypeDecl):
             typedecl = parse_type_declaration(typedecl)
         r = MethodResult(typedecl, doc)
         self.result = r
     
     def add_result_self(self, typedecl):
         """ メソッドのselfオブジェクトを返す """
-        if isinstance(typedecl, str):
+        if not isinstance(typedecl, TypeDecl):
             typedecl = parse_type_declaration(typedecl)
         r = MethodResult(typedecl, "selfオブジェクト", RETURN_SELF)
         self.result = r
@@ -853,7 +852,7 @@ class Method:
         
         return ivargs
 
-    def get_signature(self, *, fully=False, self_typename=None):
+    def get_signature(self, *, fully=False):
         """ @method alias-name [signature]
         メソッドの構文を返す。
         Returns:

@@ -131,7 +131,6 @@ class TypeAny(DefaultProxy):
         raise TypeAnyInstantiateError()
 
     
-
 class TypeAnyInstantiateError(Exception):
     def __str__(self) -> str:
         return "Any type cannot be instantiated"
@@ -142,6 +141,7 @@ class TypeUnion(DefaultProxy):
     共和型
     """
     def __init__(self, types):
+        super().__init__()
         self.types = types
     
     def get_typename(self):
@@ -197,6 +197,7 @@ class TypeUnion(DefaultProxy):
     def pprint_value(self, app, value):
         t = self.select_value_type(type(value))
         return t.pprint_value(app, value)
+
 
 
 # 型引数のデフォルト値

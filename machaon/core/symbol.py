@@ -15,7 +15,7 @@ class PythonBuiltinTypenames:
     }
 
 SPECIAL_TYPE_NAMES = {
-    "Any", "Object"
+    "Any", "Object", "None"
 }
 
 def normalize_typename(name: str) -> str:

@@ -245,12 +245,6 @@ class Type(TypeProxy):
         p = MethodParameter(name, typedecl, doc, default, flags)
         self._params.append(p)
 
-    def view_type_params_as_method(self):
-        """ 型引数をメソッドとして表現する """
-        from machaon.core.method import METHOD_EXTERNAL
-        meth = Method(self.typename, params=self._params, flags=METHOD_EXTERNAL)
-        return meth
-
     #
     # 特殊メソッド
     #

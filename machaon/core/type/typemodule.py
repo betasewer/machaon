@@ -66,7 +66,11 @@ class TypeModule:
             if module is not None:
                 tns = [x for x in tns if x.startswith(module)]
             if tns:
-                tdef = self._defs[QualTypename(value, tns[0]).stringify()]
+                if tns[0]:
+                    tn = QualTypename(value, tns[0]).stringify()
+                else:
+                    tn = value
+                tdef = self._defs[tn]
         elif code == TYPECODE_VALUETYPE:
             tn = self._lib_valuetype.get(value)
             if tn is not None:
@@ -344,6 +348,12 @@ class TypeModule:
     #
     # モジュールを操作する
     #
+    def add_special_type(self, t):
+        """ 特殊な型を追加する """
+        self._defs[t.get_typename()] = t
+        self._lib_typename[t.get_typename()] = [""]
+        self._lib_valuetype[full_qualified_name(t.get_value_type())] = t
+
     def add_fundamentals(self):
         """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
@@ -395,16 +405,6 @@ class TypeModule:
             li = self._reserved_mixins.setdefault(k, [])
             li.extend(v)
     
-    def remove_scope(self, scope):
-        """ 削除する 
-        Params:
-            scope(str):
-        """
-        if scope in self._children:
-            del self._children[scope]
-        else:
-            raise TypeModuleError("スコープ'{}'はこのモジュールに見つかりません".format(scope))
-
     def check_loading(self):
         """
         型を一通り読み込んだ後にエラーをチェックする

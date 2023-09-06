@@ -261,6 +261,18 @@ class DefaultProxy(TypeProxy):
     
     def get_document(self):
         return "<no document>"
+    
+    def get_describer(self, mixin):
+        return None
+
+    def check_type_instance(self, type):
+        return self is type
+    
+    def instantiate(self, context, args):
+        return self
+    
+    def instantiate_params(self):
+        return []
 
     def get_methods_bound_type(self):
         return METHODS_BOUND_TYPE_INSTANCE
@@ -268,6 +280,11 @@ class DefaultProxy(TypeProxy):
     def is_selectable_instance_method(self):
         return False
 
+    def summarize_value(self, value):
+        return self.stringify_value(value)
+
+    def pprint_value(self, app, value):
+        app.post("message", self.stringify_value(value))
 
 #
 # エラー

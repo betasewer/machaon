@@ -45,6 +45,7 @@ def test_fundamental_basic():
     assert t
     assert t.get_value_type() is type(None)
     assert t.is_none_type()
+    assert t.get_describer_qualname() == "NoneType"
     
     t = fundamental_type.find("ObjectCollection")
     assert t

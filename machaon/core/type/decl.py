@@ -187,12 +187,14 @@ def parse_type_declaration(decl):
     """
     if isinstance(decl, TypeProxy):
         return TypeInstanceDecl(decl)
-    if not decl:
-        raise BadTypename("<emtpy string>")
-    
-    from machaon.core.type.declparser import parse_typedecl
-    d = parse_typedecl(decl)
-    return d
+    elif isinstance(decl, str):
+        if not decl:
+            raise BadTypename("<emtpy string>")        
+        from machaon.core.type.declparser import parse_typedecl
+        d = parse_typedecl(decl)
+        return d
+    else:
+        raise TypeError("parse_type_declaration")
     
 def instantiate_type(decl, context, *args):
     """ 型宣言をインスタンス化する

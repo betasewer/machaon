@@ -246,12 +246,12 @@ def test_generic_methods():
     # static method
     ptest("1 add 2", 3)
     ptest("1 add 2 add 3", 6)
-    ptest("4 negative", -4)
-    ptest("(5 add 6) negative", -11)
+    ptest("4 neg", -4)
+    ptest("(5 add 6) neg", -11)
     ptest("(7 mul 8) add (9 mul 10) ", 7*8+9*10)
     ptest("(7 mul 8) add ((9 sub 10) mul 11) ", 7*8+(9-10)*11)
     ptest("7 mul 8 add 9 sub 10", (((7*8)+9)-10))
-    ptest("'573' length", 3)
+    ptest("'573' len", 3)
     ptest("GODZILLA slice: (9 sub 8) -1", "ODZILL")
 
 #
@@ -264,7 +264,7 @@ def test_dynamic_methods():
     # dynamic method
     ptest("ABC startswith: A", True)
     ptest("ABC ljust: 5 '_'", "ABC__")
-    ptest("ABC ljust: (2 mul 2) '_'", "ABC_")
+    ptest("ABC ljust: (2 * 2) '_'", "ABC_")
 
 def test_string_literals():
     # type method & string literal
@@ -294,7 +294,7 @@ def test_constructor():
     ptest("10 Int + ((20 Int) Float)", 30.0)
 
     # 引数あり
-    ptest("1 /+ 2 /+ 3 (Sheet: Int): positive negative :. row_values 1", [2,-2], q=sequence_equals)
+    ptest("1 /+ 2 /+ 3 (Sheet: Int): += -= :. row_values 1", [2,-2], q=sequence_equals)
 
     # ブロック型
     def type_equals(l, r):
