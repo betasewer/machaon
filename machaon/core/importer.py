@@ -302,7 +302,7 @@ class PyBasicModuleLoader:
             else:
                 for ts, fp in bucket:
                     app.post("message", "  {}".format(fp))
-                
+
     def is_package(self):
         """ パッケージかどうか判定する """
         return self.module.__spec__.submodule_search_locations is not None
