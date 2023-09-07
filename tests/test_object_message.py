@@ -5,7 +5,7 @@ import pytest
 import re
 from machaon.core.type.decl import TypeProxy
 
-from machaon.macatest import parse_test, put_instructions, run, parse_instr
+from machaon.macatest import parse_test, put_instructions, run, parse_instr, sequence_equals
 
 from machaon.core.message import (
     MessageCharBuffer, MessageEngine, MessageTokenizer
@@ -246,12 +246,12 @@ def test_generic_methods():
     # static method
     ptest("1 add 2", 3)
     ptest("1 add 2 add 3", 6)
-    ptest("4 negative", -4)
-    ptest("(5 add 6) negative", -11)
+    ptest("4 neg", -4)
+    ptest("(5 add 6) neg", -11)
     ptest("(7 mul 8) add (9 mul 10) ", 7*8+9*10)
     ptest("(7 mul 8) add ((9 sub 10) mul 11) ", 7*8+(9-10)*11)
     ptest("7 mul 8 add 9 sub 10", (((7*8)+9)-10))
-    ptest("'573' length", 3)
+    ptest("'573' len", 3)
     ptest("GODZILLA slice: (9 sub 8) -1", "ODZILL")
 
 #
@@ -264,7 +264,7 @@ def test_dynamic_methods():
     # dynamic method
     ptest("ABC startswith: A", True)
     ptest("ABC ljust: 5 '_'", "ABC__")
-    ptest("ABC ljust: (2 mul 2) '_'", "ABC_")
+    ptest("ABC ljust: (2 * 2) '_'", "ABC_")
 
 def test_string_literals():
     # type method & string literal
@@ -289,28 +289,18 @@ def test_parameter_list_end():
 
 #@run
 def test_constructor():
-    ptest("1 Int", 1)
+    ptest("1 Int", 1) # コンストラクタは呼ばれない
     ptest("1 Int + (2 Int)", 3)
     ptest("10 Int + ((20 Int) Float)", 30.0)
 
     # 引数あり
-    def deep_equals(l, r):
-        if len(l) != len(r):
-            return False
-        for ll, rr in zip(l, r):
-           if ll != rr:
-               return False
-        return True
-
-    ptest("1 /+ 2 /+ 3 Sheet: Int positive negative :. row_values 1", [2,-2], q=deep_equals)
+    ptest("1 /+ 2 /+ 3 (Sheet: Int): += -= :. row_values 1", [2,-2], q=sequence_equals)
 
     # ブロック型
     def type_equals(l, r):
-        if not isinstance(l,TypeProxy):
-            return False
         return l.get_conversion() == r
 
-    ptest("Sheet: Int positive negative", "Sheet: Int positive negative", q=type_equals)
+    ptest("Sheet[Int] =", "Sheet:machaon.core: Int:machaon.core", q=type_equals)
 
 
 def test_object_ref():

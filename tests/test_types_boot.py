@@ -1,5 +1,5 @@
 from machaon.core.context import instant_context
-from machaon.macatest import run
+from machaon.core.type.basic import TypeProxy
 
 
 def test_boot_package_load():
@@ -11,9 +11,6 @@ def test_boot_package_load():
     assert cxt.select_type("Date") is not None
     assert cxt.select_type("Time") is not None
 
-    assert cxt.type_module.get_subtype("Str", "Enclosed") is not None
-    assert cxt.type_module.get_subtype("Date", "Date8") is not None
-    assert cxt.type_module.get_subtype("Date", "Sep") is not None
 
 
 def test_boot_package_deduce():
@@ -26,3 +23,21 @@ def test_boot_package_deduce():
     from machaon.types.shell import Path
     t = context.type_module.deduce(Path)
     assert t.get_typename() == "Path"
+
+
+def test_load_new_module():
+    context = instant_context()
+
+    t = context.type_module.select("Flow", "machaon.flow")
+    assert t
+    assert isinstance(t, TypeProxy)
+    assert t.get_describer_qualname() == "machaon.flow.flow.Flow"
+
+    t = context.type_module.select("Flow", "machaon.flow")
+    assert t
+    assert isinstance(t, TypeProxy)
+    assert t.get_describer_qualname() == "machaon.flow.flow.Flow"
+
+    t = context.type_module.select("Flow", "machaon")
+    assert t
+    assert isinstance(t, TypeProxy)

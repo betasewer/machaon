@@ -48,7 +48,7 @@ class ObjectTuple():
     """ @type [Tuple]
     任意の型のオブジェクトを格納する配列。
     Params:
-        itemtype?(Type): 同一の要素型
+        itemtype(Type): 同一の要素型
     """
     def __init__(self, objects=None):
         self.objects = objects or []
@@ -157,7 +157,7 @@ class ObjectTuple():
         """ @task context [&]
         行を絞り込む。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         """
         # 関数を行に適用する
         def fn(subject):
@@ -169,7 +169,7 @@ class ObjectTuple():
         """ @task context
         行の順番を並べ替える。
         Params:
-            key(Function[](seq)): 並べ替え関数
+            key(Function[seq]): 並べ替え関数
         """
         def sortkey(subject):
             return key.run(subject).value
@@ -180,7 +180,7 @@ class ObjectTuple():
         """ @task context [%]
         値に関数を適用する。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         """
         for o in self.objects:
             predicate.run(o, context)
@@ -189,7 +189,7 @@ class ObjectTuple():
         """ @task context
         値に関数を適用し、新しいタプルとして返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Tuple: 新しいタプル
         """
@@ -228,7 +228,7 @@ class ObjectTuple():
         """ @task context alias-name [all]
         すべての要素に関数を適用し、論理積をとる。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Any: 結果
         """
@@ -241,7 +241,7 @@ class ObjectTuple():
         """ @task context alias-name [any]
         すべての要素に関数を適用し、論理和をとる。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Any: 結果
         """
@@ -354,7 +354,7 @@ class ObjectTuple():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, itemtype=None):
+    def constructor(self, context, itemtype, value):
         """ @meta context
         Params:
             Any:
@@ -367,7 +367,7 @@ class ObjectTuple():
         objs = [context.new_object(x, type=itemtype) for x in value]
         return ObjectTuple(objs)
     
-    def summarize(self, itemtype=None):
+    def summarize(self, itemtype):
         """ @meta """
         if len(self.objects) < 5:
             summ = [o.summarize() for o in self.objects]
@@ -377,7 +377,7 @@ class ObjectTuple():
             summ2 = [o.summarize() for o in self.objects[-2:]]
             return "{}".format(", ".join(summ1) + "..." + ", ".join(summ2))
 
-    def pprint(self, app, itemtype=None):
+    def pprint(self, itemtype, app):
         """ @meta """
         if len(self.objects) == 0:
             text = "空です" + "\n"

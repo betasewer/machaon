@@ -7,8 +7,9 @@ import os
 import ast
 import traceback
 
-from machaon.core.docstring import parse_doc_declaration
-from machaon.core.symbol import full_qualified_name
+from machaon.core.docstring import parse_doc_declaration, get_doc_declaration_type, DocStringDefinition
+from machaon.core.symbol import full_qualified_name, QualTypename, normalize_typename
+from machaon.core.error import ErrorSet
 
 def module_loader(expr=None, *, location=None):
     if location:
@@ -47,16 +48,14 @@ def module_loader_from_file(path, namebasepath):
     name = module_name_from_path(path, namebasepath)
     return PyModuleFileLoader(name, path)
 
+
 class PyBasicModuleLoader:
     """
     ローダーの基礎クラス
     """
     def __init__(self, m=None): # モジュールのインスタンスを受ける
         self._m = m
-        self._requires = []
-        self._defmodules = []
-        self._usingtypes = []
-        self._usingpackages = []
+        self._moduledoc = None
     
     @property
     def module(self):
@@ -93,122 +92,64 @@ class PyBasicModuleLoader:
     def load_package_directories(self):
         raise NotImplementedError()
     
-    def load_module_declaration(self, doc=None):
-        """ ソースコードの構文木からモジュールのドキュメント文字列を取り出し、解析する 
+    #
+    #
+    #
+    def is_module_document_loaded(self):
+        """ 構文木がロード済み """
+        return self._moduledoc is not None
+    
+    def load_module_declaration(self):
+        """ 
+        ソースコードの構文木からモジュールのドキュメント文字列を取り出し、解析する 
         """
-        if doc is None:
-            source = self.load_source()
-            if source is None:
-                return
-            disp = str(self)
-            tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
-            doc = ast.get_docstring(tree)
-        
-        if not doc:
+        if self.is_module_document_loaded():
             return
-
-        decl = parse_doc_declaration(doc, ("module",))
-        if decl is None:
-            return
+        self._moduledoc = ModuleDocDefinition(self)
+        self._moduledoc.load_declaration()
         
-        pser = decl.create_parser((
-            "Extra-Requirements Extra-Req",
-            "TypedefModules DefModules",
-            "UsingType",
-            "UsingPackage",
-        ))
-        # 追加の依存するmachaonパッケージ名
-        self._requires = []
-        for name in pser.get_string("Extra-Requirements").split(","):
-            package_name = name.strip()
-            if package_name:
-                self._requires.append(package_name)
-        
-        # パッケージで、型定義が含まれるモジュールを明示する
-        self._defmodules = []
-        for line in pser.get_lines("TypedefModules"):
-            module_name = line.strip()
-            if module_name:
-                m = module_loader(module_name)
-                self._defmodules.append(m)
-
-        # 参照する外部のmachaon型
-        self._usingtypes = []
-        for line in pser.get_lines("UsingType"):
-            typename, sep, modname = line.partition(":")
-            if not sep:
-                raise ValueError("Invalid module declaration: UsingType: [typename]:[modulename]")
-            from machaon.core.type.typedef import TypeDefinition, BadTypeDescription
-            d = TypeDefinition(value_type=modname.strip(), typename=typename.strip())
-            if not d.load_docstring():
-                raise BadTypeDescription()
-            self._usingtypes.append(d)
-            
-        # 参照する外部のパッケージ
-        self._usingpackages = []
-        for line in pser.get_lines("UsingPackage"):
-            packagename, sep, libname = line.partition(":")
-            if sep:
-                entry = (packagename.strip(), libname.strip())
-            else:
-                libname = line.strip()
-                entry = (libname, libname)
-            self._usingpackages.append(entry)
-
-    def get_package_extra_requirements(self):
-        """ 追加の依存するmachaonパッケージ名 """
-        return self._requires
-
     def get_package_defmodule_loaders(self):
         """ このパッケージ中にて型定義が含まれるモジュールを明示する """
-        return self._defmodules
+        if not self.is_module_document_loaded():
+            raise ValueError("モジュール宣言が読み込まれていません")
+        return self._moduledoc.defined_modules
 
     def get_using_extra_packages(self) -> List[Tuple[str, str]]:
         """ このモジュールが依存する外部パッケージ """
-        return self._usingpackages
-    
-    def scan_type_definitions(self):
-        """ ソースコードの構文木を解析し、型を定義するクラスの名前を取り出す
-        Yields:
-            TypeDefinition: ドキュメント文字列解析済みの定義オブジェクト
-        """
-        source = self.load_source()
-        disp = str(self)
-        tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+        if not self.is_module_document_loaded():
+            raise ValueError("モジュール宣言が読み込まれていません")
+        return self._moduledoc.using_packages
 
-        # モジュールのドキュメント文字列に書かれた宣言をロードする
-        moduledoc = ast.get_docstring(tree)
-        self.load_module_declaration(moduledoc)
+    def check_extra_packages_ready(self):
+        """ 依存するパッケージのロード状況 
+        Returns:
+            str -> bool: パッケージ名 -> 存在するか
+        """
+        rets = {}
+        for pkgname, module_name in self.get_using_extra_packages():
+            rets[pkgname] = module_loader(module_name).exists()
+        return rets
+
+    def get_typename_resolver(self):
+        """ このモジュール内における型宣言のリゾルバを返す """
+        self.load_module_declaration()
+        from machaon.core.type.declresolver import ModuleTypenameResolver
+        return ModuleTypenameResolver(self.get_name(), self._moduledoc.using_types)
+
+    def scan_type_describers(self):
+        """ ソースコードの構文木を解析し、型を定義するクラスを取り出す
+        Yields:
+            TypeDescriber: 定義オブジェクト
+        """
+        # モジュールのドキュメント文字を読み込む
+        self.load_module_declaration()
 
         # モジュールに定義されたクラスのドキュメント文字列を全て読んでいく
-        for node in ast.iter_child_nodes(tree):
-            if not isinstance(node, ast.ClassDef):
-                continue
-
-            doc = ast.get_docstring(node)
-            if not doc:
-                continue
-            doc = doc.lstrip()
-            
-            classname = None
-            for name, field in ast.iter_fields(node):
-                if name == "name":
-                    classname = field
-                    break
-            if classname is None:
-                raise ValueError("no classname")
-            
-            describer = ClassDescriber(AttributeLoader(self, classname), doc)
-
-            from machaon.core.type.typedef import TypeDefinition
-            d = TypeDefinition(describer, classname)
-            if not d.load_docstring(doc):
-                continue
-
-            yield d
+        for describer in self._moduledoc.scan_describers():
+            yield describer
 
         # 外部型
-        for d in self._usingtypes:
+        for d in self._moduledoc.using_types:
             yield d
     
     def scan_print_type_definitions(self, app):
@@ -223,9 +164,9 @@ class PyBasicModuleLoader:
 
         err = None
         try:
-            for typedef in self.scan_type_definitions():
-                typename = typedef.get_typename()
-                qualname = typedef.get_describer_qualname()
+            for typedesc in self.scan_type_describers():
+                typename = typedesc.get_typename()
+                qualname = typedesc.get_full_qualname()
                 yield {
                     "typename" : typename,
                     "qualname" : qualname
@@ -250,7 +191,7 @@ class PyBasicModuleLoader:
             List[PyBasicModuleLoader]:
         """
         modules = []
-        basepkg = self.module_name
+        basepkg = self.get_name()
         for pkgpath in self.load_package_directories(): # 開始モジュールのディレクトリから下降する
             # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
             skip_names = []
@@ -267,39 +208,199 @@ class PyBasicModuleLoader:
                 modules.append(loader)
 
         return modules
+
+    def load_all_module_loaders(self):
+        """ このモジュールとサブモジュール全てのローダーを返す """
+        modules = [self]
+        self.load_module_declaration()
+
+        defmods = self.get_package_defmodule_loaders()
+        if defmods:
+            modules.extend(defmods)
+        elif self.is_package():
+            modules.extend(self.get_all_submodule_loaders())
         
-    def load_all_filepaths(self):
-        from machaon.types.shell import Path
-        yield Path(self.load_filepath())
-        for loader in self.get_all_submodule_loaders():
-            yield Path(loader.load_filepath())
-            
+        with ErrorSet("サブモジュールの宣言を解析中") as errs:
+            for mod in modules:
+                errs.try_(mod.load_module_declaration)
+
+        return modules
+    
+    def load_all_describers(self):
+        """ このモジュールにある全ての型定義を抽出する """
+        # 依存パッケージをチェックする
+        notfound_depends = []
+        for name in self.get_using_extra_packages():
+            if not module_loader(name).exists():
+                notfound_depends.append(name)
+        if notfound_depends:
+            raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfound_depends)))
+    
+        # 型定義を抽出するだけ
+        for typedesc in self.scan_type_describers():
+            yield typedesc
+    
     def show_latest_files(self, app, full=False):
         """ @task
         パッケージ内のファイルをタイムスタンプ順に表示する。
         """
+        filepaths = []
+        try:
+            thispath = self.load_filepath()
+        except Exception as e:
+            app.post("message", e)
+            return
+        if thispath:
+            filepaths.append(thispath)
+        
+        try:
+            pkgdirs = self.load_package_directories()
+        except Exception as e:
+            app.post("message", e)
+            return
+        for pkgdir in pkgdirs:
+            for dirpath, dirnames, filenames in os.walk(pkgdir, topdown=True):
+                # キャッシュディレクトリを走査しない
+                dirnames[:] = [x for x in dirnames if not x.startswith((".", "__"))]
+                for filename in filenames:
+                    if filename.startswith((".","__")):
+                        continue
+                    fp = os.path.join(dirpath, filename)
+                    filepaths.append(fp)
+
         import datetime
-        from collections import defaultdict
-        stack = defaultdict(list)
-        for fp in self.load_all_filepaths():
-            t = fp.modtime().timestamp()
-            stack[t].append(fp)
-        
-        li = sorted(stack.keys(), reverse=True)
-        for kt in li[:-1 if not full else None]:
-            app.post("message", "[{}更新]".format(datetime.datetime.fromtimestamp(kt)))
-            for fp in stack[kt]:
-                app.post("message", "  {}".format(fp))
+        import bisect
+        buckets = []
+        for fp in filepaths:
+            if not os.path.isfile(fp):
+                continue
+            ts = datetime.datetime.fromtimestamp(os.stat(fp).st_mtime)
+            for bucket in buckets:
+                if bucket[0][0] <= ts and ts <= bucket[-1][0]:
+                    bisect.insort(bucket, (ts, fp))
+                    break
+                elif (bucket[0][0] - ts).seconds < 60:
+                    bucket.insert(0, (ts, fp))
+                    break
+                elif (ts - bucket[-1][0]).seconds < 60:
+                    bucket.append((ts, fp))
+                    break
+            else:
+                buckets.append([(ts, fp)])
                 
-        if not full:
-            app.post("message", "[{}更新]".format(datetime.datetime.fromtimestamp(li[-1])))
-            app.post("message", "  {}個のファイル".format(len(stack[li[-1]])))
-        
+        li = sorted(buckets, reverse=True, key=lambda x:x[0][0])
+        for i, bucket in enumerate(li):
+            t1 = bucket[0][0].strftime("%Y-%m-%d %H:%M:%S")
+            t2 = bucket[-1][0].strftime("%Y-%m-%d %H:%M:%S")
+            if t1 == t2:
+                tx = t1
+            else:
+                tx = t1 + "~" + t2
+            app.post("message", "[{}更新]".format(tx))
+            if not full and i == len(li)-1:
+                app.post("message", "  {}個のファイル".format(len(bucket)))
+            else:
+                for ts, fp in bucket:
+                    app.post("message", "  {}".format(fp))
+
     def is_package(self):
         """ パッケージかどうか判定する """
         return self.module.__spec__.submodule_search_locations is not None
 
 
+class ModuleDocDefinition:
+    """ モジュールのドキュメントを解析する 
+    TypedefModules|DefModules:
+        このパッケージの中で型定義を含むモジュールの名前。行で区切る
+        パッケージの__init__.pyに記載する。
+    UsingType|Using:
+        このモジュールが依存するmachaonの型名。行で区切る
+        モジュールごとに記載する。
+    UsingPackage:
+        このモジュールが依存するpythonのパッケージの名前。行で区切る
+        モジュールごとに記載する。
+    """
+    def __init__(self, module: PyBasicModuleLoader):
+        source = module.load_source()
+        if source is None:
+            return
+        disp = str(self)
+        tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+        #
+        self._module = module
+        self._ast = tree
+        self.defined_modules = []
+        self.using_types = []
+        self.using_packages = []
+        
+    def load_declaration(self):
+        """ 宣言部を解析する """
+        doc = ast.get_docstring(self._ast)
+        if not doc:
+            return
+
+        decl = parse_doc_declaration(doc, ("module",))
+        if decl is None:
+            return
+        
+        defs = DocStringDefinition.parse(decl, (
+            "TypedefModules DefModules",
+            "UsingType Using",
+            "UsingPackage",
+        ))
+        # パッケージで、型定義が含まれるモジュールを明示する
+        for line in defs.get_lines("TypedefModules"):
+            module_name = line.strip()
+            if module_name:
+                m = module_loader(module_name)
+                self.defined_modules.append(m)
+
+        # 参照する外部のmachaon型
+        for line in defs.get_lines("UsingType"):
+            fulltypename = QualTypename.parse(normalize_typename(line.strip()))
+            self.using_types.append(fulltypename)
+    
+        # 参照する外部のパッケージ
+        for line in defs.get_lines("UsingPackage"):
+            packagename, sep, libname = line.partition(":")
+            if sep:
+                entry = (packagename.strip(), libname.strip())
+            else:
+                libname = line.strip()
+                entry = (libname, libname)
+            self.using_packages.append(entry)
+
+    def scan_describers(self):
+        """
+        モジュールに定義されたクラスのドキュメント文字列を全て読み、machaon型のデスクライバを抽出する
+        """
+        from machaon.core.type.describer import TypeDescriberClass, create_type_describer
+        for node in ast.iter_child_nodes(self._ast):
+            if not isinstance(node, ast.ClassDef):
+                continue
+
+            doc = ast.get_docstring(node)
+            if not doc:
+                continue
+            doc = doc.lstrip()
+            
+            classname = None
+            for name, field in ast.iter_fields(node):
+                if name == "name":
+                    classname = field
+                    break
+            if classname is None:
+                raise ValueError("no classname")
+
+            atloader = AttributeLoader(self._module, classname)
+            desc = create_type_describer(TypeDescriberClass(atloader, doc))
+            if not desc.is_valid():
+                continue
+            yield desc
+
+#
+#
+#
 class PyModuleLoader(PyBasicModuleLoader):
     """
     配置されたモジュールからロードする
@@ -313,8 +414,11 @@ class PyModuleLoader(PyBasicModuleLoader):
         return self.module_name
 
     def exists(self):
-        spec = importlib.util.find_spec(self.module_name)
-        return spec is not None
+        try:
+            spec = importlib.util.find_spec(self.module_name)
+            return spec is not None
+        except:
+            return False
 
     def load_module(self):
         import sys
@@ -408,7 +512,7 @@ class PyModuleInstance(PyBasicModuleLoader):
         return "{} ({})".format(self._m.__name__, self.load_filepath())
 
 
-class AttributeLoader():
+class AttributeLoader:
     """
     モジュールの要素をロードする
     """
@@ -476,55 +580,6 @@ def get_first_package_path(module, spec):
         # 名前空間パッケージの場合、最初のパスのみを得る
         return next(iter(module.__path__), None)
     return None
-
-#
-#
-#
-class ClassDescriber():
-    def __init__(self, resolver, docstring=None):
-        self._resolver = resolver
-        self._resolved = None
-        self._docstring = docstring
-
-    def get_classname(self):
-        """ ロードせずに名前を取得 """
-        if isinstance(self._resolver, type):
-            return getattr(self._resolver, "__name__", None)
-        else:
-            return self._resolver.get_name()
-        
-    def get_docstring(self):
-        """ ロードせずにドキュメントを取得 """
-        if self._docstring is not None:
-            return self._docstring
-        else:
-            return getattr(self.klass, "__doc__", None)
-    
-    def get_full_qualname(self):
-        """ ロードせずにフルネームを取得 """
-        if isinstance(self._resolver, type):
-            return full_qualified_name(self._resolver)
-        else:
-            return self._resolver.get_qualname()
-    
-    def do_describe_object(self, type):
-        if hasattr(self.klass, "describe_object"):
-            self.klass.describe_object(type) # type: ignore
-
-    @property
-    def klass(self):
-        if self._resolved is None:
-            if isinstance(self._resolver, type):
-                self._resolved = self._resolver
-            else:
-                self._resolved = self._resolver()
-        return self._resolved
-
-    def get_attribute(self, name):
-        return getattr(self.klass, name, None)
-
-    def enum_attributes(self):
-        yield from enum_attributes(self.klass, self.klass)
 
 #
 #

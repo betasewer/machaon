@@ -84,12 +84,12 @@ class BasicLoadFile():
         raise NotImplementedError()
     
     #
-    def constructor(self, v):
+    def constructor(cls, v):
         """ @meta 
         Params:
             Path:
         """
-        return self.get_value_type()(v)
+        return cls(v)
 
     def stringify(self):
         """ @meta """
@@ -161,7 +161,7 @@ class BasicContextFile(BasicLoadFile):
         ファイルを開いて操作を行い、閉じる。
         Params:
             mode(Str): r/w
-            selector(Function[](seq)):
+            selector(Function[seq]):
         """
         with self.open(mode):
             selector(self)

@@ -1,26 +1,25 @@
 from machaon.core.symbol import (
     full_qualified_name, disp_qualified_name
 )
-from machaon.core.type.basic import DefaultProxy, RedirectProxy, instantiate_args
+from machaon.core.type.basic import DefaultProxy, RedirectProxy
 
 
 class PythonType(DefaultProxy):
     """
     Pythonの型
     """
-    def __init__(self, type, expression=None, ctorargs=None):
+    def __init__(self, type, expression=None):
         self.type = type
         self.expr = expression or full_qualified_name(type)
-        self.ctorargs = ctorargs or []
     
     @classmethod
-    def load_from_name(cls, name, ctorargs=None):
+    def load_from_name(cls, name):
         from machaon.core.importer import attribute_loader
         loader = attribute_loader(name)
         t = loader()
         if not isinstance(t, type):
             raise TypeError("'{}'はtypeのインスタンスではありません".format(name))
-        return cls(t, name, ctorargs)
+        return cls(t, name)
 
     def get_typename(self):
         return self.expr.rpartition(".")[2] # 最下位のシンボルのみ
@@ -44,10 +43,9 @@ class PythonType(DefaultProxy):
     def check_value_type(self, valtype):
         return issubclass(valtype, self.type)
 
-    def instantiate(self, context, args):
-        """ 引数を付け足す """
-        moreargs = instantiate_args(self, self.instantiate_params(), context, args)
-        return PythonType(self.type, self.expr, self._ctorargs + moreargs)
+    def instantiate(self, _context, _args):
+        """ 引数は無視される """
+        return PythonType(self.type, self.expr)
 
     def instantiate_params(self):
         """ 引数の制限なし """
@@ -73,8 +71,8 @@ class PythonType(DefaultProxy):
     def is_selectable_instance_method(self):
         return True 
     
-    def constructor(self, _context, value):
-        return self.type(value, *self.ctorargs)
+    def constructor(self, _context, args, _typeargs):
+        return self.type(*args)
 
     def stringify_value(self, value):
         tn = disp_qualified_name(type(value))
@@ -92,7 +90,5 @@ class PythonType(DefaultProxy):
     def pprint_value(self, app, value):
         app.post("message", self.summarize_value(value))
 
-    def reflux_value(self, value):
-        raise ValueError("reflux実装はPythonTypeでは提供されません")
 
 

@@ -21,7 +21,7 @@ class RepositoryArchive(BasicArchive):
 
     hostname = "<unspecified>"
     
-    def __init__(self, name, username=None, arcfilename=None, credential=None):
+    def __init__(self, name, username=None, arcfilename=None):
         super().__init__()
 
         if username is None:
@@ -31,7 +31,6 @@ class RepositoryArchive(BasicArchive):
 
         self.name = name
         self.username = username
-        self.credential = credential
         self.arcfilename = arcfilename or name + ".zip"
     
     def get_arcfilepath(self, workdir):
@@ -52,12 +51,12 @@ class RepositoryArchive(BasicArchive):
     def get_download_url(self) -> str:
         raise NotImplementedError()
     
-    def download_iter(self, outfilename):
+    def download_iter(self, outfilename, cred=None):
         """ ダウンロードを進めるイテレータ：ダウンロードしたサイズを返す """
         url = self.get_download_url()
         
         datas = []
-        with self.open_url(url, method="GET") as response:
+        with self.open_url(url, method="GET", cred=cred) as response:
             bits = None
             while True:
                 bits = response.read(type(self).download_chunk_size)
@@ -70,11 +69,11 @@ class RepositoryArchive(BasicArchive):
             for bits in datas:
                 fo.write(bits)
 
-    def query_download_size(self):
+    def query_download_size(self, cred=None):
         """ ダウンロードするアーカイブのサイズを取得：不定の時はNone """
         url = self.get_download_url()
         try: 
-            with self.open_url(url, method="HEAD") as response:
+            with self.open_url(url, method="HEAD", cred=cred) as response:
                 leng = response.headers.get("content-length", None)
                 if leng is None:
                     return None
@@ -86,15 +85,14 @@ class RepositoryArchive(BasicArchive):
     def query_hash(self):
         raise NotImplementedError()
  
-    #
-    def query_json(self, url, encoding="utf-8"):
-        with self.open_url(url) as response:
+    def query_json(self, url, *, encoding="utf-8", cred=None):
+        with self.open_url(url, method="GET", cred=cred) as response:
             blob = response.read()
         return json.loads(bytes(blob).decode(encoding))
         
-    def open_url(self, url, **kwargs):
-        if self.credential:
-            req = self.credential.build_request(self, url, **kwargs)
+    def open_url(self, url, *, cred=None, **kwargs):
+        if cred is not None:
+            req = cred.build_request(self, url, **kwargs)
         else:
             req = urllib.request.Request(url=url, **kwargs)
         try:
@@ -102,19 +100,6 @@ class RepositoryArchive(BasicArchive):
         except urllib.error.URLError as e:
             raise RepositoryURLError(e)
     
-    #
-    def add_credential(self, cred):
-        self.credential = cred
-    
-    def match_credential(self, cred):
-        if self.hostname != cred.hostname:
-            return False
-        if self.username != cred.username:
-            return False
-        if cred.repositoryname:
-            if self.name != cred.repositoryname:
-                return False
-        return True
 
 #
 #

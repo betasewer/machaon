@@ -131,6 +131,12 @@ def light_terminal_theme():
         "logfontsize" : None,
     })
     
+def white_terminal_theme():
+    return light_terminal_theme().extend("white-light", {
+        "color.framebackground" : "#FFFFFF"
+    })
+
+    
 def dark_blue_theme():
     return dark_classic_theme().extend("dark-blue", {
         "color.message-em" : "#00FFFF",

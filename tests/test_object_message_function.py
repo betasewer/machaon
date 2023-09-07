@@ -48,7 +48,8 @@ def test_parse_function():
         
         assert message_test(s, context, returned.get_typename(), "Function")
 
-        fundamental_type.define({
+        fundamental_type.select({
+            "DescriberName" : "instant",
             "Typename" : "Dog",
             "ValueType" : str,
             "Methods" : [{
@@ -82,11 +83,11 @@ def test_parse_function():
         assert message_test(fn.get_expression(), subcontext, lhso, rhs[0])
 
     lucky = {}
-    ltest("Function ctor -> @ name == lucky", lucky, True)
-    ltest("Function ctor -> @ type startswith: Golden", lucky, True)
-    ltest("Function ctor -> @ age * 10", lucky, 30)
-    ltest("Function ctor -> (@ age * 5 == 25) || (@ name == lucky)", lucky, True)
-    ltest("Function ctor -> 32 * 45 ", lucky, 32 * 45)
+    ltest("Function new: -> @ name == lucky", lucky, True)
+    ltest("Function new: -> @ type startswith: Golden", lucky, True)
+    ltest("Function new: -> @ age * 10", lucky, 30)
+    ltest("Function new: -> (@ age * 5 == 25) || (@ name == lucky)", lucky, True)
+    ltest("Function new: -> 32 * 45 ", lucky, 32 * 45)
 
 
 #
@@ -236,8 +237,8 @@ def test_message_sequential_function():
             "operator" : "Str",
         })
     
-    assert fn.memberspecs["values"].get_conversion() == "Tuple: Int"
-    assert fn.memberspecs["operator"].get_conversion() == "Str"
+    assert fn.memberspecs["values"].get_conversion() == "Tuple:machaon.core: Int:machaon.core"
+    assert fn.memberspecs["operator"].get_conversion() == "Str:machaon.core"
     r = fn({"values" : [7,8,9], "operator" : "+"})
     assert isinstance(r, int)
     assert r == 7+8+9

@@ -160,10 +160,9 @@ class Sheet():
     同じ型のオブジェクトに対する式を縦列とするデータの配列。
     Params:
         itemtype(Type): 要素の型（全要素に適用する）
-        *columns(Any): カラム表現（@またはアイテムへのセレクタ）
     """
-    def __init__(self, items, *, typeconversion=None, context=None, columns=None, uninitialized=False):
-        self.items = items
+    def __init__(self, items=None, *, typeconversion=None, context=None, columns=None, uninitialized=False):
+        self.items = items or []
         self.rows = []
         self.viewcolumns: List[DataColumnUnion] = []
         self.typeconversion = typeconversion
@@ -515,7 +514,7 @@ class Sheet():
     
     def add_column(self, column):
         """ @method
-        カラムを追加する
+        カラムを追加する（行への反映は行わない）
         Params:
             column(Any): カラム表現
         """
@@ -622,22 +621,22 @@ class Sheet():
         # 行を設定する
         if rowcommand is None:
             self.generate_rows(context, newcolumns)
-        elif rowcommand is "c":
+        elif rowcommand == "c":
             self.generate_rows_concat(context, newcolumns)
 
-    def view(self, context, columns):
+    def view(self, context, *columns):
         """ @method context
         列を表示する。
         Params:
-            columns(Tuple[Any]): カラム表現
+            *columns(Any): カラム表現
         """
         self._apply_view(context, columns, None)
     
-    def view_union(self, context, columns):
+    def view_extend(self, context, *columns):
         """ @method context alias-name [view+]
         列を追加する。同名の既に存在する列は追加しない。
         Params:
-            columns(Tuple[Any]): カラム表現
+            *columns(Any): カラム表現
         """
         # 空のデータからは空のビューしか作られない
         new_columns = []
@@ -664,7 +663,7 @@ class Sheet():
         """ @task context
         アイテムに関数を適用し、タプルとして返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Tuple:
         """
@@ -678,7 +677,7 @@ class Sheet():
         """ @task context
         アイテムに関数を適用し、偽でない返り値のみをタプルとして返す。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         Returns:
             Tuple:
         """
@@ -706,7 +705,7 @@ class Sheet():
         """ @task context [%]
         行に関数を適用する。
         Params:
-            predicate(Function[](seq)): 関数
+            predicate(Function[seq]): 関数
         """
         for entry in self.rows:
             subject = self.row_to_object(context, *entry)
@@ -716,7 +715,7 @@ class Sheet():
         """ @task context [&]
         行を絞り込む。
         Params:
-            predicate(Function[](seq)): 述語関数
+            predicate(Function[seq]): 述語関数
         """
         # 関数を行に適用する
         def fn(entry):
@@ -732,7 +731,7 @@ class Sheet():
         """ @task context
         行の順番を並べ替える。
         Params:
-            sorter?(Function[](seq)): 並べ替え関数
+            sorter?(Function[seq]): 並べ替え関数
         """
         if sorter is not None:
             def sortkey(entry):
@@ -785,10 +784,11 @@ class Sheet():
     #
     # オブジェクト共通関数
     #
-    def constructor(self, context, value, itemtype=None, *columns):
+    def constructor(self, context, itemtype, value, *columns):
         """ @meta context
         Params:
             Any: イテラブル型
+            *columns(Str): カラム
         """
         try:
             iter(value)
@@ -796,15 +796,15 @@ class Sheet():
             value = (value,)
         # 型変換を行う
         objs = [context.new_object(x, type=itemtype) for x in value]
-        return Sheet(objs, context=context, columns=columns)
+        return Sheet(objs, typeconversion=itemtype, context=context, columns=columns)
     
-    def summarize(self, itemtype, *_column_names):
+    def summarize(self, itemtype):
         """ @meta """
         col = ", ".join([x.get_name() for x in self.get_current_columns()])
         conv = "({})".format(itemtype.get_conversion()) if itemtype else ""
         return "[{}]{} {}件のアイテム".format(col, conv, self.count()) 
 
-    def pprint(self, app, itemtype, *_column_names):
+    def pprint(self, itemtype, app):
         """ @meta """
         if len(self.rows) == 0:
             text = "空です" + "\n"

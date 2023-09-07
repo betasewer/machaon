@@ -27,7 +27,7 @@ class DNDPad(AppKit.NSWindow):
 
         label = AppKit.NSTextField.alloc()
         label.initWithFrame_(((50.0, 130.0), (200.0, 150.0)))
-        label.setStringValue_("ここにドラッグ＆ドロップ")
+        label.setStringValue_("ここにドラッグ＆ドロップしてください")
         label.setDrawsBackground_(False)
         label.setBordered_(False)
         label.setSelectable_(True)
@@ -143,9 +143,9 @@ class TkDND:
         m = self._pad.update_openstatus()
         if m is not None:
             if m == PAD_OPENED:
-                self._switchbutton["text"] = "ドラッグ＆ドロップパネルを閉じる"
+                self._switchbutton["text"] = "ドラッグ＆ドロップ"
             elif m == PAD_CLOSED:
-                self._switchbutton["text"] = "ドラッグ＆ドロップパネルを開く"
+                self._switchbutton["text"] = "ドラッグ＆ドロップ"
                 if self._mainwindow:
                     self._mainwindow.makeKeyAndOrderFront_(AppKit.NSApp) # メインウィンドウをキーウィンドウに戻す
         return p

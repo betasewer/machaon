@@ -42,7 +42,7 @@ class TypeProxy:
         Params:
             mixin(Int): ミキシン実装のインデックス
         Returns:
-            Any:
+            TypeDescriber:
         """
         raise NotImplementedError()
 
@@ -52,10 +52,7 @@ class TypeProxy:
             Str:
         """
         describer = self.get_describer(mixin)
-        if isinstance(describer, type):
-            return full_qualified_name(describer)
-        else:
-            return str(describer)
+        return describer.get_full_qualname()
     
     def get_document(self):
         """
@@ -78,6 +75,16 @@ class TypeProxy:
 
     def instantiate_params(self):
         raise NotImplementedError()
+    
+    def instantiate_args(self, context, argvals, *, params=None): # paramsはテスト用
+        """ 引数を型チェックし生成する """
+        params = self.instantiate_params() if params is None else params
+        if not params and not argvals:
+            return []
+        from machaon.core.method import Method
+        method = Method(params=params)
+        argvals = method.make_argument_row(context, argvals, construct=True)
+        return argvals
 
     # メソッド関連
     def select_method(self, name):
@@ -114,25 +121,29 @@ class TypeProxy:
         raise NotImplementedError()
 
     # 特殊メソッド
-    def constructor(self, context, value):
+    def constructor(self, context, args):
         """ オブジェクトを構築する """
         raise NotImplementedError()
     
-    def construct(self, context, value):
+    def construct(self, context, value, *args):
         """ オブジェクトを構築して値を返す """
+        # 同じ型ならコンストラクタを呼ばない
         if self.check_value_type(type(value)):
-            return value # 変換の必要なし
-        ret = self.constructor(context, value)
+            return value
+        # コンストラクタを呼び出す
+        # TODO: Noneが渡された場合、デフォルトコンストラクタに分岐？
+        ret = self.constructor(context, (value, *args))
+        # 返り値を検査する
         if not self.check_value_type(type(ret)):
             raise ConstructorReturnTypeError(self, type(ret))
         return ret
 
-    def construct_obj(self, context, value):
+    def construct_obj(self, context, value, *args):
         """ Objectのインスタンスを返す """
         from machaon.core.object import Object
         if isinstance(value, Object):
             value = value.value
-        convval = self.construct(context, value)
+        convval = self.construct(context, value, *args)
         return self.new_object(convval)
     
     def new_object(self, value, *, object_type=None):
@@ -166,22 +177,18 @@ class TypeProxy:
 
     def pprint_value(self, app, value):
         raise NotImplementedError()
-
-    def reflux_value(self, value):
-        raise NotImplementedError()
     
-    # 基本型の判定
+    #
+    # 特殊型の判定
+    #
     def is_none_type(self):
-        raise NotImplementedError()
-
-    def is_object_collection_type(self):
-        raise NotImplementedError()
-        
-    def is_type_type(self):
-        raise NotImplementedError()
+        from machaon.core.type.fundamental import NoneType
+        return isinstance(self, NoneType)
     
-    def is_function_type(self):
-        raise NotImplementedError()
+    def is_object_collection_type(self):
+        from machaon.core.type.fundamental import ObjectCollectionType
+        return isinstance(self, ObjectCollectionType)
+
 
 
 class RedirectProxy(TypeProxy):
@@ -234,8 +241,8 @@ class RedirectProxy(TypeProxy):
     def is_selectable_instance_method(self):
         return self.redirect().is_selectable_instance_method()
 
-    def constructor(self, context, value):
-        return self.redirect().constructor(context, value)
+    def constructor(self, context, args, typeargs=None):
+        return self.redirect().constructor(context, args, typeargs)
 
     def stringify_value(self, value):
         return self.redirect().stringify_value(value)
@@ -246,21 +253,6 @@ class RedirectProxy(TypeProxy):
     def pprint_value(self, spirit, value):
         return self.redirect().pprint_value(spirit, value)
     
-    def reflux_value(self, value):
-        return self.redirect().reflux_value(value)
-    
-    def is_none_type(self):
-        return self.redirect().is_none_type()
-
-    def is_object_collection_type(self):
-        return self.redirect().is_object_collection_type()
-        
-    def is_type_type(self):
-        return self.redirect().is_type_type()
-
-    def is_function_type(self):
-        return self.redirect().is_function_type()
-
 
 class DefaultProxy(TypeProxy):
     # デフォルト値を提供する
@@ -269,6 +261,18 @@ class DefaultProxy(TypeProxy):
     
     def get_document(self):
         return "<no document>"
+    
+    def get_describer(self, mixin):
+        return None
+
+    def check_type_instance(self, type):
+        return self is type
+    
+    def instantiate(self, context, args):
+        return self
+    
+    def instantiate_params(self):
+        return []
 
     def get_methods_bound_type(self):
         return METHODS_BOUND_TYPE_INSTANCE
@@ -276,32 +280,11 @@ class DefaultProxy(TypeProxy):
     def is_selectable_instance_method(self):
         return False
 
-    def is_none_type(self):
-        return False
+    def summarize_value(self, value):
+        return self.stringify_value(value)
 
-    def is_object_collection_type(self):
-        return False
-        
-    def is_type_type(self):
-        return False
-
-    def is_function_type(self):
-        return False
-
-
-#
-#
-#
-def instantiate_args(thistype, params, context, argvals):
-    """ 引数を型チェックし生成する """
-    from machaon.core.method import Method
-    method = Method(params=params)
-    if not method.check_param_count(len(argvals)):
-        raise TypeError("引数より多くの型引数が与えられました: {} ({})".format(str(thistype), ",".join([str(x) for x in argvals])))
-
-    if argvals:
-        argvals = method.make_argument_row(context, argvals, construct=True)
-    return argvals
+    def pprint_value(self, app, value):
+        app.post("message", self.stringify_value(value))
 
 #
 # エラー
@@ -326,5 +309,21 @@ class TypeConversionError(Exception):
     def __str__(self):
         srctype, desttype = self.args
         return "'{}'型の引数に'{}'型の値を代入できません".format(desttype, full_qualified_name(srctype))
+
+# 型宣言における間違い
+class BadTypeDeclaration(Exception):
+    pass
+
+# メソッド宣言における間違い
+class BadMemberDeclaration(Exception):
+    pass
+
+# メソッド実装を読み込めない
+class BadMethodDelegation(Exception):
+    pass
+
+# サポートされない
+class UnsupportedMethod(Exception):
+    pass
 
 

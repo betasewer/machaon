@@ -3,9 +3,7 @@ from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Unio
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.symbol import (
     BadTypename, 
-    normalize_method_target, normalize_method_name, 
     is_valid_object_bind_name, BadObjectBindName, full_qualified_name,
-    SIGIL_SCOPE_RESOLUTION,
 )
 from machaon.core.type.alltype import (
     TypeProxy, Type, TypeModule, TypeAny, instantiate_type, 
@@ -132,6 +130,15 @@ class InvocationContext:
         if elem:
             return elem.object
         return None
+        
+    def get_previous_object(self, delta) -> Optional[Object]:
+        proc = self.spirit.get_process()
+        if proc is None:
+            return None
+        dest = proc.get_index() - delta
+        if dest < 1:
+            return None
+        return self.get_object(str(dest))
 
     def get_selected_objects(self) -> List[Object]:
         li = [] # type: List[Object]
@@ -159,29 +166,20 @@ class InvocationContext:
         self.subject_object = None
     
     #    
-    def select_type(self, typecode, *, scope=None) -> Optional[TypeProxy]:
+    def select_type(self, typecode, describername=None) -> Optional[TypeProxy]:
         """ 型名を渡し、型定義を取得する。関連するパッケージをロードする """
         if isinstance(typecode, TypeProxy):
             return typecode
-        
-        if scope is None:
-            if isinstance(typecode, str) and SIGIL_SCOPE_RESOLUTION in typecode:
-                typecode, _, scope = typecode.rpartition(SIGIL_SCOPE_RESOLUTION)
-        if scope:
-            # 関連パッケージをロードする
-            package = self.root.get_package(scope, fallback=False)
-            self.root.load_pkg(package)
-        
-        t = self.type_module.get(typecode, scope=scope)
+        t = self.type_module.select(typecode, describername)
         if t is None:
             return None
         return t
 
-    def get_type(self, typename, *, scope=None) -> TypeProxy:
+    def get_type(self, typecode) -> TypeProxy:
         """ 型名を渡し、型定義を取得する """
-        t = self.type_module.get(typename, scope=scope)
+        t = self.type_module.get(typecode)
         if t is None:
-            raise BadTypename(typename)
+            raise BadTypename(typecode)
         return t
     
     def get_py_type(self, type) -> PythonType:
@@ -226,18 +224,11 @@ class InvocationContext:
         """ 新しい型を作成するが、モジュールに登録しない """
         return Type(describer).load()
 
-    def get_subtype(self, typecode, subtypename) -> Type:
-        """ サブタイプを取得する """
-        t = self.type_module.get_subtype(typecode, subtypename)
-        if t is None:
-            raise BadTypename((typecode, subtypename))
-        return t
-
     def instantiate_type(self, conversion, *args) -> TypeProxy:
         """ 型をインスタンス化する """
         return instantiate_type(conversion, self, *args)
     
-    def new_object(self, value: Any, *args, type=None, conversion=None) -> Object:
+    def new_object(self, value: Any, *args, type=None, conversion=None, module=None) -> Object:
         """ 型名と値からオブジェクトを作る。値の型変換を行う 
         Params:
             value(Any): 値; Noneの場合、デフォルトコンストラクタを呼び出す
@@ -253,7 +244,7 @@ class InvocationContext:
                 return extension.load(basic.type).new_object(basic.value)
 
         if type and not isinstance(type, TypeAny):
-            t = self.select_type(type)
+            t = self.select_type(type, module)
             if t is None:
                 if isinstance(type, str):
                     raise BadTypename(type)
@@ -262,11 +253,11 @@ class InvocationContext:
             if value is None and not args:
                 convobj = t.construct_obj(self, None) # デフォルトコンストラクタ
             else:
-                convobj = t.construct_obj(self, value)
+                convobj = t.construct_obj(self, value, *args)
             return convobj
         elif conversion:
-            tins = self.instantiate_type(conversion, *args)
-            return tins.construct_obj(self, value)
+            tins = self.instantiate_type(conversion)
+            return tins.construct_obj(self, value, *args)
         else:
             if isinstance(value, Object):
                 return value
@@ -451,7 +442,9 @@ class InvocationContext:
         """ @method alias-name [invocations invs]
         呼び出された関数のリスト。
         Returns:
-            Sheet[](message-expression, result):
+            Sheet[]:
+        Decorates:
+            @ view: message-expression result
         """ 
         vals = []
         for inv in self.invocations:
@@ -465,7 +458,9 @@ class InvocationContext:
         """ @task alias-name [errors]
         サブコンテキストも含めたすべてのエラーを表示する。
         Returns:
-            Sheet[](context-id, message-expression, error):
+            Sheet[]:
+        Decorates:
+            @ view: context-id message-expression error
         """
         errors = []
 
@@ -497,7 +492,9 @@ class InvocationContext:
         """ @method alias-name [instructions instrs]
         コンパイルされた内部命令
         Returns:
-            Sheet[ObjectCollection](instruction, options, arg-instruction, arg-values):
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: instruction options arg-instruction arg-values
         """
         for code, *values in self._log:
             if code == LOG_MESSAGE_CODE:
@@ -537,7 +534,9 @@ class InvocationContext:
         """ @method alias-name [sub-contexts subs]
         サブコンテキストの一覧。
         Returns:
-            Sheet[Context](is-failed, message, last-result):
+            Sheet[Context]:
+        Decorates:
+            @ view: is-failed message last-result
         """
         rets = []
         submessages = [x for x in self._log if x[0] == LOG_MESSAGE_BEGIN_SUB]
@@ -587,6 +586,8 @@ class InvocationContext:
 
     def constructor(self, context, value):
         """ @meta context 
+        Params:
+            value(Int|Str):
         """
         if isinstance(value, int):
             from machaon.process import Process
@@ -617,7 +618,10 @@ def instant_context(subject=None):
     if _instant_context_types is None:
         t = TypeModule()
         t.add_fundamentals()
-        t.add_default_modules()        
+        errs = t.add_default_module_types()
+        if errs:
+            raise errs[0]
+        t.check_loading()
         _instant_context_types = t
 
     from machaon.process import TempSpirit

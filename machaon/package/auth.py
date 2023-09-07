@@ -3,7 +3,7 @@ import base64
 import os
 import configparser
 
-class Credential():
+class Credential:
     def __init__(self, hostname, username):
         self.hostname = hostname
         self.username = username
@@ -30,43 +30,52 @@ class BasicAuth(Credential):
         kwargs["headers"] = headers
         req = urllib.request.Request(url=url, **kwargs)
         return req
+    
+#
+#
+#
+class CredentialDir:
+    def __init__(self, d):
+        self._d = d
 
-
-def create_credential(root, target=None, *, repository=None):  
-    # username@hostname
-    # username/repositoryname@hostname
-    keys = []
-    if target:
-        # 文字列で指定
+    def search(self, target):      
+        """ 文字列で検索 """
         user, sep, hostname = target.partition("@")
         if not sep:
             raise ValueError("'ユーザー名@ホスト名'の形式で指定してください")
         username, sep, repositoryname = user.partition("/")
         hostname, username, repositoryname = [x.strip() for x in (hostname, username, repositoryname)]
-        keys.append(target)
+        keys = [target]
         if repositoryname:
             keys.append("{}@{}".format(username, hostname))
-    elif repository:
+        return self._search(keys, hostname, username)
+
+    def search_from_repository(self, repository):
+        """ リポジトリオブジェクトから検索 """
         hostname = repository.hostname
         username = repository.username
         repositoryname = repository.name
-        keys.append("{}/{}@{}".format(username, repositoryname, hostname))
-        keys.append("{}@{}".format(username, hostname))
-
-    # パスワードをディレクトリから開いて読みだす
-    d = root.get_credential_dir()
-    if not os.path.isdir(d):
-        os.makedirs(d) # ディレクトリを作成しておく
-        raise ValueError("認証情報iniファイルをmachaon/credentialに配置してください")
+        return self._search([
+            "{}/{}@{}".format(username, repositoryname, hostname),
+            "{}@{}".format(username, hostname)
+        ], hostname, username)
     
-    password = None
-    typename = None
-    for name in os.listdir(d):
-        p = os.path.join(d, name)
-        if os.path.isfile(p):
+    def _search(self, keys, hostname, username):
+        """ 
+        パスワードをディレクトリから検索し、認証オブジェクトを作成する
+        Params:
+            keys(Sequence[str]): 検索するエントリ名の候補
+        """
+        if not self._d.isdir():
+            self._d.makedirs() # ディレクトリを作成しておく
+            raise ValueError("認証情報iniファイルをmachaon/credentialに配置してください")
+        
+        password = None
+        typename = None
+        for f in self._d.listdirfile():
             c = configparser.ConfigParser()
             try:
-                c.read(p)
+                c.read(f)
             except:
                 continue
             # レポジトリ指定のキーと指定なしのキーで検索する
@@ -75,13 +84,17 @@ def create_credential(root, target=None, *, repository=None):
                 password = c.get(hitkey, "password")
                 typename = c.get(hitkey, "type", fallback=None)
                 break
-    
-    if password is None:
-        raise ValueError("認証情報が見つかりませんでした")
-    
-    # 認証オブジェクト
-    if typename == "basic":
-        return BasicAuth(hostname, username, password)
-    else:
-        raise ValueError("type='{}': サポートされていない認証形式です".format(typename))
+        
+        if password is None:
+            raise ValueError("認証情報が見つかりませんでした")
+        
+        # 認証オブジェクト
+        if typename == "basic":
+            return BasicAuth(hostname, username, password)
+        else:
+            raise ValueError("type='{}': サポートされていない認証形式です".format(typename))
+
+
+
+
 

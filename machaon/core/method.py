@@ -1,10 +1,8 @@
-from subprocess import call
 from typing import (
     Any, Sequence, List, Dict, Union, Callable, 
     Optional, Tuple, Generator
 )
 
-from machaon.core.importer import ClassDescriber
 from machaon.core.type.basic import METHODS_BOUND_TYPE_TRAIT_INSTANCE, TypeProxy
 from machaon.core.type.decl import TypeInstanceDecl
 
@@ -12,12 +10,13 @@ import types
 import inspect
 
 from machaon.core.object import Object
-from machaon.core.symbol import normalize_method_target, normalize_method_name
-from machaon.core.docstring import parse_doc_declaration
+from machaon.core.symbol import normalize_method_target, normalize_method_name, SIGIL_OPERATOR_MEMBER_AT, normalize_typename
+from machaon.core.docstring import parse_doc_declaration, DocStringDefinition, DocStringDeclaration
 from machaon.core.type.decl import (
     TypeDecl, parse_type_declaration, split_typename_and_value
 )
-from machaon.core.type.basic import TypeConversionError
+from machaon.core.type.declresolver import BasicTypenameResolver
+from machaon.core.type.basic import TypeConversionError, TypeProxy
 from machaon.core.type.extend import get_type_extension_loader
 
 # imported from...
@@ -27,35 +26,35 @@ from machaon.core.type.extend import get_type_extension_loader
 #
 
 #
-METHOD_CONTEXT_BOUND = 0x0001
-METHOD_SPIRIT_BOUND = 0x0002
-METHOD_TASK = 0x0004 | METHOD_SPIRIT_BOUND
-METHOD_TYPE_BOUND = 0x0010
-METHOD_CONSUME_TRAILING_PARAMS = 0x0020
-METHOD_EXTERNAL_TARGET = 0x0040
-METHOD_BOUND_TRAILING = 0x0080
-METHOD_LOADED = 0x0100
-METHOD_DECL_LOADED = 0x0200
-METHOD_HAS_RECIEVER_PARAM = 0x0400 # レシーバオブジェクトもパラメータとして扱う
+METHOD_CONTEXT_BOUND            = 0x0001
+METHOD_SPIRIT_BOUND             = 0x0002
+METHOD_TASK                     = 0x0004 | METHOD_SPIRIT_BOUND
+METHOD_TYPE_BOUND               = 0x0008 # デスクライバのクラスがselfとして渡される
+METHOD_TYPEVAL_BOUND            = 0x0010 # デスクライバのインスタンスがselfとして渡される
+METHOD_EXTERNAL                 = 0x0020 # レシーバオブジェクトもパラメータとして扱う
+METHOD_BOUND_TRAILING           = 0x0040 # ?
+METHOD_LOADED                   = 0x0100
+METHOD_DECL_LOADED              = 0x0200
+METHOD_LOADBIT_MASK             = 0x0F00 
 
-METHOD_PARAMETER_UNSPECIFIED = 0x1000
-METHOD_RESULT_UNSPECIFIED = 0x2000
-METHOD_UNSPECIFIED_MASK = 0x3000
-METHOD_KEYWORD_PARAMETER = 0x4000
+METHOD_PARAMETER_UNSPECIFIED        = 0x1000
+METHOD_RESULT_UNSPECIFIED           = 0x2000
+METHOD_UNSPECIFIED_MASK             = 0x3000
+METHOD_KEYWORD_PARAMETER            = 0x4000
+METHOD_CONSUME_TRAILING_PARAMETERS  = 0x8000 # ?
 
-METHOD_INVOKEAS_FUNCTION = 0x10000          # レシーバを受け取らない関数
-METHOD_INVOKEAS_BOUND_METHOD = 0x20000      # インスタンスメソッド、レシーバを受け取る
-METHOD_INVOKEAS_PROPERTY = 0x30000          # インスタンスのプロパティ、レシーバのみを受け取る
-METHOD_INVOKEAS_BOUND_FUNCTION = 0x40000    # レシーバを第1引数に受け取る関数
-METHOD_INVOKEAS_IMMEDIATE_VALUE = 0x50000   # 値、レシーバを受け取らない
-METHOD_INVOKEAS_MASK = 0xF0000
+METHOD_INVOKEAS_FUNCTION            = 0x10000  # レシーバを受け取らない関数
+METHOD_INVOKEAS_BOUND_METHOD        = 0x20000  # インスタンスメソッド、レシーバを受け取る
+METHOD_INVOKEAS_PROPERTY            = 0x30000  # インスタンスのプロパティ、レシーバのみを受け取る
+METHOD_INVOKEAS_BOUND_FUNCTION      = 0x40000  # レシーバを第1引数に受け取る関数
+METHOD_INVOKEAS_IMMEDIATE_VALUE     = 0x50000  # 値、レシーバを受け取らない
+METHOD_INVOKEAS_MASK                = 0xF0000
 
-METHOD_FROM_CLASS_MEMBER    = 0x100000  # クラスメンバから得た定義
-METHOD_FROM_INSTANCE_MEMBER = 0x200000  # インスタンスメンバから得た定義
-METHOD_FROM_USER_DEFINITION = 0x400000  # コメントや辞書による定義 
-METHOD_DEFINITION_FROM_MASK = 0xF00000  
+METHOD_FROM_CLASS_MEMBER            = 0x100000  # クラスメンバから得た定義
+METHOD_FROM_INSTANCE_MEMBER         = 0x200000  # インスタンスメンバから得た定義
+METHOD_FROM_USER_DEFINITION         = 0x400000  # コメントや辞書による定義 
+METHOD_DEFINITION_FROM_MASK         = 0xF00000  
 
-METHOD_META_NOEXTRAPARAMS = 0x1000000
 
 #
 PARAMETER_REQUIRED = 0x0100
@@ -79,9 +78,9 @@ class MethodLoadError(Exception):
         return self.args[0]
     def name(self):
         return self.args[1]
-    
-    def child_exception(self):
-        return self.args[0]
+
+class MethodCallingError(Exception):
+    pass
 
 # メタメソッド呼び出し時のエラー
 class BadMetaMethod(Exception):
@@ -92,10 +91,7 @@ class BadMetaMethod(Exception):
         errtype = type(self.args[0]).__name__
         typename = self.args[1].get_typename()
         methname = self.args[2].get_action_target()
-        return " {}.{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
-    
-    def child_exception(self):
-        return self.args[0]
+        return " {}の{}で{}が発生：{}".format(typename, methname, errtype, self.args[0])
 
 #
 class MethodParameterNoDefault:
@@ -133,8 +129,8 @@ class Method:
         Returns:
             Str:
         """
-        if self.flags & METHOD_LOADED == 0:
-            raise UnloadedMethod(self.name)
+        #if self.flags & METHOD_LOADED == 0:
+        #    raise UnloadedMethod(self.name)
         return self.name
     
     def get_doc(self):
@@ -161,13 +157,21 @@ class Method:
         """ 実装オブジェクト。 """
         return self._action
 
-    def is_type_bound(self):
+    def is_type_class_bound(self):
         """ @method
-        メソッドに型が渡されるか
+        メソッドにデスクライバクラスが渡されるか
         Returns:
             Bool:
         """
         return (self.flags & METHOD_TYPE_BOUND) > 0
+
+    def is_type_value_bound(self):
+        """ @method
+        メソッドにデスクライバインスタンスが渡されるか
+        Returns:
+            Bool:
+        """
+        return (self.flags & METHOD_TYPEVAL_BOUND) > 0
 
     def is_context_bound(self):
         """ @method
@@ -207,12 +211,16 @@ class Method:
         Returns:
             Bool:
         """
-        return (self.flags & METHOD_CONSUME_TRAILING_PARAMS) > 0
+        return (self.flags & METHOD_CONSUME_TRAILING_PARAMETERS) > 0
     
-    def has_reciever_param(self):
-        """ レシーバオブジェクトの引数情報があるか """
-        return (self.flags & METHOD_HAS_RECIEVER_PARAM) > 0
-
+    def is_external(self):
+        """ @method
+        外部メソッドか
+        Returns:
+            Bool:
+        """
+        return (self.flags & METHOD_EXTERNAL) > 0
+    
     def is_user_defined(self):
         """ @method
         ユーザー定義によるメソッド
@@ -246,10 +254,7 @@ class Method:
             Any: クラス型か辞書型
         """
         d = this_type.get_describer(self.mixin)
-        if isinstance(d, ClassDescriber):
-            return d.klass
-        else:
-            return d
+        return d.get_value()
 
     def get_describer_qualname(self, this_type):
         """ @method
@@ -259,7 +264,7 @@ class Method:
         Returns:
             Str:
         """
-        return this_type.get_describer_qualname(self.mixin)
+        return this_type.get_describer(self.mixin).get_full_qualname()
     
     def make_type_instance(self, this_type):
         """ 型を拘束する場合の実行時のインスタンスを得る """
@@ -305,7 +310,9 @@ class Method:
         """ @method alias-name [params]
         仮引数のリスト
         Returns:
-            Sheet[MethodParameter](name, typename, doc):
+            Sheet[MethodParameter]:
+        Decorates:
+            @ view: name typename doc
         """
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
             raise UnloadedMethod(self.name)
@@ -313,8 +320,8 @@ class Method:
     
     def get_param(self, index):
         """ 引数の定義を得る。 """
-        if self.flags & METHOD_HAS_RECIEVER_PARAM: # func指定に対応
-            if index == -1:
+        if self.is_external():
+            if index == -1: # レシーバオブジェクトの型を返す
                 return self.params[0]
             index = index + 1
         if 0 <= index:
@@ -342,37 +349,43 @@ class Method:
             return True
         return False
 
-    def make_argument_row(self, context, argobjs, *, construct=False, construct_offset=None):
+    def make_argument_row(self, context, args, *, construct=False, construct_offset=None):
         """ 
         実引数の列を生成する。
         reciever-paramは含まれない
         Returns:
             List[Object]:
         """
-        args: List[Tuple[MethodParameter, Any]] = []
+        argpairs: List[Tuple[MethodParameter, Any]] = []
         ihead = 0
         for i, tp in enumerate(self.params):
-            if self.has_reciever_param() and i == 0:
-                continue
-            elif tp.is_variable():
-                args.extend((tp, x) for x in argobjs[ihead:])
-                ihead = -1
+            if tp.is_variable():
+                argpairs.extend((tp, x) for x in args[ihead:])
+                ihead = 0xFFFF
+                break
             else:
-                if ihead < len(argobjs):
-                    args.append((tp, argobjs[ihead]))
+                if ihead < len(args):
+                    argpairs.append((tp, args[ihead]))
                 else:
-                    break
+                    argpairs.append((tp, MethodParameterDefault))
                 ihead += 1        
         
+        if ihead < len(args) and not self.is_external_nullary():
+            if self.params:
+                pasig = "({})".format(", ".join(x.get_name() for x in self.params))
+            else:
+                pasig = "無し"
+            raise TypeError("引数{}に対し、余計に多くの引数が与えられました: {}".format(pasig, args))
+
         argvalues = []
-        for i, (tp, valueo) in enumerate(args):
+        for i, (tp, valueo) in enumerate(argpairs):
             if construct_offset is not None:
                 constr = i < construct_offset
             else:
                 constr = construct
             avalue = tp.make_argument_value(context, valueo, construct=constr)
             argvalues.append(avalue)
-
+        
         return argvalues
 
     # 返り値宣言を追加
@@ -386,14 +399,16 @@ class Method:
             typedecl(str): 型宣言
             doc(str): *説明文
         """
-        decl = parse_type_declaration(typedecl)
-        r = MethodResult(decl, doc)
+        if not isinstance(typedecl, TypeDecl):
+            typedecl = parse_type_declaration(typedecl)
+        r = MethodResult(typedecl, doc)
         self.result = r
     
-    def add_result_self(self, type):
+    def add_result_self(self, typedecl):
         """ メソッドのselfオブジェクトを返す """
-        decl = TypeDecl(type)
-        r = MethodResult(decl, "selfオブジェクト", RETURN_SELF)
+        if not isinstance(typedecl, TypeDecl):
+            typedecl = parse_type_declaration(typedecl)
+        r = MethodResult(typedecl, "selfオブジェクト", RETURN_SELF)
         self.result = r
 
     def get_result(self):
@@ -408,11 +423,17 @@ class Method:
             raise UnloadedMethod(self.name)
         return self.result
     
+    def set_result_decorator(self, expr):
+        """ 返り値デコレータをセットする """
+        if self.result is None:
+            raise UnloadedMethod("返り値がロードされていません")
+        self.result.set_decorator(expr)
+    
     def get_acceptable_argument_max(self) -> Union[int, None]:
         """
         受け入れ可能な最大の引数の数を得る。
         Returns:
-            int: 個数。Noneで無限を示す
+            int: 個数。Noneで無限を示す。引数なし外部メソッドであれば-1を返す
         """
         if self.flags & METHOD_LOADED == 0:
             raise UnloadedMethod(self.name)
@@ -423,10 +444,10 @@ class Method:
             if p.is_variable():
                 return None
             cnt += 1
-        if self.flags & METHOD_HAS_RECIEVER_PARAM:
+        if self.is_external():
             cnt -= 1
         return cnt
-        
+
     # 必要な最小の引数の数を得る
     def get_required_argument_min(self) -> int:
         """
@@ -446,11 +467,15 @@ class Method:
             if not p.is_required() or p.is_variable():
                 break
             cnt += 1
-        if self.flags & METHOD_HAS_RECIEVER_PARAM:
+        if self.is_external():
             cnt -= 1
         return cnt
     
-    def load(self, this_type=None):
+    def is_nullary(self):
+        """ 引数が無い """
+        return len(self.params) == 0
+    
+    def load_from_type(self, this_type: TypeProxy, *, meta=False):
         """
         実装をロードする。
         """
@@ -460,65 +485,57 @@ class Method:
         if self.target is None:
             self.target = normalize_method_target(self.name)
 
-        # 実装コードを読み込む
-        from machaon.core.importer import attribute_loader
-        action = None
-        source = None
-        while True:
-            callobj = None
-            if self.flags & METHOD_EXTERNAL_TARGET:
-                # 外部モジュールから定義をロードする
-                loader = attribute_loader(self.target)
-                callobj = loader() # モジュールやメンバが見つからなければ例外が投げられる
-                source = self.target
-            else:
-                # クラスに定義されたメソッドが実装となる
-                if this_type is None:
-                    raise ValueError("this_type is needed unless METHOD_EXTERNAL_TARGET is specified")
-                typefn = this_type.delegate_method(self.target, self.mixin)
-                if typefn is not None:
-                    callobj = typefn
-                    source = "{}:{}".format(this_type.get_conversion(), self.name)
-                    if this_type.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE:
-                        self.flags |= METHOD_TYPE_BOUND # 第1引数は型オブジェクト、第2引数はインスタンスを渡す
-                    elif self.is_mixin():
-                        self.flags |= METHOD_TYPE_BOUND
-
-            # ドキュメント文字列を取り出す
-            calldoc = getattr(callobj, "__doc__", None)
-
-            # プロパティオブジェクトから関数を取り出す
-            if isinstance(callobj, property):
-                callobj = callobj.fget
-
-            # アクションオブジェクトの初期化処理
-            if hasattr(callobj, "describe_method"):
-                # アクションに定義されたメソッド定義処理があれば実行
-                callobj.describe_method(self)
-            elif calldoc is not None:
-                # callobjのdocstringsを解析する
-                self.parse_syntax_from_docstring(callobj.__doc__, callobj)
-            else:
-                raise BadMethodDeclaration("メソッド定義がありません。メソッド 'describe_method' かドキュメント文字列で記述してください")
+        # クラスに定義されたメソッドが実装となる
+        if meta:
+            callobj = this_type.get_describer(self.mixin).get_metamethod_attribute(self.target)
+        else:
+            callobj = this_type.get_describer(self.mixin).get_method_attribute(self.target)
+        if callobj is None:
+            raise BadMethodDeclaration("'{}'は型'{}'の属性として存在しません".format(self.target, this_type.get_conversion()))
         
-            if isinstance(callobj, type):
-                callobj = callobj()
+        target_method = "{}{}{}".format(this_type.get_conversion(), SIGIL_OPERATOR_MEMBER_AT, self.name)
 
-            if callobj is None or not callable(callobj):
-                raise BadMethodDeclaration("アクションは呼び出し可能な値ではありません：{} = {}".format(self.target, callobj))
+        if this_type.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE or self.is_mixin():
+            self.flags &= ~METHOD_TYPE_BOUND
+            self.flags |= METHOD_TYPEVAL_BOUND
 
-            action = callobj
-            break
+        # ドキュメント文字列を取り出す
+        calldoc = getattr(callobj, "__doc__", None)
+
+        # プロパティオブジェクトから関数を取り出す
+        if isinstance(callobj, property):
+            callobj = callobj.fget
+
+        # アクションオブジェクトの初期化処理
+        if hasattr(callobj, "describe_method"):
+            # アクションに定義されたメソッド定義処理があれば実行
+            callobj.describe_method(self)
+        elif calldoc is not None:
+            # callobjのdocstringsを解析する
+            self.parse_syntax_from_docstring(calldoc, callobj, this_type)
+        else:
+            raise BadMethodDeclaration("メソッド定義がありません。メソッド 'describe_method' かドキュメント文字列で記述してください")
+    
+        if isinstance(callobj, type):
+            callobj = callobj()
+
+        if callobj is None or not callable(callobj):
+            raise BadMethodDeclaration("アクションは呼び出し可能な値ではありません：{} = {}".format(self.target, callobj))
+
+        action = callobj
         
         # 返り値が無い場合はレシーバ自身を返す
         if not self.result and this_type is not None:
-            self.add_result_self(this_type)
+            if self.is_external():
+                self.add_result(TypeInstanceDecl(this_type))
+            else:
+                self.add_result_self(TypeInstanceDecl(this_type))
         
         if self.flags & METHOD_UNSPECIFIED_MASK:
             self._action = None
         else:
             self._action = action
-        self.target = source
+        self.target = target_method
         self.flags |= METHOD_LOADED
     
     def is_loaded(self):
@@ -526,26 +543,37 @@ class Method:
         return self._action is not None
     
     def is_mixin(self):
-        return self.mixin is not None
+        return self.mixin is not None and self.mixin > 0
 
-    def parse_syntax_from_docstring(self, doc: str, function: Callable = None):
+    def parse_syntax_from_docstring(self, doc: str, function: Callable = None, this_type = None):
         """ 
         docstringの解析で引数を追加する。
         Params:
             doc(str): docstring
             function(Callable): *関数の実体。引数デフォルト値を得るのに使用する
         """
-        # 1行目はメソッド宣言
-        decl = parse_doc_declaration(doc, ("method", "task"))
-        if decl is None:
-            raise BadMethodDeclaration("宣言の構文に誤りがあります")   
+        if this_type is not None:
+            tnresolver = this_type.get_describer(self.mixin).get_typename_resolver()
+        else:
+            tnresolver = BasicTypenameResolver()
+
+        if isinstance(doc, DocStringDeclaration):
+            # パース済みの宣言
+            decl = doc
+        else:
+            # 1行目はメソッド宣言
+            decl = parse_doc_declaration(doc, ("method", "task", "meta"))
+            if decl is None:
+                raise BadMethodDeclaration("宣言のタイプがメソッドではないか、ドキュメント文字列が取得できません")
+        
         if self.flags & METHOD_DECL_LOADED == 0:         
             self.load_declaration_properties(decl.props)
         
         # 定義部
-        sections = decl.create_parser((
+        sections = DocStringDefinition.parse(decl, (
             "Params Parameters Arguments Args",
             "Returns", 
+            "Decorates Deco",
         ))
 
         # 説明文
@@ -559,37 +587,49 @@ class Method:
             funcsig = inspect.signature(function)
         
         # 引数
-        for line in sections.get_lines("Params"):
-            typename, name, doc, flags = parse_parameter_line(line.strip())
+        for i, line in enumerate(sections.get_lines("Params")):
+            typename, name, doc, flags = parse_parameter_line(line.strip(), i)
             
             if typename.endswith("..."):
-                self.flags |= METHOD_CONSUME_TRAILING_PARAMS
+                self.flags |= METHOD_CONSUME_TRAILING_PARAMETERS
                 typename = typename.rstrip(".")
             
             default = None
             if funcsig:
                 p = funcsig.parameters.get(name)
                 if p is None:
-                    raise BadMethodDeclaration("存在しない引数です：" + name)
-    
-                default, pf = pick_parameter_default_value(p)
-                if pf & PARAMETER_KEYWORD:
-                    # キーワード引数には未対応
-                    self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
-                    break 
-                if flags & PARAMETER_REQUIRED == 0 and pf & PARAMETER_REQUIRED:
-                    # オプション引数の設定が食い違う場合、オプション引数として扱う
-                    pf &= ~PARAMETER_REQUIRED
-                flags |= pf
+                    if decl.decltype == "meta":
+                        # メタメソッドでのみ、名前が食い違っても許す
+                        flags |= PARAMETER_REQUIRED
+                    else:
+                        raise BadMethodDeclaration("引数'{}'は宣言されていますが、関数に存在しません".format(name))
+
+                if p is not None:
+                    default, pf = pick_parameter_default_value(p)
+                    if pf & PARAMETER_KEYWORD:
+                        # キーワード引数には未対応
+                        self.flags |= METHOD_PARAMETER_UNSPECIFIED | METHOD_KEYWORD_PARAMETER
+                        break 
+                    if flags & PARAMETER_REQUIRED == 0 and pf & PARAMETER_REQUIRED:
+                        # オプション引数の設定が食い違う場合、オプション引数として扱う
+                        pf &= ~PARAMETER_REQUIRED
+                    flags |= pf
             else:
                 flags |= PARAMETER_REQUIRED
-        
-            self.add_parameter(name, typename, doc, default, flags=flags)
+
+            typedecl = tnresolver.parse_type_declaration(typename)
+            self.add_parameter(name, typedecl, doc, default, flags=flags)
 
         # 戻り値
         for line in sections.get_lines("Returns"):
             typename, doc, flags = parse_result_line(line.strip())
-            self.add_result(typename, doc)
+            typedecl = tnresolver.parse_type_declaration(typename)
+            self.add_result(typedecl, doc)
+
+        # 戻り値デコレータ
+        decoexpr = sections.get_string("Decorates")
+        if decoexpr:
+            self.set_result_decorator(decoexpr.strip())
         
     def load_declaration_properties(self, props: Sequence[str]):
         """
@@ -599,8 +639,8 @@ class Method:
             self.flags |= METHOD_SPIRIT_BOUND
         if "context" in props:
             self.flags |= METHOD_CONTEXT_BOUND
-        if "reciever-param" in props:
-            self.flags |= METHOD_HAS_RECIEVER_PARAM
+        if "external" in props:
+            self.flags |= METHOD_EXTERNAL
         if "task" in props:
             self.flags |= METHOD_TASK
         if "nospirit" in props:
@@ -718,22 +758,28 @@ class Method:
         self.target = "<loaded from dict>"
         self.flags |= METHOD_LOADED
 
+    def load_default_meta(self, selftype):
+        """ デフォルトのメタメソッドの実装を型から読み込む """
+        target = "default_"+self.name
+        self._action = getattr(selftype, target)
+        self.target = target
+        self.flags |= METHOD_LOADED
+
     def make_invocation(self, mods=None, type=None):
         """ 適した呼び出しオブジェクトを作成する """
+        def argminmax(i,x):
+            return i, (0xFFFF if x is None else x)
+        
         bit = self.flags & METHOD_INVOKEAS_MASK
         if bit == METHOD_INVOKEAS_BOUND_METHOD or bit == METHOD_INVOKEAS_PROPERTY:
             if not isinstance(self._action, InstanceBoundAction):
                 raise ValueError("InstanceBoundAction must be specified when METHOD_INVOKEAS_BOUND_METHOD or METHOD_INVOKEAS_PROPERTY is set")
-            ami = self.get_required_argument_min()
-            amx = self.get_acceptable_argument_max()
-            amx = 0xFFFF if amx is None else amx
+            ami, amx = argminmax(self.get_required_argument_min(), self.get_acceptable_argument_max())
             from machaon.core.invocation import InstanceMethodInvocation
             return InstanceMethodInvocation(self._action.target, mods, ami, amx)
 
         elif bit == METHOD_INVOKEAS_FUNCTION or bit == METHOD_INVOKEAS_BOUND_FUNCTION:
-            ami = self.get_required_argument_min()
-            amx = self.get_acceptable_argument_max()
-            amx = 0xFFFF if amx is None else amx
+            ami, amx = argminmax(self.get_required_argument_min(), self.get_acceptable_argument_max())
             from machaon.core.invocation import FunctionInvocation
             return FunctionInvocation(self._action, mods, ami, amx)
 
@@ -746,8 +792,77 @@ class Method:
                 raise ValueError("type argument must be specified")
             from machaon.core.invocation import TypeMethodInvocation
             return TypeMethodInvocation(type, self, mods)
+        
+    def prepare_invoke_args(self, args, *, selftype=None, context=None, typeargs=None):
+        """ 
+        メソッド実行時に渡す引数を準備する 
+        引数の順番：
+            <describer> traitメソッドである場合
+            <self> 外部メソッドでない場合
+            <context> context宣言がある場合
+            <spirit> spirit宣言がある場合
+            <typeargs...> 型引数
+            <args...> 引数
+        Params:
+            args(Object[]): 引数
+            selftype(Type):
+            context(InvocationContext):
+            typeargs(Any[]):
+        """
+        if self.flags & METHOD_LOADED == 0:
+            raise UnloadedMethod(self.name)
+        
+        ivargs = []
+        
+        external = self.is_external()
 
-    def get_signature(self, *, fully=False, self_typename=None):
+        if self.is_type_value_bound(): # or (selftype and selftype.get_methods_bound_type() == METHODS_BOUND_TYPE_TRAIT_INSTANCE):
+            if selftype is not None:
+                desc = self.get_describer(selftype)
+                if isinstance(desc, type):
+                    desc = desc()    
+                ivargs.append(desc)
+            else:
+                raise MethodCallingError("trait実装のメソッドですが、selftypeが引数に渡されていません")
+        elif self.is_type_class_bound():
+            # 値の方がクラスよりも優先される
+            if selftype is not None:
+                desc = self.get_describer(selftype)
+                ivargs.append(desc)
+            else:
+                raise MethodCallingError("trait実装のメソッドですが、selftypeが引数に渡されていません")
+
+        if not external:
+            selfspec = MethodParameter("self") # デフォルトのパラメータスペック
+            selfarg, *args = args
+            ivargs.append(selfspec.make_argument_value(context, selfarg))
+
+        if self.is_context_bound(): 
+            if context is not None:
+                ivargs.append(context)
+            else:
+                raise MethodCallingError("contextを要求していますが、引数に渡されていません")
+        if self.is_spirit_bound():
+            if context is not None:
+                ivargs.append(context.spirit)
+            else:
+                raise MethodCallingError("spiritを要求していますが、引数にcontextが渡されていません")
+
+        # 型引数を集める
+        if typeargs is not None:
+            ivargs.extend(typeargs)
+
+        # 引数を生成する
+        if not external or not self.is_nullary():
+            if context is not None:
+                argvalues = self.make_argument_row(context, args)
+                ivargs.extend(argvalues)
+            else:
+                ivargs.extend([x.value if isinstance(x,Object) else x for x in args])
+            
+        return ivargs
+
+    def get_signature(self, *, fully=False):
         """ @method alias-name [signature]
         メソッドの構文を返す。
         Returns:
@@ -757,15 +872,16 @@ class Method:
         params = []
         for p in self.params:
             ps = ""
+            ptype = p.get_typename()
             if p.is_required():
-                ps = p.name
+                ps = ptype
             else:
                 if fully:
-                    ps = "{}={}".format(p.name, repr(p.default))
+                    ps = "{}={}".format(ptype, repr(p.default))
                 else:
-                    ps = "{}?".format(p.name)
+                    ps = "{}?".format(ptype)
             if p.is_variable():
-                ps = "*" + p.name
+                ps = "*" + ptype
             params.append(ps)
 
         if self.flags & METHOD_PARAMETER_UNSPECIFIED:
@@ -781,23 +897,26 @@ class Method:
             results.append("...")
         
         parts = []
-        if self_typename and (self.flags & METHOD_HAS_RECIEVER_PARAM) == 0:
-            parts.append(self_typename)
+        if not self.is_external():
+            params.insert(0, "@") # レシーバを引数として表現
         if params:
             parts.append(" ".join(params))
         parts.append("->")
         parts.append(", ".join(results))
         return " ".join(parts)
 
-    def constructor(self, value):
-        """ @meta 
+    def constructor(self, cxt, value=None):
+        """ @meta context
         Params:
-            str: オブジェクト修飾名
+            str|None: 外部メソッド指定
         """
-        _heads, _sep, name = value.rpartition(".")
-        mth = Method(name=name, target=value, flags=METHOD_EXTERNAL_TARGET)
-        mth.load()
-        return mth
+        if value is None:
+            return Method()
+        from machaon.core.message import select_method
+        inv = select_method(value, context=cxt)
+        if inv.display()[0] != "TypeMethod":
+            raise ValueError("{}: 無効なメソッド名です".format(value))
+        return inv.get_method()
     
     def pprint(self, app):
         """ @meta """
@@ -825,7 +944,7 @@ class Method:
 #
 #
 #
-class MethodParameter():
+class MethodParameter:
     def __init__(self, name, typedecl=None, doc="", default=None, flags=0):
         self.name = name
         self.doc = doc
@@ -893,37 +1012,52 @@ class MethodParameter():
     def get_typedecl(self):
         return self.typedecl
         
-    def make_argument_value(self, context, obj, typeinst=None, *, construct=False):
+    def make_argument_value(self, context, val, typeinst=None, *, construct=False):
         """ 型を検査しつつオブジェクトから引数となる値を得る """
-        if isinstance(obj, Object):
+        if isinstance(val, Object):
             construct = False
+            obj_value = True
+        else:
+            obj_value = False
         
+        # デフォルト引数を返す
+        if obj_value and not construct:
+            usedefault = val.value is MethodParameterDefault
+        else:
+            usedefault = val is MethodParameterDefault
+        if usedefault and not self.is_required():
+            if self.is_object():
+                return None # 常にNoneを使う
+            else:
+                return self.default
+
         if self.is_object():
             if construct:
-                return context.new_object(obj)
+                return context.new_object(val)
+            elif obj_value:
+                return val
             else:
-                return obj
+                raise ValueError("Object is required, but not passed")
         elif self.is_type_uninstantiable():
             if construct:
                 raise ValueError("cannot be constructed")
+            elif obj_value:
+                return val.value
             else:
-                return obj.value
+                return val
         else:
-            if construct:
-                usedefault = obj is MethodParameterDefault
-            else:
-                usedefault = obj.value is MethodParameterDefault
-            if usedefault and not self.is_required():
-                return self.default
-            
             t = typeinst or self.get_typedecl().instance(context)
             if construct:
+                if isinstance(val, TypeDecl) and not self.is_type():
+                    val = val.to_string() # 非型引数を値に変換する
                 try:
-                    value = t.construct(context, obj)
+                    value = t.construct(context, val)
                 except Exception as e:
-                    raise ArgumentTypeError(self, obj, str(e)) from e
+                    raise ArgumentTypeError(self, val, str(e)) from e
+            elif obj_value:
+                value = val.value
             else:
-                value = obj.value
+                value = val
             
             if not t.check_value_type(type(value)):
                 raise ArgumentTypeError(self, value)
@@ -966,6 +1100,9 @@ class MethodResult:
         self.typedecl = typedecl or TypeDecl()
         self.doc = doc
         self.special = special
+        self.decorator = None
+        if not isinstance(self.typedecl, TypeDecl):
+            raise TypeError("MethodResult.typedecl")
 
     def __str__(self):
         line = "Return [{}]".format(self.typename)
@@ -992,6 +1129,9 @@ class MethodResult:
 
     def get_typedecl(self):
         return self.typedecl
+    
+    def set_decorator(self, expr):
+        self.decorator = expr
 
     def make_result_value(self, context, value, *, message=None, negate=False):
         """ 型を検査しつつオブジェクトから返り値となる値を得る 
@@ -1043,11 +1183,21 @@ class MethodResult:
         # 返り値型に値が適合しない場合は、型変換を行う
         if not rettype.check_value_type(type(value)):
             value = rettype.construct(context, value)
-        
+
+        # デコレータを適用する
+        if self.decorator is not None:
+            if isinstance(self.decorator, str): # コンパイルする
+                from machaon.core.function import parse_sequential_function
+                self.decorator = parse_sequential_function(self.decorator, context, argspec=rettype)
+            
+            value = self.decorator(value)
+            if not rettype.check_value_type(type(value)): # 必要なら、さらに型変換を行う
+                value = rettype.construct(context, value)
+
         return (rettype, value)
 
 
-def parse_parameter_line(line):
+def parse_parameter_line(line, index=None):
     """
     Params:
         line(str):
@@ -1078,8 +1228,15 @@ def parse_parameter_line(line):
             flags |= PARAMETER_REQUIRED
         typename, _, _ = paren.rpartition(")")
         typename = typename.strip()
+
+    if index is not None and name and not typename: # 名前を補完する
+        typename = name
+        if index == 0:
+            name = "value"
+        else:
+            name = "value{}".format(index+1)
     
-    if not name or not typename:
+    if not name and not typename:
         raise BadMethodDeclaration("引数'{}'の型指定が間違っています。「引数名(型名): 説明文」と指定してください".format(name))
 
     return typename, name, doc, flags
@@ -1117,156 +1274,67 @@ def parse_result_line(line):
     return typename, doc, 0
 
 
-#
-#
-#
-class MetaMethod():
-    def __init__(self, target, flags=0, ctorparam=None):
-        self.target = target
-        self.flags = flags
-        self._ctorparam = ctorparam
-    
-    def get_action_target(self):
-        return self.target
-    
-    def new(self, decl):
-        """ 特殊メソッドを構築 
-        Params:
-            decl(DocStringDeclaration)
-        """
-        flags = self.flags
-        if "context" in decl.props:
-            flags |= METHOD_CONTEXT_BOUND
-        if "spirit" in decl.props:
-            flags |= METHOD_SPIRIT_BOUND
-        if "noarg" in decl.props or "noparam" in decl.props:
-            flags |= METHOD_META_NOEXTRAPARAMS
-        
-        meth = MetaMethod(self.target, flags)
-        meth.load_from_docstring(decl)
-        return meth
-
-    def is_type_bound(self):
-        return (self.flags & METHOD_TYPE_BOUND) > 0
-    
-    def is_context_bound(self):
-        return (self.flags & METHOD_CONTEXT_BOUND) > 0
-
-    def is_spirit_bound(self):
-        return (self.flags & METHOD_SPIRIT_BOUND) > 0
-    
-    def has_no_extra_params(self):
-        return (self.flags & METHOD_META_NOEXTRAPARAMS) > 0
-
-    def get_param(self):
-        return self._ctorparam or MethodParameter("value")
-    
-    def load_from_docstring(self, decl):
-        """
-        Params: ですべて指定
-        第1引数は変数名を省略可能（value）
-        追加引数においては、型がTypeなら型引数、そうでないなら追加コンストラクタ引数とみなす
-        """
-        sections = decl.create_parser((
-            "Params Parameters",
-        ))
-
-        # 説明文
-        desc = sections.get_string("Document")
-        if desc:
-            self.doc = desc.strip()
-
-        # コンストラクタ引数
-        params = sections.get_lines("Params")
-        if params:
-            if self.target != "constructor":
-                raise ValueError("メタメソッド'{}'で引数を定義することはできません".format(self.target))
-
-            firstline = params[0]
-            findend = (lambda x: None if x == -1 else x)(firstline.find(":"))
-            if -1 == firstline.find("(", 0, findend):
-                name = "value"
-                typename, doc, flags = parse_result_line(firstline.strip())
-            else:
-                typename, name, doc, flags = parse_parameter_line(firstline.strip())
-
-            typedecl = parse_type_declaration(typename)
-            p = MethodParameter(name, typedecl, doc, flags=flags)
-            self._ctorparam = p
-
-    def prepare_invoke_args(self, context, typeparams, value, typeargs, *moreargs):
-        """ メソッド実行時に渡す引数を準備する """        
-        # コンストラクタ引数の型をチェックする
-        if self._ctorparam and context is not None:
-            if not self._ctorparam.check_argument_value(context, value):
-                raise TypeConversionError(type(value), self._ctorparam.typename)
-        
-        args = []
-        if self.is_context_bound(): 
-            if context is not None:
-                args.append(context)
-            else:
-                raise ValueError("contextを要求していますが、引数に渡されていません")
-
-        args.append(value)
-
-        args.extend(moreargs)
-
-        if self.has_no_extra_params():
-            return args
-
-        # 引数を集める
-        if typeargs:
-            args.extend(typeargs)
-        else:
-            # デフォルト型引数をセット
-            from machaon.core.type.instance import TypeAny
-            for tp in typeparams:
-                if not tp.is_type():
-                    break
-                args.append(TypeAny())
-        
-        return args
-
-
-meta_method_prototypes = { x.get_action_target():x for x in (
-    MetaMethod("constructor", METHOD_TYPE_BOUND),
-    MetaMethod("stringify"),
-    MetaMethod("summarize"),
-    MetaMethod("pprint"),
-    MetaMethod("reflux"),
-)}
-
-
-def make_method_prototype(attr, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
+def make_method_prototype_from_doc(decl, attrname, mixinkey=None) -> Tuple[Optional[Method], List[str]]:
     """ 
     ドキュメントを解析して空のメソッドオブジェクトを構築 
     Params:
-        attr(Any): ドキュメントの付された関数オブジェクト
+        decl(DocStringDeclaration): ドキュメント宣言
         attrname(str): 属性名
         *mixinkey(str): mixinクラスへの参照名
     """ 
-    decl = parse_doc_declaration(attr, ("method", "task"))
-    if decl is None:
-        return None, []
-
     mname = decl.name or attrname
     method = Method(name=normalize_method_name(mname), target=attrname, mixin=mixinkey, flags=METHOD_FROM_USER_DEFINITION)
     method.load_declaration_properties(decl.props)
     return method, decl.aliases
 
-def make_method_from_dict(di):
+def make_method_from_dict(name, di, mixinkey=None):
     """
     辞書による定義からメソッドを作成する
-    
     """
-    name = di.pop("Name", None)
     if name is None:
-        raise BadMethodDeclaration("Name でメソッド名を指定してください")
-    mth = Method(name, flags=METHOD_FROM_USER_DEFINITION)
+        raise BadMethodDeclaration("メソッド名を指定してください")
+    mth = Method(name, flags=METHOD_FROM_USER_DEFINITION, mixin=mixinkey)
     mth.load_from_dict(di)
     return mth
 
+
+class MetaMethods:
+    def __init__(self):
+        prototypes = [
+            Method("constructor", flags=METHOD_TYPE_BOUND|METHOD_EXTERNAL),
+            Method("stringify"),
+            Method("summarize"),
+            Method("pprint"),
+        ]
+        self.prototypes = {x.get_name():x for x in prototypes}
+        self.prototypes["constructor"].add_parameter("value", "Any")
+
+    def get_prototype(self, name):
+        """ 
+        空の新しいメタメソッドを返す 
+        Params:
+            decl(DocStringDeclaration): ドキュメント宣言
+            attrname(str): 属性名
+        """ 
+        protometh = self.prototypes.get(name)
+        if protometh is None:
+            return None
+        flags = protometh.flags & ~METHOD_LOADBIT_MASK # ロードフラグは引き継がないように
+        meta = Method(name, target=name, flags=flags)
+        return meta
+    
+    def load_default(self, name, selftype):
+        """ 
+        デフォルトのメタメソッドを取得する
+        """
+        protometh = self.prototypes.get(name)
+        if protometh is None:
+            raise MethodLoadError("meta method '{}' does not exist".format(name))
+        protometh.load_default_meta(selftype)
+        return protometh
+
+
+meta_methods = MetaMethods()
 
 #
 #
@@ -1346,7 +1414,7 @@ def instance_invokeas(value, this):
         return METHOD_INVOKEAS_PROPERTY
 
 
-class _InvokeasTypeDict():
+class _InvokeasTypeDict:
     """
     メソッドや属性の呼び出し方法を推定する
     """

@@ -17,7 +17,7 @@ def getlasttag(log):
 @pytest.fixture
 def approot():
     app = AppRoot()
-    app.initialize(ui="tk", title="test")
+    app.initialize(ui="tk", title="test", ignore_args=True)
     app.boot_ui()
     return app
 

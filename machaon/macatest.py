@@ -23,7 +23,10 @@ def message_test(source, context, lhs, rhs, tester=None):
         tester = equals
 
     if not tester(lhs, rhs):
-        print("Assertion is failed: {}(({}) => {}, {})".format(tester.__name__, source, lhs, rhs))
+        print("Assertion is failed: {}(".format(tester.__name__))
+        print("    {},".format(lhs))
+        print("    {}".format(rhs))
+        print(") message: ({})".format(source))
         print("")
         print("--- instructions ----------------")
         print(put_instructions(context))
@@ -54,7 +57,11 @@ def runmain(*, fn):
 
 def parse_test(context, s, rhs, *, q=None):
     parser = MessageEngine(s)
-    lhso = parser.run_here(context)
+    try:
+        lhso = parser.run_here(context)
+    except Exception as e:
+        put_instructions(context, "; ")
+        raise e
     assert message_test(s, context, lhso.value, rhs, q)
     return put_instructions(context, "; ")
 
@@ -62,3 +69,15 @@ def parse_instr(context, s):
     parser = MessageEngine(s)
     parser.run_here(context)
     return put_instructions(context, "; ")
+
+#
+#
+#
+def sequence_equals(l, r):
+    if len(l) != len(r):
+        return False
+    for ll, rr in zip(l, r):
+        if ll != rr:
+            return False
+    return True
+

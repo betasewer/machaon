@@ -1,11 +1,25 @@
-
+import pytest
 from machaon.types.fundamental import fundamental_types
 from machaon.core.context import instant_context
+from machaon.core.type.decl import parse_type_declaration
+from machaon.macatest import sequence_equals
 
 fundamental_type = fundamental_types()
 
 def run(fn):
     fn()
+
+
+def test_fundamental_typetype_construct():
+    cxt = instant_context()
+
+    t = fundamental_type.find("Type")
+    assert t
+    assert t.construct(cxt, "Int")
+    assert t.construct(cxt, "Int").get_conversion() == "Int:machaon.core"
+    assert t.construct(cxt, parse_type_declaration("Bool"))
+    assert t.construct(cxt, parse_type_declaration("Bool")).get_conversion() == "Bool:machaon.core"
+
 
 def test_fundamental_basic():
     t = fundamental_type.find("Bool")
@@ -15,12 +29,12 @@ def test_fundamental_basic():
     t = fundamental_type.find("Int")
     assert t
     assert t.get_value_type() is int
-    assert t.get_conversion() == "Int"
+    assert t.get_conversion() == "Int:machaon.core"
     
     t = fundamental_type.find("Str")
     assert t
     assert t.get_value_type() is str
-    assert t.get_conversion() == "Str"
+    assert t.get_conversion() == "Str:machaon.core"
     
     t = fundamental_type.find("Function")
     assert t
@@ -31,32 +45,64 @@ def test_fundamental_basic():
     assert t
     assert t.get_value_type() is type(None)
     assert t.is_none_type()
+    assert t.get_describer_qualname() == "NoneType"
     
     t = fundamental_type.find("ObjectCollection")
     assert t
     from machaon.core.object import ObjectCollection
     assert t.get_value_type() is ObjectCollection
-    assert t.is_object_collection_type
+    assert t.is_object_collection_type()
 
 
 
 def test_fundamental_metamethod_resolve():
     cxt = instant_context()
 
+    from machaon.types.numeric import IntType
     t = fundamental_type.find("Int")
     assert t
     assert len(t.get_type_params()) == 0
-    fns = t.resolve_meta_method("constructor", cxt, "0", None)
+    fns = t.resolve_meta_method("constructor", cxt, ["0"], None)
     assert fns is not None
-    assert len(fns[1:]) == 1 # 引数1
+    fn, *args = fns
+    assert not fn.is_type_class_bound() # トレイト実装にはデスクライバのインスタンスが渡される
+    assert fn.is_type_value_bound()
+    assert not fn.is_context_bound()
+    assert len(args) == 2 # トレイト型＋引数1
+    assert isinstance(args[0], IntType)
+    assert args[1] == "0"
 
+    from machaon.core.function import FunctionType
     t = fundamental_type.find("Function")
     assert t
     assert len(t.get_type_params()) == 1
-    fns = t.resolve_meta_method("constructor", cxt, "0", None)
+    fns = t.resolve_meta_method("constructor", cxt, ["0"], None)
     assert fns is not None
-    assert len(fns[1:]) == 2 # 引数2 (contextあり)
-    assert fns[1] is cxt
+    fn, *args = fns
+    assert not fn.is_type_class_bound()
+    assert fn.is_type_value_bound()
+    assert fn.is_context_bound()
+    assert len(args) == 4 # トレイト型＋コンテキスト＋型引数＋引数1
+    assert isinstance(args[0], FunctionType)
+    assert args[1] is cxt
+    assert args[2] is None
+    assert args[3] == '0'
+
+    from machaon.types.sheet import Sheet
+    t = fundamental_type.find("Sheet")
+    assert t
+    assert len(t.get_type_params()) == 1
+    fns = t.resolve_meta_method("constructor", cxt, [[1,2,3]], [fundamental_type.get("Int")])
+    assert fns is not None
+    fn, *args = fns
+    assert fn.is_type_class_bound()  # インスタンス実装にはデスクライバのクラスが渡される
+    assert not fn.is_type_value_bound()
+    assert fn.is_context_bound()
+    assert len(args) == 4 # トレイト型＋コンテキスト＋型引数＋引数1
+    assert args[0] is Sheet
+    assert args[1] is cxt
+    assert args[2].get_typename() == "Int"
+    assert args[3] == [1,2,3]
 
 
 def test_fundamental_construct():
@@ -90,14 +136,14 @@ def test_method():
     regmatch = cxt.get_type("Str").select_method("reg-match")
     assert regmatch is not None
     assert regmatch.name == "reg-match"
-    assert regmatch.get_result().get_typename() == "bool"
+    assert regmatch.get_result().get_typename() == "Bool:machaon.core"
 
     act = regmatch.get_action()
     assert act(None, "0123.txt", "[0-9]+")
     assert not act(None, "AIUEO.wav", "[0-9]+")
 
-    assert cxt.get_type("Str").get_conversion() == "Str"
-    assert regmatch.get_action_target() == "Str:reg-match"
+    assert cxt.get_type("Str").get_conversion() == "Str:machaon.core"
+    assert regmatch.get_action_target() == "Str:machaon.core#reg-match"
 
 def test_function():
     cxt = instant_context()
@@ -108,13 +154,21 @@ def test_function():
     from machaon.core.function import  MessageExpression
     assert isinstance(fnpower, MessageExpression)
 
-def test_fundamental_numeric_subtype():
+
+def test_typetype_methods():
     cxt = instant_context()
 
-    ht = cxt.type_module.get_subtype("Int", "Hex")
-    assert len(ht.get_type_params()) == 1
+    from machaon.types.fundamental import TypeType
+    inttype = cxt.select_type("Int")
+    TypeType().help(inttype, cxt, cxt.spirit, None)
 
-    t = cxt.instantiate_type("Int:Hex", "08X")
-    assert t.construct(cxt, "ABCD") == 0xABCD
-    assert t.stringify_value(0xABCD) == "0000ABCD"
+    from machaon.types.sheet import Sheet
+    t = cxt.select_type("Type")
+    entry = t.select_method("methods").make_invocation(type=t)._prepare(cxt, t)
+    ret = entry.invoke(cxt)
+    assert ret
+    assert ret.get_typename() == "Sheet"
+    assert sequence_equals(ret.value.get_current_column_names(), ("names", "doc", "signature", "source"))
+    assert sequence_equals(ret.value.get_current_column_names(), ("names", "doc", "signature", "source"))
 
+    

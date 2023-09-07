@@ -1,37 +1,28 @@
 from machaon.core.symbol import (
-    SIGIL_SCOPE_RESOLUTION, SIGIL_PYMODULE_DOT, SIGIL_SUBTYPE_SEPARATOR,
-    BadTypename, full_qualified_name, disp_qualified_name, PythonBuiltinTypenames
+    SIGIL_MODULE_INDICATOR, SIGIL_PYMODULE_DOT
 )
-from machaon.core.type.decl import TypeDecl
-
-#
-class TypeDeclError(Exception):
-    """ 構文エラー """
-    def __init__(self, itr, err) -> None:
-        super().__init__(itr, err)
-    
-    def __str__(self):
-        itr = self.args[0]
-        pos = itr.current_preview()
-        return "型宣言の構文エラー（{}）: {}".format(self.args[1], pos)
+from machaon.core.type.decl import TypeDecl, TypeDeclError
 
 
 #
 # 型宣言パーサコンビネータ 
-# <body> ::= <subtype> | <subtype> "|" <subtype>
-# <subtype> ::= <expr> | <expr> ":" <expr>
-# <expr> ::= <type100> | <type110> | <type111> | <type101> | <type100a>
-# <type100> ::= <name>
-# <type110> ::= <name> "[" <typeargs> "]"
-# <type111> ::= <name> "[" <typeargs> "]" "(" <ctorargs> ")"
-# <type101> ::= <name> "[]"  "(" <ctorargs> ")"
-# <type100a> ::= <name> "[]"
-# <typeargs> ::= <body> | <body> "," <typeargs>
-# <ctorargs> ::= <ctorvalue> | <ctorvalue> "," <ctorargs>
-# <name> ::= ([a-z] | [A-Z] | [0-9] | '_' | '/' | '.')+
-# <ctorvalue> ::= [^,\[\]\(\)\|]+  
 #
-def _parse_typedecl(decl):
+'''
+<body> ::= <fulltypename> | <fulltypename> "|" <fulltypename>
+<fulltypename> ::= <expr> | <expr> ":" <name>
+<expr> ::= <type0> | <type1> | <type0a>
+<type0> ::= <name>
+<type0a> ::= <name> "[]"
+<type1> ::= <name> "[" <typeargs> "]"
+<typeargs> ::= <typearg> | <typearg> "," <typeargs>
+<typearg> ::= <typearg0> | <typearg1> | <typearg0a>
+<typearg0> ::= <symbol>
+<typearg0a> ::= <symbol> "[]"
+<typearg1> ::= <symbol> "[" <typeargs> "]"
+<name> ::= ([a-z] | [A-Z] | [0-9] | "_" | "/" | ".")+
+<symbol> ::= ([a-z] | [A-Z] | [0-9] | "_" | "/" | "." | ":")+
+'''
+def parse_typedecl(decl):
     """ 開始地点 """
     itr = _typedecl_Iterator(decl)
     decl = _typedecl_body(itr)
@@ -40,10 +31,13 @@ def _parse_typedecl(decl):
         raise TypeDeclError(itr, "以降を解釈できません")
     return decl
 
-def _typedecl_body(itr):
+def _typedecl_body(itr, *, astypearg=False):
     union = []
     while not itr.eos():
-        expr = _typedecl_subtype(itr)
+        if astypearg:
+            expr = _typedecl_typearg_expr(itr)
+        else:
+            expr = _typedecl_fullnamed_expr(itr)
         union.append(expr)
         ch, pos = itr.advance()
         if itr.eos():
@@ -60,37 +54,38 @@ def _typedecl_body(itr):
     else:
         return TypeDecl("Union", union)
 
-def _typedecl_subtype(itr):
-    # サブタイプの記述
-    types = []
+def _typedecl_fullnamed_expr(itr):
+    targettype = None
+    describername = None
+    targettype = _typedecl_expr(itr)
+
     while not itr.eos():
-        expr = _typedecl_expr(itr)
-        types.append(expr) 
         ch, pos = itr.advance()
         if itr.eos():
             break
-        elif ch == SIGIL_SUBTYPE_SEPARATOR:
-            if len(types) > 1:
-                raise TypeDeclError(itr, "サブタイプは1つしか指定できません")
-            continue
+        elif ch == SIGIL_MODULE_INDICATOR:
+            describername = _typedecl_name(itr)
         else:
             itr.back(pos)
             break
-    if len(types)==1:
-        return types[0]
-    elif not types:
-        raise TypeDeclError(itr, "型がありません")
-    else:
-        return TypeDecl("$Sub", types)
+
+    if targettype is None:
+        raise TypeDeclError(itr, "モジュールに対する型が指定されていません")
+    if describername is not None:
+        targettype.with_describer_name(describername)
+    return targettype
 
 def _typedecl_expr(itr):
     # 型名
     name = _typedecl_name(itr)
     if not name:
         raise TypeDeclError(itr, "型名がありません")
+    args = _typedecl_typearglist(itr)
+    return TypeDecl(name, args)
 
-    typeargs = []
-    ctorargs = []
+def _typedecl_typearglist(itr):
+    # []でくくられた型名リスト
+    args = []
     while True:
         # 型引数
         ch, pos = itr.advance()
@@ -99,32 +94,21 @@ def _typedecl_expr(itr):
         elif ch == "[":
             ch2, pos2 = itr.advance()
             if ch2 == "]":
-                typeargs = [] # 空かっこを許容
+                args = [] # 空かっこを許容
             else:
                 itr.back(pos2)
-                typeargs = _typedecl_typeargs(itr)
+                args = _typedecl_typeargs(itr)
         else:
             itr.back(pos)
             break
-
-        # コンストラクタ引数
-        ch, pos = itr.advance()
-        if itr.eos():
-            break
-        elif ch == "(":
-            ctorargs = _typedecl_ctorargs(itr)
-        else:
-            itr.back(pos)
-
-        break
-    
-    return TypeDecl(name, typeargs, ctorargs)
+    return args
 
 def _typedecl_typeargs(itr):
     args = []
     while True:
-        expr = _typedecl_body(itr)
-        args.append(expr)
+        value = _typedecl_body(itr, astypearg=True)
+        if value is not None:
+            args.append(value)
         ch, pos = itr.advance()
         if ch == ",":
             continue
@@ -136,35 +120,31 @@ def _typedecl_typeargs(itr):
             raise TypeDeclError(itr, "予期せぬ文字です")
     return args
 
-def _typedecl_ctorargs(itr):
-    args = []
-    while True:
-        value = _typedecl_ctorvalue(itr)
-        args.append(value)
-        ch, pos = itr.advance()
-        if ch == ",":
-            continue
-        elif ch == ")":
-            break
-        elif itr.eos():
-            raise TypeDeclError(itr, "コンストラクタ引数リストで予期せぬ終わりに到達")
-        else:
-            raise TypeDeclError(itr, "予期せぬ文字です")
-    return args
+def _typedecl_typearg_expr(itr):  
+    # 型引数リストがついている  
+    symbol = _typedecl_typearg_symbol(itr)
+    if not symbol:
+        raise TypeDeclError(itr, "型名がありません")
+    args = _typedecl_typearglist(itr)
+    return TypeDecl(symbol, args)
 
-def is_typename_char(ch):
+def is_nontypename_char(ch):
+    # 非型引数の表現で使える文字
+    return ch not in "|[],"
+
+def is_typename_first_char(ch):
+    # 型名の先頭に使用可能な文字
     return ch.isidentifier()
 
-digits = "0123456789"
 def is_typename_continue_char(ch):
-    return is_typename_char(ch) or ch == SIGIL_SCOPE_RESOLUTION or ch == SIGIL_PYMODULE_DOT or ch in digits
+    # 型名の先頭以降使える文字 - 識別子文字、数字、ピリオド
+    return is_typename_first_char(ch) or (0x30 <= ord(ch) and ord(ch) <= 0x39) or ch in (SIGIL_PYMODULE_DOT,)
 
 def _typedecl_name(itr):
-    # Pythonの識別名で使える文字 + SIGIL_SCOPE_RESOLUTION + SIGIL_PYMODULE_DOT
     name = ""
     while not itr.eos():
         ch, pos = itr.advance()
-        if ch and len(name) == 0 and is_typename_char(ch):
+        if ch and len(name) == 0 and is_typename_first_char(ch):
             name += ch
         elif ch and len(name) > 0 and is_typename_continue_char(ch):
             name += ch
@@ -173,17 +153,16 @@ def _typedecl_name(itr):
             break
     return name
 
-def _typedecl_ctorvalue(itr):
-    # 構文用の文字以外は全て受け入れる
-    name = ""
-    while not itr.eos():
+def _typedecl_typearg_symbol(itr):
+    # 型名、あるいは非型の値
+    value = ""
+    while True:
         ch, pos = itr.advance()
-        if ch is None or ch in ("),"): 
+        if not is_nontypename_char(ch): # 型名に使用できる文字も含まれている
             itr.back(pos)
             break
-        else:
-            name += ch
-    return name
+        value += ch
+    return value
 
 class _typedecl_Iterator():
     def __init__(self, s):
@@ -192,6 +171,9 @@ class _typedecl_Iterator():
     
     def eos(self):
         return self._i is None
+    
+    def pos(self):
+        return self._i
 
     def advance(self):
         # Returns: Tuple[char, lastposition]

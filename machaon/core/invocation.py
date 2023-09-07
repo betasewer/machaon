@@ -92,9 +92,6 @@ class InvocationEntry():
 
         args = self.args
         kwargs = self.kwargs
-        if "IGNORE_ARGS" in self.invocation.modifier:
-            args = ()
-            kwargs = {}
 
         result = None
         from machaon.process import ProcessInterrupted
@@ -162,12 +159,6 @@ def resolve_object_value(obj, spec=None):
     else:
         return obj.value
 
-def parameter_spec(t, i):
-    spec = t.get_parameter_spec(i)
-    if spec is not None:
-        return spec
-    return MethodParameter("param")
-
 #
 #
 #
@@ -203,6 +194,9 @@ class BasicInvocation():
         if not m and straight:
             m.append("straight")
         return " ".join(m)
+
+    def is_modified_ignore_args(self):
+        return "IGNORE_ARGS" in self.modifier
 
     def _prepare(self, context, *argvalues) -> InvocationEntry:
         """ デバッグ用: ただちに呼び出しエントリを構築する """
@@ -242,7 +236,7 @@ class TypeMethodInvocation(BasicInvocation):
     def __init__(self, type, method, modifier=None):
         super().__init__(modifier)
         self.type = type
-        self.method = method
+        self.method: Method = method
     
     def get_method(self):
         return self.method
@@ -256,45 +250,19 @@ class TypeMethodInvocation(BasicInvocation):
     def display(self):
         return ("TypeMethod", self.method.get_action_target(), self.modifier_name())
     
-    def query_method(self, this_type):
-        self.method.load(this_type)
-        return self.method
-    
     def is_task(self):
         return self.method.is_task()
 
     def is_parameter_consumer(self):
         return self.method.is_trailing_params_consumer()
 
-    def prepare_invoke(self, context, *argobjects):
-        selfobj, *argobjs = argobjects
-        
+    def prepare_invoke(self, context, *argobjects):      
         # メソッドの実装を読み込む
-        self.method.load(self.type)
-
-        args = []
-        if self.method.is_type_bound():
-            # 型オブジェクトを渡す
-            args.append(self.method.make_type_instance(self.type))
-
-        # インスタンスを渡す
-        selfspec = parameter_spec(self, -1)
-        args.append(selfspec.make_argument_value(context, selfobj))
-
-        if self.method.is_context_bound():
-            # コンテクストを渡す
-            args.append(context)
-        
-        if self.method.is_spirit_bound():
-            # spiritを渡す
-            args.append(context.get_spirit())
-        
-        # 引数オブジェクトを整理する
-        args.extend(self.method.make_argument_row(context, argobjs))
-        
+        self.method.load_from_type(self.type)
         action = self.method.get_action()
+        args = self.method.prepare_invoke_args(argobjects, selftype=self.type, context=context)
         result_spec = self.method.get_result()
-        return InvocationEntry(self, action, args, {}, result_spec)   
+        return InvocationEntry(self, action, args, {}, result_spec)
     
     def get_action(self):
         return self.method.get_action()
@@ -399,9 +367,11 @@ class InstanceMethodInvocation(BasicInvocation):
     def prepare_invoke(self, context, *argobjects):
         a = [resolve_object_value(x) for x in argobjects]
         instance, *args = a
+        if self.is_modified_ignore_args():
+            args = ()
         method = self.resolve_bound_method(instance)
         return InvocationEntry(self, method, args, {})
-    
+
 
 class FunctionInvocation(BasicInvocation):
     """
@@ -433,7 +403,10 @@ class FunctionInvocation(BasicInvocation):
         return ("Function", self.get_method_name(), self.modifier_name())
     
     def prepare_invoke(self, context, *argobjects):
-        args = [resolve_object_value(x) for x in argobjects] # そのまま実行
+        if self.is_modified_ignore_args():
+            args = []
+        else:
+            args = [resolve_object_value(x) for x in argobjects]
         return InvocationEntry(self, self.fn, args, {})
     
     def get_action(self):
@@ -510,13 +483,13 @@ class TypeConstructorInvocation(BasicInvocation):
         return False
 
     def prepare_invoke(self, context, *argobjects):
-        argobj, *args = argobjects
         # 型の実装を取得する
-        t = self._type.instance(context, [x.value for x in args]) # Objectをはがし、引数の型変換を行う
-        # 変換コンストラクタの呼び出しを作成
-        argvalue = t.get_typedef().get_constructor_param().make_argument_value(context, argobj)
+        t = self._type.instance(context)
+        # コンストラクタ引数を作成
         result_spec = MethodResult(TypeInstanceDecl(t))
-        return InvocationEntry(self, t.construct, (context, argvalue), {}, result_spec)
+        argvals = [x.value for x in argobjects] # オブジェクトを剝がす
+        # TODO: ignore-argsがついている場合、デフォルトコンストラクタを呼び出すべきか
+        return InvocationEntry(self, t.construct, (context, *argvals), {}, result_spec)
     
     def get_action(self):
         raise ValueError("型変換関数の実体は取得できません")

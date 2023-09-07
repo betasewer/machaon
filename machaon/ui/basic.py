@@ -171,12 +171,14 @@ class Launcher():
             if process:
                 context = process.get_last_invocation_context()
                 error = ErrorObject(e, context=context)
-                error.pprint(context.spirit)
-                # ただちにメッセージを取得し処理する
+                # エラーメッセージをUIに転送し、ただちにメッセージを取得して表示する
+                error.pprint(context.spirit) 
                 for msg in process.handle_post_message():
                     self.message_handler(msg, nested=True)
-                # オブジェクトを追加
-                context.store_object(str(process.get_index()), context.new_object(error, type="Error"))
+                # コンテキストにエラーオブジェクトを設定し、メッセージの実行を終了
+                errobj = context.new_invocation_error_object(error)
+                context.push_extra_exception(errobj)
+                process.on_finish_process(context, errobj)
             else:
                 from machaon.types.stacktrace import verbose_display_traceback
                 self.insert_screen_text("error", "プロセスの外部でエラーが発生：{}[{}]".format(e, type(e).__name__))

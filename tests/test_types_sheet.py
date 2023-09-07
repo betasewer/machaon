@@ -12,7 +12,8 @@ from machaon.types.sheet import Sheet, ItemItselfColumn
 from machaon.macatest import run
 
 class Employee():
-    """
+    """ @type
+    従業員
     """
     def __init__(self, name, postcode="000-0000"):
         self._name = name
@@ -39,7 +40,7 @@ class Employee():
         """
         return self._postcode
 
-def employees_sheet(objectdesk, args, columns):
+def employees_sheet(objectdesk, args, columns) -> Sheet:
     datas = [Employee(*a) for a in args]
     view = objectdesk.new_object(datas, *columns, conversion="Sheet[Employee]")
     return view.value
@@ -67,11 +68,9 @@ def test_type():
     sh = cxt.new_object(datas, *columns, conversion="Sheet[Employee]")
 
     assert isinstance(sh.type, TypeInstance)
-    assert sh.type.get_args()[0].get_conversion() == "Employee"
-    assert sh.type.get_args()[1] == "name"
-    assert sh.type.get_args()[2] == "postcode"
+    assert len(sh.type.get_args()) == 1
+    assert sh.type.get_args()[0].get_conversion() == "Employee:tests.test_types_sheet.Employee"
 
-    assert sh.value.get_current_column_names() == ["name", "postcode"]
 
 
 #
@@ -125,7 +124,7 @@ def test_create_no_mod(objectdesk):
 def test_expand_view(objectdesk):
     view = employees_sheet(objectdesk, [("ken","111-1111"), ("yuuji","222-2222"), ("kokons","333-3333")], ["name", "postcode"])
 
-    view.view_union(objectdesk, ["tall", "name"])
+    view.view_extend(objectdesk, "tall", "name")
     assert view.get_current_column_names() == ["name", "postcode", "tall"]
     assert view.count() == 3
     assert values(view.row_values(0)) == ["ken", "111-1111", 3]
@@ -304,7 +303,7 @@ def hotelrooms(name, rooms=None):
     h = Hotel(name)
     cxt = instant_context()
     rooms = rooms if rooms is not None else h.rooms()
-    o = Sheet.constructor(Sheet, cxt, rooms, cxt.define_type(Room))
+    o = Sheet.constructor(Sheet, cxt, cxt.select_type(Room), rooms)
     return o, cxt
 
 def heterovalues():
@@ -315,7 +314,7 @@ def heterovalues():
         123.4,
     ]
     cxt = instant_context()
-    v = Sheet.constructor(Sheet, cxt, values, None)
+    v = Sheet.constructor(Sheet, cxt, None, values)
     return v
 
 #
@@ -341,7 +340,7 @@ def test_apis():
     assert [x.value.name() for x in rooms.current_items()] == ["101", "102", "103", "201", "202", "203", "501"]
 
     # append
-    rooms.view(cxt, ["name", "type"])
+    rooms.view(cxt, "name", "type")
     rooms.append(cxt, Room("502", "Single", "Bed"))
     rooms.append(cxt, Room("503", "Single", "Bed"))
     assert [x[0].value for _, x in rooms.current_rows()] == ["101", "102", "103", "201", "202", "203", "501", "502", "503"]
@@ -356,8 +355,9 @@ def test_apis():
 
 def test_list_conversion_construct():
     cxt = instant_context()
-    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str](length, @)")
+    r = cxt.new_object(["A1", "B2B", "C3C3"], conversion="Sheet[Str]")
     sh = r.value
+    sh.view(cxt, "length", "@")
     assert values(sh.row_values(0)) == [2, "A1"]
     assert values(sh.row_values(1)) == [3, "B2B"]
     assert values(sh.row_values(2)) == [4, "C3C3"]
@@ -366,7 +366,7 @@ def test_string_tables():
     rooms, cxt = hotelrooms("Okehazama")
     rooms.append(cxt, Room("haunted", None, None))
     
-    rooms.view(cxt, ["name", "type", "style"])
+    rooms.view(cxt, "name", "type", "style")
     table = rooms.rows_to_string_table(cxt)
     assert table == [
         (0, ["101", "Twin", "Bed"]),
@@ -380,7 +380,7 @@ def test_string_tables():
 
     # hetero container
     view = heterovalues()
-    view.view(cxt, ["@", "@ * 2"])
+    view.view(cxt, "@", "@ * 2")
     table = view.rows_to_string_table(cxt)
     assert table == [
         (0, ["string1", "string1string1"]),
@@ -399,7 +399,7 @@ def test_none_value():
     ])
     rooms.insert(cxt, 1, Room("404", "Double", "Bed"))
     
-    rooms.view(cxt, ["name", "type", "style"])
+    rooms.view(cxt, "name", "type", "style")
     table = rooms.rows_to_string_table(cxt)
     assert table == [
         (0, ["1408", "-", "-"]),

@@ -7,17 +7,19 @@ from machaon.core.symbol import (
     SIGIL_OBJECT_ID,
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
+    SIGIL_OBJECT_PREVIOUS,
     SIGIL_LINE_QUOTER,
     SIGIL_BEGIN_USER_QUOTER,
-    SIGIL_SELECTOR_REVERSE_MESSAGE,
     SIGIL_SELECTOR_NEGATE_RESULT,
     SIGIL_SELECTOR_BASIC_RECIEVER,
     SIGIL_SELECTOR_TRAILING_ARGS,
     SIGIL_SELECTOR_CONSUME_ARGS,
     SIGIL_SELECTOR_SHOW_HELP,
+    SIGIL_SELECTOR_IGNORE_ARGS,
+    SIGIL_OPERATOR_MEMBER_AT,
+    SIGIL_CONSTRUCTOR_SELECTOR,
     SIGIL_END_TRAILING_ARGS,
     SIGIL_DISCARD_MESSAGE,
-    SIGIL_TYPE_INDICATOR,
     QUOTE_ENDPARENS,
     is_triming_control_char,
     is_modifiable_selector,
@@ -34,6 +36,7 @@ from machaon.core.invocation import (
     Bind1stInvocation,
 )
 from machaon.core.type.declparser import TypeDeclError
+from machaon.core.type.typemodule import TypeModuleError
 
 
 #
@@ -333,8 +336,6 @@ class Message:
         fn = FunctionInfo(inventry.action)
         return "{}{}".format(self.selector.get_method_name(), fn.display_parameters())
 
-
-
 #
 #
 #
@@ -408,7 +409,7 @@ class BasicRef:
         self._lastvalue = None
 
     def is_resolved(self):
-        raise NotImplementedError()
+        return True
 
 class ResultStackRef(BasicRef):
     """ スタックにおかれた計算結果への参照 """
@@ -430,9 +431,6 @@ class SubjectRef(BasicRef):
             raise BadExpressionError("無名関数の引数を参照しましたが、与えられていません")
         return subject
 
-    def is_resolved(self):
-        return True
-
 class ObjectRef(BasicRef):
     """ 任意のオブジェクトへの参照 """
     def __init__(self, ident, lastvalue=None):
@@ -445,9 +443,21 @@ class ObjectRef(BasicRef):
             raise BadExpressionError("オブジェクト'{}'は存在しません".format(self._ident))
         return obj
 
-    def is_resolved(self):
-        return True
+class PreviousObjectRef(BasicRef):
+    """ 任意のオブジェクトへの参照 """
+    def __init__(self, ident, lastvalue=None):
+        super().__init__(lastvalue)
+        self._ident = ident
+    
+    def do_pick(self, evalcontext):
+        obj = evalcontext.context.get_previous_object(self._ident)
+        if obj is None:
+            raise BadExpressionError("参照'{}'に対応するオブジェクトは存在しません".format(self._ident))
+        return obj
 
+#
+#
+#
 class SelectorResolver():
     """ セレクタを解決する """
     def __init__(self, selector):
@@ -456,14 +466,14 @@ class SelectorResolver():
     def resolve(self, evalcontext, reciever):
         if isinstance(reciever, BasicRef):
             reciever = reciever.pick_object(evalcontext)
-        return select_method(self.selector, reciever.type, reciever=reciever.value)
+        return select_method(self.selector, reciever.type, reciever=reciever.value, context=evalcontext.context)
 
 class ObjectSelectorResolver(SelectorResolver):
     """ 文字列ではないセレクタ名を解決する """
     def resolve(self, evalcontext, reciever):
         if isinstance(reciever, BasicRef):
             reciever = reciever.pick_object(evalcontext)
-        return select_method_by_object(self.selector, reciever.type, reciever=reciever.value)
+        return select_method_by_object(self.selector, reciever.type, reciever=reciever.value, context=evalcontext.context)
 
 
 #
@@ -478,8 +488,8 @@ def select_type(context, typeexpr):
     """
     try:
         tt = context.instantiate_type(typeexpr)
-    except (BadTypename, TypeDeclError):
-        return None
+    except (BadTypename, TypeDeclError, AttributeError, TypeModuleError):
+        return None # 型定義が見つからなかった
     return context.get_type("Type").new_object(tt)
 
 def select_literal(context, literal):
@@ -497,12 +507,14 @@ def select_literal(context, literal):
     
     # 値をオブジェクトに変換する
     typename = type(value).__name__
-    if typename not in PythonBuiltinTypenames.literals:
-        raise BadExpressionError("Unsupported literal type: {}".format(typename))
-    return Object(context.get_type(typename), value)
+    if typename in PythonBuiltinTypenames.literals:
+        return Object(context.get_type(typename), value)
+    else:
+        return Object(context.get_type("Str"), literal) # エラーにしないで、元の文字列のままスルーする
+
 
 # メソッド
-def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
+def select_method(name, typetraits=None, *, reciever=None, modbits=None, context=None) -> BasicInvocation:
     # モディファイアを分離する
     if modbits is None:
         if isinstance(name, AffixedSelector):
@@ -512,20 +524,29 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
         name = s.selector()
         modbits = s.affixes()
 
-    # 逆転モディファイアには専用の呼び出しを使う
-    if "REVERSE_MESSAGE" in modbits:
-        return ReversedMessageInvocation(name, typetraits, reciever, modbits)
-
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
             return select_index_method(int(name), typetraits, reciever, modbits)
 
-    # 大文字のメソッドは型変換コンストラクタ
+    # コンストラクタセパレータがある
+    if SIGIL_CONSTRUCTOR_SELECTOR in name and context:
+        method, sep, typedecl = name.partition(SIGIL_CONSTRUCTOR_SELECTOR)
+        if sep and typedecl[0].isupper(): # 型らしき文字が続く
+            method = expand_constructor_syntax(method, typedecl)
+            return select_type_method(typedecl, method, modbits, reciever=reciever, context=context)
+        
+    # 先頭に型らしき大文字の識別子が来た
     if name[0].isupper():
-        return select_type_constructor(name, modbits)
+        typedecl, sep, method = name.partition(SIGIL_OPERATOR_MEMBER_AT)
+        if sep:
+            # セパレータが含まれている場合、外部メソッド呼び出し
+            return select_type_method(typedecl, method, modbits, reciever=reciever, context=context)
+        else:
+            # 型変換コンストラクタ
+            return select_type_constructor(name, modbits, context=context)
 
-    # 型メソッド
+    # この型のメソッド
     using_type_method = typetraits is not None
     if using_type_method:
         # 型メソッドを参照
@@ -548,20 +569,18 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None) -> Basi
     return InstanceMethodInvocation(name, modifier=modbits)
 
 
-def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None) -> BasicInvocation:
+def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None, context=None) -> BasicInvocation:
     # 逆転モディファイアには専用の呼び出しを使う
     #if "REVERSE_MESSAGE" in modbits:
-
     tn = obj.get_typename()
     v = obj.value
-
     from machaon.core.function import FunctionExpression
     if tn == "Int" or tn == "Float":
         return select_index_method(int(v), typetraits, reciever, modbits)
     elif tn == "Type":
         return select_type_constructor(v, modbits)
     elif tn == "Str": 
-        return select_method(v, typetraits, reciever=reciever, modbits=modbits)
+        return select_method(v, typetraits, reciever=reciever, modbits=modbits, context=context)
     elif isinstance(v, BasicInvocation):
         return v
     elif tn == "Function" or isinstance(v, FunctionExpression):
@@ -575,14 +594,24 @@ def select_index_method(value, typetraits, reciever, modbits):
     inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
     return Bind1stInvocation(inv, value, "Int", modbits)
 
-def select_type_constructor(name, modbits):
+def select_type_constructor(name, modbits, context=None):
     return TypeConstructorInvocation(name, modbits)
+
+def select_type_method(typedecl, name, modbits, reciever=None, context=None):
+    if context is not None:
+        tdef = context.instantiate_type(typedecl)
+        return select_method(name, tdef, modbits=modbits, reciever=reciever, context=context)
+    else:
+        raise ValueError("context is not defined at this timing")
 
 def select_py_callable(fn):
     # Pythonの任意の関数
     from machaon.core.method import (make_method_from_value, METHOD_INVOKEAS_BOUND_FUNCTION)
     mth = make_method_from_value(fn, "<unnamed>", METHOD_INVOKEAS_BOUND_FUNCTION) # 第一引数はレシーバオブジェクト
     return mth.make_invocation()
+
+def expand_constructor_syntax(methodname, typename):
+    return "from-" + methodname
 
 
 #
@@ -623,13 +652,13 @@ def enum_selectable_method(typetraits, instance=None):
 class AffixedSelector:
     prefixes = [
         ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
-        ("REVERSE_MESSAGE", SIGIL_SELECTOR_REVERSE_MESSAGE),
-        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER),
+        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER), 
     ]
     suffixes = [
         ("TRAILING_ARGS", SIGIL_SELECTOR_TRAILING_ARGS),
         ("CONSUME_ARGS", SIGIL_SELECTOR_CONSUME_ARGS),
         ("SHOW_HELP", SIGIL_SELECTOR_SHOW_HELP),
+        ("IGNORE_ARGS", SIGIL_SELECTOR_IGNORE_ARGS),
     ]
 
     @classmethod
@@ -831,6 +860,7 @@ class MessageCharBuffer():
         consume = 0
         userquote_wait = False
         selector_prefixes = {x for _,x in AffixedSelector.prefixes}
+        selector_suffixes = {x for _,x in AffixedSelector.suffixes}
         for i in range(len(s)):
             self._readlength += 1
 
@@ -880,7 +910,8 @@ class MessageCharBuffer():
                 # ブロックを終了する
                 if nVOID:
                     yield CHAR_END_BLOCK
-                elif testchar(nch, SIGIL_SELECTOR_TRAILING_ARGS, SIGIL_SELECTOR_CONSUME_ARGS):
+                elif nch in selector_suffixes and testvoid(char(i+2), ")"):
+                    # モディファイア付きでブロックセレクタを終了する
                     yield SpecialChar(CHAR_BLOCK_SELECTOR_MOD, nch)
                     yield CHAR_END_BLOCK
                     consume += 1
@@ -903,7 +934,7 @@ class MessageCharBuffer():
 
     def get_read_length(self):
         return self._readlength
-    
+
 
 class MessageTokenizer():
     """ 
@@ -1242,6 +1273,17 @@ class MessageEngine():
                     code.add(self.arg_ROOT_MEMBER)
                 return new_block_bits(code)
                 
+            elif objid[0] == SIGIL_OBJECT_PREVIOUS:
+                # 逆順のインデックスによるオブジェクトの参照
+                memberid = objid[1:]
+                if memberid == "":
+                    memberid = "1"
+                if memberid.isdigit():
+                    index = int(memberid) # 数値を取得する
+                    code.add(self.arg_REF_PREVIOUS, index)
+                else:
+                    code.add(self.arg_REF_NAME, objid)
+                
             elif objid.isdigit():
                 # 数値名称のオブジェクト
                 objid = str(int(objid)) # 数値表現を正規化
@@ -1454,6 +1496,11 @@ class MessageEngine():
     def arg_REF_NAME(self, context, name):
         """ """
         return ObjectRef(name)
+
+    @_ast_ARG
+    def arg_REF_PREVIOUS(self, context, name):
+        """ """
+        return PreviousObjectRef(name)
 
     @_ast_ARG
     def arg_STRING(self, context, value):

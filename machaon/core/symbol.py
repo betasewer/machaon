@@ -1,4 +1,3 @@
-from typing import Tuple
 
 #
 # 型名
@@ -15,13 +14,14 @@ class PythonBuiltinTypenames:
         "list", "tuple", "set", "bytes", 
     }
 
+SPECIAL_TYPE_NAMES = {
+    "Any", "Object", "None"
+}
+
 def normalize_typename(name: str) -> str:
     if not name[0].isupper():
         if name in PythonBuiltinTypenames.literals:
             name = name.capitalize() # ドキュメントとしても使うために、Pythonの組み込み型に限り小文字でも可とする
-    bracket = name.find("[")
-    if bracket != -1:
-        name = name[:bracket]
     return name.replace("_","-")
 
 def is_valid_typename(name: str):
@@ -30,35 +30,33 @@ def is_valid_typename(name: str):
             return False
     return True
 
-def normalize_return_typename(name: str) -> Tuple[str, str]:
-    if "[" in name:
-        name1, _, name2 = name.partition("[")
-        typename = normalize_typename(name1)
-        name2 = name2.rstrip("]")
-        secondtypename = normalize_typename(name2) if name2 else ""
-    else:
-        typename = normalize_typename(name)
-        secondtypename = ""
-    
-    return typename, secondtypename
-
 # 型名の間違い
 class BadTypename(Exception):
     pass
 
-# スコープ
-def parse_scoped_typename(name):
-    n, sep, s = name.partition(SIGIL_SCOPE_RESOLUTION)
-    if sep:
-        return n, s
-    else:
-        return name, None
 
-def get_scoped_typename(name, scope=None):
-    if scope:
-        return name + SIGIL_SCOPE_RESOLUTION + scope
-    else:
-        return name
+# デスクライバを指定した型名
+class QualTypename:
+    def __init__(self, typename, describername=None):
+        self.typename = typename
+        self.describer = describername
+
+    @classmethod
+    def parse(cls, s):
+        n, sep, d = s.partition(SIGIL_MODULE_INDICATOR)
+        if sep:
+            return cls(n, d)
+        else:
+            return cls(s, None)
+
+    def stringify(self):
+        if self.describer is not None:
+            return self.typename + SIGIL_MODULE_INDICATOR + self.describer
+        else:
+            return self.typename
+        
+    def is_qualified(self):
+        return self.describer is not None
 
 
 #
@@ -141,19 +139,21 @@ def disp_qualified_name(t):
 SIGIL_OBJECT_ID = "@"
 SIGIL_OBJECT_LAMBDA_MEMBER = "."
 SIGIL_OBJECT_ROOT_MEMBER = "@"
-SIGIL_SCOPE_RESOLUTION = "/"
+SIGIL_OBJECT_PREVIOUS = "_"
 
 SIGIL_SELECTOR_NEGATE_RESULT        = "!"
-SIGIL_SELECTOR_REVERSE_MESSAGE      = "~"
 SIGIL_SELECTOR_BASIC_RECIEVER       = "`"
 SIGIL_SELECTOR_TRAILING_ARGS        = ":"
 SIGIL_SELECTOR_CONSUME_ARGS         = ">"
 SIGIL_SELECTOR_SHOW_HELP            = "?"
+SIGIL_SELECTOR_IGNORE_ARGS          = "^"
+
+SIGIL_CONSTRUCTOR_SELECTOR = ">>"
 
 SIGIL_END_TRAILING_ARGS = ":."
 SIGIL_DISCARD_MESSAGE = "."
 
-SIGIL_TYPE_INDICATOR = "::"
+SIGIL_RETURN_TYPE_INDICATOR = "::"
 QUOTE_ENDPARENS = {
     "[" : "]",
     "{" : "}",
@@ -169,7 +169,13 @@ SIGIL_LINE_QUOTER = "->"
 
 # 型名
 SIGIL_PYMODULE_DOT = "."
-SIGIL_SUBTYPE_SEPARATOR = ":"
+SIGIL_MODULE_INDICATOR = ":"
+
+# 定義ドキュメント
+SIGIL_DEFINITION_DOC = "@"
+
+# オペレータ
+SIGIL_OPERATOR_MEMBER_AT = "#"
 
 #
 #
@@ -245,7 +251,6 @@ SUMMARY_ESCAPE_TRANS = str.maketrans({
 DefaultModuleNames = (
     "types.string", "types.numeric", "types.dateandtime", 
     "types.shell", "types.file", "types.tuple",
-    "flow.flow", "flow.flux",
 )
 
 #

@@ -112,12 +112,12 @@ class Process:
                 return
    
         # 同期実行の終わり
-        self.on_finish_process(context)
+        ret = self.message.finish()
+        self.on_finish_process(context, ret)
 
     # メッセージ実行後のフロー
-    def on_finish_process(self, context):
+    def on_finish_process(self, context, ret):
         # 返り値をオブジェクトとして配置する
-        ret = self.message.finish()
         context.push_object(str(self.index), ret)
         
         # 実行時に発生した例外を確認する
@@ -142,7 +142,8 @@ class Process:
 
     def run_process_async(self, context, routine):
         for _ in routine: pass # 残りの処理を全て実行する
-        self.on_finish_process(context)
+        ret = self.message.finish()
+        self.on_finish_process(context, ret)
     
     def get_index(self):
         """ @method alias-name [index]

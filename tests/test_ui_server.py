@@ -8,12 +8,7 @@ def test_batch_launcher(tmpdir):
 
     logdir = tmpdir.mkdir("log")
     app = create_app(
-        title="testrun", ui="batch", logdir=logdir, logfileperiod="monthly"
-        ).packages(
-        )["docxx"](
-            "github:betasewer/python-docx-xtended:docxx"
-        )["xlsxx"](
-            "github:betasewer/python-xlsx-xtended:xlsxx"
+        title="testrun", ui="batch", logdir=logdir, logfileperiod="monthly", ignore_args=True
         ).messages(
             "1 + 2",
             "1 to 30"

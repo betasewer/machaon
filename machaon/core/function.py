@@ -1,12 +1,12 @@
 from machaon.core.symbol import (
-    SIGIL_TYPE_INDICATOR
+    SIGIL_RETURN_TYPE_INDICATOR
 )
 from machaon.core.message import (
     MessageEngine, select_method, select_method_by_object, Message, EvalContext, ResultStackRef
 )
 from machaon.core.object import Object
 from machaon.core.invocation import BasicInvocation
-from machaon.platforms import is_windows
+from machaon.core.type.basic import TypeProxy
 
 #
 # api
@@ -148,7 +148,7 @@ def parse_function_message(expression):
     """
     # 式の型指定子と式本体に分ける
     spl = expression.split(maxsplit=2)
-    if len(spl) > 2 and spl[1] == SIGIL_TYPE_INDICATOR:
+    if len(spl) > 2 and spl[1] == SIGIL_RETURN_TYPE_INDICATOR:
         typeconv = spl[0]
         body = spl[2]
     else:
@@ -212,6 +212,8 @@ class SequentialMessageExpression(FunctionExpression):
 
         elif isinstance(argspec, str):
             self._subjecttype = self.context.instantiate_type(argspec)
+        elif isinstance(argspec, TypeProxy):
+            self._subjecttype = argspec
 
     def get_expression(self) -> str:
         return self.f.get_expression()
@@ -263,7 +265,7 @@ def parse_sequential_function(expression, context, argspec=None):
 
 
 
-class FunctionType():
+class FunctionType:
     """ @type [Function]
     1引数をとるメッセージ。
     ValueType:
@@ -271,7 +273,7 @@ class FunctionType():
     Params:
         qualifier(Str): None|(seq)uential
     """
-    def constructor(self, context, s, qualifier=None):
+    def constructor(self, context, qualifier, s):
         """ @meta context
         Params:
             Str:
@@ -283,7 +285,7 @@ class FunctionType():
             f = parse_sequential_function(s, context)
         return f
 
-    def stringify(self, f):
+    def stringify(self, qualifier, f):
         """ @meta """
         return f.get_expression()
     

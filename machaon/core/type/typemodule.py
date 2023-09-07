@@ -3,13 +3,13 @@ from typing import Dict, Optional, List, Union, Any, Generator
 from machaon.core.symbol import (
     BadTypename, normalize_typename, BadMethodName, PythonBuiltinTypenames, 
     full_qualified_name, is_valid_typename,
-    get_scoped_typename, parse_scoped_typename
+    QualTypename
 )
 from machaon.core.type.decl import TypeProxy
 from machaon.core.type.type import Type
-from machaon.core.type.typedef import TypeDefinition
-from machaon.core.importer import ClassDescriber, attribute_loader
-
+from machaon.core.type.describer import TypeDescriber, create_type_describer, detect_describer_name_type
+from machaon.core.error import ErrorSet
+from machaon.core.importer import module_loader, attribute_loader
 
 #
 # 型定義モジュールのエラー 
@@ -20,28 +20,25 @@ class TypeModuleError(Exception):
 # 
 #
 #
-CORE_SCOPE = ""
-
-TYPECODE_TYPENAME = 1
+TYPECODE_FULLNAME = 1
 TYPECODE_VALUETYPE = 2
+TYPECODE_TYPENAME = 3
+TYPECODE_DESCRIBERNAME = 4
 
 SUBTYPE_BASE_ANY = 1
+
 
 
 #
 # 型取得インターフェース
 #
-class TypeModule():
+class TypeModule:
     def __init__(self):
-        self.scopename = None
-        self.parent = None
-        self._lib_typename: Dict[str, Type] = {}
-        self._lib_describer: Dict[str, str] = {}
-        self._lib_valuetype: Dict[str, str] = {}
-        self._subtype_rels: Dict[str, Dict[str, Type]] = {}
-        self._loading_mixins: Dict[str, List[TypeDefinition]] = {}
-        #
-        self._children: Dict[str, TypeModule] = {} 
+        self._defs: Dict[str, Type] = {} # fulltypename -> Type
+        self._lib_typename: Dict[str, List[str]] = {} # typename -> fulltypename[]
+        self._lib_describer: Dict[str, str] = {} # describer -> fulltypename
+        self._lib_valuetype: Dict[str, str] = {} # valuetypename -> fulltypename
+        self._reserved_mixins: Dict[str, List[TypeDescriber]] = {}
 
     #
     @property
@@ -56,79 +53,61 @@ class TypeModule():
         Returns:
             Int:
         """
-        return len(self._lib_typename)
+        return len(self._defs)
     
     #
-    def _load_type(self, t: Union[Type, TypeDefinition]) -> Type:
-        """ 型定義をロードする """
-        if isinstance(t, TypeDefinition):
-            ti = t.load_type()
-        else:
-            ti = t
-        return ti
-    
-    def _select(self, value:str, code:int, *, noload=False) -> Optional[Type]:
-        """ このライブラリから型定義を取り出す """
-        libt = None
-        if code == TYPECODE_TYPENAME:
-            libt = self._lib_typename.get(value)
+    def _select_type(self, value:str, code:int, module:str=None) -> Optional[Type]:
+        """ このライブラリから型定義を1つ取り出す """
+        tdef = None
+        if code == TYPECODE_FULLNAME:
+            tdef = self._defs.get(value)
+        elif code == TYPECODE_TYPENAME:
+            tns = self._lib_typename.get(value, [])
+            if module is not None:
+                tns = [x for x in tns if x.startswith(module)]
+            if tns:
+                if tns[0]:
+                    tn = QualTypename(value, tns[0]).stringify()
+                else:
+                    tn = value
+                tdef = self._defs[tn]
         elif code == TYPECODE_VALUETYPE:
             tn = self._lib_valuetype.get(value)
             if tn is not None:
-                libt = self._lib_typename[tn]
-        if libt is None:
-            return None
-        if noload:
-            return libt
+                tdef = self._defs[tn]
+        elif code == TYPECODE_DESCRIBERNAME:
+            tn = self._lib_describer.get(value)
+            if tn is not None:
+                tdef = self._defs[tn]
+        
+        if tdef is not None:
+            return tdef
         else:
-            return self._load_type(libt)
-
-    def _select_scoped(self, scopename, typename):
-        """ スコープから型を検索する """
-        scope = self.get_scope(scopename)
-        if scope is not None:
-            target = scope._select(typename, TYPECODE_TYPENAME, noload=True)
-            if target is not None:
-                return target
-        return None
+            return None
 
 
     #
     # 型を取得する
     #
-    def find(self, typename: str, *, code=TYPECODE_TYPENAME, scope=None) -> Optional[Type]:
-        """ 定義を探索する 
+    def find(self, typename) -> Optional[Type]:
+        """ 定義を不完全な型名と実装名で探索する 
         Params:
-            typename(str): 型名
-            code?(int): 検索対象
-            scope?(str): スコープ名
+            typename(str|QualTypename): 不完全な型名+実装名
         Returns:
             Optional[Type]:
         """
-        t = None
-        if scope is None:
-            # 自分自身を探索する
-            t = self._select(typename, code)
-            if t is not None:
-                return t
-
-            # すべての子モジュールを探索
-            for ch in self._children.values():
-                t = ch.find(typename, code=code)
-                if t is not None:
-                    return t
+        if isinstance(typename, QualTypename):
+            qualname = typename
+        elif isinstance(typename, str):
+            qualname = QualTypename.parse(normalize_typename(typename))
         else:
-            # 特定のモジュールを探索
-            mod = self.get_scope(scope)
-            if mod is None:
-                raise TypeModuleError("スコープ'{}'は子モジュールのなかに見つかりません".format(scope))
-            return mod._select(typename, code)
+            raise TypeError("typename")
+        return self._select_type(qualname.typename, TYPECODE_TYPENAME, qualname.describer)
     
-    def get(self, typecode: Any, *, scope=None) -> Optional[TypeProxy]:
+    def get(self, typecode: Any) -> Optional[TypeProxy]:
         """ 色々なデータから定義を探索する 
         Params:
-            typecode(Any): str=型名 | Type=型定義そのもの | <class>=型の値型
-            scope?(str): スコープ名
+            typecode(Any): str=修飾された完全な型名 | 修飾されていない不完全な型名 | Type=型定義そのもの | <class>=型の値型
         Returns:
             Optional[Type]:
         """
@@ -137,16 +116,22 @@ class TypeModule():
 
         t = None
         if isinstance(typecode, str):
-            typename = normalize_typename(typecode)
-            t = self.find(typename, scope=scope)
-        elif isinstance(typecode, Type):
-            t = typecode
+            qualname = QualTypename.parse(normalize_typename(typecode))
+            if qualname.is_qualified():
+                # 完全一致で検索する
+                t = self._select_type(qualname.stringify(), TYPECODE_FULLNAME)
+            else:
+                # 型名のみの一致で検索する
+                t = self._select_type(qualname.typename, TYPECODE_TYPENAME)
         elif hasattr(typecode, "Type_typename"):
+            # 登録済みの型のデスクライバ
             tn = typecode.Type_typename
-            typename, thisscope = parse_scoped_typename(tn)
-            t = self.find(typename, scope=thisscope)
+            modname = full_qualified_name(typecode)
+            t = self._select_type(QualTypename(tn,modname).stringify(), TYPECODE_FULLNAME)
         elif isinstance(typecode, type):
-            t = self.find(full_qualified_name(t), code=TYPECODE_VALUETYPE, scope=scope)
+            # 値型
+            vtn = full_qualified_name(typecode)
+            t = self._select_type(vtn, TYPECODE_VALUETYPE)
         else:
             raise TypeError("未対応のtypecodeです: {}".format(typecode))
 
@@ -155,372 +140,250 @@ class TypeModule():
 
         return t
 
-    def _enum_types(self, lib, geterror):
-        for name, t in lib.items():
-            if geterror:
-                try:
-                    yield name, self._load_type(t), None
-                except Exception as e:
-                    from machaon.types.stacktrace import ErrorObject
-                    yield name, None, ErrorObject(e)
-            else:
-                yield name, self._load_type(t)
-
-    def enum(self, *, geterror=False) -> Generator[Type, None, None]:
+    def getall(self, *, geterror=False) -> Generator[Type, None, None]:
         """ すべての型をロードし、取得する
         Params:
             geterror(bool): 発生したエラーを取得する
+        Yields:
+            str, Type | (geterror) str, Type, ErrorObject
         """
-        yield from self._enum_types(self._lib_typename, geterror)
-        
-        for chi in self._children.values():
-            yield from chi.enum(geterror=geterror)
+        for fullname, t in self._defs.items():
+            if geterror:
+                try:
+                    yield fullname, t, None
+                except Exception as e:
+                    from machaon.types.stacktrace import ErrorObject
+                    yield fullname, None, ErrorObject(e)
+            else:
+                yield fullname, t
 
     def deduce(self, value_type) -> Optional[TypeProxy]:
         """ 値型に適合する型を取得する
         Params:
-            value_type(type):
+            value_type(type|str):
         Returns:
             Optional[TypeProxy]: 
         """
-        if not isinstance(value_type, type):
-            raise TypeError("value_type must be type instance, not value")
+        if isinstance(value_type, type):
+            # ビルトイン型に対応する
+            if hasattr(value_type, "__name__"): 
+                typename = value_type.__name__
+                if typename in PythonBuiltinTypenames.literals: # 基本型
+                    return self.get(typename.capitalize())
+                elif typename in PythonBuiltinTypenames.dictionaries: # 辞書型
+                    return self.get("ObjectCollection")
+                elif typename in PythonBuiltinTypenames.iterables: # イテラブル型
+                    return self.get("Tuple")
+            
+            tn = full_qualified_name(value_type)
+        elif isinstance(value_type, str):
+            tn = value_type
+        else:
+            raise TypeError("value_type must be type or str instance, not '{}'".format(value_type))
 
-        # ビルトイン型に対応する
-        if hasattr(value_type, "__name__"): 
-            typename = value_type.__name__
-            if typename in PythonBuiltinTypenames.literals: # 基本型
-                return self.get(typename.capitalize())
-            elif typename in PythonBuiltinTypenames.dictionaries: # 辞書型
-                return self.get("ObjectCollection")
-            elif typename in PythonBuiltinTypenames.iterables: # イテラブル型
-                return self.get("Tuple")
-        
         # 値型で検索する
-        t = self.find(full_qualified_name(value_type), code=TYPECODE_VALUETYPE)
+        t = self._select_type(tn, TYPECODE_VALUETYPE)
         if t is not None:
             return t
 
         # 見つからなかった
         return None
 
-    #
-    # サブタイプを取得する
-    #
-    def _select_subtype(self, basekey, typename):
-        """ このモジュールで型名とサブタイプ名の関係を解決する 
+    def select(self, typecode, describername:str=None):
+        """ 型名を検索し、存在しない場合は定義のロードを試みる
         Params:
-            basekey(str): 元の型名
-            typename(str): サブタイプ名
+            typecode(str|type|dict): 型名/デスクライバ型/辞書型
+            describername(str): 完全な実装名
         Returns:
-            Optional[TypeProxy]
+            Type:
         """
-        bag = self._subtype_rels.get(basekey)
-        if bag is not None:
-            td = self._subtype_rels[basekey].get(typename)
-            if td is not None:
-                return self._load_type(td)
-        return None
-        
-    def find_subtype(self, basekey, typename, scope=None):
-        """ findと同様にサブタイプを探索する
-        Params:
-            basekey(str): 元の型名
-            typename(str): サブタイプ名
-            scope?(str): スコープ名
-        Returns:
-            Optional[TypeProxy]
-        """
-        if scope is None:
-            # 自分自身の定義を探索
-            t = self._select_subtype(basekey, typename)
+        if isinstance(typecode, str):  
+            # 型名
+            t = self._select_type(normalize_typename(typecode), TYPECODE_TYPENAME, module=describername)
+            if t is not None:
+                if describername is not None:
+                    target, isklass = detect_describer_name_type(describername)
+                    if target is not None and isklass:                        
+                        # mixinで追加ロードすべきか確認する
+                        self.inject_type_mixin(target, t)
+                return t
+            
+            # 対象モジュールから定義をロードする
+            if describername is None:
+                raise BadTypename("型'{}'は存在しません。定義クラス・モジュール・パッケージの指定があればロード可能です".format(typecode))
+            
+            target, isklass = detect_describer_name_type(describername)
+            if target is None:
+                raise TypeModuleError("デスクライバ'{}'はクラス名、モジュール名、パッケージ名のいずれでもありません".format(describername))
+            if isklass: # クラス
+                return self.define(target, typename=typecode)
+            else: # モジュール or パッケージの全ての型をロードする
+                err = None
+                try:
+                    self.use_module_or_package_types(target, fallback=True)
+                except Exception as e:
+                    err = e
+                # 型名で探索
+                t = self._select_type(typecode, TYPECODE_TYPENAME, describername) 
+                if t is None:
+                    raise err # 型が見つからなかった場合のみ、エラーを投げる
+                return t
+    
+        elif isinstance(typecode, type):
+            # デスクライバクラス型
+            t = self._select_type(full_qualified_name(typecode), TYPECODE_DESCRIBERNAME)
             if t is not None:
                 return t
+            else:
+                # このデスクライバから定義をロードする
+                return self.define(typecode)
+            
+        elif isinstance(typecode, dict):
+            # 辞書型
+            desc = create_type_describer(typecode)
+            t = self._select_type(desc.get_typename(), TYPECODE_TYPENAME, desc.get_full_qualname())
+            if t is not None:
+                return t
+            else:
+                return self.define(desc)
 
-            # 子モジュールをすべて探索
-            for ch in self._children.values():
-                tt = ch.find_subtype(basekey, typename)
-                if tt is not None:
-                    return tt
-        else:
-            # 特定のモジュールを探索
-            if scope not in self._children:
-                raise TypeModuleError("スコープ'{}'は子モジュールのなかに見つかりません".format(scope))
-            mod = self._children[scope]
-            return mod._select_subtype(basekey, typename)
-    
-    def get_subtype(self, basetypecode: Any, typename: str, *, scope=None):
-        """ サブタイプを探索する
-        Params:
-            basetypecode(Any): getで使用できるすべての値
-            typename(str): サブタイプ名
-            scope?(str): スコープ名
-        Returns:
-            Optional[TypeProxy]
-        """
-        basetype = self.get(basetypecode, scope=scope)
-        if basetype is None:
-            return None
-        
-        subtype = self.find_subtype(basetype.get_typename(), typename, scope=scope)
-        if subtype is None:
-            # 総称型のものを探す
-            if basetypecode == SUBTYPE_BASE_ANY: 
-                return None
-            subtype = self.find_subtype(SUBTYPE_BASE_ANY, typename, scope=scope)
-
-        return subtype
-
-    def enum_subtypes_of(self, basetypecode, *, scope=None, geterror=False):
-        """ ある型のすべてのサブタイプをロードし、取得する
-        Params:
-            geterror(bool): 発生したエラーを取得する
-        Yields:
-            Tuple[Str, Str, Type, Error]: scopename, typename, type, error
-        """
-        basetype = self.get(basetypecode, scope=scope)
-        if basetype is None:
-            return None
-        basekey = basetype.get_typename()
-
-        # 子モジュールを全て探索する
-        def _enum(mod):
-            types = mod._subtype_rels.get(basekey, {})
-            for name, t, err in self._enum_types(types, geterror):
-                yield (mod.scopename, "{}:{}".format(basekey,name), t, err)
-                
-            for ch in mod._children.values():
-                yield from _enum(ch)
-        
-        yield from _enum(self)
-
-    def enum_all_subtypes(self, *, geterror=False):
-        """ 全てのサブタイプを取得する。 
-        Yields:
-            Tuple[Str, Str, Type, Error]: scopename, typename, type, error
-        """
-        def _enum(mod):
-            for base, types in mod._subtype_rels.items():
-                for name, t, err in self._enum_types(types, geterror):
-                    yield (mod.scopename, "{}:{}".format(base,name), t, err)
-                
-            for ch in mod._children.values():
-                yield from _enum(ch)
-
-        yield from _enum(self)
-
-
-
-    #
-    # 型を定義する
-    #
-    def define(self, 
-        describer: Any = None,
-        *,
+    def define(self, describer, *,
         typename = None, 
         value_type = None,
-        doc = "",
-        bits = 0
+        doc = None,
+        bits = 0,
+        describername = None,
+        typeclass = None,
+        fallback = False
     ) -> Type:
-        # 登録処理
-        t: Any = None # 型オブジェクトのインスタンス
-        if describer is None:
-            # 実質文字列型
-            t = Type({"ValueType":str})
-        elif isinstance(describer, TypeDefinition):
-            t = describer
-        elif isinstance(describer, Type):
-            # Traitsまたは派生型のインスタンスが渡された
-            t = describer.copy() # 複製する
-        elif isinstance(describer, dict):
-            # 実装を記述した辞書型
-            t = Type(describer)
-        elif isinstance(describer, ClassDescriber) or isinstance(describer, type):
-            if not isinstance(describer, ClassDescriber):
-                describer = ClassDescriber(describer)
-            td = TypeDefinition(describer)
-            t = Type(describer, name=td.proto_define())
-        else:
-            raise TypeModuleError("TypeModule.defineは'{}'による型定義に対応していません：".format(type(describer).__name__))
-        
-        if isinstance(t, Type):
-            # 定義をロードする
-            t.describe(
-                typename=typename, value_type=value_type, 
-                doc=doc, bits=bits
-            ).load()
-            key = t.get_typename()
-            if key is None:
-                raise TypeModuleError("No typename is set: {}".format(describer))
+        """ 型定義を作成する """
+        if isinstance(describer, Type):
+            return self._add_type(describer, fallback=fallback)
+    
+        desc = create_type_describer(describer, name=describername)
+        if desc.is_typedef():
+            t = (typeclass or resolve_typeclass(desc.get_value_full_qualname()))(desc)
+            t.load(typename=typename, value_type=value_type, doc=doc, bits=bits)
+            return self._add_type(t, fallback=fallback)
+        elif desc.is_mixin():
+            return self._add_type_mixin(desc, desc.get_mixin_target()) # ミキシンが予約された場合はNoneが返る
 
-            self._add_type(key, t)
-        elif isinstance(t, TypeDefinition):
-            if t.is_mixin():
-                # mixinを登録するか読み込む
-                basename, basescope = parse_scoped_typename(t.get_sub_target())
-                self._load_mixin(basename, basescope, t, reserve=True)
-            else:
-                # 定義を型名に紐づけて配置する
-                typename = t.proto_define()
-                if t.is_subtype():
-                    basename, basescope = parse_scoped_typename(t.get_sub_target())
-                    self._add_subtype(basename, typename, t)
-                else:
-                    self._add_type(typename, t)
-        else:
-            raise TypeModuleError("Unknown result value of TypeModule.define: {}".format(t))
-
-        return t
-
-    def _add_type(self, typename, type):
+    def _add_type(self, type, *, fallback=False):
         """ 型をモジュールに追加する """
-        describername = type.get_describer_qualname()
+        if not type.is_loaded():
+            raise ValueError("type must be loaded")
+        
+        tqualname: QualTypename = type.get_qual_typename()
+        if not tqualname.is_qualified():
+            raise TypeModuleError("型'{}'のデスクライバクラス名が指定されていません".format(tqualname))
+        typename:str = tqualname.typename
+        qualname:str = tqualname.stringify()
+        describername:str = tqualname.describer
+        original_describername:str = type.get_describer().get_value_full_qualname()
+
+        # フルスコープ型名の辞書をチェックする
+        if qualname in self._defs:
+            if fallback: return
+            raise TypeModuleError("型'{}'はこのモジュールに既に存在します".format(qualname))
+
         valuetypename = type.get_value_type_qualname()
 
         # 型名の辞書をチェックする
         if typename in self._lib_typename:
-            dest = self._lib_typename[typename]
-            if dest.get_describer_qualname() == describername:
-                return dest # 同じものが登録済み
-            else:
-                o = dest.get_describer_qualname()
-                n = describername
-                raise TypeModuleError("型'{}'はこのモジュールに既に存在します\n  旧= {}\n  新= {}".format(typename, o, n))
-        
-        # デスクライバクラスをチェックする
-        if describername is not None:
-            if describername in self._lib_describer:
-                return # 登録済み
+            descs = self._lib_typename[typename]
+            if describername in descs:
+                if fallback: return
+                raise TypeModuleError("型'{}'はこのモジュールに既に存在します".format(qualname))
 
-        self._lib_typename[typename] = type
-        self._lib_describer[describername] = typename
+        # デスクライバの辞書をチェックする
+        if original_describername in self._lib_describer:
+            tn = self._lib_describer[original_describername]
+            return self._defs[tn] # デスクライバの重複はエラーにしない
+
+        # 型の登録を開始する
+        self._defs[qualname] = type
+        self._lib_typename.setdefault(typename, []).append(describername)
+
+        # デスクライバは本名で登録する
+        self._lib_describer[original_describername] = qualname
 
         # 値型は最初に登録されたものを優先する
         if valuetypename not in self._lib_valuetype:
-            self._lib_valuetype[valuetypename] = typename
-
-        # スコープモジュールを登録する
-        type.scope = self
+            self._lib_valuetype[valuetypename] = qualname
 
         # 予約済みのmixinロードを実行する
-        self._load_reserved_mixin(typename, self.scopename, type)
+        self._inject_reserved_mixins(qualname, type)
 
         return type
 
-    def _add_subtype(self, basename, typename, t):
-        """ サブタイプ定義を追加する """
-        if basename == "Any":
-            basename = SUBTYPE_BASE_ANY
-        base = self._subtype_rels.setdefault(basename, {})
-        base[typename] = t
-        
-    def add_definition(self, describer, classname=None) -> TypeDefinition:
-        """ 型定義を作成する """
-        td = TypeDefinition.new(describer, classname)
-        return self.define(td)
+    def inject_type_mixin(self, describername, target_type: Type):
+        """ Mixin実装を追加する """
+        if all(describername != x.get_full_qualname() for x in target_type.get_all_describers()):
+            mxtd = create_type_describer(describername)
+            target_type.mixin_method_prototypes(mxtd)
 
-    def _load_mixin(self, basename, basescope, t, *, reserve=False):
-        """ mixin定義を追加する """
-        basescope = basescope or CORE_SCOPE
-        target = self._select_scoped(basescope, basename)
-        if target is not None:
-            # 定義を追加、もしくは追加を予約する
-            target.mixin_load(t.get_describer())
-            return
-
-        # 型やスコープの定義がまだ無かった
-        if reserve:
-            li = self._loading_mixins.setdefault((basename, basescope), [])
-            li.append(t)
-
-    def _load_reserved_mixin(self, typename, scopename, target):
-        """  """
-        mi = self.root._loading_mixins.get((typename, scopename))
-        if mi:
-            for mt in mi:
-                target.mixin_load(mt.get_describer())
-            mi.clear()
-
-    def _load_reserved_mixin_all(self):
-        """  """
-        for (name, scope), mts in self.root._loading_mixins.items():
-            target = self._select_scoped(scope, name)
-            if target is None:
-                continue
-            for mt in mts:
-                target.mixin_load(mt.get_describer())
-            mts.clear()
-
-    #
-    # 子モジュールを操作する
-    #
-    def get_scope(self, scopename):
-        """ 取得する
-        Returns:
-            TypeModule:
-        """
-        return self._children.get(scopename)
-
-    def update_scope(self, scopename, other, *, addonly=False):
-        """ 追加または上書きする 
-        Params:
-            scopename(str): 
-            other(TypeModule):
-        """
-        if scopename in self._children:
-            if addonly:
-                raise TypeModuleError("スコープ'{}'はこのモジュールに既に存在します".format(scopename)) 
-            self._children[scopename].update(other)
+    def _add_type_mixin(self, describer: TypeDescriber, target: str):
+        """ Mixin実装を追加する """
+        qt = QualTypename.parse(target)
+        if not qt.is_qualified():
+            raise ValueError("{}: mixin対象の型名'{}'はデスクライバで修飾してください".format(describer.get_full_qualname(), target))
+        t = self.find(qt)
+        if t is not None:
+            t.mixin_method_prototypes(describer)
+            return t 
         else:
-            self._add_child(other, scopename)
-        # 予約中のmixinを解決する
-        self._load_reserved_mixin_all()
+            # 予約リストに追加する
+            mixins = self._reserved_mixins.setdefault(target, [])
+            mixins.append(describer)
+            return None
+        
+    def _inject_reserved_mixins(self, fulltypename: str, target: Type):
+        """ 予約済みのmixin実装を型に追加し、リストから削除する """
+        for key, mixins in self._reserved_mixins.items():
+            if fulltypename.startswith(key): # 前方一致
+                for mixin in mixins:
+                    target.mixin_method_prototypes(mixin)
+                mixins.clear()
+
+    #
+    # モジュールを操作する
+    #
+    def add_special_type(self, t):
+        """ 特殊な型を追加する """
+        self._defs[t.get_typename()] = t
+        self._lib_typename[t.get_typename()] = [""]
+        self._lib_valuetype[full_qualified_name(t.get_value_type())] = t
 
     def add_fundamentals(self):
         """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
-        self.update_scope(CORE_SCOPE, fundamental_types())
+        self.update(fundamental_types())
     
-    def add_default_modules(self, names=None):
+    def add_default_module_types(self, names=None):
         """ 標準モジュールの型を追加する """
-        from machaon.package.package import create_module_package
         from machaon.core.symbol import DefaultModuleNames
         names = names or DefaultModuleNames
-        for module in names:
-            pkg = create_module_package("machaon." + module)
-            mod = pkg.load_type_module()
-            if mod is None:
-                continue
-            self.update_scope(CORE_SCOPE, mod)
+        with ErrorSet("標準モジュールの型を追加") as errs:
+            for module in names:
+                try:
+                    name = "machaon."+module
+                    self.use_module_or_package_types(name, fallback=True)
+                except Exception as e:
+                    errs.add(e, value=name)
 
-    def add_package_types(self, pkg, scope=CORE_SCOPE):
-        """ 手動でパッケージを読み込み追加する """
-        mod = pkg.load_type_module()
-        if mod is None:
-            return False
-        self.update_scope(scope, mod)
-        return True
-
-    def remove_scope(self, scope):
-        """ 削除する 
-        Params:
-            scope(str):
-        """
-        if scope in self._children:
-            del self._children[scope]
+    def use_module_or_package_types(self, name, fallback=False):
+        """ モジュールあるいはパッケージ内の型を追加する """
+        if isinstance(name, str):
+            mod = module_loader(name)
         else:
-            raise TypeModuleError("スコープ'{}'はこのモジュールに見つかりません".format(scope))
-
-    def _add_child(self, child, scopename):
-        """ 親モジュールを設定する """
-        # 子に自らを親モジュールとして設定する
-        child.parent = self
-        child.scopename = scopename
-        # mixinをrootへと引き継ぐ
-        self.root._loading_mixins.update(child._loading_mixins)
-        child._loading_mixins.clear()
-        # 子の辞書に追加する
-        self._children[scopename] = child
+            mod = name
+        with ErrorSet("'{}'に定義された全ての型をロード".format(name)) as errs:
+            for mod in mod.load_all_module_loaders():
+                for desc in mod.load_all_describers():
+                    try:
+                        self.define(desc, fallback=fallback) # 重複した場合は単にスルーする
+                    except Exception as e:
+                        errs.add(e, value=desc.get_full_qualname())
 
     def update(self, other):
         """ 
@@ -529,29 +392,31 @@ class TypeModule():
         Params:
             other(TypeModule):
         """
-        other.scopename = self.scopename
-        other.parent = self.parent
-        self._lib_typename.update(other._lib_typename)
+        self._defs.update(other._defs)
+        for k, v in other._lib_typename.items():
+            li = self._lib_typename.setdefault(k, [])
+            li.extend(v)
         self._lib_describer.update(other._lib_describer)
         self._lib_valuetype.update(other._lib_valuetype)
-        self._subtype_rels.update(other._subtype_rels)
-        self._children.update(other._children)
-        # mixinはトップレベルのモジュールで予約する
-        self.root._loading_mixins.update(other._loading_mixins)
-
+        # mixinを全ての型に試し、残りのリストを引き取る
+        for fulltypename, type in self._defs.items():
+            other._inject_reserved_mixins(fulltypename, type)
+        for k, v in other._reserved_mixins.items():
+            li = self._reserved_mixins.setdefault(k, [])
+            li.extend(v)
+    
     def check_loading(self):
         """
         型を一通り読み込んだ後にエラーをチェックする
         """
         not_found_mixins = []
-        for k, li in self._loading_mixins.items():
+        for k, li in self._reserved_mixins.items():
             if li:
                 not_found_mixins.append((k, li))
         if not_found_mixins:
             vals = []
-            for (tn, scope), li in not_found_mixins:
-                typename = get_scoped_typename(tn, scope or "<no-scope>")
-                descs = " + ".join([desc.get_describer_qualname() for desc in li])
+            for typename, li in not_found_mixins:
+                descs = " + ".join([desc.get_full_qualname() for desc in li])
                 vals.append("{} <- {}".format(typename, descs))
             raise TypeModuleError("対象の型が見つからなかったmixin実装が残っています:\n  " + ", ".join(vals))
 
@@ -560,23 +425,31 @@ class TypeModule():
     class DefinitionSyntax():
         def __init__(self, parent):
             self._parent = parent
-        
-        def register(self, typename):
-            if not is_valid_typename(typename):
-                raise BadTypename(typename)
-            def _define(doc, *, describer=None, value_type=None, scope=None, bits=0):
-                d = TypeDefinition(describer, typename, value_type, doc, scope, bits)
-                self._parent.define(d)
+
+        def register(self, fulltypename):
+            if not is_valid_typename(fulltypename):
+                raise BadTypename(fulltypename)
+            def _define(doc, *, value_type=None, bits=0):
+                self._parent.define(fulltypename, value_type=value_type, doc=doc, bits=bits)
             return _define
-        
+
         def __getattr__(self, typename):
             return self.register(typename)
-        
+
         def __getitem__(self, typename):
             return self.register(typename)
-        
+
     # 遅延登録
     def definitions(self):
         return self.DefinitionSyntax(self)
 
 
+#
+#
+#
+def resolve_typeclass(describername):
+    from machaon.core.type.fundamental import NoneType, ObjectCollectionType
+    return {
+        "machaon.types.fundamental.NoneType" : NoneType,
+        "machaon.core.object.ObjectCollection" : ObjectCollectionType
+    }.get(describername, Type)

@@ -51,59 +51,91 @@ def UTCOffset(utc_delta) -> datetime.tzinfo:
 # 
 #
 #
-class DatetimeType():
+class DatetimeType:
     """ @type trait [Datetime]
     日付と時刻
     ValueType:
         datetime.datetime
     """
-    def constructor(self, s=None):
+    def constructor(self, v=None, m=None, d=None, h=None, mm=None, s=None):
         """ @meta 
         Params:
-            None|Str|Int:
+            v?(Int|Str|None): 西暦年/時刻表現
+            m?(Int): 月
+            d?(Int): 日
+            h?(Int): 時間
+            mm?(Int): 分
+            s?(Int): 秒
         """
-        if s is None:
-            return datetime.datetime.now()
-
-        if isinstance(s, int):
-            return datetime.datetime.fromordinal(s)
-        elif isinstance(s, (list, tuple)):
-            if len(s) < 3:
-                raise ValueError("{}: 要素の数が足りません".format(s))
-            if len(s) >= 6:
-                return datetime.datetime(s[0], s[1], s[2], s[3], s[4], s[5])
+        if isinstance(v, int):
+            if m is None or d is None:
+                raise ValueError("指定された引数が足りません")
+            if h is None or mm is None or s is None:
+                return datetime.datetime(v, m, d)
             else:
-                return datetime.datetime(s[0], s[1], s[2])
+                return datetime.datetime(v, m, d, h, mm, s)
 
-        klass, sep, tail = s.partition("/")
-        klass = klass.lower()
-        if sep:
-            if klass == "posix":
-                return datetime.datetime.fromtimestamp(float(tail))
-            elif klass == "posix-utc":
-                return datetime.datetime.utcfromtimestamp(float(tail))
-            elif klass == "iso":
-                return datetime.datetime.fromisoformat(s)
-        
-        if "T" in s:
-            return datetime.datetime.fromisoformat(s)
-        
         # 2009/12/01/12:50.49
-        parts = s.split("/")
-        if len(parts) >= 3:
-            y, m, d = parse_date(s)
-            if len(parts) == 4:
-                h, n, c = parse_time(parts[3])
-                return datetime.datetime(y, m, d, h, n, c)
-            else:
-                return datetime.datetime(y, m, d)
+        if isinstance(v, str):
+            parts = v.split("/")
+            if len(parts) >= 3:
+                y, m, d = parse_date(v)
+                if len(parts) == 4:
+                    h, n, c = parse_time(parts[3])
+                    return datetime.datetime(y, m, d, h, n, c)
+                else:
+                    return datetime.datetime(y, m, d)
 
-        raise ValueError("不正な日付の形式です: " + s)
+        raise ValueError("不正な日付の形式です: " + v)
 
     def stringify(self, date):
         """ @meta """
         return date.strftime("%Y/%m/%d (%a) %H:%M.%S")
 
+    def from_timestamp(self, value):
+        """ @method external
+        Params:
+            value(Float):
+        """
+        return datetime.datetime.fromtimestamp(value)
+    
+    def from_timestamp_utc(self, value):
+        """ @method external
+        Params:
+            value(Float): 
+        """
+        return datetime.datetime.utcfromtimestamp(value)
+    
+    def from_ordinal(self, value):
+        """ @method external
+        Params:
+            value(Int):
+        """
+        return datetime.datetime.fromordinal(value)
+    
+    def from_iso(self, value):
+        """ @method external
+        Params:
+            value(Str):
+        """
+        return datetime.datetime.fromisoformat(value)
+    
+    def now(self, tz=None):
+        """ @method external
+        現在の時刻を返す。
+        Params:
+            tz(Timezone): 
+        """
+        if not isinstance(tz, Timezone):
+            tz = None
+        return datetime.datetime.now(tz)
+
+    def utcnow(self):
+        """ @method external
+        現在の時刻を返す。
+        """
+        return datetime.datetime.utcnow()
+    
     #
     # 取得
     #
@@ -203,20 +235,6 @@ class DatetimeType():
         """
         return d.timetz()
 
-    def now(self, _d, tz=None):
-        """ @method
-        現在の時刻を返す。
-        Params:
-            tz(Timezone): 
-        """ 
-        return datetime.datetime.now(tz)
-        
-    def utcnow(self, _d):
-        """ @method
-        現在の時刻を返す。
-        """ 
-        return datetime.datetime.utcnow()
-        
     #
     # timezone
     #
@@ -334,37 +352,58 @@ class DateType:
     ValueType:
         datetime.date
     """
-    def constructor(self, s):
-        """ @meta """
-        if s is None:
-            return datetime.datetime.now()
-
-        if isinstance(s, int):
-            return datetime.date.fromordinal(s)
-        elif isinstance(s, (list, tuple)):
-            if len(s) < 3:
-                raise ValueError("{}: 要素の数が足りません".format(s))
-            return datetime.date(s[0], s[1], s[2])
-
-        klass, sep, tail = s.partition("/")
-        klass = klass.lower()
-        if sep:
-            if klass == "posix":
-                return datetime.date.fromtimestamp(float(tail))
-            elif klass == "iso":
-                return datetime.date.fromisoformat(s)
+    def constructor(self, year=None, month=None, day=None):
+        """ @meta 
+        Params:
+            year(Int):
+            month(Int):
+            day(Int):
+        """
+        if isinstance(year, int):
+            return datetime.date(year, month, day)
         
         # 2009/12/01
-        parts = s.split("/")
-        if len(parts) >= 3:
-            y, m, d = parse_date(s)
-            return datetime.date(y, m, d)
+        if isinstance(year, str):
+            parts = year.split("/")
+            if len(parts) >= 3:
+                y, m, d = parse_date(year)
+                return datetime.date(y, m, d)
 
-        raise ValueError("不正な日付の形式です: " + s)
+        raise ValueError("不正な日付の形式です: " + year)
 
     def stringify(self, date):
         """ @meta """
         return date.strftime("%Y/%m/%d (%a) ")
+    
+    #
+    #
+    #
+    def from_timestamp(self, s):
+        """ @method external
+        Params:
+            s(Float):
+        """
+        return datetime.date.fromtimestamp(s)
+    
+    def from_iso(self, s):
+        """ @method external
+        Params:
+            s(Str):
+        """
+        return datetime.date.fromisoformat(s)
+    
+    def from_ordinal(self, o):
+        """ @method external
+        Params:
+            o(Int):
+        """
+        return datetime.date.fromordinal(o)
+    
+    def today(self):
+        """ @method external
+        今日の日付を表す。
+        """
+        return datetime.date.today()
 
     #
     # 取得
@@ -597,10 +636,8 @@ class TimeType:
             Str:
         """
         return d.strftime(format)
-#
-# Date:
-# サブタイプ
-#
+
+
 def digits_split_by_nondigit(s, required=None):
     parts = [""]
     for ch in s:
@@ -616,48 +653,48 @@ def digits_split_by_nondigit(s, required=None):
     return digits
 
 
-class DateSeparated:
-    """ @type subtype [Sep]
-    数字以外の任意の文字で区切られた日付表現。
-    BaseType:
-        Date:
-    """
-    def constructor(self, s):
-        """ @meta """
-        if isinstance(s, str):
-            y, m, d = digits_split_by_nondigit(s, 3)
-            return datetime.date(y, m, d)
-        else:
-            return DateType.constructor(DateType, s)
 
-    def stringify(self, d):
-        """ @meta """
-        return d.strftime("%Y/%m/%d")
+class DateRepresent:
+    """ @mixin
+    MixinType:
+        Date:machaon.types.dateandtime:
+    """
+    def from_joined(self, s):
+        """ @method external
+        数字以外の任意の文字で区切られた日付表現。
+        Params:
+            s(Str):
+        """
+        y, m, d = digits_split_by_nondigit(s, 3)
+        return datetime.date(y, m, d)
     
-
-class MonthSeparated:
-    """ @type subtype
-    年と月の区切られた組み合わせ。
-    BaseType:
-        Date:
-    """
-    def constructor(self, s, day=None):
-        """ @meta """
-        if isinstance(s, str):
-            y, m = digits_split_by_nondigit(s, 2)
-            d = day if day is not None else 1
-            return datetime.date(y, m, d)
-        else:
-            return DateType.constructor(DateType, s)
-
-class Date8:
-    """ @type subtype
-    YYYYMMDDな日付表現。
-    BaseType:
-        Date:
-    """
-    def constructor(self, s):
-        """ @meta """
+    def from_joined_month(self, s, day=None):
+        """ @method external
+        年と月の区切られた組み合わせ。
+        Params:
+            s(Str):
+            day?(Int):
+        """
+        y, m = digits_split_by_nondigit(s, 2)
+        d = day if day is not None else 1
+        return datetime.date(y, m, d)
+    
+    #
+    #
+    #
+    def yyyymmdd(self, d):
+        """ @method [date8]
+        Returns:
+            Str:
+        """
+        return d.strftime("%Y%m%d")
+    
+    def from_yyyymmdd(self, s):
+        """ @method external [from_date8]
+        YYYYMMDDな日付表現。
+        Params:
+            s(Str):
+        """
         if len(s) != 8:
             raise ValueError(s)
         y = s[0:4]
@@ -665,20 +702,20 @@ class Date8:
         d = s[6:]
         return datetime.date(int(y), int(m), int(d))
 
-    def stringify(self, d):
-        """ @meta """
-        return d.strftime("%Y%m%d")
+    def mmdd(self, d):
+        """ @method [date4]
+        Returns:
+            Str:
+        """
+        return d.strftime("%m%d")
     
-class Date4:
-    """ @type subtype
-    MMDDな今年の日付表現。
-    BaseType:
-        Date:
-    Params:
-        year?(int):
-    """
-    def constructor(self, s, year=None):
-        """ @meta """
+    def from_mmdd(self, s, year=None):
+        """ @method external [from_date4]
+        MMDDな日付表現。
+        Params:
+            s(Str):
+            year?(int):
+        """
         if len(s) != 4:
             raise ValueError(s)
         if year is None:
@@ -689,97 +726,64 @@ class Date4:
         d = int(s[2:])
         return datetime.date(y, m, d)
 
-    def stringify(self, d):
-        """ @meta noarg """
-        return d.strftime("%m%d")
-
-class Month:
-    """ @type subtype
-    今年のある月の1日を表す。 Intへのflow
-    BaseType:
-        Date:
-    Params:
-        year?(int):
-        day?(int):
-    """
-    def constructor(self, s, year=None, day=None):
-        """ @meta """
-        v = int(s)
-        if year is None:
-            y = datetime.datetime.today().year
-        else:
-            y = year
+    #
+    # 
+    #
+    def from_this_year_month(self, v, day=None):
+        """ @method external
+        今年のある月の1日。
+        Params:
+            v(int):
+            day?(int):
+        """
+        y = datetime.datetime.today().year
         if day is None:
             d = 1
         else:
             d = day
         return datetime.date(y, v, d)
-
-    def reflux(self, d):
-        """ @meta noarg """
-        return d.month
-
-class Day:
-    """ @type subtype
-    今月のある日を表す。 Intへのflow
-    BaseType:
-        Date:
-    Params:
-        year?(int):
-        month?(int):
-    """
-    def constructor(self, s, year=None, month=None):
-        """ @meta """
-        v = int(s)
-        if year is None:
-            y = datetime.datetime.today().year
-        else:
-            y = year
-        if month is None:
-            m = datetime.datetime.today().month
-        else:
-            m = month
+    
+    def from_this_month_day(self, v):
+        """ @method external
+        今月のある日。
+        Params:
+            v(int):
+        """
+        y = datetime.datetime.today().year
+        m = datetime.datetime.today().month
         return datetime.date(y, m, v)
 
-    def reflux(self, d):
-        """ @meta noarg """
-        return d.day
-
-def complete_year_low(y):
-    if 0 <= y and y < 50: # 2000 ~ 2049
-        y = 2000 + y
-    elif 50 <= y and y < 100: # 1950 ~ 1999
-        y = 1900 + y
-    return y
-
-
-class YearLowMonth:
-    """ @type subtype
-    西暦の下二桁と月の区切られた組み合わせ。
-    BaseType:
-        Date:
-    Params:
-        day?(int):
-    """
-    def constructor(self, s, day=None):
-        """ @meta """
+    #
+    # 西暦の下二桁
+    #
+    def from_yearlow_month(self, s, day=None):
+        """ @method external
+        西暦の下二桁と月の区切られた組み合わせ。
+        Params:
+            s(str):
+            day?(int):
+        """
         yv, m = digits_split_by_nondigit(s, 2)        
-        y = complete_year_low(yv)
+        y = DateRepresent.complete_yearlow(yv)
         d = day if day is not None else 1
         return datetime.date(y, m, d)
 
-class YearLowDate:
-    """ @type subtype
-    西暦の下二桁と月日の区切られた組み合わせ。
-    BaseType:
-        Date:
-    Params:
-        day?(int):
-    """
-    def constructor(self, s):
-        """ @meta """
+    def from_yearlow_date(self, s):
+        """ @method external
+        西暦の下二桁と月日の区切られた組み合わせ。
+        Params:
+            s(str):
+        """
         yv, m, d = digits_split_by_nondigit(s, 3) 
-        y = complete_year_low(yv)
+        y = DateRepresent.complete_yearlow(yv)
         return datetime.date(y, m, d)
+
+    @staticmethod
+    def complete_yearlow(y):
+        if 0 <= y and y < 70: # 2000 ~ 2069
+            y = 2000 + y
+        elif 70 <= y and y < 100: # 1970 ~ 1999
+            y = 1900 + y
+        return y
 
 

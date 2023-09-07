@@ -1,9 +1,9 @@
 
-from machaon.core.type.type import TYPE_NONETYPE, TYPE_OBJCOLTYPE, TYPE_USE_INSTANCE_METHOD
-from machaon.core.type.typemodule import TypeModule
-from machaon.core.type.decl import parse_type_declaration
+
+from machaon.core.type.decl import parse_type_declaration, TypeDecl
 from machaon.core.type.pytype import PythonType
-from machaon.core.type.extend import SubType
+
+from machaon.core.symbol import QualTypename, full_qualified_name
 
 from machaon.core.object import Object
 
@@ -21,10 +21,17 @@ class TypeType:
     def constructor(self, context, value):
         """ @meta context
         Params:
-            Str: 型名 / クラスの完全な名前(qualname)
+            value(Any): 型表現 / 型の完全な名前(qualname) / パース済みの型宣言
         """
-        decl = parse_type_declaration(value)
-        return decl.instance(context)
+        if isinstance(value, str):
+            decl = parse_type_declaration(value)
+            return decl.instance(context)
+        elif isinstance(value, QualTypename):
+            return context.select_type(value)
+        elif isinstance(value, TypeDecl):
+            return value.instance(context)
+        else:
+            raise TypeError("型の表現あるいは完全な型名が必要です")
 
     def stringify(self, v):
         """ @meta """
@@ -36,27 +43,22 @@ class TypeType:
     #
     # メソッド
     #
-    def new(self, type):
-        '''@method
-        引数無しでコンストラクタを実行する。
-        Returns:
-            Object: オブジェクト
-        '''
-        vt = type.get_value_type()
-        value = vt()
-        return Object(type, value)
-    
-    def ctor(self, type, context, s):
+    def new(self, type, context, *args):
         '''@method context
-        文字列からインスタンスを作成する。
+        コンストラクタを実行する。
         Params:
-            s(Str):
+            *args(Any): 引数
         Returns:
             Object: オブジェクト
         '''
-        value = type.construct(context, s)
-        return Object(type, value)
-
+        if not args:
+            vt = type.get_value_type()
+            value = vt()
+            return Object(type, value)
+        else:
+            value = type.construct(context, *args)
+            return Object(type, value)
+    
     def instance(self, type, context, *args):
         """ @method context
         型引数を束縛した型インスタンスを作成する。
@@ -74,19 +76,63 @@ class TypeType:
         docs = []
         docs.append("{} [{}]".format(typ.get_conversion(), type(typ).__name__))
         docs.extend(typ.get_document().splitlines())
-        docs.append("［実装］\n{}".format(typ.get_describer_qualname()))
-        docs.append("［メソッド］")
+
+        tdef = typ.get_typedef()
+        if tdef is not None:
+            docs.append("［実装］")
+            docs.extend([x.get_value_full_qualname() for x in tdef.get_all_describers()])
+        else:
+            vt = typ.get_value_type()
+            if vt:
+                docs.append("［値型］")
+                docs.append(full_qualified_name(vt))
+        docs.append("")
         app.post("message", "\n".join(docs))
+
+        # 型引数の表示
+        if tdef and len(tdef.get_type_params()) > 0:
+            app.post("message", "［型引数］")
+            from machaon.core.method import Method, METHOD_EXTERNAL
+            meth = Method(tdef.get_typename(), params=tdef.get_type_params(), flags=METHOD_EXTERNAL)
+            meth.add_result_self(tdef)
+            app.post("message", meth.get_signature() + "\n")
+
+        # コンストラクタの表示
+        if tdef:
+            app.post("message", "［コンストラクタ］")
+            meth = typ.get_constructor()
+            app.post("message", meth.get_signature() + "\n")
+
         # メソッドの表示
+        app.post("message", "［メソッド］")
         meths = self.methods(typ, context, app, value)
-        meths_sheet = context.new_object(meths, conversion="Sheet[Method](names,doc,signature,source)")
+        intr = []
+        extr = []
+        for meth in meths:
+            if meth["#extend"].value.is_external():
+                extr.append(meth)
+            else:
+                intr.append(meth)
+    
+        # 通常メソッド
+        meths_sheet = context.new_object(intr, conversion="Sheet[Method]")
+        meths_sheet.value.view(context, "names", "signature", "doc")
         meths_sheet.pprint(app)
+
+        # 外部メソッド
+        if extr:
+            app.post("message", "［外部メソッド］")
+            meths_sheet = context.new_object(extr, conversion="Sheet[Method]")
+            meths_sheet.value.view(context, "names", "signature", "doc")
+            meths_sheet.pprint(app)
 
     def methods(self, typ, context, app, instance=None):
         '''@task context
         使用可能なメソッドを列挙する。
         Returns:
-            Sheet[Method](names,doc,signature,source): メソッドのリスト
+            Sheet[Method]: メソッドのリスト
+        Decorates:
+            @ view: names doc signature source
         '''
         helps = []
         from machaon.core.message import enum_selectable_method
@@ -99,18 +145,11 @@ class TypeType:
                         "names" : context.new_object(names),
                         "doc" : "!{}: {}".format(type(meth).__name__, meth),
                         "signature" : "",
-                        "source" : ""
                     })
                 else:
-                    source = "user"
-                    if meth.is_from_class_member():
-                        source = "class"
-                    elif meth.is_from_instance_member():
-                        source = "instance"
                     helps.append({
                         "#extend" : context.new_object(meth, type="Method"),
                         "names" : context.new_object(names),
-                        "source" : context.new_object(source),
                     })
         return helps
     
@@ -124,40 +163,6 @@ class TypeType:
         """
         return type.select_method(name)
 
-    def subtype(self, typ, context, name):
-        ''' @method context [sub]
-        サブタイプを取得する。
-        Params:
-            name(str):
-        Returns:
-            Type:
-        '''
-        sub = context.type_module.get_subtype(typ, name)
-        if sub is not None:
-            return SubType(typ, sub)
-        return None
-
-    def subtypes(self, typ, context, app):
-        ''' @task context [subs]
-        サブタイプを列挙する。
-        Returns:
-            Sheet[ObjectCollection](name,doc,scope,location): メソッドのリスト
-        '''
-        with app.progress_display():
-            for scopename, name, t, error in context.type_module.enum_subtypes_of(typ, geterror=True):            
-                app.interruption_point(progress=1)
-                entry = {
-                    "name" : name,
-                }
-                if error is not None:
-                    entry["doc"] = "!!!" + error.summarize()
-                    entry["type"] = error
-                else:
-                    entry["doc"] = t.doc
-                    entry["scope"] = scopename
-                    entry["location"] = t.get_describer_qualname()
-                yield entry
-    
     def name(self, type):
         ''' @method
         型名。
@@ -206,7 +211,9 @@ class TypeType:
         ''' @method
         mixinを含めたすべての実装場所を示す文字列を返す。
         Returns:
-            Sheet[](name, describer):
+            Sheet[]:
+        Decorates:
+            @ view: name describer:
         '''
         return [{"name": x.get_full_qualname(), "describer": x} for x in type.get_all_describers()]
 
@@ -219,21 +226,8 @@ class TypeType:
         return isinstance(type, PythonType)
     
 
-class NoneType():
-    """ @type [None]
-    PythonのNone型。 
-    """
-    def constructor(self, _s):
-        """ @meta 
-        いかなる引数もNoneに変換する
-        """
-        return None
 
-    def stringify(self, f):
-        """ @meta """
-        return "<None>"
-
-class BoolType():
+class BoolType:
     """ @type [Bool]
     PythonのBool型。 
     ValueType:
@@ -285,21 +279,6 @@ class BoolType():
     #
     # if
     #
-    def if_true(self, b, context, if_, else_):
-        """ @method context
-        文字列を評価し、真なら実行する。コンテキストを引き継ぐ。
-        @ == 32 if-true: "nekkedo" "hekkeo"
-        Params:
-            if_(Function): true 節
-            else_(Function): false 節 
-        Returns:
-            Object: 返り値
-        """
-        if b:
-            body = if_
-        else:
-            body = else_
-        return body.run_here(context) # コンテキストを引き継ぐ
 
 
 
@@ -318,46 +297,42 @@ class NotFound(Exception):
 #  データ型登録
 #
 # ----------------------------------------------------------
+fundamental_typenames = [QualTypename.parse(x) for x in [
+    "Type:machaon.types.fundamental.TypeType",       # Type
+    "Bool:machaon.types.fundamental.BoolType",       # Bool
+    "Str:machaon.types.string.StrType",              # Str
+    "Int:machaon.types.numeric.IntType",             # Int
+    "Float:machaon.types.numeric.FloatType",         # Float
+    "Complex:machaon.types.numeric.ComplexType",     # Complex
+    "Function:machaon.core.function.FunctionType",   # Function
+    "Tuple:machaon.types.tuple.ObjectTuple",         # Tuple
+    "Sheet:machaon.types.sheet.Sheet",               # Sheet
+    # エラー型
+    "Error:machaon.types.stacktrace.ErrorObject",      # Error
+    "TracebackObject:machaon.types.stacktrace.TracebackObject", # TracebackObject
+    "FrameObject:machaon.types.stacktrace.FrameObject",         # FrameObject
+    "Context:machaon.core.context.InvocationContext",  # Context
+    "Process:machaon.process.Process",                 # Process
+    "PyModule:machaon.types.package.Module",           # PyModule
+    # システム型
+    "Method:machaon.core.method.Method",               # Method
+    "Package:machaon.types.package.AppPackageType",    # Package
+    "Stored:machaon.core.persistence.StoredMessage",   # Stored
+    "ShellTheme:machaon.ui.theme.ShellTheme",          # ShellTheme
+    "RootObject:machaon.types.app.RootObject",         # RootObject
+    # 特殊
+    "ObjectCollection:machaon.core.object.ObjectCollection", # ObjectCollection
+]]
+
+fundamental_describer_name = "machaon.core"
+
 def fundamental_types():
+    from machaon.core.type.typemodule import TypeModule
     module = TypeModule()
-    for qualname in [
-        "machaon.types.fundamental.TypeType",       # Type
-        "machaon.types.fundamental.BoolType",       # Bool
-        "machaon.types.string.StrType",             # Str
-        "machaon.types.numeric.IntType",            # Int
-        "machaon.types.numeric.FloatType",          # Float
-        "machaon.types.numeric.ComplexType",        # Complex
-        "machaon.core.function.FunctionType",       # Function
-        "machaon.types.tuple.ObjectTuple",          # Tuple
-        "machaon.types.sheet.Sheet",                # Sheet
-        # エラー型
-        "machaon.types.stacktrace.ErrorObject",     # Error
-        "machaon.types.stacktrace.TracebackObject", # TracebackObject
-        "machaon.types.stacktrace.FrameObject",     # FrameObject
-        "machaon.core.context.InvocationContext",   # Context
-        "machaon.process.Process",                  # Process
-        "machaon.types.package.Module",             # PyModule
-        # システム型
-        "machaon.core.method.Method",               # Method
-        "machaon.types.package.AppPackageType",     # Package
-        "machaon.core.persistence.StoredMessage",   # Stored
-        "machaon.ui.theme.ShellTheme",              # ShellTheme
-        "machaon.types.app.RootObject",             # RootObject
-    ]:
-        module.add_definition(qualname)
-
-    # None
-    td = module.add_definition("machaon.types.fundamental.NoneType")
-    td.value_type = type(None)
-    td.bits |= TYPE_NONETYPE
-
-    # ObjectCollection
-    td = module.add_definition("machaon.core.object.ObjectCollection")
-    td.bits |= TYPE_OBJCOLTYPE
-
+    for fulltypename in fundamental_typenames:
+        module.define(fulltypename, describername=fundamental_describer_name)
+    from machaon.core.type.fundamental import NoneType
+    module.add_special_type(NoneType())
     return module
-
-
-
 
 

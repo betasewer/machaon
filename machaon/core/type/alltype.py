@@ -3,7 +3,6 @@ from .basic import *
 from .decl import *
 from .declparser import *
 from .type import *
-from .typedef import *
 from .typemodule import *
 from .instance import *
 #

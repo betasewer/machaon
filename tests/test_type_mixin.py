@@ -1,4 +1,4 @@
-from machaon.core.importer import ClassDescriber
+from machaon.core.type.describer import TypeDescriberClass
 from machaon.core.invocation import TypeMethodInvocation
 from machaon.core.context import instant_context
 from machaon.core.message import select_method
@@ -6,9 +6,9 @@ from machaon.core.type.alltype import TypeModule, Type
 
 
 class StrEx:
-    """ @type mixin
+    """ @mixin
     MixinType:
-        Str:
+        Str:machaon.core:
     """
     def sparse(self, s, space=1):
         """ @method
@@ -25,21 +25,20 @@ from machaon.macatest import run, parse_test
 def test_mixin_load():
     types = TypeModule()
     types.add_fundamentals()
-    types.add_definition(StrEx)
+    types.define(StrEx)
 
     StrType = types.get("Str")
     assert StrType.select_method("sparse") is not None
-    assert isinstance(StrType.mixins()[0], ClassDescriber)
-    assert StrType.mixins()[0].get_classname() == "StrEx"
+    assert isinstance(StrType.get_describer(1), TypeDescriberClass)
+    assert StrType.get_describer(1).get_typename() == "StrEx"
 
     assert isinstance(select_method("sparse", StrType), TypeMethodInvocation)
 
 def test_mixin_run():
     cxt = instant_context()
-    cxt.type_module.add_definition(StrEx)
+    cxt.type_module.define(StrEx)
 
     StrType = cxt.get_type("Str")
-    assert cxt.type_module.get_scope("") is not None
     assert isinstance(StrType, Type)
     assert StrType.select_method("sparse") is not None
     

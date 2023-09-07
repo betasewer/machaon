@@ -1,4 +1,4 @@
-from machaon.core.type.basic import DefaultProxy, RedirectProxy, TypeProxy, instantiate_args
+from machaon.core.type.basic import DefaultProxy, RedirectProxy, TypeProxy
 
 #
 #
@@ -25,7 +25,7 @@ class TypeInstance(RedirectProxy):
     
     def instantiate(self, context, args):
         """ 引数を付け足す """
-        moreargs = instantiate_args(self, self.instantiate_params(), context, args)
+        moreargs = self.instantiate_args(context, args)
         newargs = []
         # UnspecifiedTypeParamを埋める
         i = 0
@@ -57,7 +57,7 @@ class TypeInstance(RedirectProxy):
 
     def get_conversion(self):
         n = ""
-        n += self.type.typename
+        n += self.type.get_conversion()
         if self._args:
             strs = []
             for a in self._args:
@@ -71,8 +71,8 @@ class TypeInstance(RedirectProxy):
             n += ": " + " ".join(strs)
         return n
 
-    def constructor(self, context, value):
-        return self.type.constructor(context, value, self._args)
+    def constructor(self, context, args):
+        return self.type.constructor(context, args, self._args)
 
     def stringify_value(self, value):
         return self.type.stringify_value(value, self._args)
@@ -83,9 +83,6 @@ class TypeInstance(RedirectProxy):
     def pprint_value(self, spirit, value):
         return self.type.pprint_value(spirit, value, self._args)
     
-    def reflux_value(self, value):
-        return self.type.reflux_value(value, self._args)
-
     def get_args(self):
         return self._args
 
@@ -121,7 +118,7 @@ class TypeAny(DefaultProxy):
     def get_methods_bound_type(self):
         raise TypeAnyInstantiateError()
 
-    def constructor(self, context, value):
+    def constructor(self, context, args, typeargs):
         raise TypeAnyInstantiateError()
 
     def stringify_value(self, value):
@@ -133,10 +130,7 @@ class TypeAny(DefaultProxy):
     def pprint_value(self, app, value):
         raise TypeAnyInstantiateError()
 
-    def reflux_value(self, value):
-        raise TypeAnyInstantiateError()
     
-
 class TypeAnyInstantiateError(Exception):
     def __str__(self) -> str:
         return "Any type cannot be instantiated"
@@ -147,6 +141,7 @@ class TypeUnion(DefaultProxy):
     共和型
     """
     def __init__(self, types):
+        super().__init__()
         self.types = types
     
     def get_typename(self):
@@ -177,7 +172,7 @@ class TypeUnion(DefaultProxy):
 
     def instantiate(self, context, args):
         """ 型引数を追加する """
-        moretypes = instantiate_args(self, self.instantiate_params(), context, args)
+        moretypes = self.instantiate_args(context, args)
         return TypeUnion(self.types + moretypes)
 
     def instantiate_params(self):
@@ -187,9 +182,9 @@ class TypeUnion(DefaultProxy):
         p.set_variable()
         return [p]
     
-    def constructor(self, context, value):
+    def constructor(self, context, args, typeargs):
         firsttype = self.types[0]
-        return firsttype.constructor(context, value)
+        return firsttype.constructor(context, args, typeargs)
 
     def stringify_value(self, value):
         t = self.select_value_type(type(value))
@@ -203,9 +198,7 @@ class TypeUnion(DefaultProxy):
         t = self.select_value_type(type(value))
         return t.pprint_value(app, value)
 
-    def reflux_value(self, value):
-        t = self.select_value_type(type(value))
-        return t.reflux_value(value)
+
 
 # 型引数のデフォルト値
 UnspecifiedTypeParam = TypeAny()
