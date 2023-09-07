@@ -1,5 +1,5 @@
 from machaon.core.symbol import (
-    SIGIL_MODULE_INDICATOR, SIGIL_PYMODULE_DOT
+    SIGIL_DESCRIBER_INDICATOR, SIGIL_PYMODULE_DOT
 )
 from machaon.core.type.decl import TypeDecl, TypeDeclError
 
@@ -63,7 +63,7 @@ def _typedecl_fullnamed_expr(itr):
         ch, pos = itr.advance()
         if itr.eos():
             break
-        elif ch == SIGIL_MODULE_INDICATOR:
+        elif ch == SIGIL_DESCRIBER_INDICATOR:
             describername = _typedecl_name(itr)
         else:
             itr.back(pos)

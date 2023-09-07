@@ -1,6 +1,6 @@
 
 from machaon.core.type.type import TYPE_DELAY_LOAD_METHODS, Type
-from machaon.core.symbol import normalize_method_name, normalize_method_target
+from machaon.core.symbol import normalize_method_name, normalize_method_target, SIGIL_OPERATOR_MEMBER_AT
 from machaon.core.method import make_method_prototype_from_doc, parse_doc_declaration
 from machaon.core.invocation import TypeMethodInvocation
 from machaon.core.type.describer import TypeDescriberClass
@@ -492,7 +492,7 @@ class GenericMethods:
         """
         return right in left 
 
-    @resolver.operator("#", "at")
+    @resolver.operator(SIGIL_OPERATOR_MEMBER_AT, "at")
     def at(self, left, index):
         """ @method external
         添え字演算子。（要素アクセス）
@@ -504,7 +504,7 @@ class GenericMethods:
         """
         return left[index]
         
-    @resolver.operator("#>", "attrat")
+    @resolver.operator(SIGIL_OPERATOR_MEMBER_AT+">", "attrat")
     def attrat(self, left, key):
         """ @method external
         属性にアクセスする。
@@ -517,7 +517,7 @@ class GenericMethods:
         key = normalize_method_target(key)
         return getattr(left, key)
     
-    @resolver.operator("[:]", "slice") #
+    @resolver.operator("["+SIGIL_OPERATOR_MEMBER_AT+"]", "slice") # 
     def slice(self, left, start, stop):
         """ @method external
         添え字演算子。（要素アクセス）

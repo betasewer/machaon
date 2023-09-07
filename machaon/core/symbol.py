@@ -43,7 +43,7 @@ class QualTypename:
 
     @classmethod
     def parse(cls, s):
-        n, sep, d = s.partition(SIGIL_MODULE_INDICATOR)
+        n, sep, d = s.partition(SIGIL_DESCRIBER_INDICATOR)
         if sep:
             return cls(n, d)
         else:
@@ -51,7 +51,7 @@ class QualTypename:
 
     def stringify(self):
         if self.describer is not None:
-            return self.typename + SIGIL_MODULE_INDICATOR + self.describer
+            return self.typename + SIGIL_DESCRIBER_INDICATOR + self.describer
         else:
             return self.typename
         
@@ -150,7 +150,9 @@ SIGIL_SELECTOR_IGNORE_ARGS          = "^"
 
 SIGIL_CONSTRUCTOR_SELECTOR = ">>"
 
-SIGIL_END_TRAILING_ARGS = ":."
+SIGIL_BEGIN_MESSAGE = ".:"
+SIGIL_END_MESSAGE = ":."
+SIGIL_END_TRAILING_ARGS = ":." # to be removed
 SIGIL_DISCARD_MESSAGE = "."
 
 SIGIL_RETURN_TYPE_INDICATOR = "::"
@@ -169,7 +171,7 @@ SIGIL_LINE_QUOTER = "->"
 
 # 型名
 SIGIL_PYMODULE_DOT = "."
-SIGIL_MODULE_INDICATOR = ":"
+SIGIL_DESCRIBER_INDICATOR = ":"
 
 # 定義ドキュメント
 SIGIL_DEFINITION_DOC = "@"
