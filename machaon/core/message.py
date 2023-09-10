@@ -8,6 +8,7 @@ from machaon.core.symbol import (
     SIGIL_OBJECT_LAMBDA_MEMBER,
     SIGIL_OBJECT_ROOT_MEMBER,
     SIGIL_OBJECT_PREVIOUS,
+    SIGIL_QUOTERS,
     SIGIL_LINE_QUOTER,
     SIGIL_BEGIN_USER_QUOTER,
     SIGIL_SELECTOR_NEGATE_RESULT,
@@ -18,7 +19,10 @@ from machaon.core.symbol import (
     SIGIL_SELECTOR_IGNORE_ARGS,
     SIGIL_OPERATOR_MEMBER_AT,
     SIGIL_CONSTRUCTOR_SELECTOR,
-    SIGIL_END_TRAILING_ARGS,
+    SIGIL_BEGIN_MESSAGE,
+    SIGIL_BEGIN_MESSAGE_BLOCK,
+    SIGIL_BEGIN_MESSAGE_DEFERRED,
+    SIGIL_END_MESSAGE,
     SIGIL_DISCARD_MESSAGE,
     QUOTE_ENDPARENS,
     is_triming_control_char,
@@ -52,15 +56,28 @@ class BadExpressionError(Exception):
 
 class InternalMessageError(Exception):
     """ メッセージの実行中に起きたエラー """
-    def __init__(self, error, message):
+    def __init__(self, error, message, context):
         self.error = error
         self.message = message
-        self.with_traceback(self.error.__traceback__) # トレース情報を引き継ぐ
+        self.context = context
+        if hasattr(self.error, "__traceback__"):
+            self.with_traceback(self.error.__traceback__) # トレース情報を引き継ぐ
+            self.__cause__ = self.error
 
     def __str__(self):
         lines = []
-        lines.append("メッセージ[{}]の実行中にエラー:".format(self.message.get_expression()))
+        lines.append("メッセージ実行中にエラー発生：")
         lines.append(str(self.error))
+        lines.append("  メッセージ：")
+        done, notdone = self.message.split_read_expression()
+        if notdone:
+            msg = done.rstrip() + " <<!!ここでエラー!!>> " + notdone.lstrip()
+        else:
+            msg = done
+        lines.append("    {}".format(msg))
+        lines.append("  実行ログ：")
+        for l in self.context.display_log(None):
+            lines.append("  {}".format(l))
         return "\n".join(lines)
 
 #
@@ -76,7 +93,7 @@ class Message:
         self.selector = None # Invocation
         self.args = args or []   # List[Object]
         self.selector_mods = set()
-        self._concluded = False
+        self._conclude = False
         if reciever:
             self.set_reciever(reciever)
         if selector:
@@ -163,13 +180,21 @@ class Message:
 
     def check_concluded(self, evalcontext):
         """ メッセージがすでに完成しているか """
-        if self._concluded:
-            return True
-
         urefcount = len([x for x in self._refs() if not x.is_resolved()])
         if evalcontext.locals.count() < urefcount:
-            return False
-
+            if self._conclude:
+                raise BadExpressionError("必要な値の数がスタック上に足りていません")
+            else:
+                return False
+        
+        if self._conclude:
+            self.complete_explicit_conclusion(evalcontext)
+            return True
+        else:
+            return self.check_auto_conclusion(evalcontext)
+        
+    def check_auto_conclusion(self, evalcontext):
+        """ メッセージ実行に必要な最小の要素があるか確認 """
         if not self.is_reciever_specified():
             return False
         
@@ -183,11 +208,10 @@ class Message:
             if not self.is_min_arg_specified():
                 return False
         
-        self._concluded = True
         return True
 
-    def conclude(self, evalcontext):
-        """ メッセージを完成させる """
+    def complete_explicit_conclusion(self, evalcontext):
+        """ メッセージを完成させ、要素が足りなければ例外を投げる """
         if not self.is_reciever_specified():
             # レシーバが無い場合はエラー
             raise BadExpressionError("レシーバがありません：{}".format(self.sexpr()))
@@ -208,7 +232,9 @@ class Message:
                 # ゼロの場合はセレクタを返す
                 self.as_selector_returner(evalcontext)
 
-        self._concluded = True
+    def conclude_explicit(self):
+        """ メッセージ完成のフラグを明示的に立てる """
+        self._conclude = True
 
     def resolve_selector(self, evalcontext):
         """ セレクタを呼び出しへと解決する。 """
@@ -650,25 +676,21 @@ def enum_selectable_method(typetraits, instance=None):
 #
 #
 class AffixedSelector:
-    prefixes = [
-        ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
-        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER), 
-    ]
     suffixes = [
         ("TRAILING_ARGS", SIGIL_SELECTOR_TRAILING_ARGS),
         ("CONSUME_ARGS", SIGIL_SELECTOR_CONSUME_ARGS),
-        ("SHOW_HELP", SIGIL_SELECTOR_SHOW_HELP),
         ("IGNORE_ARGS", SIGIL_SELECTOR_IGNORE_ARGS),
+        ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
+        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER), 
+        ("SHOW_HELP", SIGIL_SELECTOR_SHOW_HELP),
     ]
+    sigils_suffixes = {ch:name for name,ch in suffixes}
 
     @classmethod
     def get_modifier(cls, ch, *, fallback=False):
-        for v, c in cls.prefixes:
-            if c == ch:
-                return v
-        for v, c in cls.suffixes:
-            if c == ch:
-                return v
+        name = cls.sigils_suffixes.get(ch)
+        if name is not None:
+            return name
         if not fallback:
             raise ValueError("Invalid modifier character: " + ch)
         return None
@@ -678,7 +700,8 @@ class AffixedSelector:
         self._flags = set(flags)
 
     def __repr__(self):
-        return "<{}{}>".format(self._selector, "|".join(self._flags))
+        parts = [self._selector] + list(self._flags)
+        return "<{}>".format(" ".join(parts))
 
     @classmethod
     def parse(cls, selector):
@@ -686,19 +709,6 @@ class AffixedSelector:
             return AffixedSelector(selector, set())
 
         flags = set()
-        buf = ""
-        pre_offset = 0
-        for ch in selector:
-            buf += ch
-            for name, token in cls.prefixes:
-                if token == buf:
-                    flags.add(name)
-                    buf = ""
-                    pre_offset += 1
-                    break
-            else:
-                break
-        
         post_offset = None
         for name, token in cls.suffixes:
             if selector.endswith(token):
@@ -706,7 +716,7 @@ class AffixedSelector:
                 post_offset = -len(token)
                 break
         
-        sel = selector[pre_offset:post_offset]
+        sel = selector[0:post_offset]
         if is_modifiable_selector(sel):
             return AffixedSelector(sel, flags)
         else:
@@ -728,17 +738,25 @@ class AffixedSelector:
 # 文字列からメッセージを組み立てつつ実行する
 #
 # --------------------------------------------------------------------
+# 文字列から文字の意味を決める
+CHAR_END_TERM = 1
+CHAR_END_QUOTE = 2
 
 # 式の文字列をトークンへ変換
-TOKEN_NOTHING = 0
-TOKEN_TERM = 0x01
-TOKEN_BLOCK_BEGIN = 0x02
-TOKEN_BLOCK_END = 0x04
-TOKEN_ALL_BLOCK_END = 0x08
-TOKEN_STRING = 0x10
-TOKEN_SYNTACTIC = 0x20
-TOKEN_FIRSTTERM = 0x40
-TOKEN_BLOCK_SELECTOR_MOD = 0x100
+TOKEN_NOTHING               = 0
+TOKEN_TERM                  = 0x01
+TOKEN_FIRSTTERM             = 0x02
+TOKEN_ENDTERM               = 0x04
+TOKEN_STRING                = 0x08
+TOKEN_SYNTACTIC             = 0x10
+# 構文上の命令 - TOKEN_SYNTACTICと組み合わる
+SYNTAX_CODE_MASK                 = 0xF0000
+SYNTAX_CODE_BEGIN_MESSAGE        = 0x10000
+SYNTAX_CODE_END_MESSAGE          = 0x20000
+SYNTAX_CODE_DISCARD_MESSAGE      = 0x30000
+# BEGIN_MESSAGEの下位ビット
+SYNTAX_CODE_MESSAGE_BLOCK        = 0x01000
+SYNTAX_CODE_MESSAGE_DEFERRED     = 0x02000
 
 #  - 要素の種類
 TERM_TYPE_MASK     = 0xF0
@@ -751,36 +769,9 @@ EXPECT_RECIEVER = TERM_TYPE_RECIEVER
 EXPECT_SELECTOR = TERM_TYPE_SELECTOR
 EXPECT_ARGUMENT = TERM_TYPE_ARGUMENT
 
-# 構文上の命令
-SYNTAX_CODE_END_TRAILING_ARGS = 1
-SYNTAX_CODE_DISCARD_MESSAGE = 2
 
-#
-#
-#
-CHAR_BEGIN_QUOTE = 1
-CHAR_END_QUOTE = 2
-CHAR_BEGIN_BLOCK = 3
-CHAR_END_BLOCK = 4
-CHAR_END_BLOCK_TRARGS = 5
-CHAR_WAIT_USER_QUOTER = 6
-CHAR_BEGIN_LINE_QUOTER = 7
-CHAR_BLOCK_SELECTOR_MOD = 8
-CHAR_END_TRAILING_ARGS = 9
-CHAR_SPACE = 100
-
-class SpecialChar():
-    """ コード付きの文字 """
-    def __init__(self, code, char) -> None:
-        self.code = code
-        self.char = char
-
-def testvoid(ch, brk=None):
-    if ch is None:
-        return True
-    elif ch.isspace():
-        return True
-    elif brk and ch == brk:
+def testvoid(ch, issep):
+    if ch is None or issep(ch):
         return True
     return False
 
@@ -795,7 +786,7 @@ def teststring(ch, ch2, s):
     return False
 
 
-class MessageCharBuffer():
+class MessageCharBuffer:
     def __init__(self):
         self.buffer = [] # type: list[str]
         self.quote_beg = None
@@ -803,6 +794,7 @@ class MessageCharBuffer():
         self.quote_buf = []
         self.lastflush = ""
         self._readlength = 0
+        self._is_separator = str.isspace
 
     def flush(self):
         string = "".join(self.buffer)
@@ -856,87 +848,68 @@ class MessageCharBuffer():
             if 0<=i and i<length:
                 return s[i]
             return None
+        issep = self._is_separator
 
-        consume = 0
-        userquote_wait = False
-        selector_prefixes = {x for _,x in AffixedSelector.prefixes}
-        selector_suffixes = {x for _,x in AffixedSelector.suffixes}
-        for i in range(len(s)):
+        self._readlength = 0
+        quote_symbol_waiting = False
+        while True:
+            i = self._readlength
+            if i >= length:
+                break
             self._readlength += 1
 
-            if consume > 0:
-                consume -= 1
-                continue
-            
             ch = s[i]
 
             if is_triming_control_char(ord(ch)):
                 continue
 
-            if userquote_wait:
-                if ch.isspace():
-                    self.begin_quote(" ", " ")
+            if quote_symbol_waiting:
+                if issep(ch):
+                    self.begin_quote(ch, ch)
                 else:
                     self.begin_quote(ch, QUOTE_ENDPARENS.get(ch,ch))
-                userquote_wait = False
-                continue
+                quote_symbol_waiting = False
+                continue # 引用符記号自体をスキップする
 
             pch = char(i-1)
             nch = char(i+1)
             
-            pVOID = testvoid(pch, "(")
-            nVOID = testvoid(nch, ")")
+            pVOID = testvoid(pch, issep)
+            nVOID = testvoid(nch, issep)
 
             if self.quoting():
                 if nVOID and self.check_quote_end(ch): # 引用符の後ろにスペースを必要とする
                     yield CHAR_END_QUOTE
+                    self._readlength += 1 # 次のスペースを一つ飛ばす
                 else:
                     yield ch
                 continue
 
-            if pVOID and testchar(ch, "'", '"'):
-                # 文字列リテラルを開始する
+            if pVOID and testchar(ch, *SIGIL_QUOTERS):
+                # 引用符で囲まれた単語
                 self.begin_quote(ch, ch)
-                yield CHAR_BEGIN_QUOTE
-            elif pVOID and testchar(ch, "("):
-                # ブロックを開始する
-                yield CHAR_BEGIN_BLOCK
-            elif pVOID and testchar(nch, "(") and ch in selector_prefixes:
-                # モディファイア付きでブロックセレクタを開始する
-                yield CHAR_BEGIN_BLOCK
-                yield SpecialChar(CHAR_BLOCK_SELECTOR_MOD, ch)
-                consume += 1
-            elif testchar(ch, ")"):
-                # ブロックを終了する
-                if nVOID:
-                    yield CHAR_END_BLOCK
-                elif nch in selector_suffixes and testvoid(char(i+2), ")"):
-                    # モディファイア付きでブロックセレクタを終了する
-                    yield SpecialChar(CHAR_BLOCK_SELECTOR_MOD, nch)
-                    yield CHAR_END_BLOCK
-                    consume += 1
-                else:
-                    yield ch
-            elif teststring(pch, ch, SIGIL_BEGIN_USER_QUOTER):
+            elif pVOID and teststring(ch, nch, SIGIL_BEGIN_USER_QUOTER):
                 # ユーザー定義の引用符
-                userquote_wait = True
-                yield CHAR_WAIT_USER_QUOTER
-            elif teststring(pch, ch, SIGIL_LINE_QUOTER):
+                quote_symbol_waiting = True
+                self._readlength += 1 # USER_QUOTERの次の文字へ
+            elif pVOID and teststring(ch, nch, SIGIL_LINE_QUOTER):
                 # 行末までの引用符
                 self.begin_quote(SIGIL_LINE_QUOTER, None)
-                yield CHAR_BEGIN_LINE_QUOTER
+                self._readlength += 1 # LINE_QUOTERの次の文字へ
             else:
                 # それ以外のメッセージを構成する文字
-                if ch.isspace():
-                    yield CHAR_SPACE
+                if issep(ch):
+                    yield CHAR_END_TERM
                 else:
                     yield ch
 
     def get_read_length(self):
         return self._readlength
 
+#
+LEN_SIGIL_BEGIN_MESSAGE = len(SIGIL_BEGIN_MESSAGE)
 
-class MessageTokenizer():
+class MessageTokenizer:
     """ 
     """
     def __init__(self):
@@ -952,74 +925,94 @@ class MessageTokenizer():
         s = source[self._last_read_length:l]
         self._last_read_length = l
         return s
+    
+    def split_read(self, source):
+        l = self.buffer.get_read_length()
+        return source[0:l], source[l:]
+    
+    def parse_block_head(self, s):
+        tokentype = TOKEN_SYNTACTIC | SYNTAX_CODE_BEGIN_MESSAGE
+        if s == SIGIL_BEGIN_MESSAGE:
+            pass
+        elif s == SIGIL_BEGIN_MESSAGE_BLOCK:
+            tokentype |= SYNTAX_CODE_MESSAGE_BLOCK
+        elif s == SIGIL_BEGIN_MESSAGE_DEFERRED:
+            tokentype |= SYNTAX_CODE_MESSAGE_DEFERRED
+        else:
+            return None, None
+        return tokentype, ""
+    
+    def parse_block_tail(self, s):
+        tokentype = TOKEN_SYNTACTIC | SYNTAX_CODE_END_MESSAGE
+        rest = s[0:-len(SIGIL_END_MESSAGE)]
+        mod = ""
+        i = 0
+        l = len(rest)
+        if i+2 < l and rest[i] == "[" and rest[-1] == "]":
+            mod = rest[i+1:-1]
+            i = l
+        if i != l:
+            return None, None
+        else:
+            return tokentype, mod
 
     def new_token(self, s, tokentype=0):
-        # 単語で区切られた構文記号
-        if s == SIGIL_END_TRAILING_ARGS:
-            tokentype = TOKEN_SYNTACTIC
-            s = SYNTAX_CODE_END_TRAILING_ARGS
-        elif s == SIGIL_DISCARD_MESSAGE:
-            tokentype = TOKEN_SYNTACTIC
-            s = SYNTAX_CODE_DISCARD_MESSAGE
-        elif s:
+        # 構文記号
+        if tokentype & TOKEN_STRING == 0:
+            if s == SIGIL_BEGIN_MESSAGE:
+                tokentype |= TOKEN_SYNTACTIC | SYNTAX_CODE_BEGIN_MESSAGE
+                s = ""
+            elif s == SIGIL_BEGIN_MESSAGE_BLOCK:
+                tokentype |= TOKEN_SYNTACTIC | SYNTAX_CODE_BEGIN_MESSAGE | SYNTAX_CODE_MESSAGE_BLOCK
+                s = ""
+            elif s == SIGIL_BEGIN_MESSAGE_DEFERRED:
+                tokentype |= TOKEN_SYNTACTIC | SYNTAX_CODE_BEGIN_MESSAGE | SYNTAX_CODE_MESSAGE_DEFERRED
+                s = ""
+            elif s.endswith(SIGIL_END_MESSAGE):
+                tt, ts = self.parse_block_tail(s)
+                if tt is not None:
+                    tokentype |= tt
+                    s = ts
+                else:
+                    tokentype |= TOKEN_TERM
+            elif s == SIGIL_DISCARD_MESSAGE:
+                tokentype |= TOKEN_SYNTACTIC | SYNTAX_CODE_DISCARD_MESSAGE
+                s = ""
+        
+        if s and tokentype & TOKEN_SYNTACTIC == 0:
             tokentype |= TOKEN_TERM
         
         if self._wait_firstterm: 
             tokentype |= TOKEN_FIRSTTERM
             if tokentype & TOKEN_TERM:
                 self._wait_firstterm = False
+        
         return (s, tokentype)
     
     def read_token(self, source):
-        paren_count = 0
-        token = self.new_token
+        new_token = self.new_token
         buf = self.buffer
         for c in buf.read_char(source):
             if isinstance(c, int):
-                if c == CHAR_SPACE:
-                    if buf.flush(): 
-                        yield token(buf.last())
-                elif c == CHAR_BEGIN_QUOTE:
-                    pass
+                if c == CHAR_END_TERM:
+                    tokentype = 0
                 elif c == CHAR_END_QUOTE:
-                    if buf.flush(): 
-                        yield token(buf.last(), TOKEN_STRING)
-                elif c == CHAR_BEGIN_BLOCK:
-                    if buf.flush(): 
-                        yield token(buf.last())
-                    yield token("", TOKEN_BLOCK_BEGIN)
-                    paren_count += 1
-                elif c == CHAR_END_BLOCK:
-                    if paren_count == 0:
-                        buf.add(")") # 括弧をリテラルの一部に含める
-                        paren_count = -1
-                    else:
-                        buf.flush()
-                        yield token(buf.last(), TOKEN_BLOCK_END)
-                        paren_count -= 1
-                        if paren_count < 0:
-                            raise SyntaxError("ブロックの開始記号が{}個足りません".format(-paren_count-1))
-                elif c == CHAR_BEGIN_LINE_QUOTER:
-                    pass
-                elif c == CHAR_WAIT_USER_QUOTER:
-                    pass
+                    tokentype = TOKEN_STRING
+                else:
+                    raise ValueError(c)
+                if buf.flush(): 
+                    yield new_token(buf.last(), tokentype)
             elif isinstance(c, str):
                 # バッファに文字を追加する
                 buf.add(c)
-            elif isinstance(c, SpecialChar):
-                if c.code == CHAR_BLOCK_SELECTOR_MOD:
-                    yield (c.char, TOKEN_BLOCK_SELECTOR_MOD)
-
-        if paren_count > 0:
-            raise SyntaxError("ブロックの終了記号が{}個足りません".format(paren_count))
         
         # バッファに残っている文字を処理する
         buf.flush()
         term = buf.last()
         if buf.quoting():
-            yield token(term, TOKEN_ALL_BLOCK_END|TOKEN_STRING)
+            yield new_token(term, TOKEN_ENDTERM|TOKEN_STRING)
         else:
-            yield token(term, TOKEN_ALL_BLOCK_END)
+            yield new_token(term, TOKEN_ENDTERM)
 
 
 #
@@ -1033,7 +1026,7 @@ _INTLCODE_AST = 3
 _INTLCODE_AST_BLOCK = 4
 
 def _intlcode_WITH_ARGOBJECTS(evalcontext, objs):
-    return [objs]
+    return [evalcontext, objs]
 
 def _intlcode_WITH_CONTEXT(evalcontext, objs):
     return [evalcontext.context]
@@ -1063,7 +1056,7 @@ def _ast_ARG(fn):
     return fn
 
 
-class InternalEngineCode():
+class InternalEngineCode:
     def __init__(self):
         self.arg_codes = []
         self.ast_codes = []
@@ -1117,27 +1110,35 @@ class InternalEngineCode():
         """ 文字列にまとめて返す """
         ls = []
         for instrname, options, args in self.instructions():
-            if args is None:
-                line = "{:18}({})".format(instrname, ",".join(options))
-            else:
-                p = ", ".join(["{}({})".format(x,",".join([str(w) for w in y])) for x,y in args])
-                line = "{:18}({}) | {}".format(instrname, ",".join(options), p)
-            ls.append(line)
+            parts = []
+            parts.append(instrname)
+            if options:
+                opts = (str(x) for x in options)
+                parts.append(" ".join(opts))
+            if args is not None:
+                argsline = []
+                for argcode, vals in args:
+                    arg = [str(x) for x in [argcode, *vals]]
+                    argsline.append(" ".join(arg))
+                parts.append("> " + " > ".join(argsline))
+            ls.append(" ".join(parts))
         return ls
 
 
 #
 #
 #
-class MessageEngine():
+class MessageEngine:
     def __init__(self, expression="", messages=None):
         self.source = expression
         self._tokens = None  # type: MessageTokenizer
         self._readings = []  # type: list[Message]
         self._curblockstack = [] # type: list[int]
+        self._closingblock = 0
         self._msgs = messages or []
         self._lastread = ""  # 最後に完成したメッセージの文字列
         self._lastevalcxt = None
+        self._lastblockcomplete = False # メッセージが完結した直後である
 
     def __repr__(self) -> str:
         return "<MessageEngine ({})>".format(self.source)
@@ -1146,32 +1147,93 @@ class MessageEngine():
         """ コード文字列を返す """
         return self.source
     
-    # 現在評価している途中のメッセージ
-    def current_reading_message(self):
-        if self._curblockstack: 
-            curblock = self._curblockstack[-1]
-            if len(self._readings)-1 < curblock:
-                return None
-            return self._readings[-1]
+    def split_read_expression(self):
+        """ 実行の済んだ部分と、未実行の部分を分けてコードを返す 
+        Returns:
+            str, str:
+        """
+        if self._tokens is None:
+            raise ValueError("まだ実行が開始されていません")
+        return self._tokens.split_read(self.source)
+    
+    def begin_message(self, evalcontext, *args):
+        """ メッセージを未完成スタックに追加する """
+        msg = Message(*args)
+        self._readings.append(msg)
+        # ログに残す
+        index = len(self._readings)-1
+        evalcontext.context.log_message_ast(index, 1)
+        
+    def begin_block(self, evalcontext):
+        """ ブロックを開始する """
+        newpos = self.current_message_top()  # 上でメッセージを追加済み
+        self._curblockstack.append(newpos)   # 新しいブロックの番号を記録する
+        evalcontext.context.log_message_ast(newpos, 10)
+
+    def current_message_top(self):
+        return len(self._readings)-1
+
+    def current_block_top(self):
+        if self._curblockstack:
+            return self._curblockstack[-1]
         else:
-            if not self._readings:
-                return None
-            return self._readings[-1]
+            return -1 # トップレベルにある
+
+    def current_block_messages(self):
+        """ ブロックの先頭までのメッセージインデクスを取得する """
+        top = self.current_block_top()
+        i = len(self._readings)-1
+        while i >= 0:
+            if i < top:
+                break 
+            yield i, self._readings[i]
+            i -= 1
+
+    def check_within_current_block(self, message_index):
+        """ 現在のブロック内にあれば、True """
+        if self._curblockstack and self._curblockstack[-1] > message_index:
+            return False
+        return True
+    
+    def end_message(self):
+        """ メッセージをスタックから取り除く """
+        if self._readings:
+            self._readings.pop()
+
+    def end_block(self, count=None):
+        """ ブロックを取り除く """
+        if count is not None:
+            del self._curblockstack[-count:]
+        elif self._closingblock > 0:
+            del self._curblockstack[-self._closingblock:]
+            self._closingblock = 0
+
+    def modify_last_block_selector(self, pos, modifier):
+        """ メッセージにモディファイアを設定する """
+        mod = AffixedSelector.get_modifier(modifier)
+        index = pos - 1
+        if len(self._readings) < -index:
+            raise ValueError("Enough number of message does not exist")
+        self._readings[index].set_selector_modifier(mod)
 
     # 
-    def compile_code(self, reading, token: str, tokentype: int):
+    def build_next_code(self, token: str, tokentype: int):
         """
         トークンから内部コードを生成する
         Params:
-            reading(Optional[Message]): 読んでいる途中のメッセージオブジェクト
             token(str): 文字列
             tokentype(int): 文字列の意味(TOKEN_XXX)
         Returns:
             InternalEngineCode: 還元された命令コードと引数のセット
         """
-        #
-        # 直前のトークンから次に来るべきトークンの意味を決定する
-        #
+        # 構築中のメッセージを取得する
+        top = self.current_block_top()
+        mindex = self.current_message_top()
+        if 0 <= mindex and top <= mindex:
+            reading = self._readings[mindex]
+        else:
+            reading = None
+        
         if reading is None:
             expect = EXPECT_NOTHING
         elif not reading.is_reciever_specified():
@@ -1184,49 +1246,64 @@ class MessageEngine():
         #
         code = InternalEngineCode()
 
-        # ブロック終了指示
-        if tokentype & TOKEN_BLOCK_END:
-            code.add(self.ast_POP_BLOCK)
-        elif tokentype & TOKEN_ALL_BLOCK_END:
-            code.add(self.ast_POP_ALL_BLOCKS)
+        # ブロックの最後のトークンである
+        if tokentype & TOKEN_ENDTERM:
+            code.add(self.ast_END_ALL_BLOCKS)
 
         # エスケープされた文字列
         isstringtoken = tokentype & TOKEN_STRING > 0
 
-        # 明示的ブロック開始指示
-        if tokentype & TOKEN_BLOCK_BEGIN:
-            if expect == EXPECT_NOTHING:
-                if tokentype & TOKEN_FIRSTTERM:
-                    # レシーバのメッセージとする
-                    code.add(self.ast_ADD_NEW_MESSAGE)
+        # 構文用の特殊な記号
+        if tokentype & TOKEN_SYNTACTIC > 0:
+            sycode = tokentype & SYNTAX_CODE_MASK
+            # 明示的なブロックの開始
+            if sycode == SYNTAX_CODE_BEGIN_MESSAGE:
+                if expect == EXPECT_NOTHING:
+                    if tokentype & TOKEN_FIRSTTERM:
+                        # レシーバのメッセージとする
+                        code.add(self.ast_ADD_NEW_MESSAGE)
+                    else:
+                        # 先行する値をレシーバとするセレクタのメッセージとする
+                        code.add(self.arg_STACK_REF)
+                        code.add(self.ast_ADD_TWIN_NEW_MESSAGE)
                 else:
-                    # 先行する値をレシーバとするセレクタのメッセージとする
-                    code.add(self.arg_STACK_REF)
-                    code.add(self.ast_ADD_TWIN_NEW_MESSAGE)
-            else:
-                # 前のメッセージの要素とする
-                code.add(self.ast_ADD_ELEMENT_AS_NEW_MESSAGE, expect)
-            code.add(self.ast_PUSH_BLOCK)
-            return code
-
-        # 特殊な記号
-        if not isstringtoken:
-            if tokentype == TOKEN_SYNTACTIC:
-                # 引数リストの終わり
-                if token == SYNTAX_CODE_END_TRAILING_ARGS:
-                    if expect == EXPECT_ARGUMENT:
-                        code.add(self.ast_POP_BLOCK)
-                        return code
-                # メッセージの連鎖をリセットする
-                if token == SYNTAX_CODE_DISCARD_MESSAGE:
-                    if expect == EXPECT_NOTHING:
-                        code.add(self.ast_DISCARD_LAST_BLOCK_MESSAGE)
-                        return code
-                    raise BadExpressionError("メッセージの要素が足りません")
-            # 現在のブロックセレクタに適用するモディファイア
-            elif tokentype == TOKEN_BLOCK_SELECTOR_MOD:
-                code.add(self.ast_MODIFY_NEXT_BLOCK_SELECTOR, token)
+                    # 前のメッセージの要素とする
+                    code.add(self.ast_ADD_ELEMENT_AS_NEW_MESSAGE, expect)
+                if tokentype & SYNTAX_CODE_MESSAGE_DEFERRED > 0:
+                    code.add(self.ast_BEGIN_BLOCK, "deferred")
+                elif tokentype & SYNTAX_CODE_MESSAGE_BLOCK > 0:
+                    code.add(self.ast_BEGIN_BLOCK)
                 return code
+            # 引数リストの終わり
+            elif sycode == SYNTAX_CODE_END_MESSAGE:
+                if top == mindex and top != -1:
+                    # ブロックを終了しようとしている（トップレベルは閉じない）
+                    code.add(self.ast_END_BLOCK, mindex, token)
+                elif top > mindex:
+                    # 直ちにブロックを削除する
+                    code.add(self.ast_END_LAST_BLOCK, mindex, top, token)
+                elif top < mindex:
+                    # 引数リストを終了する
+                    if expect == EXPECT_ARGUMENT:
+                        code.add(self.ast_END_MESSAGE, mindex, top, token)
+                    else:
+                        raise BadExpressionError("メッセージを閉じようとしましたが、要素が足りていません")
+                    if token:
+                        raise BadExpressionError("ブロックモディファイアは、ブロックの終わりでのみ有効です")
+                elif top == mindex and self._lastblockcomplete:
+                    if expect == EXPECT_NOTHING:
+                        return None # 何もしない
+                    else:
+                        raise BadExpressionError("メッセージを閉じようとしましたが、要素が足りていません")
+                else:
+                    raise BadExpressionError("メッセージの閉じ記号を解釈できません")
+
+            # メッセージの連鎖をリセットする
+            elif sycode == SYNTAX_CODE_DISCARD_MESSAGE:
+                if expect == EXPECT_NOTHING:
+                    code.add(self.ast_DISCARD_LAST_BLOCK_MESSAGE)
+                    return code
+                raise BadExpressionError("メッセージの要素が足りません")
 
         # メッセージの要素ではない
         if (tokentype & TOKEN_TERM) == 0:
@@ -1357,39 +1434,12 @@ class MessageEngine():
             code.add(self.ast_SET_AS_SELECTOR_RETURNER)
         code.add(self.arg_SELECTOR_VALUE, selector)
 
-    def complete_messages(self, evalcontext):
-        """
-        完成した構文木を返す
-        Yields:
-            Message:
-        """
-        # 完成したメッセージをキューから取り出す
-        completed = 0
-        index = len(self._readings)-1
-        for msg in reversed(self._readings):
-            # ブロック外の評価を遅延する
-            if self._curblockstack and self._curblockstack[-1] > index: 
-                break
-            
-            # メッセージが完成しているか
-            if not msg.check_concluded(evalcontext):
-                break
-
-            # メッセージが完成したので評価する
-            yield msg
-            completed += 1
-
-            index -= 1
-
-        if completed>0:
-            del self._readings[-completed:]
-
 
     #
     #  メッセージを構築する
     #
     @_ast_ADDER
-    def ast_ADD_ELEMENT_TO_LAST_MESSAGE(self, objs, ttpcode):
+    def ast_ADD_ELEMENT_TO_LAST_MESSAGE(self, _evalcontext, objs, ttpcode):
         """ """
         if ttpcode == TERM_TYPE_RECIEVER:
             i = 0
@@ -1410,7 +1460,7 @@ class MessageEngine():
             i += 1
 
     @_ast_ADDER
-    def ast_ADD_ELEMENT_AS_NEW_MESSAGE(self, objs, ttpcode):
+    def ast_ADD_ELEMENT_AS_NEW_MESSAGE(self, evalcontext, objs, ttpcode):
         """ """
         if ttpcode == TERM_TYPE_RECIEVER:
             self._readings[-1].set_reciever(ResultStackRef())
@@ -1421,51 +1471,61 @@ class MessageEngine():
         elif ttpcode == TERM_TYPE_ARGUMENT:
             self._readings[-1].add_arg(ResultStackRef())
         
-        new_msg = Message(*objs)
-        self._readings.append(new_msg)
+        self.begin_message(evalcontext, *objs)
 
     @_ast_ADDER
-    def ast_ADD_NEW_MESSAGE(self, objs):
+    def ast_ADD_NEW_MESSAGE(self, evalcontext, objs):
         """ """
-        new_msg = Message(*objs)
-        self._readings.append(new_msg)
+        self.begin_message(evalcontext, *objs)
 
     @_ast_ADDER
-    def ast_ADD_TWIN_NEW_MESSAGE(self, objs):
+    def ast_ADD_TWIN_NEW_MESSAGE(self, evalcontext, objs):
         """ """
-        new_msg = Message(*objs, ResultStackRef()) # 最後の要素が次のメッセージ
-        self._readings.append(new_msg)
-        # 空のメッセージを追加する
-        new_msg = Message()
-        self._readings.append(new_msg)
+        self.begin_message(evalcontext, *objs, ResultStackRef()) # 最後の要素が次のメッセージ
+        self.begin_message(evalcontext) # 空のメッセージを追加する
 
     @_ast_BLOCK
-    def ast_PUSH_BLOCK(self, _evalcontext):
+    def ast_BEGIN_BLOCK(self, evalcontext, blocktype=None):
         """  """
-        newpos = len(self._readings)-1 # 上でメッセージを追加済み
-        self._curblockstack.append(newpos) # 新しいブロックの番号を記録する
+        self.begin_block(evalcontext)
 
     @_ast_BLOCK
-    def ast_POP_BLOCK(self, evalcontext):
-        """  """
-        if self._curblockstack:
-            top = self._curblockstack[-1]
-        else:
-            top = 0
+    def ast_END_MESSAGE(self, evalcontext, index, top, modifier=None):
+        """ 引数リストを終了するか、何もしない """        
+        self._readings[index].conclude_explicit()
+        evalcontext.context.log_message_ast("{}, {}".format(index, top), 2)
+
+    @_ast_BLOCK
+    def ast_END_BLOCK(self, evalcontext, index, modifier=None):
+        """ ブロックを終了しようとしている """
+        for i, msg in self.current_block_messages():
+            msg.conclude_explicit()
+            evalcontext.context.log_message_ast(i, 2)
+        self._closingblock += 1
+        evalcontext.context.log_message_ast(index, 20)
+        # 一つ上のメッセージにモディファイアを設定
+        if modifier:
+            self.modify_last_block_selector(-1, modifier)
+
+    @_ast_BLOCK
+    def ast_END_LAST_BLOCK(self, evalcontext, index, top, modifier=None):
+        """ 直ちにブロックを削除する """
+        # 直ちにブロックを削除する
+        self.end_block(1)
+        # 現在のメッセージにモディファイアを設定
+        if modifier:
+            self.modify_last_block_selector(0, modifier)
+        evalcontext.context.log_message_ast("{}, {}".format(index, top), 21)
+
+    @_ast_BLOCK
+    def ast_END_ALL_BLOCKS(self, evalcontext):
+        """ """
         for i, msg in enumerate(reversed(self._readings)):
             j = len(self._readings) - i - 1
-            if j < top:
-                break 
-            msg.conclude(evalcontext)
-        if self._curblockstack:
-            self._curblockstack.pop()
-
-    @_ast_BLOCK
-    def ast_POP_ALL_BLOCKS(self, evalcontext):
-        """ """
-        for msg in self._readings:
-            msg.conclude(evalcontext)
-        self._curblockstack.clear()
+            msg.conclude_explicit()
+            evalcontext.context.log_message_ast(j, 2) 
+        self._closingblock = len(self._curblockstack)
+        evalcontext.context.log_message_ast(None, 22)
 
     @_ast
     def ast_DISCARD_LAST_BLOCK_MESSAGE(self):
@@ -1473,15 +1533,7 @@ class MessageEngine():
         if self._tokens is None:
             raise ValueError("Any message has not been read")
         self._tokens.set_next_token_firstterm() # 次にバッファから読みだすトークンはfirsttermになる
-        
-    @_ast
-    def ast_MODIFY_NEXT_BLOCK_SELECTOR(self, modchar):
-        """ """
-        mod = AffixedSelector.get_modifier(modchar)
-        if len(self._readings) < 2:
-            raise ValueError("Enough number of message does not exist")
-        self._readings[-2].set_selector_modifier(mod)
-
+    
     @_ast
     def ast_SET_AS_SELECTOR_RETURNER(self, evalcontext):
         """ 直前のメッセージをセレクタを返すメッセージに変える """
@@ -1576,27 +1628,51 @@ class MessageEngine():
     #
     #
     #
-    def produce_message_1st(self, evalcontext):
+    def produce_message(self, evalcontext):
         """ コードから構文を組み立てつつ随時実行 """
         self._msgs = []
         self._tokens = MessageTokenizer()
+        self._closingblock = 0
         for token, tokentype in self._tokens.read_token(self.source):
-            reading = self.current_reading_message()
-            intlcode = self.compile_code(reading, token, tokentype)
-            if intlcode is None:
-                break
-            evalcontext.context.log_message_code(intlcode)
+            completed = len(self._msgs)
 
-            # 内部コードを実行する 
-            intlcode.run(evalcontext)
+            intlcode = self.build_next_code(token, tokentype)
+            if intlcode is not None:
+                evalcontext.context.log_message_code(intlcode)
+                
+                # 内部コードを実行し、メッセージを組み立てる
+                intlcode.run(evalcontext)
 
-            # メッセージを組み立てる
-            for msg in self.complete_messages(evalcontext):
-                # これから評価するメッセージ式の文字列を排出
-                yield self._tokens.pop_last_read(self.source)
-                # 組み立てたメッセージを排出
-                yield msg 
-                self._msgs.append(msg)
+                # 組みあがったメッセージから実行する
+                index = len(self._readings)-1
+                while index >= 0:
+                    # ブロック外の評価を遅延する
+                    if not self.check_within_current_block(index):
+                        break
+                    # メッセージが完成していなければスキップする
+                    msg = self._readings[index]
+                    if not msg.check_concluded(evalcontext):
+                        break
+                    
+                    # これから評価するメッセージ式の文字列
+                    msgsrc = self._tokens.pop_last_read(self.source)
+                    evalcontext.context.log_message_eval(index, msgsrc, msg)
+
+                    yield msgsrc # 文字列を排出
+                    yield msg    # 組み立てたメッセージを排出
+                    self._msgs.append(msg) # 組みあがったメッセージを保存
+
+                    # メッセージとブロックをスタックから取り除く
+                    self.end_message()
+                    self.end_block()
+
+                    index -= 1
+            
+            # スタックから組みあがったメッセージを取り除く
+            if len(self._msgs) == completed:
+                self._lastblockcomplete = False
+            else:
+                self._lastblockcomplete = True
     
     def produce_message_cached(self, _evalcontext):
         """ キャッシュされたメッセージをクリアして返す """
@@ -1613,7 +1689,7 @@ class MessageEngine():
         if cache and self._msgs:
             produce_message = self.produce_message_cached
         else:
-            produce_message = self.produce_message_1st
+            produce_message = self.produce_message
 
         context.log_message_begin(self.source)
 
@@ -1635,7 +1711,7 @@ class MessageEngine():
 
         except Exception as e:
             # メッセージ実行以外の場所でエラーが起きた
-            err = InternalMessageError(e,self) # コード情報を付加し、トレース情報を引き継ぐ
+            err = InternalMessageError(e, self, context) # コード情報を付加し、トレース情報を引き継ぐ
             evalcxt.locals.push_local_object(context.new_invocation_error_object(err)) # スタックに乗せる
             context.push_extra_exception(err)
             return

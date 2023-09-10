@@ -24,7 +24,7 @@ def test_straight_select():
 def test_modified_select():
     StrType = fundamental_type.get("Str")
 
-    tm = select_method("!reg-search", StrType)
+    tm = select_method("reg-search!", StrType)
     assert tm
     assert tm.display() == ("TypeMethod", "Str:machaon.core#reg-search", "negate-result")
 
@@ -32,7 +32,7 @@ def test_modified_select():
     assert gm
     assert gm.display() == ("TypeMethod", "Generic:machaon.core#is-in", "consume-args")
 
-    gm = select_method("`identity", StrType)
+    gm = select_method("identity`", StrType)
     assert gm
     assert gm.display() == ("TypeMethod", "Generic:machaon.core#identity", "basic-reciever")
     
