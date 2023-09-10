@@ -25,7 +25,7 @@ class TypeDeclError(Exception):
 # Typename[Typeparam1, param2...]
 #
 class TypeDecl:
-    def __init__(self, typename=None, args=None):
+    def __init__(self, typename=None, args=None, resolver=None):
         if typename is None:
             self.typename = None
             self.describername = None
@@ -38,6 +38,7 @@ class TypeDecl:
         else:
             raise TypeError("TypeDecl")
         self.declargs = args or []
+        self.resolver = resolver
     
     def __str__(self):
         return self.to_string()
@@ -67,6 +68,10 @@ class TypeDecl:
             elems += ",".join([x.to_string() for x in self.declargs])
             elems += "]"
         return elems
+    
+    def to_nt_value(self):
+        """ 非型引数値へと変換する """
+        return self.typename
 
     def instance(self, context, args=None) -> TypeProxy:
         """
@@ -78,6 +83,9 @@ class TypeDecl:
             return TypeAny()
         elif isinstance(self.typename, TypeProxy):
             return self.typename
+        elif self.typename == "Object":
+            from machaon.core.type.instance import TypeAnyObject
+            return TypeAnyObject()
         elif self.typename == "Union":
             # 型制約
             from machaon.core.type.instance import TypeUnion
@@ -90,13 +98,17 @@ class TypeDecl:
             from machaon.core.type.pytype import PythonType
             return PythonType.load_from_name(self.typename)
         else:
+            # 一般的な型名
             from machaon.core.type.instance import TypeInstance
-            # 型名を置換する
-            typename = py_anon_redirection.get(self.typename.lower(), self.typename)
+            # 型名を解決する
+            if self.resolver is not None:
+                tn, dn = self.resolver.resolve(self.typename, self.describername)
+            else:
+                tn, dn = self.typename, self.describername
             # 型オブジェクトを取得
-            td: TypeProxy = context.select_type(typename, self.describername) # モジュールから型を読み込む
+            td: TypeProxy = context.select_type(tn, dn) # モジュールから型を読み込む
             if td is None:
-                raise BadTypename(typename)
+                raise BadTypename("{}({})".format(self.typename, tn))
             # 引数を束縛する
             argvals = self.declargs
             if args:
@@ -107,11 +119,6 @@ class TypeDecl:
             else:
                 return td
             
-    def resolve(self, resolver):
-        self.typename, self.describername = resolver(self.typename, self.describername)
-        for a in self.declargs:
-            a.resolve(resolver)
-
 
 #
 #
@@ -159,29 +166,17 @@ class TypeInstanceDecl(TypeDecl):
             return self.inst
         else:
             return self.inst.instantiate(context, args)
+
     
-    def instance_constructor_params(self):
-        """ 再束縛する引数の型情報を提供する """
-        return self.inst.instantiate_params()
-    
-#
-# Python標準の型注釈に対応
-#
-py_anon_redirection = {
-    "list" : "Tuple",
-    "sequence" : "Tuple",
-    "set" : "Tuple",
-    "mapping" : "ObjectCollection",
-    "dict" : "ObjectCollection",
-}
 
 #
 # 型宣言のパーサ
 #
-def parse_type_declaration(decl):
+def parse_type_declaration(decl, resolver=None):
     """ 型宣言をパースする
     Params:
         decl(str):
+        resolver():
     Returns:
         TypeDecl|TypeInstanceDecl:
     """
@@ -191,17 +186,17 @@ def parse_type_declaration(decl):
         if not decl:
             raise BadTypename("<emtpy string>")        
         from machaon.core.type.declparser import parse_typedecl
-        d = parse_typedecl(decl)
+        d = parse_typedecl(decl, resolver)
         return d
     else:
         raise TypeError("parse_type_declaration")
     
-def instantiate_type(decl, context, *args):
+def instantiate_type(decl, context, *args, resolver=None):
     """ 型宣言をインスタンス化する
     Params:
         decl(str):
     Returns:
         TypeDecl:
     """
-    d = parse_type_declaration(decl)
+    d = parse_type_declaration(decl, resolver)
     return d.instance(context, args)

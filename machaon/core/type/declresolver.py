@@ -1,12 +1,23 @@
-from machaon.core.type.decl import parse_type_declaration
 from machaon.core.symbol import SPECIAL_TYPE_NAMES
 from machaon.types.fundamental import fundamental_typenames, fundamental_describer_name
 
 
 class BasicTypenameResolver:
-    """ 一切の解決を行わない """
-    def parse_type_declaration(self, name):
-        return parse_type_declaration(name)
+    """ デフォルトの解決のみを行う """
+    def resolve(self, typename, describername):
+        if describername is None:
+            if typename in SPECIAL_TYPE_NAMES:
+                return typename, None
+            
+            if typename in py_anon_redirection:
+                typename = py_anon_redirection[typename]
+            
+            for fn in fundamental_typenames:
+                if fn.typename == typename:
+                    return fn.typename, fundamental_describer_name
+            
+        return typename, describername
+    
 
 class ModuleTypenameResolver:
     """
@@ -38,6 +49,9 @@ class ModuleTypenameResolver:
             if typename in SPECIAL_TYPE_NAMES:
                 return typename, None
             
+            if typename in py_anon_redirection:
+                typename = py_anon_redirection[typename]
+            
             for ut in self.klass_using_types:
                 if ut.typename == typename:
                     return ut.typename, ut.describer
@@ -52,8 +66,19 @@ class ModuleTypenameResolver:
 
             return typename, "{}.{}".format(self.this_module, typename)
 
-    def parse_type_declaration(self, name):
-        decl = parse_type_declaration(name)
-        decl.resolve(self.resolve)
-        return decl
+
+
+#
+# Python標準の型注釈に対応
+#
+py_anon_redirection = {
+    "list" : "Tuple",
+    "List" : "Tuple",
+    "Sequence" : "Tuple",
+    "set" : "Tuple",
+    "Set" : "Tuple",
+    "dict" : "ObjectCollection",
+    "Mapping" : "ObjectCollection",
+    "Dict" : "ObjectCollection",
+}
 

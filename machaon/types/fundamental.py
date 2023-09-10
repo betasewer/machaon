@@ -100,7 +100,7 @@ class TypeType:
         # コンストラクタの表示
         if tdef:
             app.post("message", "［コンストラクタ］")
-            meth = typ.get_constructor()
+            meth = tdef.get_constructor()
             app.post("message", meth.get_signature() + "\n")
 
         # メソッドの表示
@@ -147,6 +147,7 @@ class TypeType:
                         "signature" : "",
                     })
                 else:
+                    meth.resolve_type(context) # 型をすべてロードする
                     helps.append({
                         "#extend" : context.new_object(meth, type="Method"),
                         "names" : context.new_object(names),

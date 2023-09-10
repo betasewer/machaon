@@ -135,6 +135,7 @@ def test_method():
 
     regmatch = cxt.get_type("Str").select_method("reg-match")
     assert regmatch is not None
+    regmatch.resolve_type(cxt)
     assert regmatch.name == "reg-match"
     assert regmatch.get_result().get_typename() == "Bool:machaon.core"
 

@@ -35,6 +35,7 @@ METHOD_EXTERNAL                 = 0x0020 # レシーバオブジェクトもパ�
 METHOD_BOUND_TRAILING           = 0x0040 # ?
 METHOD_LOADED                   = 0x0100
 METHOD_DECL_LOADED              = 0x0200
+METHOD_TYPES_RESOLVED           = 0x0400
 METHOD_LOADBIT_MASK             = 0x0F00 
 
 METHOD_PARAMETER_UNSPECIFIED        = 0x1000
@@ -370,7 +371,7 @@ class Method:
                     argpairs.append((tp, MethodParameterDefault))
                 ihead += 1        
         
-        if ihead < len(args) and not self.is_external_nullary():
+        if ihead < len(args) and not (self.is_external() and self.is_nullary()):
             if self.params:
                 pasig = "({})".format(", ".join(x.get_name() for x in self.params))
             else:
@@ -617,13 +618,13 @@ class Method:
             else:
                 flags |= PARAMETER_REQUIRED
 
-            typedecl = tnresolver.parse_type_declaration(typename)
+            typedecl = parse_type_declaration(typename, tnresolver)
             self.add_parameter(name, typedecl, doc, default, flags=flags)
 
         # 戻り値
         for line in sections.get_lines("Returns"):
             typename, doc, flags = parse_result_line(line.strip())
-            typedecl = tnresolver.parse_type_declaration(typename)
+            typedecl = parse_type_declaration(typename, tnresolver)
             self.add_result(typedecl, doc)
 
         # 戻り値デコレータ
@@ -765,6 +766,19 @@ class Method:
         self.target = target
         self.flags |= METHOD_LOADED
 
+    def resolve_type(self, context):
+        """ 引数や返り値の型宣言をインスタンス化する """
+        if self.flags & METHOD_TYPES_RESOLVED > 0:
+            return
+        if not self.is_loaded():
+            raise UnloadedMethod(self.name)
+        
+        for p in self.params:
+            p.resolve_type(context)
+        if self.result:
+            self.result.resolve_type(context)
+        self.flags |= METHOD_TYPES_RESOLVED
+
     def make_invocation(self, mods=None, type=None):
         """ 適した呼び出しオブジェクトを作成する """
         def argminmax(i,x):
@@ -811,6 +825,9 @@ class Method:
         """
         if self.flags & METHOD_LOADED == 0:
             raise UnloadedMethod(self.name)
+        
+        if context is not None:
+            self.resolve_type(context)
         
         ivargs = []
         
@@ -1049,7 +1066,7 @@ class MethodParameter:
             t = typeinst or self.get_typedecl().instance(context)
             if construct:
                 if isinstance(val, TypeDecl) and not self.is_type():
-                    val = val.to_string() # 非型引数を値に変換する
+                    val = val.to_nt_value() # 非型引数を値に変換する
                 try:
                     value = t.construct(context, val)
                 except Exception as e:
@@ -1071,6 +1088,17 @@ class MethodParameter:
         else:
             t0 = self.get_typedecl().instance(context)
             return t0.check_value_type(type(value))
+        
+    def resolve_type(self, context):
+        """ 型を解決する """
+        if isinstance(self.typedecl, TypeInstanceDecl):
+            return
+        try:
+            ti = self.typedecl.instance(context)
+        except Exception as e:
+            from machaon.core.type.instance import UnresolvableType
+            ti = UnresolvableType(self.typedecl.to_string(), e)
+        self.typedecl = TypeInstanceDecl(ti)
 
 
 class ArgumentTypeError(Exception):
@@ -1195,6 +1223,17 @@ class MethodResult:
                 value = rettype.construct(context, value)
 
         return (rettype, value)
+
+    def resolve_type(self, context):
+        """ 型を解決する """
+        if isinstance(self.typedecl, TypeInstanceDecl):
+            return
+        try:
+            ti = self.typedecl.instance(context)
+        except Exception as e:
+            from machaon.core.type.instance import UnresolvableType
+            ti = UnresolvableType(self.typedecl.to_string(), e)
+        self.typedecl = TypeInstanceDecl(ti)
 
 
 def parse_parameter_line(line, index=None):

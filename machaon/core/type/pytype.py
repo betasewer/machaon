@@ -48,11 +48,8 @@ class PythonType(DefaultProxy):
         return PythonType(self.type, self.expr)
 
     def instantiate_params(self):
-        """ 引数の制限なし """
-        from machaon.core.method import MethodParameter
-        p = MethodParameter("params", "Any")
-        p.set_variable()
-        return [p]
+        """ 型引数はない """
+        return []
 
     def select_method(self, name):
         from machaon.core.method import select_method_from_type_and_instance

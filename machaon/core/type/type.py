@@ -95,8 +95,8 @@ class Type(TypeProxy):
         return t
 
     def instantiate_params(self):
-        """ 後ろに続く再束縛引数 """
-        return self.get_type_params() # 型引数と同じ
+        """ 型引数を返す """
+        return self._params
 
     def instantiate(self, context, args):
         """ 型引数を型変換し、束縛したインスタンスを生成する """

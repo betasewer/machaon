@@ -136,6 +136,7 @@ class TypeAnyInstantiateError(Exception):
         return "Any type cannot be instantiated"
 
 
+
 class TypeUnion(DefaultProxy):
     """
     共和型
@@ -199,6 +200,107 @@ class TypeUnion(DefaultProxy):
         return t.pprint_value(app, value)
 
 
+class TypeAnyObject(DefaultProxy):
+    """
+    全ての型を受け入れる
+    """
+    def get_typename(self):
+        return "Object"
+
+    def get_conversion(self):
+        return "Object"
+    
+    def get_document(self):
+        return "Any object type"
+    
+    def check_type_instance(self, _type):
+        return True
+    
+    def check_value_type(self, valtype):
+        return True
+
+    #
+    #
+    #
+    def select_method(self, name):
+        raise NotImplementedError()
+    
+    def is_selectable_method(self, name):
+        raise NotImplementedError()
+
+    def enum_methods(self):
+        raise NotImplementedError()
+    
+    #
+    #
+    #
+    def instantiate(self, context, args):
+        raise TypeAnyInstantiateError()
+
+    def instantiate_params(self):
+        raise TypeAnyInstantiateError()
+
+    def get_methods_bound_type(self):
+        raise TypeAnyInstantiateError()
+
+    def constructor(self, context, args, typeargs):
+        raise TypeAnyInstantiateError()
+
+    def stringify_value(self, value):
+        raise TypeAnyInstantiateError()
+    
+    def summarize_value(self, value):
+        raise TypeAnyInstantiateError()
+
+    def pprint_value(self, app, value):
+        raise TypeAnyInstantiateError()
+    
+
+class UnresolvableType(DefaultProxy):
+    """
+    全ての型を受け入れる
+    """
+    def __init__(self, decl, err):
+        super().__init__()
+        self.basic = decl
+        self.error = err
+
+    def get_typename(self):
+        return "UnresolvableType[{}]".format(self.basic)
+
+    def get_conversion(self):
+        return self.get_typename()
+
+    def get_document(self):
+        return "解決できなかった型[{}]: {}".format(self.basic, self.error)
+    
+    def check_type_instance(self, _type):
+        return False
+    
+    def check_value_type(self, valtype):
+        return False
+
+    def instantiate(self, context, args):
+        raise TypeAnyInstantiateError()
+
+    def instantiate_params(self):
+        raise TypeAnyInstantiateError()
+
+    def get_methods_bound_type(self):
+        raise TypeAnyInstantiateError()
+
+    def constructor(self, context, args, typeargs):
+        raise TypeAnyInstantiateError()
+
+    def stringify_value(self, value):
+        raise TypeAnyInstantiateError()
+    
+    def summarize_value(self, value):
+        raise TypeAnyInstantiateError()
+
+    def pprint_value(self, app, value):
+        raise TypeAnyInstantiateError()
+    
 
 # 型引数のデフォルト値
 UnspecifiedTypeParam = TypeAny()

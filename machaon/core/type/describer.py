@@ -7,6 +7,7 @@ from machaon.core.type.basic import (
 from machaon.core.docstring import (
     parse_doc_declaration, DocStringDefinition, get_doc_declaration_type
 )
+from machaon.core.type.decl import parse_type_declaration
 from machaon.core.type.declresolver import BasicTypenameResolver
 from machaon.core.method import (
     Method, BadMethodDeclaration,
@@ -209,7 +210,7 @@ class TypeDescriberClass(TypeDescriber):
         # 型引数
         for line in defs.get_lines("Params"):
             typename, name, doc, flags = parse_parameter_line(line.strip())
-            typedecl = BasicTypenameResolver().parse_type_declaration(typename) # 基本型のみなので解決は不要
+            typedecl = parse_type_declaration(typename, BasicTypenameResolver()) # 基本型のみなのでデフォルトの解決で足りる
             type.add_type_param(name, typedecl, doc, flags)
 
         for alias in defs.get_lines("MemberAlias"):
@@ -276,7 +277,7 @@ class TypeDescriberClass(TypeDescriber):
             raise BadTypeDeclaration("mixin対象を'MixinType'で指定してください")
         t = mixin.rstrip(":") # コロンがついていてもよしとする
         # 型名を解決する
-        decl = self.get_typename_resolver().parse_type_declaration(t)
+        decl = parse_type_declaration(t, self.get_typename_resolver())
         return decl.to_string()
     
     def get_typename_resolver(self):

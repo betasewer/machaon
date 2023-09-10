@@ -502,10 +502,11 @@ class TypeConstructorInvocation(BasicInvocation):
 
     def get_parameter_spec(self, index) -> Optional[MethodParameter]:
         if isinstance(self._type, TypeInstanceDecl):
-            mth = Method(params=self._type.instance_constructor_params())
-            return mth.get_param(index)
-        else:
-            return None # 不明：推測する
+            tdef = self._type.instance(None)
+            from machaon.core.type.type import Type
+            if isinstance(tdef, Type):
+                return tdef.get_constructor().get_param(index)
+        return None # 不明：推測する
 
 
 class Bind1stInvocation(BasicInvocation):

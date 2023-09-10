@@ -22,16 +22,55 @@ from machaon.core.type.decl import TypeDecl, TypeDeclError
 <name> ::= ([a-z] | [A-Z] | [0-9] | "_" | "/" | ".")+
 <symbol> ::= ([a-z] | [A-Z] | [0-9] | "_" | "/" | "." | ":")+
 '''
-def parse_typedecl(decl):
+def parse_typedecl(decl, resolver=None):
     """ 開始地点 """
-    itr = _typedecl_Iterator(decl)
+    itr = TypeDecl_ParseIterator(decl, resolver)
     decl = _typedecl_body(itr)
     if not itr.eos():
         itr.advance()
         raise TypeDeclError(itr, "以降を解釈できません")
     return decl
 
-def _typedecl_body(itr, *, astypearg=False):
+
+class TypeDecl_ParseIterator:
+    def __init__(self, decl, resolver):
+        self._s = decl
+        self._i = -1
+        self.resolver = resolver
+    
+    def eos(self):
+        return self._i is None
+    
+    def pos(self):
+        return self._i
+
+    def advance(self):
+        # Returns: Tuple[char, lastposition]
+        if self.eos(): return None, None # eos
+        li = self._i
+        while True:
+            self._i += 1
+            if self._i >= len(self._s):
+                self._i = None # reach eos
+                return None, li
+            ch = self._s[self._i]
+            if not ch.isspace(): # 空白は読み捨てる
+                return ch, li
+    
+    def back(self, pos):
+        if self.eos(): return # eos
+        self._i = pos
+    
+    def current_preview(self):
+        if self.eos(): return self._s + "<<<"
+        return self._s[0:self._i] + " >>>" + self._s[self._i] + "<<< " + self._s[self._i+1:]
+
+    def new_decl(self, typename, children):
+        return TypeDecl(typename, children, self.resolver)
+    
+
+
+def _typedecl_body(itr:TypeDecl_ParseIterator, *, astypearg=False):
     union = []
     while not itr.eos():
         if astypearg:
@@ -52,9 +91,9 @@ def _typedecl_body(itr, *, astypearg=False):
     elif not union:
         raise TypeDeclError(itr, "型がありません")
     else:
-        return TypeDecl("Union", union)
+        return itr.new_decl("Union", union)
 
-def _typedecl_fullnamed_expr(itr):
+def _typedecl_fullnamed_expr(itr:TypeDecl_ParseIterator):
     targettype = None
     describername = None
     targettype = _typedecl_expr(itr)
@@ -75,15 +114,15 @@ def _typedecl_fullnamed_expr(itr):
         targettype.with_describer_name(describername)
     return targettype
 
-def _typedecl_expr(itr):
+def _typedecl_expr(itr:TypeDecl_ParseIterator):
     # 型名
     name = _typedecl_name(itr)
     if not name:
         raise TypeDeclError(itr, "型名がありません")
     args = _typedecl_typearglist(itr)
-    return TypeDecl(name, args)
+    return itr.new_decl(name, args)
 
-def _typedecl_typearglist(itr):
+def _typedecl_typearglist(itr:TypeDecl_ParseIterator):
     # []でくくられた型名リスト
     args = []
     while True:
@@ -103,7 +142,7 @@ def _typedecl_typearglist(itr):
             break
     return args
 
-def _typedecl_typeargs(itr):
+def _typedecl_typeargs(itr:TypeDecl_ParseIterator):
     args = []
     while True:
         value = _typedecl_body(itr, astypearg=True)
@@ -120,13 +159,13 @@ def _typedecl_typeargs(itr):
             raise TypeDeclError(itr, "予期せぬ文字です")
     return args
 
-def _typedecl_typearg_expr(itr):  
+def _typedecl_typearg_expr(itr:TypeDecl_ParseIterator):  
     # 型引数リストがついている  
     symbol = _typedecl_typearg_symbol(itr)
     if not symbol:
         raise TypeDeclError(itr, "型名がありません")
     args = _typedecl_typearglist(itr)
-    return TypeDecl(symbol, args)
+    return itr.new_decl(symbol, args)
 
 def is_nontypename_char(ch):
     # 非型引数の表現で使える文字
@@ -163,36 +202,3 @@ def _typedecl_typearg_symbol(itr):
             break
         value += ch
     return value
-
-class _typedecl_Iterator():
-    def __init__(self, s):
-        self._s = s
-        self._i = -1
-    
-    def eos(self):
-        return self._i is None
-    
-    def pos(self):
-        return self._i
-
-    def advance(self):
-        # Returns: Tuple[char, lastposition]
-        if self.eos(): return None, None # eos
-        li = self._i
-        while True:
-            self._i += 1
-            if self._i >= len(self._s):
-                self._i = None # reach eos
-                return None, li
-            ch = self._s[self._i]
-            if not ch.isspace(): # 空白は読み捨てる
-                return ch, li
-    
-    def back(self, pos):
-        if self.eos(): return # eos
-        self._i = pos
-    
-    def current_preview(self):
-        if self.eos(): return self._s + "<<<"
-        return self._s[0:self._i] + " >>>" + self._s[self._i] + "<<< " + self._s[self._i+1:]
-
