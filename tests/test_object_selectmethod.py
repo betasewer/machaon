@@ -18,7 +18,7 @@ def test_straight_select():
 
     gm = select_method("+", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#add", "")
+    assert gm.display() == ("TypeMethod", "Object#add", "")
 
 
 def test_modified_select():
@@ -30,11 +30,11 @@ def test_modified_select():
 
     gm = select_method("in>", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#is-in", "consume-args")
+    assert gm.display() == ("TypeMethod", "Object#is-in", "consume-args")
 
     gm = select_method("`identity", StrType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identity", "basic-reciever")
+    assert gm.display() == ("TypeMethod", "Object#identity", "basic-reciever")
     
     gm = select_method("join?", StrType)
     assert gm
@@ -50,7 +50,7 @@ def test_pytype_method_select():
 
     gm = select_method("<", AnyType)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#less", "")
+    assert gm.display() == ("TypeMethod", "Object#less", "")
 
 
 def test_objcol_select():
@@ -105,7 +105,7 @@ def test_extend_select():
     # Generic TypeMethod
     gm = select_method("=", exttype, reciever=base)
     assert gm
-    assert gm.display() == ("TypeMethod", "Generic:machaon.core#identity", "")
+    assert gm.display() == ("TypeMethod", "Object#identity", "")
     assert gm._invoke(cxt, base) == base
 
 

@@ -16,7 +16,7 @@ class EMPTY_OBJECT:
 #
 #
 #
-class Object():
+class Object:
     def __init__(self, type, value=EMPTY_OBJECT):
         self.value: Any = value
         self.type: TypeProxy = type
@@ -101,6 +101,13 @@ class Object():
         if self.is_error():
             raise self.value.error
         return self.value
+    
+    @classmethod
+    def peel(cls, x):
+        if isinstance(x, cls):
+            return x.value
+        else:
+            return x
 
 #
 def _error_string(e, method):

@@ -1,4 +1,4 @@
-from machaon.core.type.basic import DefaultProxy, RedirectProxy, TypeProxy
+from machaon.core.type.basic import DefaultProxy, RedirectProxy, TypeProxy, METHODS_BOUND_TYPE_TRAIT_INSTANCE
 
 #
 #
@@ -89,6 +89,10 @@ class TypeInstance(RedirectProxy):
 #
 #
 #
+class UninstantiableTypeError(Exception):
+    def __str__(self) -> str:
+        return "This type cannot be instantiated"
+
 
 class TypeAny(DefaultProxy):
     """
@@ -110,32 +114,27 @@ class TypeAny(DefaultProxy):
         return True
 
     def instantiate(self, context, args):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def instantiate_params(self):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def get_methods_bound_type(self):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def constructor(self, context, args, typeargs):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def stringify_value(self, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
     
     def summarize_value(self, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def pprint_value(self, app, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     
-class TypeAnyInstantiateError(Exception):
-    def __str__(self) -> str:
-        return "Any type cannot be instantiated"
-
-
 
 class TypeUnion(DefaultProxy):
     """
@@ -203,7 +202,11 @@ class TypeUnion(DefaultProxy):
 class TypeAnyObject(DefaultProxy):
     """
     全ての型を受け入れる
+    インスタンス化はできないが、メソッドの参照のみなされる
     """
+    def __init__(self):
+        self._methods = {}
+
     def get_typename(self):
         return "Object"
 
@@ -211,49 +214,93 @@ class TypeAnyObject(DefaultProxy):
         return "Object"
     
     def get_document(self):
-        return "Any object type"
+        return "あらゆる型のオブジェクトを受け入れる型"
     
     def check_type_instance(self, _type):
         return True
     
     def check_value_type(self, valtype):
         return True
+    
+    def get_describer(self, _mixin):
+        return self.method_resolver.get_describer()
 
     #
     #
     #
+    @property
+    def method_resolver(self):
+        from machaon.types.generic import get_resolver
+        return get_resolver()
+
     def select_method(self, name):
-        raise NotImplementedError()
-    
+        """
+        ほかの型と異なり、一度に全メソッドを読み込まず、要求が来るたびに該当メソッドだけを読み込む。
+        メソッドが無い場合は、GenericMethodsのメンバ名のなかから実装を探し出し、読み込みを行う。
+        したがって、関数本体でのエイリアス名の指定は無効である。
+        """
+        fnname = self.method_resolver.resolve(name)
+        if fnname is None:
+            return None
+        if fnname not in self._methods:
+            fn = self.method_resolver.get_attribute(fnname)
+            if fn is None:
+                return None
+            return self.load_method(fn, fnname)
+        else:
+            return self._methods[fnname]
+
     def is_selectable_method(self, name):
-        raise NotImplementedError()
+        return self.method_resolver.is_resolvable(name)
 
     def enum_methods(self):
-        raise NotImplementedError()
-    
+        """ 利用可能なメソッドをすべて挙げる """
+        for names, fnname, fn in self.method_resolver.enum_attributes():
+            if fnname not in self._methods:
+                yield names, self.load_method(fn, fnname)
+            else:
+                yield names, self._methods[fnname]
+
+    def load_method(self, fn, fnname):
+        """ その都度メソッド定義をロードする """
+        from machaon.core.docstring import parse_doc_declaration
+        from machaon.core.method import make_method_prototype_from_doc
+
+        decl = parse_doc_declaration(fn, ("method", "task"))
+        if decl is None:
+            return None
+
+        method, _aliases = make_method_prototype_from_doc(decl, fnname)
+        if method is None:
+            return None
+
+        method.load_from_type(self, callobj=fn)
+        self._methods[fnname] = method
+        return method
+
     #
     #
     #
     def instantiate(self, context, args):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def instantiate_params(self):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def get_methods_bound_type(self):
-        raise TypeAnyInstantiateError()
+        return METHODS_BOUND_TYPE_TRAIT_INSTANCE
 
     def constructor(self, context, args, typeargs):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def stringify_value(self, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
     
     def summarize_value(self, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def pprint_value(self, app, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
     
 
 class UnresolvableType(DefaultProxy):
@@ -281,27 +328,34 @@ class UnresolvableType(DefaultProxy):
         return False
 
     def instantiate(self, context, args):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def instantiate_params(self):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def get_methods_bound_type(self):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def constructor(self, context, args, typeargs):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def stringify_value(self, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
     
     def summarize_value(self, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
 
     def pprint_value(self, app, value):
-        raise TypeAnyInstantiateError()
+        raise UninstantiableTypeError()
     
 
+#
+# インスタンス
+#
+AnyType = TypeAny()
+ObjectType = TypeAnyObject()
+# 型関数
+UnionType = TypeUnion
 # 型引数のデフォルト値
-UnspecifiedTypeParam = TypeAny()
+UnspecifiedTypeParam = AnyType
 

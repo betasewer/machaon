@@ -37,6 +37,7 @@ from machaon.core.invocation import (
 )
 from machaon.core.type.declparser import TypeDeclError
 from machaon.core.type.typemodule import TypeModuleError
+from machaon.core.type.instance import ObjectType
 
 
 #
@@ -554,11 +555,10 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
         if meth is not None:
             return meth.make_invocation(modbits, typetraits)
     
-    # グローバル定義の関数
-    from machaon.types.generic import resolve_generic_method_invocation
-    inv = resolve_generic_method_invocation(name, modbits)
-    if inv is not None:
-        return inv 
+    # 共通型定義の関数
+    gmeth = ObjectType.select_method(name)
+    if gmeth is not None:
+        return gmeth.make_invocation(modbits, ObjectType)
 
     if using_type_method:
         if not typetraits.is_selectable_instance_method():

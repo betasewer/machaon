@@ -13,7 +13,7 @@ from machaon.core.object import Object
 from machaon.core.symbol import normalize_method_target, normalize_method_name, SIGIL_OPERATOR_MEMBER_AT, normalize_typename
 from machaon.core.docstring import parse_doc_declaration, DocStringDefinition, DocStringDeclaration
 from machaon.core.type.decl import (
-    TypeDecl, parse_type_declaration, split_typename_and_value
+    TypeDecl, parse_type_declaration, split_typename_and_value, AnyType, ObjectType
 )
 from machaon.core.type.declresolver import BasicTypenameResolver
 from machaon.core.type.basic import TypeConversionError, TypeProxy
@@ -100,6 +100,7 @@ class MethodParameterNoDefault:
 
 class MethodParameterDefault:
     pass
+
 
 #
 #
@@ -476,7 +477,7 @@ class Method:
         """ 引数が無い """
         return len(self.params) == 0
     
-    def load_from_type(self, this_type: TypeProxy, *, meta=False):
+    def load_from_type(self, this_type: TypeProxy, *, meta=False, callobj=None):
         """
         実装をロードする。
         """
@@ -487,7 +488,9 @@ class Method:
             self.target = normalize_method_target(self.name)
 
         # クラスに定義されたメソッドが実装となる
-        if meta:
+        if callobj is not None:
+            pass
+        elif meta:
             callobj = this_type.get_describer(self.mixin).get_metamethod_attribute(self.target)
         else:
             callobj = this_type.get_describer(self.mixin).get_method_attribute(self.target)
@@ -553,10 +556,12 @@ class Method:
             doc(str): docstring
             function(Callable): *関数の実体。引数デフォルト値を得るのに使用する
         """
+        # 名前解決器
+        tnresolver = BasicTypenameResolver()
         if this_type is not None:
-            tnresolver = this_type.get_describer(self.mixin).get_typename_resolver()
-        else:
-            tnresolver = BasicTypenameResolver()
+            desc = this_type.get_describer(self.mixin)
+            if desc is not None:
+                tnresolver = desc.get_typename_resolver()
 
         if isinstance(doc, DocStringDeclaration):
             # パース済みの宣言
@@ -666,7 +671,7 @@ class Method:
         self.doc = fn.__doc__ or ""
         
         # 戻り値
-        self.add_result(result_typename or "Any") # 不明、値から推定する
+        self.add_result(result_typename or AnyType) # 不明、値から推定する
 
         # シグネチャを関数から取得
         try:
@@ -837,7 +842,7 @@ class Method:
             if selftype is not None:
                 desc = self.get_describer(selftype)
                 if isinstance(desc, type):
-                    desc = desc()    
+                    desc = desc()
                 ivargs.append(desc)
             else:
                 raise MethodCallingError("trait実装のメソッドですが、selftypeが引数に渡されていません")
@@ -850,9 +855,12 @@ class Method:
                 raise MethodCallingError("trait実装のメソッドですが、selftypeが引数に渡されていません")
 
         if not external:
-            selfspec = MethodParameter("self") # デフォルトのパラメータスペック
             selfarg, *args = args
-            ivargs.append(selfspec.make_argument_value(context, selfarg))
+            if context is not None:
+                selfspec = MethodParameter("self") # デフォルトのパラメータスペック(Any)
+                ivargs.append(selfspec.make_argument_value(context, selfarg))
+            else:
+                ivargs.append(Object.peel(selfarg))
 
         if self.is_context_bound(): 
             if context is not None:
@@ -875,7 +883,7 @@ class Method:
                 argvalues = self.make_argument_row(context, args)
                 ivargs.extend(argvalues)
             else:
-                ivargs.extend([x.value if isinstance(x,Object) else x for x in args])
+                ivargs.extend([Object.peel(x) for x in args])
             
         return ivargs
 
@@ -967,7 +975,7 @@ class MethodParameter:
         self.doc = doc
         self.default = default
         self.flags = flags
-        self.typedecl = typedecl or TypeDecl()
+        self.typedecl = typedecl or AnyType
     
     def __str__(self):
         name = self.name
@@ -994,17 +1002,14 @@ class MethodParameter:
         return self.doc
     
     def is_type_unspecified(self):
-        return self.typename is None or self.typename == "Any" or self.typename == "Object"
-        
-    def is_type_uninstantiable(self):
-        return self.typename is None or self.typename == "Object"
+        return self.typedecl is AnyType or self.typedecl is ObjectType
+    
+    def is_object(self):
+        return self.typedecl is ObjectType
 
     def is_string(self):
         return self.typename == "Str"
     
-    def is_object(self):
-        return self.typename == "Object"
-
     def is_type(self):
         return self.typename == "Type"
 
@@ -1055,7 +1060,7 @@ class MethodParameter:
                 return val
             else:
                 raise ValueError("Object is required, but not passed")
-        elif self.is_type_uninstantiable():
+        elif self.is_type_unspecified():
             if construct:
                 raise ValueError("cannot be constructed")
             elif obj_value:
@@ -1066,7 +1071,7 @@ class MethodParameter:
             t = typeinst or self.get_typedecl().instance(context)
             if construct:
                 if isinstance(val, TypeDecl) and not self.is_type():
-                    val = val.to_nt_value() # 非型引数を値に変換する
+                    val = val.to_string() # 型名が非型引数の値であるはず
                 try:
                     value = t.construct(context, val)
                 except Exception as e:
@@ -1091,14 +1096,7 @@ class MethodParameter:
         
     def resolve_type(self, context):
         """ 型を解決する """
-        if isinstance(self.typedecl, TypeInstanceDecl):
-            return
-        try:
-            ti = self.typedecl.instance(context)
-        except Exception as e:
-            from machaon.core.type.instance import UnresolvableType
-            ti = UnresolvableType(self.typedecl.to_string(), e)
-        self.typedecl = TypeInstanceDecl(ti)
+        self.typedecl = self.typedecl.resolve(context)
 
 
 class ArgumentTypeError(Exception):
@@ -1125,7 +1123,7 @@ class ArgumentTypeError(Exception):
 #
 class MethodResult:
     def __init__(self, typedecl=None, doc="", special=None):
-        self.typedecl = typedecl or TypeDecl()
+        self.typedecl = typedecl or AnyType
         self.doc = doc
         self.special = special
         self.decorator = None
@@ -1147,7 +1145,7 @@ class MethodResult:
         return self.doc
     
     def is_type_to_be_deduced(self):
-        return self.typename == "Any"
+        return self.typedecl is AnyType
     
     def is_return_self(self):
         return self.special is RETURN_SELF
@@ -1184,7 +1182,7 @@ class MethodResult:
         
         # Noneはそのまま返す
         if value is None:
-            return (context.get_type("None"), None)
+            return (context.type_module.get("None"), None)
 
         # 型拡張の定義かどうか
         extension = get_type_extension_loader(value)
@@ -1193,9 +1191,7 @@ class MethodResult:
         
         # 型を決める
         rettype = None
-        if self.is_already_instantiated():
-            rettype = self.typedecl.instance(context)
-        elif self.is_type_to_be_deduced():
+        if self.is_type_to_be_deduced():
             rettype = context.deduce_type(value) # 型を値から推定する
         else:
             rettype = self.typedecl.instance(context)
@@ -1226,14 +1222,7 @@ class MethodResult:
 
     def resolve_type(self, context):
         """ 型を解決する """
-        if isinstance(self.typedecl, TypeInstanceDecl):
-            return
-        try:
-            ti = self.typedecl.instance(context)
-        except Exception as e:
-            from machaon.core.type.instance import UnresolvableType
-            ti = UnresolvableType(self.typedecl.to_string(), e)
-        self.typedecl = TypeInstanceDecl(ti)
+        self.typedecl = self.typedecl.resolve(context)
 
 
 def parse_parameter_line(line, index=None):
@@ -1346,7 +1335,7 @@ class MetaMethods:
             Method("pprint"),
         ]
         self.prototypes = {x.get_name():x for x in prototypes}
-        self.prototypes["constructor"].add_parameter("value", "Any")
+        self.prototypes["constructor"].add_parameter("value", AnyType)
 
     def get_prototype(self, name):
         """ 

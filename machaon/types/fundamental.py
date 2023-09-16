@@ -77,16 +77,20 @@ class TypeType:
         docs.append("{} [{}]".format(typ.get_conversion(), type(typ).__name__))
         docs.extend(typ.get_document().splitlines())
 
+        special = typ is context.type_module.ObjectType or typ is context.type_module.AnyType
         tdef = typ.get_typedef()
-        if tdef is not None:
+        if special:
+            pass
+        elif tdef is not None:
             docs.append("［実装］")
             docs.extend([x.get_value_full_qualname() for x in tdef.get_all_describers()])
+            docs.append("")
         else:
             vt = typ.get_value_type()
             if vt:
                 docs.append("［値型］")
                 docs.append(full_qualified_name(vt))
-        docs.append("")
+                docs.append("")
         app.post("message", "\n".join(docs))
 
         # 型引数の表示
@@ -115,9 +119,10 @@ class TypeType:
                 intr.append(meth)
     
         # 通常メソッド
-        meths_sheet = context.new_object(intr, conversion="Sheet[Method]")
-        meths_sheet.value.view(context, "names", "signature", "doc")
-        meths_sheet.pprint(app)
+        if intr:
+            meths_sheet = context.new_object(intr, conversion="Sheet[Method]")
+            meths_sheet.value.view(context, "names", "signature", "doc")
+            meths_sheet.pprint(app)
 
         # 外部メソッド
         if extr:
@@ -333,7 +338,7 @@ def fundamental_types():
     for fulltypename in fundamental_typenames:
         module.define(fulltypename, describername=fundamental_describer_name)
     from machaon.core.type.fundamental import NoneType
-    module.add_special_type(NoneType())
+    module.add_special_type(NoneType(), describername=fundamental_describer_name)
     return module
 
 

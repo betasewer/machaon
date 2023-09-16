@@ -173,3 +173,13 @@ def test_typetype_methods():
     assert sequence_equals(ret.value.get_current_column_names(), ("names", "doc", "signature", "source"))
 
     
+def test_objecttype_methods():
+    cxt = instant_context()
+
+    t = cxt.type_module.ObjectType
+    assert t
+    assert t.get_typename() == "Object"
+    meth = t.select_method("+")
+    assert meth
+
+

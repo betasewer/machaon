@@ -1,7 +1,7 @@
 from machaon.core.symbol import (
     SIGIL_DESCRIBER_INDICATOR, SIGIL_PYMODULE_DOT
 )
-from machaon.core.type.decl import TypeDecl, TypeDeclError
+from machaon.core.type.decl import TypeDecl, TypeDeclError, ModuleTypeDecl, SpecialTypeDecls, PythonTypeDecl
 
 
 #
@@ -66,10 +66,21 @@ class TypeDecl_ParseIterator:
         return self._s[0:self._i] + " >>>" + self._s[self._i] + "<<< " + self._s[self._i+1:]
 
     def new_decl(self, typename, children):
-        return TypeDecl(typename, children, self.resolver)
-    
+        """ 型宣言のインスタンスを作る """
+        if typename in SpecialTypeDecls:
+            # 特殊型?
+            return SpecialTypeDecls[typename].bind(children)
+        elif SIGIL_PYMODULE_DOT in typename: 
+            # Python型?
+            return PythonTypeDecl(typename, children)
+        else:
+            # 普通の型
+            return ModuleTypeDecl(typename, children, self.resolver)
 
 
+#
+#
+#
 def _typedecl_body(itr:TypeDecl_ParseIterator, *, astypearg=False):
     union = []
     while not itr.eos():

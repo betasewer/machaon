@@ -11,49 +11,31 @@ from machaon.core.type.describer import TypeDescriberClass
 class GenericMethodResolver:
     def __init__(self) -> None:
         self.describer = TypeDescriberClass(GenericMethods)
-        self.describer.set_full_qualname("machaon.core")
-        _GenericMethodsType = Type(self.describer)
-        _GenericMethodsType.load(nodescribe=True, typename="Generic", value_type=self.TypeValue)
-        self._t = _GenericMethodsType
 
-    @property
-    def type(self):
-        return self._t
-
-    class TypeValue:
-        def __init__(self):
-            raise TypeError("Should not be constructed")
+    def is_resolvable(self, name):
+        return name in self.operators
         
     def resolve(self, name):
-        """
-        ほかの型と異なり、一度に全メソッドを読み込まず、要求が来るたびに該当メソッドだけを読み込む。
-        メソッドが無い場合は、GenericMethodsのメンバ名のなかから実装を探し出し、読み込みを行う。
-        したがって、関数本体でのエイリアス名の指定は無効である。
-        """
         fnname = self.operators.get(name)
-        if fnname is None:
-            return None
-
-        method = self.type.select_method(fnname)
-        if method is None:
-            # ロードする
-            attrname = normalize_method_target(fnname)
-            attr = self.describer.get_method_attribute(attrname)
-            if attr is None:
-                return None
-
-            decl = parse_doc_declaration(attr, ("method", "task"))
-            if decl is None:
-                return None
-            
-            method, _aliases = make_method_prototype_from_doc(decl, attrname)
-            if method is None:
-                return None
-            
-            method.load_from_type(self.type)
-            self.type.add_method(method)
-
-        return method
+        return fnname
+        
+    def get_attribute(self, fnname):
+        return self.describer.get_method_attribute(fnname)
+    
+    def enum_attributes(self):
+        # 演算子名を復元するマップ
+        operators_rev = {}
+        for k,v in self.operators.items():
+            operators_rev.setdefault(v, []).append(k)
+        # 属性をすべて辿る
+        from machaon.core.importer import enum_attributes
+        for name, val in enum_attributes(self.describer.get_value()):
+            if not name in operators_rev:
+                continue
+            yield operators_rev[name], name, val
+    
+    def get_describer(self):
+        return self.describer
 
     operators = {}
 
@@ -64,11 +46,14 @@ class GenericMethodResolver:
                 cls.operators[normalize_method_name(opr)] = fn.__name__ 
             return fn
         return _deco
-    
-    
+
+
 
 def resolve_generic_method(name):
     return _GenericMethodResolver.resolve(name)
+
+def is_resolvable_generic_method(name):
+    return _GenericMethodResolver.is_resolvable(name)
 
 def resolve_generic_method_invocation(name, modbits=None):
     method = resolve_generic_method(name)
@@ -76,35 +61,6 @@ def resolve_generic_method_invocation(name, modbits=None):
         return None
     return TypeMethodInvocation(_GenericMethodResolver.type, method, modbits)
 
-
-#
-# 演算子と実装の対応
-#
-operators = {
-    "+" : "add",
-    "-" : "sub",
-    "*" : "mul",
-    "@" : "matmul",
-    "**" : "pow",
-    "/" : "div",
-    "//" : "floordiv",
-    "%" : "mod",
-    "-=" : "negative",
-    "+=" : "positive",
-    "&" : "bitand",
-    "^" : "bitxor",
-    "|" : "bitor",
-    "~" : "bitinv",
-    ">>" : "rshift",
-    "<<" : "lshift",
-    "in" : "is-in",
-    "#" : "at",
-    "#>" : "attrat",
-    "=" : "identical",
-    "?" : "pretty",
-    "=>" : "bind",
-    "/+" : "tuplepush",
-}
 
 #
 #
@@ -626,7 +582,7 @@ class GenericMethods:
     @resolver.operator("help")
     def help(self, context, obj):
         """ @method external context
-        オブジェクトの説明、メソッドを表示する。
+        オブジェクトの型の説明、メソッドを表示する。
         Arguments:
             obj(Object): 対象
         """
@@ -692,3 +648,6 @@ class GenericMethods:
 
 
 _GenericMethodResolver = GenericMethodResolver()
+def get_resolver():
+    return _GenericMethodResolver
+

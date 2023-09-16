@@ -5,7 +5,7 @@ from machaon.core.symbol import (
     full_qualified_name, is_valid_typename,
     QualTypename
 )
-from machaon.core.type.decl import TypeProxy
+from machaon.core.type.decl import TypeProxy, SpecialTypeDecls
 from machaon.core.type.type import Type
 from machaon.core.type.describer import TypeDescriber, create_type_describer, detect_describer_name_type
 from machaon.core.error import ErrorSet
@@ -39,6 +39,12 @@ class TypeModule:
         self._lib_describer: Dict[str, str] = {} # describer -> fulltypename
         self._lib_valuetype: Dict[str, str] = {} # valuetypename -> fulltypename
         self._reserved_mixins: Dict[str, List[TypeDescriber]] = {}
+        # 特殊型のインスタンス
+        from machaon.core.type.instance import AnyType, ObjectType, UnionType
+        self.AnyType = AnyType
+        self.ObjectType = ObjectType
+        # 特殊型関数
+        self.UnionType = UnionType
 
     #
     @property
@@ -62,6 +68,8 @@ class TypeModule:
         if code == TYPECODE_FULLNAME:
             tdef = self._defs.get(value)
         elif code == TYPECODE_TYPENAME:
+            if value in SpecialTypeDecls:
+                raise BadTypename("'{}'は型名として使用できません".format(value))
             tns = self._lib_typename.get(value, [])
             if module is not None:
                 tns = [x for x in tns if x.startswith(module)]
@@ -113,7 +121,7 @@ class TypeModule:
         """
         if isinstance(typecode, TypeProxy):
             return typecode
-
+            
         t = None
         if isinstance(typecode, str):
             qualname = QualTypename.parse(normalize_typename(typecode))
@@ -121,7 +129,7 @@ class TypeModule:
                 # 完全一致で検索する
                 t = self._select_type(qualname.stringify(), TYPECODE_FULLNAME)
             else:
-                # 型名のみの一致で検索する
+                # 型名の部分一致で検索する
                 t = self._select_type(qualname.typename, TYPECODE_TYPENAME)
         elif hasattr(typecode, "Type_typename"):
             # 登録済みの型のデスクライバ
@@ -147,6 +155,13 @@ class TypeModule:
         Yields:
             str, Type | (geterror) str, Type, ErrorObject
         """
+        # メソッドが利用可能な特殊型も含まれる
+        def special_type(x):
+            r = (x.get_typename(), x)
+            return r + (None,) if geterror else r
+        yield special_type(self.ObjectType)
+
+        # モジュール型
         for fullname, t in self._defs.items():
             if geterror:
                 try:
@@ -247,6 +262,9 @@ class TypeModule:
             else:
                 return self.define(desc)
 
+    #
+    #
+    #   
     def define(self, describer, *,
         typename = None, 
         value_type = None,
@@ -348,12 +366,6 @@ class TypeModule:
     #
     # モジュールを操作する
     #
-    def add_special_type(self, t):
-        """ 特殊な型を追加する """
-        self._defs[t.get_typename()] = t
-        self._lib_typename[t.get_typename()] = [""]
-        self._lib_valuetype[full_qualified_name(t.get_value_type())] = t
-
     def add_fundamentals(self):
         """ 基本型を追加する """
         from machaon.types.fundamental import fundamental_types
@@ -384,6 +396,13 @@ class TypeModule:
                         self.define(desc, fallback=fallback) # 重複した場合は単にスルーする
                     except Exception as e:
                         errs.add(e, value=desc.get_full_qualname())
+
+    def add_special_type(self, t, describername=None):
+        """ 特殊な型を追加する """
+        qname = QualTypename(t.get_typename(), describername).stringify()
+        self._defs[qname] = t
+        self._lib_typename[t.get_typename()] = [describername or ""]
+        self._lib_valuetype[full_qualified_name(t.get_value_type())] = qname
 
     def update(self, other):
         """ 
@@ -448,8 +467,7 @@ class TypeModule:
 #
 #
 def resolve_typeclass(describername):
-    from machaon.core.type.fundamental import NoneType, ObjectCollectionType
+    from machaon.core.type.fundamental import ObjectCollectionType
     return {
-        "machaon.types.fundamental.NoneType" : NoneType,
         "machaon.core.object.ObjectCollection" : ObjectCollectionType
     }.get(describername, Type)

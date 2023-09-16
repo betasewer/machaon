@@ -584,12 +584,16 @@ def get_first_package_path(module, spec):
 #
 #
 #
-def enum_attributes(value_type, value):
+def enum_attributes(value_type, value=None):
     """
     定義順でメソッドを列挙する
     Yields:
         Tuple[str, Any | Exception]:
     """
+    if value is None:
+        value = value_type
+        value_type = type(value)
+
     ranks = {}
     top = 1
     bases = [value_type]

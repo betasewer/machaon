@@ -1,12 +1,13 @@
 import pytest
 
 from machaon.core.type.alltype import (
-    TypeDecl, TypeInstance, parse_type_declaration, TypeUnion, 
+    ModuleTypeDecl, TypeInstance, parse_type_declaration, TypeUnion, 
     PythonType, ExtendedType, get_type_extension_loader, Type
 )
 from machaon.core.invocation import InstanceMethodInvocation, FunctionInvocation
 from machaon.core.context import instant_context
 
+TypeDecl = ModuleTypeDecl
 parse_ = parse_type_declaration
 
 def reflectparse(s):
