@@ -86,7 +86,7 @@ def test_parse_function():
     ltest("Function new: -> @ name == lucky", lucky, True)
     ltest("Function new: -> @ type startswith: Golden", lucky, True)
     ltest("Function new: -> @ age * 10", lucky, 30)
-    ltest("Function new: -> (@ age * 5 == 25) || (@ name == lucky)", lucky, True)
+    ltest("Function new: -> .: @ age * 5 == 25 :. || .: @ name == lucky :.", lucky, True)
     ltest("Function new: -> 32 * 45 ", lucky, 32 * 45)
 
 
@@ -101,7 +101,7 @@ def test_message_failure():
     context = test_context(silent=True)
     r = run_function("2 * 3 + 5 non-exisitent-method 0", None, context)
     assert r.is_error() # bad method
-    assert r.value.get_error_typename() == "BadExpressionError"
+    assert r.value.get_error_typename() == "InternalMessageError"
 
     # 関数の実行中のエラー
     context = test_context(silent=True)
@@ -151,24 +151,24 @@ def test_message_block():
     context = test_context()
 
     # 二つ以上のメッセージを含むブロック
-    r = run_function("10 * (1 + 2 + 3)", None, context)
+    r = run_function("10 * .: 1 + 2 + 3 :.", None, context)
     assert r.value == 10 * 6
 
-    r = run_function("'1-2-3' startswith: (1 Str + '-')", None, context)
+    r = run_function("'1-2-3' startswith: .: 1 Str + '-' :.", None, context)
     assert r.value is True
     
-    r = run_function("('1 2 3' + ' ' + '4 5') split as Int reduce +", None, context)
+    r = run_function(".: '1 2 3' + ' ' + '4 5' :. split as Int reduce +", None, context)
     assert r.value == (1 + 2 + 3 + 4 + 5)
 
     # ネスト
-    r = run_function("100 / ((1 + 2 + 3) * (4 + 5 + 6))", None, context)
+    r = run_function("100 / .: .: 1 + 2 + 3 :. * .: 4 + 5 + 6 :. :.", None, context)
     assert r.value == 100 / ((1 + 2 + 3) * (4 + 5 + 6))
     
     # ブロックの完結後に値が続く場合
-    r = run_function("title center: (5 * (3 + 1)) =", None, context)
+    r = run_function("title center: .: 5 * : 3 + 1 :. =", None, context)
     assert r.value == "title".center(5 * (3 + 1), "=")
 
-    r = run_function("(10 ** (1 + 2)) * 3", None, context)
+    r = run_function(".: 10 ** .: 1 + 2 :. :. * 3", None, context)
     assert r.value == 10 ** (1 + 2) * 3
 
 
@@ -179,10 +179,10 @@ def test_message_discard():
     r = run_function("10 + 20 . 2 * 4", None, context)
     assert r.value == 2 * 4
 
-    r = run_function(". 10 + 20 . 3 * 5 .", None, context)
+    r = run_function(". 10 + 20 . これはコメントです = . 3 * 5 .", None, context)
     assert r.value == 3 * 5
 
-    r = run_function("100 * (1 + 2 + 3 . 8 =)", None, context)
+    r = run_function("100 * .: 1 + 2 + 3 . 8 = :.", None, context)
     assert r.value == 100 * 8
 
 #
@@ -232,7 +232,7 @@ def test_message_sequential_function():
     assert r == 15
 
     # call with multiple args
-    fn = parse_sequential_function("(@ values) reduce (@ operator)", context, {
+    fn = parse_sequential_function(": @ values reduce : @ operator", context, {
             "values": "Tuple[Int]", 
             "operator" : "Str",
         })

@@ -1,6 +1,6 @@
 from machaon.core.object import Object
 from machaon.process import TempSpirit
-from machaon.core.message import MessageEngine
+from machaon.core.message import MessageEngine, InternalMessageError
 import pytest
 
 def message_test(source, context, lhs, rhs, tester=None):
@@ -11,9 +11,6 @@ def message_test(source, context, lhs, rhs, tester=None):
             spi = TempSpirit()
             lhs.pprint(spi)
             spi.printout()
-            print("--- instructions ----------------")
-            print(put_instructions(context))
-            print("\n".join([x["message-expression"] for x in context.get_invocations()]))
             return False
         lhs = lhs.value
 
@@ -27,10 +24,6 @@ def message_test(source, context, lhs, rhs, tester=None):
         print("    {},".format(lhs))
         print("    {}".format(rhs))
         print(") message: ({})".format(source))
-        print("")
-        print("--- instructions ----------------")
-        print(put_instructions(context))
-        print("\n".join([x["message-expression"] for x in context.get_invocations()]))
         if context.is_failed():
             error = context.new_invocation_error_object()
             spi = TempSpirit()
@@ -41,9 +34,10 @@ def message_test(source, context, lhs, rhs, tester=None):
     return True
 
 def put_instructions(cxt, sep='\n'):
-    f1 = "{instruction} {options}"
-    f2 = "{instruction} {options} > {args}"
-    return sep.join(f1.format(**d) if d["args"] is None else f2.format(**d) for d in cxt.get_instructions())
+    asts = []
+    for d in cxt.get_instructions():
+        asts.extend(d.display_instructions())
+    return sep.join(asts)
 
 def run(f):
     f()
@@ -59,10 +53,13 @@ def parse_test(context, s, rhs, *, q=None):
     parser = MessageEngine(s)
     try:
         lhso = parser.run_here(context)
+    except InternalMessageError:
+        raise
     except Exception as e:
-        put_instructions(context, "; ")
-        raise e
-    assert message_test(s, context, lhso.value, rhs, q)
+        raise InternalMessageError(e, parser, context) from e
+    if not message_test(s, context, lhso.value, rhs, q):
+        e = AssertionError(lhso.value, rhs)
+        raise InternalMessageError(e, parser, context)
     return put_instructions(context, "; ")
 
 def parse_instr(context, s):

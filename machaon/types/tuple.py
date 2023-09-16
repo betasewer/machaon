@@ -217,7 +217,7 @@ class ObjectTuple():
             cur = start
             objs = self.objects
         
-        predicate = parse_sequential_function("(@ left) {} (@ right)".format(methodname), context)
+        predicate = parse_sequential_function(": @ left {} : @ right".format(methodname), context)
         for o in objs:
             subject = context.new_object({"left": cur, "right": o})
             cur = predicate.run(subject)

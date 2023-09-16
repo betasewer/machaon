@@ -21,10 +21,7 @@ class ErrorObject():
         self.context = context
     
     def get_error(self):
-        if isinstance(self.error, InternalMessageError):
-            return self.error.error
-        else:
-            return self.error
+        return self.error
     
     def get_error_typename(self):
         """ @method alias-name [error_typename]
@@ -125,6 +122,20 @@ class ErrorObject():
                 break
             err = cause
         return ErrorObject(err, context=self.context)
+    
+    def chain(self):
+        """ @method
+        Returns:
+            Sheet[Error]:
+        """
+        yield self
+        err = self.get_error()
+        while True: 
+            cause = err.__cause__
+            if cause is None:
+                break
+            yield ErrorObject(cause, context=self.context)
+            err = cause
 
     def log(self, app):
         """ @task

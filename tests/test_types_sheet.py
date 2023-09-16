@@ -160,7 +160,7 @@ def test_algorithm(objectdesk):
     assert vals[3].value == 7
 
     # filter
-    f = parse_function("(@ name contains ke) || (@ tall == 6)")
+    f = parse_function(".: @ name contains ke :. || .: @ tall == 6 :.")
     view.filter(objectdesk, None, f)
     assert view.count() == 2
     assert values(view.row_values(0)) == ["ken","111-1111"]
@@ -168,7 +168,7 @@ def test_algorithm(objectdesk):
 
     # collect
     viewhe = heterovalues()
-    f = parse_function("(@ upper)")
+    f = parse_function("@ upper")
     vals = viewhe.collect(objectdesk, None, f)
     assert len(vals) == 2
     assert values(vals) == [ "STRING1", "STRING-STRANG2" ]

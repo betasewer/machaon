@@ -16,8 +16,10 @@ from machaon.core.invocation import (
 #    
 LOG_MESSAGE_BEGIN = 1
 LOG_MESSAGE_CODE = 2
-LOG_MESSAGE_EVAL_BEGIN = 3
-LOG_MESSAGE_EVAL_END = 4
+LOG_MESSAGE_EVAL_READY = 4
+LOG_MESSAGE_EVAL_BEGIN = 5
+LOG_MESSAGE_EVAL_END = 6
+LOG_MESSAGE_AST = 7
 LOG_MESSAGE_END = 10
 LOG_MESSAGE_BEGIN_SUB = 11
 
@@ -352,6 +354,9 @@ class InvocationContext:
         """ 実行ログを追加する """
         self._log.append((logcode, *args))
 
+    def enable_log(self):
+        self.log = self._add_log
+
     def disable_log(self):
         """ ログを蓄積しない """
         self.log = _context_no_log
@@ -363,6 +368,14 @@ class InvocationContext:
     def log_message_code(self, c):
         """ """
         self.log(LOG_MESSAGE_CODE, c)
+
+    def log_message_ast(self, stackindex, isbegin):
+        """ """
+        self.log(LOG_MESSAGE_AST, stackindex, isbegin)
+
+    def log_message_eval(self, message_index, msgsrc, msg):
+        """ """
+        self.log(LOG_MESSAGE_EVAL_READY, msgsrc, "[{}] {}".format(message_index, msg.sexpr()))
     
     def log_message_end(self):
         """ """
@@ -394,9 +407,32 @@ class InvocationContext:
                 for line in ccode.display_instructions():
                     printer("  {}".format(line))
 
+            elif code == LOG_MESSAGE_AST:
+                index = args[0]
+                code = args[1]
+                if code == 1:
+                    printer(" begin message [{}]:".format(index))
+                elif code == 2:
+                    printer(" end message [{}]:".format(index))
+                elif code == 10:
+                    printer(" begin block, from message [{}]:".format(index))
+                elif code == 20:
+                    printer(" end current block, to message [{}]:".format(index))
+                elif code == 21:
+                    printer(" end last block, to message [{}]:".format(index))
+                elif code == 22:
+                    printer(" end all block:")
+                
+            elif code == LOG_MESSAGE_EVAL_READY:
+                src = args[0]
+                eview = args[1]
+                printer(" evaluating:")
+                printer("  {}".format(src))
+                printer("  {}".format(eview))
+
             elif code == LOG_MESSAGE_EVAL_BEGIN:
                 invindex = args[0]
-                printer(" evaluated message:")
+                printer(" eval:")
                 printer("  {}".format(self.invocations[invindex].message.sexpr()))
 
             elif code == LOG_MESSAGE_EVAL_END:
@@ -424,8 +460,11 @@ class InvocationContext:
             printer(" {}:{}{}".format(title, pad*" ", line))
 
         if self._extra_exception:
-            err = self._extra_exception
-            printer("  ERROR: {}".format(type(err).__name__))
+            from machaon.types.stacktrace import ErrorObject
+            names = []
+            for err in ErrorObject(self._extra_exception, context=self).chain():
+                names.append(err.get_error_typename())
+            printer("  ERROR: {}".format(" <- ".join(names)))
         
     def get_message(self):
         """ @method alias-name [message] 
@@ -492,19 +531,13 @@ class InvocationContext:
         """ @method alias-name [instructions instrs]
         コンパイルされた内部命令
         Returns:
-            Sheet[ObjectCollection]:
+            Sheet[Any]:
         Decorates:
-            @ view: instruction options arg-instruction arg-values
+            @ view: display-instructions
         """
         for code, *values in self._log:
             if code == LOG_MESSAGE_CODE:
-                c = values[0]
-                for instrname, options, args in c.instructions():
-                    yield {
-                        "instruction" : instrname,
-                        "options" : options,
-                        "args" : args,
-                    }
+                yield values[0]
 
     def get_subcontext(self, index):
         """ @method alias-name [sub-context sub]
@@ -575,14 +608,17 @@ class InvocationContext:
         """ 
         self.pprint_log(lambda x: app.post("message", x))
 
-    def display_log(self):
+    def display_log(self, sep="\n"):
         """ @method 
         Returns:
             Str:
         """
         lines = []
         self.pprint_log(lambda x: lines.append(x))
-        return "\n".join(lines)
+        if sep is None:
+            return lines
+        else:
+            return sep.join(lines)
 
     def constructor(self, context, value):
         """ @meta context 
