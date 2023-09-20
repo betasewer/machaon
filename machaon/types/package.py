@@ -10,9 +10,6 @@ class AppPackageType:
     ValueType: 
         machaon.package.package.Package
     """
-    def get_manager(self, spirit_or_context) -> PackageManager:
-        return spirit_or_context.root.package_manager()
-
     def name(self, package: Package):
         """ @method
         パッケージ名
@@ -27,23 +24,69 @@ class AppPackageType:
         Returns:
             Str:
         """
-        is_installed = self.get_manager(spirit).is_installed(package)
+        loadstatus = self.loading_status(package)
+        installstatus = spirit.root.query_package_status(package, isinstall=True)
 
-        if package.is_ready():
-            errors = []
-            if not is_installed:
-                errors.append("インストールの記録なし")
-
-            if not errors:
-                return "準備完了"
-            else:
-                return "利用可能 ({})".format("／".join(errors))
-    
-        else:
-            if is_installed:
-                return "インストールされた記録があるが、モジュールが見つからない"
-            else:
+        if "notfound" == loadstatus:
+            if "notfound" == installstatus:
                 return "インストールされていない"
+            else:
+                return "インストールされたがモジュールが見つからない"
+        if "delayed" == loadstatus:
+            if "notfound" == installstatus:
+                return "インストールされていない"
+            else:
+                return "読み込み待機中"
+        if "failed" == loadstatus:
+            if "notfound" == installstatus:
+                return "インストールされていない"
+            else:
+                errors = []
+                if package.is_load_failed():
+                    errcnt = len(package.get_load_errors())
+                    errors.append("{}件のエラー".format(errcnt))
+                
+                return "モジュールのロードに失敗 ({})".format("／".join(errors))
+            
+        if loadstatus.startswith("ready"):
+            if "notfound" == installstatus:
+                return "インストールされていないが利用可能"
+            else:
+                errors = []
+                if package.is_load_failed():
+                    errcnt = len(package.get_load_errors())
+                    errors.append("{}件のエラー".format(errcnt))
+                
+                errexmodules = sum([1 for b in package.check_required_modules_ready().values() if not b])
+                if errexmodules > 0:
+                    errors.append("{}個の追加依存パッケージが不足".format(errexmodules))
+
+                if not errors:
+                    return "準備完了"
+                else:
+                    return "利用可能 ({})".format("／".join(errors))
+        
+        return "unexpected status：{}{}".format(loadstatus, installstatus)
+    
+    def loading_status(self, package: Package):
+        """ @method
+        モジュールのロード状態を示す文字列。
+        Returns:
+            Str:
+        """
+        loadstatus = "ready"
+        if not package.is_ready():
+            loadstatus = "notfound"
+        elif not package.once_loaded():
+            loadstatus = "delayed"
+        elif package.is_load_failed():
+            count = package.get_module_count()
+            if count == 0:
+                loadstatus = "failed"
+            else:
+                errcnt = len(package.get_load_errors())
+                loadstatus = "ready ({} error)".format(errcnt)
+        return loadstatus
     
     def update_status(self, package: Package, spirit):
         """ @task
@@ -52,11 +95,9 @@ class AppPackageType:
         Returns:
             Str:
         """
-        installstatus = self.get_manager(spirit).query_update_status(package)
-        if installstatus is None:
-            return "リモートソースとの通信に失敗"
-        elif "none" == installstatus:
-            return "ローカルにインストール記録が存在しません"
+        installstatus = spirit.root.query_package_status(package)
+        if "none" == installstatus:
+            return "ローカルに存在しません"
         elif "old" == installstatus:
             return "アップデートがあります"
         elif "latest" == installstatus:
@@ -64,6 +105,22 @@ class AppPackageType:
         
         return "unexpected status：{}".format(installstatus)
 
+    def errors(self, package: Package):
+        """ @method
+        前回のロード時に発生したエラー
+        Returns:
+            Sheet[Error]: 
+        """
+        return package.get_load_errors()
+
+    def scope(self, package: Package):
+        """ @method
+        型を展開するスコープ
+        Returns:
+            Str:
+        """
+        return package.scope
+    
     def source(self, package: Package):
         """ @method
         ソースを示す文字列
@@ -86,7 +143,7 @@ class AppPackageType:
         Returns:
             Str:
         """
-        h = self.get_manager(context).get_installed_hash(package)
+        h = context.root.pkgmanager.get_installed_hash(package)
         if not h:
             return "<no-hash>"
         return h
@@ -108,7 +165,7 @@ class AppPackageType:
         Returns:
             Path:
         """
-        return self.get_manager(app).get_installed_location(package)
+        return app.root.package_manager().get_installed_location(package)
     
     def install(self, package: Package, context, app, *options):
         """ @task context
@@ -161,6 +218,8 @@ class AppPackageType:
         if not package.is_remote_source():
             app.post("message", "リモートソースの指定がありません")
             return
+        
+        approot = app.get_root()
 
         app.post("message-em", "パッケージ'{}'の更新を開始".format(package.name))
         rep = package.get_source()
@@ -168,39 +227,42 @@ class AppPackageType:
             app.post("message", "ソース = {}".format(rep.get_source()))
         
         # パッケージの状態を調べる
-        operation = self.get_manager(app).update
-        status = self.get_manager(app).query_update_status(package)
+        operation = approot.package_manager().update
+        status = approot.query_package_status(package)
         if status == "none":
             app.post("message", "新たにインストールします")
-            operation = self.get_manager(app).install
+            operation = approot.package_manager().install
         elif status == "old":
             app.post("message", "より新しいバージョンが存在します")
         elif status == "latest":
             app.post("message", "最新の状態です")
             if not forceinstall:
                 return
-        elif status is None:
+        elif status == "unknown":
             app.post("error", "不明：パッケージの状態の取得に失敗")
             return
 
         # ダウンロード・インストール処理
         self.display_download_and_install(app, package, operation, options)
 
-        # 追加依存モジュールを表示する
-        for name, ready in package.get_initial_module().check_extra_packages_ready().items():
-            if not ready:
-                app.post("warn", "パッケージ'{}'がありません。手動で追加する必要があります".format(name))
+        # 型をロードする
+        approot.load_pkg(package)
 
-        if operation.__name__ == "install":
+        # 追加依存モジュールを表示する
+        for name, ready in package.check_required_modules_ready().items():
+            if not ready:
+                app.post("warn", "モジュール'{}'がありません。手動で追加する必要があります".format(name))
+
+        if operation is approot.package_manager().install:
             app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
         else:
             app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
-
+            
         return
     
     def uninstall(self, package, context, app):
         """ @task context
-        パッケージをアンインストールする。 !!!
+        パッケージをアンインストールする。
         """
         if package.is_module_source():
             app.post("message", "このモジュールはアンインストールできません")
@@ -224,6 +286,39 @@ class AppPackageType:
 
         app.post("message", "削除完了")
     
+    def load(self, package, context):
+        """ @method context
+        パッケージに定義された全ての型を読み込む。
+        """
+        context.root.load_pkg(package)
+
+    def reload(self, package, context):
+        """ @method context
+        以前読み込んだ定義を破棄し、再度読み込みをおこなう。
+        """
+        context.root.unload_pkg(package)
+        context.root.load_pkg(package, force=True)        
+    
+    def scan(self, package, app):
+        """ @task
+        パッケージに定義された型を収集しログを表示する。登録はしない。
+        Returns:
+            Sheet[ObjectCollection](typename, qualname, error):
+        """
+        elems = []
+        for mod in package.load_module_loaders():
+            for df in mod.scan_print_type_definitions(app):
+                elems.append(df)
+        return elems
+    
+    def extra_requires(self, package):
+        """ @method [extra]
+        このパッケージが追加で依存するモジュール名。
+        Returns:
+            Sheet[ObjectCollection](name, ready):
+        """
+        return [{"name":x, "ready":y} for x, y in package.check_required_modules_ready().items()]
+
     def stringify(self, package):
         """ @meta """
         return "<Package {}>".format(package.name)
@@ -306,9 +401,7 @@ class Module():
         """ @task
         このモジュールに定義された型を収集しログを表示する。登録はしない。
         Returns:
-            Sheet[ObjectCollection]:
-        Decorates:
-            @ view: typename qualname error
+            Sheet[ObjectCollection](typename, qualname, error):
         """
         mod = self.mloader()
         elems = list(mod.scan_print_type_definitions(app))
@@ -335,32 +428,6 @@ class Module():
         else:
             yield mod.get_name()
 
-    def walkscan(self, app):
-        """ @task
-        パッケージに定義された型を収集しログを表示する。登録はしない。
-        Returns:
-            Sheet[Dict]:
-        Decorates:
-            @ view: typename qualname error
-        """
-        elems = []
-        mod = self.mloader()
-        for modloader in mod.load_all_module_loaders():
-            for df in modloader.scan_print_type_definitions(app):
-                elems.append(df)
-        return elems
-    
-    def extra_requires(self):
-        """ @method [extra]
-        このモジュールが追加で依存するパッケージ名。
-        Returns:
-            Sheet[Dict]: 
-        Decorates:
-            @ view: name ready
-        """
-        mod = self.mloader()
-        return [{"name":x, "ready":y} for x, y in mod.check_extra_packages_ready().items()]
-
     def load_definition(self, context, name):
         """@task nospirit context
         属性を取得し、値がクラスであれば型定義として読み込む。
@@ -373,7 +440,8 @@ class Module():
         v = m.load_attr(name)
         if not isinstance(v, type):
             raise ValueError("'{}'はクラスではありません: {}".format(name, v))
-        return context.type_module.define(v)
+        d = context.type_module.add_definition(v)
+        return d.load_type() # 即座にロードする
 
 
 
