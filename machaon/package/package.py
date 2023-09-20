@@ -8,10 +8,8 @@ import importlib
 from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
 from machaon.core.type.typemodule import TypeModule
-from machaon.core.importer import module_loader, PyBasicModuleLoader, PyModuleLoader
-from machaon.core.error import ErrorSet
+from machaon.core.importer import module_loader, PyBasicModuleLoader
 from machaon.types.shell import Path
-from machaon.types.file import TextFile
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
 from machaon.package.archive import BasicArchive
@@ -35,7 +33,7 @@ class PACKAGE_LOAD_END:
 #
 #
 #
-class Package:
+class Package():
     MODULES = PACKAGE_TYPE_MODULES
     SINGLE_MODULE = PACKAGE_TYPE_SINGLE_MODULE
     DEPENDENCY = PACKAGE_TYPE_DEPENDENCY
@@ -49,6 +47,7 @@ class Package:
         module: Optional[str] = None, 
         separate = True, 
         hashval = None, 
+        scope = None
     ):
         self.name: str = name
         self.source: BasicArchive = source
@@ -57,11 +56,29 @@ class Package:
         if type is None: 
             type = PACKAGE_TYPE_MODULES
         self._type = type
+        
+        if self.is_type_modules():
+            self.scope = scope or self.name
+        else:
+            self.scope = None
 
         self.entrypoint: Optional[str] = module
 
         self._hash = hashval
-        self._creds = None # 認証情報の入ったディレクトリ
+
+        self._loaded: List[Exception] = []
+        self._modules: List[PyBasicModuleLoader] = [] # 読み込み済みモジュール
+        self._extra_reqs: List[str] = [] # 追加の依存パッケージ名
+    
+    def assign_definition(self, pkg):
+        self.name = pkg.name
+        self.source = pkg.source
+        self.scope = pkg.scope
+        self.separate = pkg.separate
+        self.entrypoint = pkg.entrypoint
+        self._type = pkg._type
+        self._hash = pkg._hash
+        return self
     
     @property
     def source_name(self):
@@ -109,7 +126,6 @@ class Package:
         return self._type == PACKAGE_TYPE_UNDEFINED
     
     def is_ready(self) -> bool:
-        """ エントリポイントのモジュールが読み込み可能かチェックする """
         if self._type == PACKAGE_TYPE_RESOURCE:
             return False
         if self.entrypoint is None:
@@ -125,45 +141,161 @@ class Package:
         
         return True
     
-    #
-    # モジュールロード
-    #
-    def load_declaration(self):
-        """ イニシャルモジュールの宣言をロードする """
-        # モジュールのdocstringを読みに行く
-        initial_module = self.get_initial_module()
-        initial_module.load_module_declaration()
-        return initial_module
+    def check_required_modules_ready(self) -> Dict[str, bool]:
+        """ 依存するmachaonパッケージのロード状況 """
+        rets = {}
+        for module_name in self._extra_reqs:
+            rets[module_name] = module_loader(module_name).exists()
+        return rets
+    
+    def load_module_loaders(self):
+        """ サブモジュールのローダを生成する """
+        modules = []
 
+        if self._type == PACKAGE_TYPE_UNDEFINED:
+            raise PackageLoadError("パッケージの定義がありません")
+        elif self._type not in (PACKAGE_TYPE_MODULES, PACKAGE_TYPE_SINGLE_MODULE, PACKAGE_TYPE_DEPENDENCY):
+            return modules
+        
+        # モジュールのdocstringを読みに行く
+        initial_module = module_loader(self.entrypoint)
+        try:
+            initial_module.load_module_declaration()
+        except Exception as e:
+            raise PackageLoadError(type(e).__name__, e)
+        
+        # docstringを解析する
+        self._extra_reqs = initial_module.get_package_extra_requirements()
+
+        # サブモジュールのロード
+        modules: List[PyBasicModuleLoader] = []
+        if self._type == PACKAGE_TYPE_MODULES:
+            defmods = initial_module.get_package_defmodule_loaders()
+            if defmods:
+                modules = defmods
+            else:
+                modules = initial_module.get_all_submodule_loaders()
+        elif self._type == PACKAGE_TYPE_SINGLE_MODULE:
+            modules = [initial_module]
+
+        # サブモジュールのdocstringを解析する
+        for mod in modules:
+            try:
+                mod.load_module_declaration()
+            except Exception as e:
+                self._loadfail(PackageLoadError(type(e).__name__, e))
+        return modules
+    
+    def load_type_module(self) -> TypeModule:
+        """ モジュールにあるすべての型定義クラスを得る """
+        typemod = TypeModule()
+        self.reset_loading()
+
+        try:
+            modules = self.load_module_loaders()
+        except Exception as e:
+            return self._loadfail(e)
+
+        if not self.is_type_modules():
+            return
+
+        if not modules:
+            return self._loadfail(PackageLoadError("モジュールを1つも読み込めませんでした"))
+
+        for modloader in modules:
+            try:
+                notfounddepends = [n for n,x in modloader.get_using_extra_packages() if not module_loader(x).exists()]
+                if notfounddepends:
+                    raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfounddepends)))
+                for typedef in modloader.scan_type_definitions():
+                    typemod.define(typedef)
+            except Exception as e:
+                self._loadfail(PackageModuleLoadError(e, str(modloader)))
+                continue
+            self._modules.append(modloader)
+        
+        if typemod.count() == 0:
+            self._loadfail(PackageLoadError("{}個のモジュールの中から型を1つも読み込めませんでした".format(len(modules))))
+
+        self.finish_loading()
+        return typemod
+
+    def get_module_count(self):
+        """ ロードされたモジュールの数を返す """
+        if not self.once_loaded():
+            raise ValueError("Not loaded yet")
+        return len(self._modules)
+        
     def get_initial_module(self):
         return module_loader(self.entrypoint)
+        
+    #
+    # ロード状態
+    #
+    def reset_loading(self):
+        """ ロード状態を空にする """
+        self._loaded.clear()
     
-    def set_as_private_package(self, creds):
-        """ 認証が必要なパッケージとする """
-        self._creds = creds
+    def finish_loading(self):
+        """ ロード終了のフラグをたてる """
+        self._loaded.append(PACKAGE_LOAD_END)
 
-    def get_credential(self):
-        """ 認証オブジェクトを作成する """
-        if self._creds is not None:
-            return self._creds.search_from_repository(self.get_source())
-        return None
+    def once_loaded(self):
+        """ ロードが行われたか """
+        return len(self._loaded) > 0
+    
+    def _loadfail(self, e):
+        """ 内部で、ロードエラーを記録する 
+        Params:
+            e(Exception): 例外オブジェクト
+        """
+        if not isinstance(e, Exception):
+            raise TypeError(e)
+        self._loaded.append(e)
+    
+    def is_load_failed(self):
+        """ ロードが失敗に終わったか """
+        if not self._loaded:
+            return False # 未ロード時はFalse
+        return self._loaded[0] is not PACKAGE_LOAD_END
+    
+    def is_load_succeeded(self):
+        """ ロードが成功に終わったか """
+        if not self._loaded:
+            return False # 未ロード時はFalse
+        return self._loaded[0] is PACKAGE_LOAD_END
+
+    def get_load_errors(self) -> List[Exception]:
+        """ ロードエラーを全て返す """
+        errs = []
+        for x in self._loaded:
+            if x is PACKAGE_LOAD_END:
+                break
+            errs.append(x)
+        return errs
+    
+    def get_last_load_error(self) -> Optional[Exception]:
+        """ 最後に起きたロードエラーを返す """
+        errors = self.get_load_errors()
+        return errors[-1] if errors else None
 
     #
-    # 展開
     #
-    def extraction(self):
-        rep = self.get_source()
-        if isinstance(rep, RepositoryArchive):
-            return RemotePackageExtraction(rep, self.get_credential())
-        elif isinstance(rep, BasicArchive):
-            return ArchivePackageExtraction(rep)
-        else:
-            return LocalPackageExtraction(rep)
+    #
+    def unload(self, typemodule):
+        """ パッケージの読み込んだ全ての型を削除する """
+        if self._type == PACKAGE_TYPE_UNDEFINED:
+            raise PackageLoadError("パッケージの定義がありません")
 
+        if not self._loaded:
+            return
 
+        if self._type == PACKAGE_TYPE_MODULES:
+            typemodule.remove_scope(self.scope)
+        
+        self._loaded.clear()
 
-
-def create_package(name, package, module=None, **kwargs):
+def create_package(name, package, modules=None, **kwargs):
     """
     文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
     """
@@ -174,10 +306,10 @@ def create_package(name, package, module=None, **kwargs):
             raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
         if host == "github":
             from machaon.package.repository import GithubRepArchive
-            pkgsource, module = _parse_repository_source(desc, GithubRepArchive, module)
+            pkgsource, module = _parse_repository_source(desc, GithubRepArchive)
         elif host == "bitbucket":
             from machaon.package.repository import BitbucketRepArchive
-            pkgsource, module = _parse_repository_source(desc, BitbucketRepArchive, module)
+            pkgsource, module = _parse_repository_source(desc, BitbucketRepArchive)
         elif host == "package":
             from machaon.package.archive import LocalModule
             module = desc
@@ -203,14 +335,12 @@ def create_package(name, package, module=None, **kwargs):
         kwargs["type"] = pkgtype
     return Package(name, pkgsource, module=module, **kwargs)
 
-def _parse_repository_source(src, repository_class, module):
+def _parse_repository_source(src, repository_class):
     desc, sep, mod = src.rpartition(":")
     if not sep:
         desc = src
         mod = None
     rep = repository_class(desc)
-    if not mod:
-        mod = module
     if not mod:
         mod = rep.name
     return rep, mod
@@ -264,27 +394,19 @@ class PackageManager():
     PIP_MSG = milestone_msg("msg")
     PIP_END = milestone_msg("returncode")
 
-    def __init__(self, directory, pkglistdir, databasepath, credentials):
-        self.dir = Path(directory)
-        # パッケージ
-        self._pkglistdir = Path(pkglistdir)
-        self.packages = []
-        self._creds = credentials # 認証情報
-        self._core = create_package("machaon", "github:betasewer/machaon")
-        # 更新データベース
+    def __init__(self, directory, databasepath):
+        self.dir = directory
+        if not isinstance(self.dir, Path):
+            self.dir = Path(directory)
         self.database = None # type: configparser.ConfigParser
         self._dbpath = databasepath
 
     def add_to_import_path(self):
-        """ パッケージディレクトリをモジュールパスに追加する """
         p = self.dir.get()
         if p not in sys.path:
             sys.path.insert(0, p)
     
-    #
-    # パッケージ更新データベース
-    #
-    def load_database(self, *, force=False):
+    def load_database(self, force=False):
         if not force and self.database is not None:
             return
         
@@ -335,8 +457,6 @@ class PackageManager():
             raise DatabaseNotLoadedError()
              
     def is_installed(self, pkg):
-        if not pkg.is_remote_source():
-            return True
         self.check_database()
         if isinstance(pkg, Package):
             pkgname = pkg.name
@@ -345,66 +465,7 @@ class PackageManager():
         else:
             raise TypeError(repr(pkg))
         return self.database.has_section(pkgname)
-    
-    #
-    # リポジトリリスト
-    #
-    def load_packages(self, *, force=False):
-        """ リポジトリリストからパッケージ定義を読み込む """
-        if not force and self.packages:
-            return
-        
-        if not self._pkglistdir.isdir():
-            return # パスが見つからず
-        
-        newpkgs = []
-        
-        # リストファイルのディレクトリを読み込む
-        for f in self._pkglistdir.listdirfile():
-            if not f.hasext(".packages"):
-                continue
 
-            # リストファイルを読み込む
-            repolist = configparser.ConfigParser()
-            with TextFile(f, encoding="utf-8").read_stream() as fi:
-                repolist.read_file(fi.stream)
-            
-            listname = f.basename()
-            for sectname in repolist.sections():
-                pkgname = "{}.{}".format(listname, sectname)
-                repo = repolist.get(sectname, "repository", fallback=None)
-                module = repolist.get(sectname, "module", fallback=sectname)
-
-                if repo is None:
-                    continue
-                pkg = create_package(pkgname, repo, module=module)
-
-                private = repolist.get(sectname, "private", fallback=False)
-                if private:
-                    pkg.set_as_private_package(self._creds)
-
-                newpkgs.append(pkg)
-        
-        self.packages = newpkgs
-
-    def get(self, name, *, fallback=True):
-        for pkg in self.packages:
-            if pkg.name == name:
-                return pkg
-        if not fallback:
-            raise PackageNotFoundError(name)
-        return None
-    
-    def getall(self):
-        for pkg in self.packages:
-            yield pkg
-
-    def add(self, pkg: Package):
-        """ 後から追加する """
-        self.packages.append(pkg)
-
-    #
-    #
     #
     def install(self, pkg: Package, options=None, newinstall: bool=True):
         if pkg.is_module_source():
@@ -413,7 +474,7 @@ class PackageManager():
 
         # ダウンロードと展開を行う
         localpath = None
-        with pkg.extraction() as extractor:
+        with package_extraction(pkg) as extractor:
             for status in extractor:
                 if status == PackageManager.EXTRACTED_FILES:
                     localpath = status.path
@@ -511,50 +572,20 @@ class PackageManager():
         else:
             raise NotImplementedError()
     
-    def query_update_status(self, pkg: Package) -> str:
-        """ パッケージが最新か、通信して確かめる """
+    def query_status(self, pkg) -> str:
         if not pkg.is_remote_source():
             return "latest"
         installed_hash = self.get_installed_hash(pkg)
         if installed_hash is None:
-            return "none"
+            return "notfound"
         # hashを比較して変更を検知する
         latest_hash = pkg.load_latest_hash() # リモートリポジトリに最新のハッシュ値を問い合わせる
         if latest_hash is None:
-            return None
+            return "unknown"
         if installed_hash == latest_hash:
             return "latest"
         else:
             return "old"
-        
-    def get_core_package(self):
-        """ machaonをパッケージとして取得する """
-        return self._core
-
-    def update_core(self):
-        """ machaonをアップデートする """
-        # インストールディレクトリ
-        curmodule = PyModuleLoader("machaon")
-        location = curmodule.load_filepath()
-        if location is None:
-            raise ValueError("インストール先が不明です")
-
-        installdir = (Path(location).dir() / "..").normalize()
-        lock = (installdir / ".." / ".machaon-update-lock").normalize()
-        if lock.exists():
-            raise ValueError("{}: 上書きしないようにロックされています".format(lock))
-
-        with self._core.extraction() as extraction:
-            for status in extraction:
-                if status == PackageManager.EXTRACTED_FILES:
-                    if status.path is None:
-                        return
-                    yield PackageManager.PIP_INSTALLING
-                    yield from run_pip(installtarget=status.path, installdir=installdir, options=["--upgrade"])
-                else:
-                    yield status
-    
-
 
 #
 #
@@ -608,20 +639,19 @@ class ArchivePackageExtraction:
     
 
 class RemotePackageExtraction(ArchivePackageExtraction):
-    def __init__(self, rep, cred):
+    def __init__(self, rep):
         super().__init__(rep)
-        self.cred = cred
         
     def __iter__(self):
         self.must_be_entered()
         
         # リモートアーカイブをダウンロードする
         try:
-            total = self.rep.query_download_size(self.cred)
+            total = self.rep.query_download_size()
             yield PackageManager.DOWNLOAD_START.bind(total=total)
 
             arcfilepath = self.rep.get_arcfilepath(self.tempdir.get())
-            for size in self.rep.download_iter(arcfilepath, self.cred):
+            for size in self.rep.download_iter(arcfilepath):
                 yield PackageManager.DOWNLOADING.bind(size=size, total=total)
                 
             yield PackageManager.DOWNLOAD_END.bind(total=total)
@@ -633,6 +663,18 @@ class RemotePackageExtraction(ArchivePackageExtraction):
         # ローカルアーカイブの処理を行う
         yield from super().__iter__()
     
+
+
+def package_extraction(pkg: Package):
+    rep = pkg.get_source()
+    if isinstance(rep, RepositoryArchive):
+        return RemotePackageExtraction(rep)
+    elif isinstance(rep, BasicArchive):
+        return ArchivePackageExtraction(rep)
+    else:
+        return LocalPackageExtraction(rep)
+
+
 
 def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):
     cmd = [sys.executable, "-m", "pip"]
