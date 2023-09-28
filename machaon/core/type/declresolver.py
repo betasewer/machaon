@@ -1,22 +1,35 @@
-from machaon.core.symbol import SPECIAL_TYPE_NAMES
+from machaon.core.symbol import SPECIAL_TYPE_NAMES, QualTypename
 from machaon.types.fundamental import fundamental_typenames, fundamental_describer_name
+
+
+def resolve_basic(typename):
+    """ 特殊型の型名を解決 """
+    if typename in SPECIAL_TYPE_NAMES:
+        return QualTypename(typename)
+    return None
+
+def resolve_fundamental(typename):
+    """ Pythonビルトイン型の型名を解決 """
+    if typename in py_anon_redirection:
+        typename = py_anon_redirection[typename]
+    
+    for fn in fundamental_typenames:
+        if fn.typename == typename:
+            return QualTypename(fn.typename, fundamental_describer_name)
+
 
 
 class BasicTypenameResolver:
     """ デフォルトの解決のみを行う """
     def resolve(self, typename, describername):
         if describername is None:
-            if typename in SPECIAL_TYPE_NAMES:
-                return typename, None
+            qn = resolve_basic(typename)
+            if qn: return qn
+
+            qn = resolve_fundamental(typename)
+            if qn: return qn
             
-            if typename in py_anon_redirection:
-                typename = py_anon_redirection[typename]
-            
-            for fn in fundamental_typenames:
-                if fn.typename == typename:
-                    return fn.typename, fundamental_describer_name
-            
-        return typename, describername
+        return QualTypename(typename, describername)
     
 
 class ModuleTypenameResolver:
@@ -42,29 +55,26 @@ class ModuleTypenameResolver:
         """
         if describername:
             if describername[0].isupper():
-                return typename, "{}.{}".format(self.this_module, describername)
+                return QualTypename(typename, "{}.{}".format(self.this_module, describername))
             else:
-                return typename, describername
+                return QualTypename(typename, describername)
         else:
-            if typename in SPECIAL_TYPE_NAMES:
-                return typename, None
-            
-            if typename in py_anon_redirection:
-                typename = py_anon_redirection[typename]
-            
+            qn = resolve_basic(typename)
+            if qn: return qn
+
             for ut in self.klass_using_types:
                 if ut.typename == typename:
-                    return ut.typename, ut.describer
+                    return ut
             
             for ut in self.module_using_types:
                 if ut.typename == typename:
-                    return ut.typename, ut.describer
+                    return ut
             
-            for fn in fundamental_typenames:
-                if fn.typename == typename:
-                    return fn.typename, fundamental_describer_name
+            qn = resolve_fundamental(typename)
+            if qn: return qn
 
-            return typename, "{}.{}".format(self.this_module, typename)
+            # このモジュールに定義された型
+            return QualTypename(typename, "{}.{}".format(self.this_module, typename))
 
 
 

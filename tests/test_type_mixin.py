@@ -34,6 +34,21 @@ def test_mixin_load():
 
     assert isinstance(select_method("sparse", StrType), TypeMethodInvocation)
 
+
+def test_mixn_load_double():
+    types = TypeModule()
+    types.add_fundamentals()
+    StrType = types.get("Str")
+
+    types.inject_type_mixin(StrEx, StrType)
+    
+    assert StrType.select_method("sparse") is not None
+
+    types.inject_type_mixin(StrEx, StrType)
+
+    assert StrType.select_method("sparse") is not None
+    
+
 def test_mixin_run():
     cxt = instant_context()
     cxt.type_module.define(StrEx)
@@ -44,3 +59,5 @@ def test_mixin_run():
     
     assert parse_test(cxt, "breakfast sparse", "b r e a k f a s t")
     assert parse_test(cxt, "breakfast sparse: 2", "b  r  e  a  k  f  a  s  t")
+
+

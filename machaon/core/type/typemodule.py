@@ -204,25 +204,32 @@ class TypeModule:
         # 見つからなかった
         return None
 
-    def select(self, typecode, describername:str=None):
+    def select(self, typecode, describername:str=None, resolver=None):
         """ 型名を検索し、存在しない場合は定義のロードを試みる
         Params:
-            typecode(str|type|dict): 型名/デスクライバ型/辞書型
+            typecode(QualTypename|str|type|dict): 型名/デスクライバ型/辞書型
             describername(str): 完全な実装名
         Returns:
             Type:
         """
+        if isinstance(typecode, QualTypename):
+            describername = typecode.describer
+            typecode = typecode.typename
+
         if isinstance(typecode, str):  
-            # 型名
-            t = self._select_type(normalize_typename(typecode), TYPECODE_TYPENAME, module=describername)
+            # 型名で検索する
+            typename = normalize_typename(typecode)
+            t = self._select_type(typename, TYPECODE_TYPENAME, module=describername)
             if t is not None:
-                if describername is not None:
-                    target, isklass = detect_describer_name_type(describername)
-                    if target is not None and isklass:                        
-                        # mixinで追加ロードすべきか確認する
-                        self.inject_type_mixin(target, t)
                 return t
             
+            # 可能なら型名を解決する
+            if resolver is not None:
+                tqn: QualTypename = resolver.resolve(typename, describername)
+                if tqn:
+                    typename = tqn.typename
+                    describername = tqn.describer
+
             # 対象モジュールから定義をロードする
             if describername is None:
                 raise BadTypename("型'{}'は存在しません。定義クラス・モジュール・パッケージの指定があればロード可能です".format(typecode))
@@ -231,17 +238,17 @@ class TypeModule:
             if target is None:
                 raise TypeModuleError("デスクライバ'{}'はクラス名、モジュール名、パッケージ名のいずれでもありません".format(describername))
             if isklass: # クラス
-                return self.define(target, typename=typecode)
+                return self.define(target, typename=typename)
             else: # モジュール or パッケージの全ての型をロードする
                 err = None
                 try:
                     self.use_module_or_package_types(target, fallback=True)
                 except Exception as e:
                     err = e
-                # 型名で探索
-                t = self._select_type(typecode, TYPECODE_TYPENAME, describername) 
+                # 再度型名で探索
+                t = self._select_type(typename, TYPECODE_TYPENAME, describername) 
                 if t is None:
-                    raise err # 型が見つからなかった場合のみ、エラーを投げる
+                    raise err # 型が見つからなかった場合のみ、読み込み時に起きたエラーを投げる
                 return t
     
         elif isinstance(typecode, type):
@@ -261,6 +268,18 @@ class TypeModule:
                 return t
             else:
                 return self.define(desc)
+            
+    def mixin(self, type: TypeProxy, describername):
+        """ mixinとしてロードする """
+        target, isklass = detect_describer_name_type(describername)
+        if target is None:
+            raise TypeModuleError("Mixin対象が不明です")
+        if isklass:
+            self.inject_type_mixin(target, type)
+        else:
+            # モジュールまたはパッケージの型を全てロードする（対象以外の型も変更される）
+            self.use_module_or_package_types(target, fallback=True)
+
 
     #
     #
@@ -336,8 +355,10 @@ class TypeModule:
 
     def inject_type_mixin(self, describername, target_type: Type):
         """ Mixin実装を追加する """
-        if all(describername != x.get_full_qualname() for x in target_type.get_all_describers()):
-            mxtd = create_type_describer(describername)
+        mxtd = create_type_describer(describername)
+        if not mxtd.is_mixin():
+            raise ValueError("mixin実装ではありません")
+        if all(mxtd.get_full_qualname() != x.get_full_qualname() for x in target_type.get_all_describers()):
             target_type.mixin_method_prototypes(mxtd)
 
     def _add_type_mixin(self, describer: TypeDescriber, target: str):

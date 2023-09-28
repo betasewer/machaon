@@ -33,6 +33,9 @@ class TypeDecl:
         
     def instance(self, context, args=None) -> TypeProxy:
         raise NotImplementedError()
+    
+    def resolve(self, context) -> TypeProxy:
+        raise NotImplementedError()
 
 
 class ModuleTypeDecl(TypeDecl):
@@ -82,17 +85,9 @@ class ModuleTypeDecl(TypeDecl):
         if isinstance(self.typename, TypeProxy):
             return self.typename
         
-        # 型名を解決する
-        if self.resolver is not None:
-            tn, dn = self.resolver.resolve(self.typename, self.describername)
-        else:
-            tn, dn = self.typename, self.describername
-        
         # 型オブジェクトを取得
-        td: TypeProxy = context.select_type(tn, dn) # モジュールから型を読み込む
-        if td is None:
-            raise BadTypename("{}({})".format(self.typename, tn))
-        
+        td: TypeProxy = context.select_type(self.typename, self.describername, resolver=self.resolver) # モジュールから型を検索する
+
         # 引数を束縛する
         argvals = self.declargs
         if args:

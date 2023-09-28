@@ -168,14 +168,11 @@ class InvocationContext:
         self.subject_object = None
     
     #    
-    def select_type(self, typecode, describername=None) -> Optional[TypeProxy]:
+    def select_type(self, typecode, describername=None, resolver=None) -> TypeProxy:
         """ 型名を渡し、型定義を取得する。関連するパッケージをロードする """
         if isinstance(typecode, TypeProxy):
             return typecode
-        t = self.type_module.select(typecode, describername)
-        if t is None:
-            return None
-        return t
+        return self.type_module.select(typecode, describername, resolver=resolver)
 
     def get_type(self, typecode) -> TypeProxy:
         """ 型名を渡し、型定義を取得する """

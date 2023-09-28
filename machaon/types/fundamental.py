@@ -113,7 +113,7 @@ class TypeType:
         intr = []
         extr = []
         for meth in meths:
-            if meth["#extend"].value.is_external():
+            if meth["#extend"] and meth["#extend"].value.is_external():
                 extr.append(meth)
             else:
                 intr.append(meth)
@@ -185,18 +185,6 @@ class TypeType:
         '''
         return type.get_document()
     
-    def scope(self, type):
-        ''' @method
-        スコープ名。
-        Returns:
-            Str:
-        '''
-        t = type.get_typedef()
-        if t:
-            if type.scope is None:
-                return ""
-            return type.scope
-
     def conversion(self, type):
         ''' @method
         完全な型名。
@@ -231,6 +219,14 @@ class TypeType:
         '''
         return isinstance(type, PythonType)
     
+    def mixin(self, type, context, *describers):
+        ''' @method context
+        スコープ名。
+        Params:
+            +describers(Str): デスクライバ名
+        '''
+        for desc in describers:
+            context.type_module.mixin(type, desc)
 
 
 class BoolType:

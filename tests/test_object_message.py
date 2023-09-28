@@ -332,6 +332,7 @@ def test_generate_instructions():
         "ast_ADD_NEW_MESSAGE > arg_STACK_REF > arg_SELECTOR_VALUE <neg>",
         "ast_END_ALL_BLOCKS"
     )
+    assert pinstr("@ [0] /+ .: @ [3] split: ; :. map strip :.")
 
 
 

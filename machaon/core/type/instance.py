@@ -305,7 +305,7 @@ class TypeAnyObject(DefaultProxy):
 
 class UnresolvableType(DefaultProxy):
     """
-    全ての型を受け入れる
+    宣言解決時にエラーが起きた型
     """
     def __init__(self, decl, err):
         super().__init__()
@@ -313,13 +313,13 @@ class UnresolvableType(DefaultProxy):
         self.error = err
 
     def get_typename(self):
-        return "UnresolvableType[{}]".format(self.basic)
+        return "UnresolvableType[{}: {}]".format(self.basic, self.error)
 
     def get_conversion(self):
         return self.get_typename()
 
     def get_document(self):
-        return "解決できなかった型[{}]: {}".format(self.basic, self.error)
+        return "解決できなかった型'{}':\n{}".format(self.basic, self.error)
     
     def check_type_instance(self, _type):
         return False

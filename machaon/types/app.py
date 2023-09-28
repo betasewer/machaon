@@ -51,11 +51,6 @@ class RootObject:
                 status = AppPackageType().status(pkg, spirit)
                 spirit.post("message", " -> {}".format(status))
 
-            try:
-                self.root.check_pkg_loading()
-            except Exception as e:
-                spirit.post("error", str(e))
-
         # 変数をロードする
         count = self.root.load_startup_variables(self.context)
         if count > 0:
