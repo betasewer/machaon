@@ -3,6 +3,7 @@ from http import HTTPStatus
 import json
 import urllib.parse
 
+from machaon.core.symbol import full_qualified_name
 from machaon.ui.server.wsgi import WSGIRequest
 
 def split_url_path(url):
@@ -235,6 +236,8 @@ class ApiSlotRegister:
 
 class ApiServerApp:
     """ apiを実装する """
+    errortrace = False
+
     def __init__(self):
         super().__init__()
         self.request: WSGIRequest = None
@@ -256,28 +259,34 @@ class ApiServerApp:
         method = req.method
         paths = split_url_path(req.path) # 前後の空の要素を取り除く
 
+        status = HTTPStatus.NOT_FOUND
+        retval = None
+
         # apiを探して実行する
         slot, slotcast = self.slot.match_slot(method, paths)
         if slot is not None:
-            retval = slot.invoke(self, req, slotcast)
-        else:
-            retval = HTTPStatus.NOT_FOUND
+            if self.errortrace:
+                try:
+                    retval = slot.invoke(self, req, slotcast)   
+                    status = HTTPStatus.OK         
+                except Exception as e:
+                    from machaon.types.stacktrace import verbose_display_traceback
+                    retval = {
+                        "error": [full_qualified_name(type(e),True)] + [str(x) for x in e.args],
+                        "stacktrace": verbose_display_traceback(e)
+                    }
+                    status = HTTPStatus.INTERNAL_SERVER_ERROR     
+            else:
+                retval = slot.invoke(self, req, slotcast)   
+                status = HTTPStatus.OK
 
         # データを返す
-        if isinstance(retval, HTTPStatus):
-            # ステータスコード
-            status = retval
-            bits = req.status_message_html(retval).encode("utf-8")
-            result = ApiResult(bits, ('Content-type', 'text/html; charset=utf-8')) # html
-            header = result.create_result_header()
-        elif isinstance(retval, ApiResult):
+        if isinstance(retval, ApiResult):
             # ApiResult
-            status = HTTPStatus.OK
             result = retval
             header = result.create_result_header()
         else:
             # json
-            status = HTTPStatus.OK
             bits = json.dumps(retval).encode("utf-8")
             result = ApiResult(bits, ('Content-type', 'application/json; charset=utf-8')) # utf-8のjson形式
             header = result.create_result_header()

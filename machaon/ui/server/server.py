@@ -23,6 +23,7 @@ class ServerBasic:
 
 
 
+
 class InternalServer(ServerBasic):
     """ 実行中のmachaonから開始するサーバーアプリ """
     def __init__(self, serverapp, spirit):
@@ -35,7 +36,6 @@ class InternalServer(ServerBasic):
         request = WSGIRequest(self._spirit, env, start_response)
         results = list(self._server.run(request))
         return results
-
 
 class SingleServer(ServerBasic):
     """ machaonを介した単体のサーバーアプリ """
