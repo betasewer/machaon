@@ -5,13 +5,15 @@ from machaon.core.importer import attribute_loader
 
 
 class Meta:
-    def __init__(self, describer, *, value=False):
+    def __init__(self, describer, ctorname=None, *, value=False):
         self._describer = describer
+        self._ctorname = ctorname or "constructor"
         self._trait = not value
     
     def constructor(self, *args):
         """ この型のオブジェクトを作成する """
-        return self._describer.constructor(self._describer, *args)
+        ctor = getattr(self._describer, self._ctorname)
+        return ctor(self._describer, *args)
 
     def try_constructor(self, *args, default=None):
         """ 例外を許容する """
@@ -87,15 +89,15 @@ class MetaChoice:
 
 
 class DefinedMeta:
-    def get(self, describer, **kwargs):
+    def get(self, describer, ctorname, **kwargs):
         if isinstance(describer, str):
             d = attribute_loader(describer)()
         else:
             d = describer
-        return Meta(d, **kwargs)
+        return Meta(d, ctorname, **kwargs)
 
-    def __call__(self, describer, **kwargs):
-        return self.get(describer, **kwargs)
+    def __call__(self, describer, ctorname, **kwargs):
+        return self.get(describer, ctorname, **kwargs)
     
     def choice(self, *types):
         return MetaChoice(types)
@@ -103,9 +105,9 @@ class DefinedMeta:
     #
     # ショートカット
     #
-    def _shortcut(dest, **kwargs):
-        def getter(self):
-            return self.get(dest, **kwargs)
+    def _shortcut(desc, ctorname=None, **kwargs):
+        def getter(self) -> Meta:
+            return self.get(desc, ctorname, **kwargs)
         return property(fget=getter)
 
     # numeric
@@ -115,14 +117,14 @@ class DefinedMeta:
     Date            = _shortcut("machaon.types.dateandtime.DateType")
     Datetime        = _shortcut("machaon.types.dateandtime.DatetimeType")
     Time            = _shortcut("machaon.types.dateandtime.TimeType")
-    DateSeparated   = _shortcut("machaon.types.dateandtime.DateSeparated")
-    MonthSeparated  = _shortcut("machaon.types.dateandtime.MonthSeparated")
-    Date8           = _shortcut("machaon.types.dateandtime.Date8")
-    Date4           = _shortcut("machaon.types.dateandtime.Date4")
-    Month           = _shortcut("machaon.types.dateandtime.Month")
-    Day             = _shortcut("machaon.types.dateandtime.Day")
-    YearLowMonth    = _shortcut("machaon.types.dateandtime.YearLowMonth")
-    YearLowDate     = _shortcut("machaon.types.dateandtime.YearLowDate")
+    DateSeparated   = _shortcut("machaon.types.dateandtime.DateRepresent", "from_joined")
+    MonthSeparated  = _shortcut("machaon.types.dateandtime.DateRepresent", "from_joined_month")
+    Date8           = _shortcut("machaon.types.dateandtime.DateRepresent", "from_yyyymmdd")
+    Date4           = _shortcut("machaon.types.dateandtime.DateRepresent", "from_mmdd")
+    Month           = _shortcut("machaon.types.dateandtime.DateRepresent", "from_this_year_month")
+    Day             = _shortcut("machaon.types.dateandtime.DateRepresent", "from_this_month_day")
+    YearLowMonth    = _shortcut("machaon.types.dateandtime.DateRepresent", "from_yearlow_month")
+    YearLowDate     = _shortcut("machaon.types.dateandtime.DateRepresent", "from_yearlow_date")
 
 
 meta = DefinedMeta()
