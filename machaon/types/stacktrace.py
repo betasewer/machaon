@@ -916,7 +916,7 @@ def find_code_function(code, fnname, locals, globals):
                 return FunctionInfo(cfn, 4, None, selfobj)
             # メソッド
             fn = getattr(selfobj, fnname, None)
-            if fn.__code__ is code:
+            if getattr(fn, "__code__", None) is code:
                 return FunctionInfo(fn, 0, "self", selfobj)
     
     # クラスメソッド
@@ -926,7 +926,7 @@ def find_code_function(code, fnname, locals, globals):
         if clsobj is not None: break
     if clsobj is not None:
         cfn = getattr(clsobj, fnname, None)
-        if cfn and cfn.__code__ is code:
+        if cfn and getattr(cfn, "__code__", None) is code:
             return FunctionInfo(cfn, 1, candname, clsobj)
 
     # グローバル関数
