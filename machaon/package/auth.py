@@ -37,6 +37,9 @@ class BasicAuth(Credential):
 class CredentialDir:
     def __init__(self, d):
         self._d = d
+    
+    def file(self, *paths):
+        return self._d.join(*paths)
 
     def search(self, target):      
         """ 文字列で検索 """
@@ -73,6 +76,8 @@ class CredentialDir:
         password = None
         typename = None
         for f in self._d.listdirfile():
+            if not f.hasext(".ini"):
+                continue
             c = configparser.ConfigParser()
             try:
                 c.read(f)

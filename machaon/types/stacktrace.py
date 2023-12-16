@@ -887,6 +887,10 @@ def display_variable(name, value, linewidth):
     except Exception as e:
         err = collapse_text(str(e), width=linewidth)
         val_str = "<error on pprint.pformat: {}>".format(err)
+
+    # 長すぎる場合は短縮する
+    if len(val_str) > 1000:
+        val_str = val_str[0:500] + "\n... [{}字省略] ...\n".format(len(val_str)-1000) + val_str[-500:]
     
     vallines = collapse_text(val_str, linewidth).splitlines()
 

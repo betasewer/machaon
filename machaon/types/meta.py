@@ -7,12 +7,13 @@ from machaon.core.importer import attribute_loader
 class Meta:
     def __init__(self, describer, ctorname=None, *, value=False):
         self._describer = describer
-        self._ctorname = ctorname or "constructor"
+        self._ctorname = ctorname
         self._trait = not value
     
     def constructor(self, *args):
         """ この型のオブジェクトを作成する """
-        ctor = getattr(self._describer, self._ctorname)
+        ctormethod = "from_"+self._ctorname if self._ctorname else "constructor"
+        ctor = getattr(self._describer, ctormethod)
         return ctor(self._describer, *args)
 
     def try_constructor(self, *args, default=None):
@@ -24,10 +25,12 @@ class Meta:
 
     def stringify(self, value):
         """ この型のオブジェクトを引数にとり、文字列として返す """
+        strmethod = self._ctorname if self._ctorname else "stringify"
+        strg = getattr(self._describer, strmethod)
         if self._trait:
-            return self._describer.stringify(self._describer, value)
+            return strg(self._describer, value)
         else:
-            return self._describer.stringify(value)
+            return strg(value)
     
     def pprint(self, app, value):
         """ この型のオブジェクトを引数にとり、文字列として表示する """
@@ -36,13 +39,13 @@ class Meta:
         else:
             return self._describer.pprint(value, app)
     
-    def convert_stringify(self, *args, dest=None):
-        """ この型のオブジェクトを作成し、そのまま文字列にして返す """
-        o = self.constructor(*args)
-        if dest:
-            return dest.stringify(o)
+    def call(self, method_name, *args, **kwargs):
+        """ 任意のメソッドを呼び出す """
+        m = getattr(self._describer, method_name)
+        if self._trait:
+            return m(self._describer, *args, **kwargs)
         else:
-            return self.stringify(o)
+            return m(*args, **kwargs)
 
     
 class MetaChoice:
@@ -73,31 +76,19 @@ class MetaChoice:
         else:
             return v
 
-    def convert_stringify(self, *args, dest=None, default=None):
-        """ この型のオブジェクトを作成し、そのまま文字列にして返す """
-        t, v = self.select_constructor(*args)
-        if dest is not None:
-            if t is None:
-                v = default
-            return dest.stringify(v)
-        else:
-            if t is None:
-                raise ValueError("No match constructor for ({})".format(args))
-            return t.stringify(v)
-
 
 
 
 class DefinedMeta:
-    def get(self, describer, ctorname, **kwargs):
+    def make(self, describer, ctorname=None, **kwargs):
         if isinstance(describer, str):
             d = attribute_loader(describer)()
         else:
             d = describer
         return Meta(d, ctorname, **kwargs)
 
-    def __call__(self, describer, ctorname, **kwargs):
-        return self.get(describer, ctorname, **kwargs)
+    def __call__(self, describer, ctorname=None, **kwargs):
+        return self.make(describer, ctorname, **kwargs)
     
     def choice(self, *types):
         return MetaChoice(types)
@@ -107,7 +98,7 @@ class DefinedMeta:
     #
     def _shortcut(desc, ctorname=None, **kwargs):
         def getter(self) -> Meta:
-            return self.get(desc, ctorname, **kwargs)
+            return self.make(desc, ctorname, **kwargs)
         return property(fget=getter)
 
     # numeric
@@ -117,14 +108,14 @@ class DefinedMeta:
     Date            = _shortcut("machaon.types.dateandtime.DateType")
     Datetime        = _shortcut("machaon.types.dateandtime.DatetimeType")
     Time            = _shortcut("machaon.types.dateandtime.TimeType")
-    DateSeparated   = _shortcut("machaon.types.dateandtime.DateRepresent", "from_joined")
-    MonthSeparated  = _shortcut("machaon.types.dateandtime.DateRepresent", "from_joined_month")
-    Date8           = _shortcut("machaon.types.dateandtime.DateRepresent", "from_yyyymmdd")
-    Date4           = _shortcut("machaon.types.dateandtime.DateRepresent", "from_mmdd")
-    Month           = _shortcut("machaon.types.dateandtime.DateRepresent", "from_this_year_month")
-    Day             = _shortcut("machaon.types.dateandtime.DateRepresent", "from_this_month_day")
-    YearLowMonth    = _shortcut("machaon.types.dateandtime.DateRepresent", "from_yearlow_month")
-    YearLowDate     = _shortcut("machaon.types.dateandtime.DateRepresent", "from_yearlow_date")
+    DateSeparated   = _shortcut("machaon.types.dateandtime.DateRepresent", "joined")
+    MonthSeparated  = _shortcut("machaon.types.dateandtime.DateRepresent", "joined_month")
+    Date8           = _shortcut("machaon.types.dateandtime.DateRepresent", "yyyymmdd")
+    Date4           = _shortcut("machaon.types.dateandtime.DateRepresent", "mmdd")
+    Month           = _shortcut("machaon.types.dateandtime.DateRepresent", "this_year_month")
+    Day             = _shortcut("machaon.types.dateandtime.DateRepresent", "this_month_day")
+    YearLowMonth    = _shortcut("machaon.types.dateandtime.DateRepresent", "yearlow_month")
+    YearLowDate     = _shortcut("machaon.types.dateandtime.DateRepresent", "yearlow_date")
 
 
 meta = DefinedMeta()

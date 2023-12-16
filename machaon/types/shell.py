@@ -125,7 +125,7 @@ class Path:
         """ @method
         いずれかの拡張子を持っているか
         Params:
-            names(Tuple):
+            names(str|Tuple):
         Returns:
             Bool:
         """
