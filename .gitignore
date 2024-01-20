@@ -16,4 +16,4 @@ __a_*
 frontend-profile
 .*
 .*.*
-machaon/configs/betasewer.ini
+machaon/configs/*.packages
