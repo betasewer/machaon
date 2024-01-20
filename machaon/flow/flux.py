@@ -110,7 +110,7 @@ class TypeFlux(FluxFunctor):
     def reflux(self, value):
         if isinstance(value, _ConstructorArgs):
             value = value.ctor(self._type.get_value_type())
-        return self._type.reflux_value(value)
+        return self._type.stringify_value(value) # reflux_value
 
     def influx_flow(self):
         return "{} construct".format(self._type.get_conversion())
