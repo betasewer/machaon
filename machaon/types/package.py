@@ -30,20 +30,15 @@ class AppPackageType:
         is_installed = self.get_manager(spirit).is_installed(package)
 
         if package.is_ready():
-            errors = []
-            if not is_installed:
-                errors.append("インストールの記録なし")
-
-            if not errors:
-                return "準備完了"
+            if is_installed:
+                return "準備完了 (インストールの記録なし)"
             else:
-                return "利用可能 ({})".format("／".join(errors))
-    
+                return "準備完了"
         else:
             if is_installed:
-                return "インストールされた記録があるが、モジュールが見つからない"
+                return "利用不可（インストールの記録あり）"
             else:
-                return "インストールされていない"
+                return "利用不可"
     
     def update_status(self, package: Package, spirit):
         """ @task
@@ -53,10 +48,8 @@ class AppPackageType:
             Str:
         """
         installstatus = self.get_manager(spirit).query_update_status(package)
-        if installstatus is None:
-            return "リモートソースとの通信に失敗"
-        elif "none" == installstatus:
-            return "ローカルにインストール記録が存在しません"
+        if "none" == installstatus:
+            return "ローカルに存在しません"
         elif "old" == installstatus:
             return "アップデートがあります"
         elif "latest" == installstatus:
@@ -179,7 +172,7 @@ class AppPackageType:
             app.post("message", "最新の状態です")
             if not forceinstall:
                 return
-        elif status is None:
+        elif status == "unknown":
             app.post("error", "不明：パッケージの状態の取得に失敗")
             return
 
@@ -198,7 +191,7 @@ class AppPackageType:
 
         return
     
-    def uninstall(self, package, context, app):
+    def uninstall(self, package: Package, context, app):
         """ @task context
         パッケージをアンインストールする。 !!!
         """

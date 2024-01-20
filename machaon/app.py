@@ -10,7 +10,8 @@ from machaon.core.object import Object, ObjectCollection
 from machaon.core.type.typemodule import TypeModule
 from machaon.core.error import ErrorSet
 from machaon.process import ProcessSentence, Spirit, TempSpirit, ProcessHive, ProcessChamber, ProcessSentence
-from machaon.package.package import Package, PackageManager, PackageNotFoundError, create_package
+from machaon.package.package import PackageManager
+from machaon.package.auth import CredentialDir
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 from machaon.ui.keycontrol import HotkeySet, KeyController
@@ -93,7 +94,6 @@ class AppRoot:
         return Path(self.basicdir) / "store"
     
     def get_credential_dir(self):
-        from machaon.package.auth import CredentialDir
         return CredentialDir(Path(self.basicdir) / "credential")
     
     def get_log_dir(self):
@@ -165,7 +165,8 @@ class AppRoot:
 
         # パッケージマネージャの初期化
         package_dir = self.get_package_dir()
-        self.pkgmanager = PackageManager(package_dir, self.basicdir, os.path.join(self.basicdir, "packages.ini"), self.get_credential_dir())
+        package_list_dir = self.get_basic_dir()
+        self.pkgmanager = PackageManager(package_dir, package_list_dir, package_list_dir / "packages.ini", self.get_credential_dir())
         try:
             self.pkgmanager.load_packages()
             self.pkgmanager.load_database()

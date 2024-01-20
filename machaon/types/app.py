@@ -315,7 +315,7 @@ class RootObject:
             app.post("message", "より新しいバージョンが存在します")
 
         # ダウンロードしてインストールする
-        if AppPackageType().display_download_and_install(app, pkg, lambda _:self.root.package_manager().update_core):
+        if AppPackageType().display_download_and_install(app, pkg, lambda *args:self.root.package_manager().update_core()):
             app.post("message", "machaonを更新しました。次回起動時に反映されます")
 
     def update_all(self, context, app):

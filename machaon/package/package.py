@@ -15,6 +15,7 @@ from machaon.types.file import TextFile
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
 from machaon.package.archive import BasicArchive
+from machaon.package.auth import CredentialDir
 
 
 
@@ -61,7 +62,7 @@ class Package:
         self.entrypoint: Optional[str] = module
 
         self._hash = hashval
-        self._creds = None # 認証情報の入ったディレクトリ
+        self._remote_creds: CredentialDir = None
     
     @property
     def source_name(self):
@@ -138,29 +139,30 @@ class Package:
     def get_initial_module(self):
         return module_loader(self.entrypoint)
     
-    def set_as_private_package(self, creds):
-        """ 認証が必要なパッケージとする """
-        self._creds = creds
-
-    def get_credential(self):
-        """ 認証オブジェクトを作成する """
-        if self._creds is not None:
-            return self._creds.search_from_repository(self.get_source())
-        return None
 
     #
-    # 展開
+    #
+    #
+    def set_remote_credentials(self, creds):
+        """ 認証が必要なパッケージとする """
+        self._remote_creds = creds
+
+    def find_remote_credential(self):
+        """ 認証オブジェクトを作成する """
+        if self._remote_creds is None:
+            return None
+        return self._remote_creds.search_from_repository(self.get_source())
+    
     #
     def extraction(self):
+        """ パッケージ展開オブジェクトを作成する """
         rep = self.get_source()
         if isinstance(rep, RepositoryArchive):
-            return RemotePackageExtraction(rep, self.get_credential())
+            return RemotePackageExtraction(rep, self.find_remote_credential())
         elif isinstance(rep, BasicArchive):
             return ArchivePackageExtraction(rep)
         else:
             return LocalPackageExtraction(rep)
-
-
 
 
 def create_package(name, package, module=None, **kwargs):
@@ -264,16 +266,16 @@ class PackageManager():
     PIP_MSG = milestone_msg("msg")
     PIP_END = milestone_msg("returncode")
 
-    def __init__(self, directory, pkglistdir, databasepath, credentials):
+    def __init__(self, directory: Path, pkglistdir: Path, databasepath: Path, credentials: CredentialDir):
         self.dir = Path(directory)
         # パッケージ
         self._pkglistdir = Path(pkglistdir)
         self.packages = []
-        self._creds = credentials # 認証情報
+        self._creds: CredentialDir = credentials # 認証情報
         self._core = create_package("machaon", "github:betasewer/machaon")
         # 更新データベース
         self.database = None # type: configparser.ConfigParser
-        self._dbpath = databasepath
+        self._dbpath = Path(databasepath)
 
     def add_to_import_path(self):
         """ パッケージディレクトリをモジュールパスに追加する """
@@ -288,18 +290,18 @@ class PackageManager():
         if not force and self.database is not None:
             return
         
-        if os.path.isfile(self._dbpath):
+        if self._dbpath.isfile():
             # ファイルを読み込む
             cfg = configparser.ConfigParser()
-            with open(self._dbpath, "r", encoding="utf-8") as fi:
-                cfg.read_file(fi)
+            with TextFile(self._dbpath, encoding="utf-8").read_stream() as fi:
+                cfg.read_file(fi.stream)
             self.database = cfg
         else:
             # 空データ
             self.database = configparser.ConfigParser()
         return True
 
-    def add_database(self, pkg, toplevel=None, infodir=None):
+    def add_database(self, pkg: Package, toplevel=None, infodir=None):
         self.check_database()
         if pkg.name not in self.database:
             self.database[pkg.name] = {}
@@ -335,10 +337,10 @@ class PackageManager():
             raise DatabaseNotLoadedError()
              
     def is_installed(self, pkg):
-        if not pkg.is_remote_source():
-            return True
         self.check_database()
         if isinstance(pkg, Package):
+            if not pkg.is_remote_source():
+                return True
             pkgname = pkg.name
         elif isinstance(pkg, str):
             pkgname = pkg
@@ -383,7 +385,7 @@ class PackageManager():
 
                     private = repolist.get(sectname, "private", fallback=False)
                     if private:
-                        pkg.set_as_private_package(self._creds)
+                        pkg.set_remote_credentials(self._creds)
                 except Exception as e:
                     errset.add(e, message="定義'{}', セクション'{}'".format(f,sectname))
 
@@ -522,11 +524,11 @@ class PackageManager():
             return "latest"
         installed_hash = self.get_installed_hash(pkg)
         if installed_hash is None:
-            return "none"
+            return "notfound"
         # hashを比較して変更を検知する
         latest_hash = pkg.load_latest_hash() # リモートリポジトリに最新のハッシュ値を問い合わせる
         if latest_hash is None:
-            return None
+            return "unknown"
         if installed_hash == latest_hash:
             return "latest"
         else:
@@ -536,15 +538,18 @@ class PackageManager():
         """ machaonをパッケージとして取得する """
         return self._core
 
-    def update_core(self):
+    def update_core(self, *, location=None):
         """ machaonをアップデートする """
         # インストールディレクトリ
-        curmodule = PyModuleLoader("machaon")
-        location = curmodule.load_filepath()
         if location is None:
-            raise ValueError("インストール先が不明です")
+            curmodule = PyModuleLoader("machaon")
+            modlocation = curmodule.load_filepath()
+            if modlocation is None:
+                raise ValueError("machaonのインストール先が不明です")
+            installdir = (Path(location).dir() / "..").normalize()
+        else:
+            installdir = Path(location)
 
-        installdir = (Path(location).dir() / "..").normalize()
         lock = (installdir / ".." / ".machaon-update-lock").normalize()
         if lock.exists():
             raise ValueError("{}: 上書きしないようにロックされています".format(lock))
@@ -638,6 +643,10 @@ class RemotePackageExtraction(ArchivePackageExtraction):
         # ローカルアーカイブの処理を行う
         yield from super().__iter__()
     
+
+
+
+
 
 def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):
     cmd = [sys.executable, "-m", "pip"]
