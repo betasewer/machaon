@@ -5,16 +5,14 @@ from machaon.core.importer import attribute_loader
 
 
 class Meta:
-    def __init__(self, describer, ctorname=None, *, value=False):
+    def __init__(self, describer, *mixins, value=False):
         self._describer = describer
-        self._ctorname = ctorname
+        self._mixins = mixins or []
         self._trait = not value
     
     def constructor(self, *args):
         """ この型のオブジェクトを作成する """
-        ctormethod = "from_"+self._ctorname if self._ctorname else "constructor"
-        ctor = getattr(self._describer, ctormethod)
-        return ctor(self._describer, *args)
+        return self._describer.constructor(self._describer, *args)
 
     def try_constructor(self, *args, default=None):
         """ 例外を許容する """
@@ -25,12 +23,10 @@ class Meta:
 
     def stringify(self, value):
         """ この型のオブジェクトを引数にとり、文字列として返す """
-        strmethod = self._ctorname if self._ctorname else "stringify"
-        strg = getattr(self._describer, strmethod)
         if self._trait:
-            return strg(self._describer, value)
+            return self._describer.stringify(self._describer, value)
         else:
-            return strg(value)
+            return self._describer.stringify(value)
     
     def pprint(self, app, value):
         """ この型のオブジェクトを引数にとり、文字列として表示する """
@@ -39,83 +35,60 @@ class Meta:
         else:
             return self._describer.pprint(value, app)
     
-    def call(self, method_name, *args, **kwargs):
-        """ 任意のメソッドを呼び出す """
-        m = getattr(self._describer, method_name)
-        if self._trait:
-            return m(self._describer, *args, **kwargs)
-        else:
-            return m(*args, **kwargs)
-
-    
-class MetaChoice:
-    def __init__(self, types):
-        self._choice = list(types)
-
-    def select_constructor(self, *args):
-        v = None
-        for t in self._choice:
-            try:
-                v = t.constructor(*args)
-            except:
-                continue
+    def get_method(self, method_name):
+        """ 任意のメソッドを取り出す """
+        def bind(fn):
+            def wrapper(*a, **kwa):
+                return fn(self._describer, *a, **kwa)
+            return wrapper
+                
+        m = getattr(self._describer, method_name, None)
+        if m is not None:
+            if self._trait:
+                return bind(m)
             else:
-                return t, v
-        return None, None
+                return m
+        for mixin in self._mixins:
+            mi = getattr(mixin, method_name, None)
+            if mi is not None:
+                return bind(mi)
+        return None
 
-    def constructor(self, *args):
-        t, v = self.select_constructor(*args)
-        if t is None:
-            raise ValueError("No match constructor for ({})".format(args))
-        return v
-
-    def try_constructor(self, *args, default=None):
-        t, v = self.select_constructor(*args)
-        if t is None:
-            return default
-        else:
-            return v
-
-
+    def __getattr__(self, key):
+        """ metaのメンバとしてメソッドを取得する """
+        mth = self.get_method(key)
+        if mth is not None:
+            return mth
+        raise KeyError(key)
 
 
 class DefinedMeta:
-    def make(self, describer, ctorname=None, **kwargs):
-        if isinstance(describer, str):
-            d = attribute_loader(describer)()
-        else:
-            d = describer
-        return Meta(d, ctorname, **kwargs)
+    def __call__(self, describer, *mixins, value=False):
+        def loadclass(x):
+            if isinstance(x, str):
+                return attribute_loader(x)() 
+            else:
+                return x
 
-    def __call__(self, describer, ctorname=None, **kwargs):
-        return self.make(describer, ctorname, **kwargs)
-    
-    def choice(self, *types):
-        return MetaChoice(types)
+        d = loadclass(describer)
+        mxs = [loadclass(x) for x in mixins]
+        return Meta(d, *mxs, value=value)
 
     #
     # ショートカット
     #
-    def _shortcut(desc, ctorname=None, **kwargs):
+    def _defined(desc, *mixins, value=False):
         def getter(self) -> Meta:
-            return self.make(desc, ctorname, **kwargs)
+            return self(desc, *mixins, value=value)
         return property(fget=getter)
 
     # numeric
-    LocaleInt       = _shortcut("machaon.types.numeric.LocaleInt")
-    LocaleFloat     = _shortcut("machaon.types.numeric.LocaleFloat")
+    LocaleInt       = _defined("machaon.types.numeric.LocaleInt")
+    LocaleFloat     = _defined("machaon.types.numeric.LocaleFloat")
     # dateandtime
-    Date            = _shortcut("machaon.types.dateandtime.DateType")
-    Datetime        = _shortcut("machaon.types.dateandtime.DatetimeType")
-    Time            = _shortcut("machaon.types.dateandtime.TimeType")
-    DateSeparated   = _shortcut("machaon.types.dateandtime.DateRepresent", "joined")
-    MonthSeparated  = _shortcut("machaon.types.dateandtime.DateRepresent", "joined_month")
-    Date8           = _shortcut("machaon.types.dateandtime.DateRepresent", "yyyymmdd")
-    Date4           = _shortcut("machaon.types.dateandtime.DateRepresent", "mmdd")
-    Month           = _shortcut("machaon.types.dateandtime.DateRepresent", "this_year_month")
-    Day             = _shortcut("machaon.types.dateandtime.DateRepresent", "this_month_day")
-    YearLowMonth    = _shortcut("machaon.types.dateandtime.DateRepresent", "yearlow_month")
-    YearLowDate     = _shortcut("machaon.types.dateandtime.DateRepresent", "yearlow_date")
+    Date            = _defined("machaon.types.dateandtime.DateType", "machaon.types.dateandtime.DateRepresent")
+    Datetime        = _defined("machaon.types.dateandtime.DatetimeType")
+    Time            = _defined("machaon.types.dateandtime.TimeType")
 
 
 meta = DefinedMeta()
