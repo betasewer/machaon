@@ -556,13 +556,13 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
             return select_index_method(int(name), typetraits, reciever, modbits)
 
-    # コンストラクタセパレータがある
+    # コンストラクタセパレータが含まれている
     if SIGIL_CONSTRUCTOR_SELECTOR in name and context:
         method, sep, typedecl = name.partition(SIGIL_CONSTRUCTOR_SELECTOR)
-        if sep and typedecl[0].isupper(): # 型らしき文字が続く
+        if method and sep and typedecl and typedecl[0].isupper(): # 型らしき文字が続く
             method = expand_constructor_syntax(method, typedecl)
             return select_type_method(typedecl, method, modbits, reciever=reciever, context=context)
-        
+
     # 先頭に型らしき大文字の識別子が来た
     if name[0].isupper():
         typedecl, sep, method = name.partition(SIGIL_OPERATOR_MEMBER_AT)

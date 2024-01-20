@@ -215,9 +215,9 @@ class InvocationContext:
             return t
         return PythonType(value_type)
 
-    def define_type(self, typecode) -> Type:
+    def define_type(self, typecode, *, fallback=False) -> Type:
         """ 型を定義する """
-        return self.type_module.define(typecode)
+        return self.type_module.define(typecode, fallback=fallback)
 
     def define_temp_type(self, describer: Any) -> Type:
         """ 新しい型を作成するが、モジュールに登録しない """
