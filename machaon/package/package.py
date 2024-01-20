@@ -360,6 +360,7 @@ class PackageManager():
         newpkgs = []
         
         # リストファイルのディレクトリを読み込む
+        errset = ErrorSet("パッケージ定義の読み込み")
         for f in self._pkglistdir.listdirfile():
             if not f.hasext(".packages"):
                 continue
@@ -371,21 +372,25 @@ class PackageManager():
             
             listname = f.basename()
             for sectname in repolist.sections():
-                pkgname = "{}.{}".format(listname, sectname)
-                repo = repolist.get(sectname, "repository", fallback=None)
-                module = repolist.get(sectname, "module", fallback=sectname)
+                try:
+                    pkgname = "{}.{}".format(listname, sectname)
+                    repo = repolist.get(sectname, "repository", fallback=None)
+                    module = repolist.get(sectname, "module", fallback=sectname)
 
-                if repo is None:
-                    continue
-                pkg = create_package(pkgname, repo, module=module)
+                    if repo is None:
+                        continue
+                    pkg = create_package(pkgname, repo, module=module)
 
-                private = repolist.get(sectname, "private", fallback=False)
-                if private:
-                    pkg.set_as_private_package(self._creds)
+                    private = repolist.get(sectname, "private", fallback=False)
+                    if private:
+                        pkg.set_as_private_package(self._creds)
+                except Exception as e:
+                    errset.add(e, message="定義'{}', セクション'{}'".format(f,sectname))
 
                 newpkgs.append(pkg)
         
         self.packages = newpkgs
+        errset.throw_if_failed()
 
     def get(self, name, *, fallback=True):
         for pkg in self.packages:

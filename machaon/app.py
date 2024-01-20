@@ -188,6 +188,8 @@ class AppRoot:
             except Exception as e:
                 self._startuperrors.add(e, message="ホットキーの監視")
 
+        self._startuperrors.throw_if_failed()
+
     #
     # クラスパッケージ
     #    

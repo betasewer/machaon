@@ -13,6 +13,9 @@ class ErrorSetValue:
         )
     
     def displays(self):
+        if self.message is not None:
+            yield "エラー発生:" + self.message
+        
         from machaon.types.stacktrace import ErrorObject
         err = ErrorObject(self.error)
         for l in err.short_display(self.stackdelta).splitlines():
@@ -27,8 +30,6 @@ class ErrorSetValue:
                 parts.append("{}".format(self.value))
             else:
                 parts.append("({})".format(self.value))
-        if self.message is not None:
-            parts.append(self.message)
         yield " ".join(parts)
 
 
