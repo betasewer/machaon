@@ -102,4 +102,20 @@ class WSGIRequest:
     def shift_path_info(self):
         wsgiutil.shift_path_info(self._env)
 
+    def write_urlencoded_values(self, values):
+        """ テスト用 キーと値のペアをURLエンコードしてリクエストに書き込む """
+        from io import BytesIO
+        q = urllib.parse.urlencode(values)
+        bits = q.encode("ascii")
+        self._env["wsgi.input"] = BytesIO(bits)
+        self._env["CONTENT_LENGTH"] = len(bits)
+    
+    def write_json(self, di: dict):
+        """ テスト用 辞書をリクエストに書き込む """
+        from io import BytesIO
+        import json
+        t = json.dumps(di)
+        bits = t.encode("utf-8")
+        self._env["wsgi.input"] = BytesIO(bits)
+        self._env["CONTENT_LENGTH"] = len(bits)
 
