@@ -205,6 +205,15 @@ class Path:
         names = list(self.track())
         names.reverse()
         return names
+    
+    def split_last(self):
+        """ @method
+        末尾の要素とそれ以上の要素に分割する。
+        Returns:
+            Tuple[Path]:
+        """
+        h, f = os.path.split(self._path)
+        return Path(h), Path(f)
 
     #
     # ファイル属性
