@@ -237,7 +237,7 @@ class Type(TypeProxy):
         # 全てオプショナル引数となる
         flags &= ~PARAMETER_REQUIRED
         # デフォルト値
-        if typedecl.typename == "Type":
+        if typedecl.to_string() == "Type":
             default = UnspecifiedTypeParam # 型引数のデフォルト値 = Any
         else:
             default = None # 非型引数はNone
