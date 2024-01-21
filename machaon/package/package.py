@@ -209,7 +209,7 @@ def create_package(name, package, module=None, **kwargs):
 
 
 def create_module_package(module):
-    return create_package("module-{}".format(module), "module:{}".format(module))
+    return create_package("module-{}".format(module), "module:{}".format(module), module)
 
 
 
@@ -262,7 +262,7 @@ class PackageManager():
         self._pkglistdir = Path(pkglistdir)
         self.packages = []
         self._creds: CredentialDir = credentials # 認証情報
-        self._core = create_package("machaon", "github:betasewer/machaon")
+        self._core = create_package("machaon", "github:betasewer/machaon", "machaon")
         # 更新データベース
         self.database = None # type: configparser.ConfigParser
         self._dbpath = Path(databasepath)
@@ -371,7 +371,7 @@ class PackageManager():
 
                     if repo is None:
                         continue
-                    pkg = create_package(pkgname, repo, module=module)
+                    pkg = create_package(pkgname, repo, module)
 
                     private = repolist.get(sectname, "private", fallback=False)
                     if private:
