@@ -176,10 +176,10 @@ def create_package(name, package, module=None, **kwargs):
             raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
         if host == "github":
             from machaon.package.repository import GithubRepArchive
-            pkgsource, module = _parse_repository_source(desc, GithubRepArchive, module)
+            pkgsource = GithubRepArchive(desc)
         elif host == "bitbucket":
             from machaon.package.repository import BitbucketRepArchive
-            pkgsource, module = _parse_repository_source(desc, BitbucketRepArchive, module)
+            pkgsource = BitbucketRepArchive(desc)
         elif host == "package":
             from machaon.package.archive import LocalModule
             module = desc
@@ -201,21 +201,11 @@ def create_package(name, package, module=None, **kwargs):
     else:
         pkgsource = package
     
+    if module is None:
+        raise ValueError("package: 'module'でエントリポイントモジュール名を指定してください")
     if pkgtype is not None:
         kwargs["type"] = pkgtype
     return Package(name, pkgsource, module=module, **kwargs)
-
-def _parse_repository_source(src, repository_class, module):
-    desc, sep, mod = src.rpartition(":")
-    if not sep:
-        desc = src
-        mod = None
-    rep = repository_class(desc)
-    if not mod:
-        mod = module
-    if not mod:
-        mod = rep.name
-    return rep, mod
 
 
 def create_module_package(module):

@@ -21,16 +21,22 @@ class RepositoryArchive(BasicArchive):
 
     hostname = "<unspecified>"
     
-    def __init__(self, name, username=None, arcfilename=None):
+    def __init__(self, name, *, username=None, branch=None, arcfilename=None):
         super().__init__()
 
         if username is None:
             if "/" not in name:
                 raise ValueError("Specify username")
-            username, name = name.split("/")
+            username, _sep, name = name.partition("/")
+        if branch is None:
+            if ":" in name:
+                name, _sep, branch = name.partition(":")
+            else:
+                branch = "master"
 
         self.name = name
         self.username = username
+        self.branch = branch
         self.arcfilename = arcfilename or name + ".zip"
     
     def get_arcfilepath(self, workdir):
@@ -40,7 +46,7 @@ class RepositoryArchive(BasicArchive):
         return self.name
     
     def get_source(self) -> str:
-        return "{}/{}/{}".format(type(self).hostname, self.username, self.name)
+        return "{}:{}/{}:{}".format(type(self).hostname, self.username, self.name, self.branch)
 
     def get_repository_url(self):
         raise NotImplementedError()
@@ -114,10 +120,10 @@ class GithubRepArchive(RepositoryArchive):
         return "https://github.com/{}/{}/".format(self.username, self.name)
     
     def get_download_url(self):
-        return "https://api.github.com/repos/{}/{}/zipball/master".format(self.username, self.name)
+        return "https://api.github.com/repos/{}/{}/zipball/{}".format(self.username, self.name, self.branch)
 
     def query_hash(self):
-        url = "https://api.github.com/repos/{}/{}/git/ref/heads/master".format(self.username, self.name)
+        url = "https://api.github.com/repos/{}/{}/git/ref/heads/{}".format(self.username, self.name, self.branch)
         js = self.query_json(url)
         sha = js["object"]["sha"]
         return sha
@@ -135,10 +141,10 @@ class BitbucketRepArchive(RepositoryArchive):
         return "https://bitbucket.org/{}/{}/".format(self.username, self.name)
     
     def get_download_url(self):
-        return "https://bitbucket.org/{}/{}/get/master.zip".format(self.username, self.name)
+        return "https://bitbucket.org/{}/{}/get/{}.zip".format(self.username, self.name, self.branch)
     
     def query_hash(self):
-        url = "https://api.bitbucket.org/2.0/repositories/{}/{}/commits/master".format(self.username, self.name)
+        url = "https://api.bitbucket.org/2.0/repositories/{}/{}/commits/{}".format(self.username, self.name, self.branch)
         js = self.query_json(url)
         hash_ = js["values"][0]["hash"]
         return hash_
