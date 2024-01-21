@@ -536,7 +536,7 @@ class PackageManager():
             modlocation = curmodule.load_filepath()
             if modlocation is None:
                 raise ValueError("machaonのインストール先が不明です")
-            installdir = (Path(location).dir() / "..").normalize()
+            installdir = (Path(modlocation).dir() / "..").normalize()
         else:
             installdir = Path(location)
 
