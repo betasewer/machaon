@@ -180,7 +180,9 @@ class AppPackageType:
         self.display_download_and_install(app, package, operation, options)
 
         # 追加依存モジュールを表示する
-        for name, ready in package.get_initial_module().check_extra_packages_ready().items():
+        package.load_declaration()
+        extrapkgs = package.get_initial_module().check_extra_packages_ready()
+        for name, ready in extrapkgs.items():
             if not ready:
                 app.post("warn", "パッケージ'{}'がありません。手動で追加する必要があります".format(name))
 
