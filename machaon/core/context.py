@@ -645,7 +645,7 @@ def _context_no_log(*a, **kw):
 
 _instant_context_types = None
 
-def instant_context(subject=None):
+def instant_context(subject=None, root=None):
     """ 即席実行用のコンテキスト """
     global _instant_context_types
     if _instant_context_types is None:
@@ -658,7 +658,7 @@ def instant_context(subject=None):
         _instant_context_types = t
 
     from machaon.process import TempSpirit
-    spi = TempSpirit()
+    spi = TempSpirit(root)
     
     return InvocationContext(
         input_objects=ObjectCollection(),

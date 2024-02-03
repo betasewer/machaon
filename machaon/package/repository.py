@@ -24,15 +24,24 @@ class RepositoryArchive(BasicArchive):
     def __init__(self, name, *, username=None, branch=None, arcfilename=None):
         super().__init__()
 
+        rest = name
+        n_username = None
+        n_branch = None
+        if "/" in rest:
+            n_username, sep, rest = rest.partition("/")
+        if ":" in rest:
+            rest, sep, n_branch = rest.partition(":")        
+
         if username is None:
-            if "/" not in name:
-                raise ValueError("Specify username")
-            username, _sep, name = name.partition("/")
+            username = n_username
         if branch is None:
-            if ":" in name:
-                name, _sep, branch = name.partition(":")
-            else:
-                branch = "master"
+            branch = n_branch or "master"
+        name = rest
+        
+        if not name:
+            raise ValueError("Specify repository name: " + name)
+        if not username:
+            raise ValueError("Specify username: " + name)
 
         self.name = name
         self.username = username
@@ -48,18 +57,18 @@ class RepositoryArchive(BasicArchive):
     def get_source(self) -> str:
         return "{}:{}/{}:{}".format(type(self).hostname, self.username, self.name, self.branch)
 
-    def get_repository_url(self):
+    def get_repository_url(self, commit):
         raise NotImplementedError()
-
+    
     #
     # ダウンロード
     #
-    def get_download_url(self) -> str:
+    def get_download_url(self, commit=None) -> str:
         raise NotImplementedError()
     
-    def download_iter(self, outfilename, cred=None):
+    def download_iter(self, outfilename, commit=None, cred=None):
         """ ダウンロードを進めるイテレータ：ダウンロードしたサイズを返す """
-        url = self.get_download_url()
+        url = self.get_download_url(commit)
         
         datas = []
         with self.open_url(url, method="GET", cred=cred) as response:
@@ -75,9 +84,9 @@ class RepositoryArchive(BasicArchive):
             for bits in datas:
                 fo.write(bits)
 
-    def query_download_size(self, cred=None):
+    def query_download_size(self, commit=None, cred=None):
         """ ダウンロードするアーカイブのサイズを取得：不定の時はNone """
-        url = self.get_download_url()
+        url = self.get_download_url(commit)
         try: 
             with self.open_url(url, method="HEAD", cred=cred) as response:
                 leng = response.headers.get("content-length", None)
@@ -119,8 +128,11 @@ class GithubRepArchive(RepositoryArchive):
     def get_repository_url(self):
         return "https://github.com/{}/{}/".format(self.username, self.name)
     
-    def get_download_url(self):
-        return "https://api.github.com/repos/{}/{}/zipball/{}".format(self.username, self.name, self.branch)
+    def get_download_url(self, commit):
+        if commit is not None:
+            return "https://github.com/{}/{}/archive/{}.zip".format(self.username, self.name, commit)
+        else:
+            return "https://github.com/{}/{}/archive/refs/heads/{}.zip".format(self.username, self.name, self.branch)
 
     def query_hash(self):
         url = "https://api.github.com/repos/{}/{}/git/ref/heads/{}".format(self.username, self.name, self.branch)
@@ -140,8 +152,11 @@ class BitbucketRepArchive(RepositoryArchive):
     def get_repository_url(self):
         return "https://bitbucket.org/{}/{}/".format(self.username, self.name)
     
-    def get_download_url(self):
-        return "https://bitbucket.org/{}/{}/get/{}.zip".format(self.username, self.name, self.branch)
+    def get_download_url(self, commit):
+        if commit is not None:
+            return "https://bitbucket.org/{}/{}/get/{}.zip".format(self.username, self.name, commit)
+        else:
+            return "https://bitbucket.org/{}/{}/get/{}.zip".format(self.username, self.name, self.branch)
     
     def query_hash(self):
         url = "https://api.bitbucket.org/2.0/repositories/{}/{}/commits/{}".format(self.username, self.name, self.branch)

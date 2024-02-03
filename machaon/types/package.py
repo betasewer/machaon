@@ -103,29 +103,28 @@ class AppPackageType:
         """
         return self.get_manager(app).get_installed_location(package)
     
-    def install(self, package: Package, context, app, *options):
-        """ @task context
+    def install(self, package: Package, app, *options):
+        """ @task
         パッケージをインストールし、ロードする。
         Params:
             *options(str):
         """
-        self.display_update(package, context, app, forceinstall=True, options=options)
+        self.display_update(package, app, options=options, forceinstall=True)
     
-    def update(self, package: Package, context, app, *options):
-        """ @task context
+    def update(self, package: Package, app, *options):
+        """ @task
         パッケージを更新し、再ロードする。
         Params:
             *options(Str):
         """
-        self.display_update(package, context, app, options=options)
+        self.display_update(package, app, options=options, forceupdate=True)
         
     # 
-    def display_download_and_install(self, app, package:Package, operation, options=None):
-        for state in operation(package, options):
+    def display_download_and_install(self, app, routine):
+        for state in routine:
             # ダウンロード中
             if state == PackageManager.DOWNLOAD_START:
-                url = package.get_source().get_download_url()
-                app.post("message", "パッケージのダウンロードを開始 --> {}".format(url))
+                app.post("message", "パッケージのダウンロードを開始 --> {}".format(state.url))
                 app.start_progress_display(total=state.total)
             elif state == PackageManager.DOWNLOADING:
                 app.interruption_point(progress=state.size)
@@ -150,7 +149,7 @@ class AppPackageType:
                     return False
         return True
         
-    def display_update(self, package: Package, context, app, forceinstall=False, options=None):
+    def display_update(self, package: Package, app, options=None, *, forceinstall=False, forceupdate=False):
         if not package.is_remote_source():
             app.post("message", "リモートソースの指定がありません")
             return
@@ -161,61 +160,64 @@ class AppPackageType:
             app.post("message", "ソース = {}".format(rep.get_source()))
         
         # パッケージの状態を調べる
-        operation = self.get_manager(app).update
         status = self.get_manager(app).query_update_status(package)
         if status == "none":
             app.post("message", "新たにインストールします")
-            operation = self.get_manager(app).install
         elif status == "old":
             app.post("message", "より新しいバージョンが存在します")
+            if not forceinstall and not forceupdate:
+                return
         elif status == "latest":
             app.post("message", "最新の状態です")
-            if not forceinstall:
+            if not forceinstall and not forceupdate:
                 return
         elif status == "unknown":
             app.post("error", "不明：パッケージの状態の取得に失敗")
             return
 
         # ダウンロード・インストール処理
-        self.display_download_and_install(app, package, operation, options)
+        install_type = PackageManager.INSTALL_TARGET_VERSION
+        if forceupdate:
+            install_type = PackageManager.INSTALL_LATEST_VERSION
+        
+        self.display_download_and_install(app, 
+            self.get_manager(app).install(package, install_type, options)
+        )
 
         # 追加依存モジュールを表示する
-        package.load_declaration()
-        extrapkgs = package.get_initial_module().check_extra_packages_ready()
-        for name, ready in extrapkgs.items():
+        inimodule = package.load_initial_declaration()
+        for name, ready in inimodule.check_extra_packages_ready().items():
             if not ready:
                 app.post("warn", "パッケージ'{}'がありません。手動で追加する必要があります".format(name))
 
-        if operation.__name__ == "install":
-            app.post("message-em", "パッケージ'{}'のインストールが完了".format(package.name))
-        else:
-            app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
-
+        app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
         return
-    
-    def uninstall(self, package: Package, context, app):
-        """ @task context
-        パッケージをアンインストールする。 !!!
+
+    def uninstall(self, package: Package, app):
+        """ @task
+        パッケージをアンインストールする。
         """
         if package.is_module_source():
-            app.post("message", "このモジュールはアンインストールできません")
+            app.post("message", "このパッケージはアンインストールできません")
             return
+    
+        app.post("message-em", "パッケージ'{}'のアンインストールを開始".format(package.name))
 
-        approot = app.get_root()
-
-        app.post("message-em", " ====== パッケージ'{}'のアンインストール ====== ".format(package.name))
-
-        for state in approot.package_manager().uninstall(package):
+        for state in self.get_manager(app).uninstall(package):
             if state == PackageManager.UNINSTALLING:
                 app.post("message", "ファイルを削除")
             elif state == PackageManager.PIP_UNINSTALLING:
                 app.post("message", "pipを呼び出し")
             elif state == PackageManager.PIP_MSG:
                 app.post("message", "  " + state.msg)
-
-        if package.is_type_modules():
-            app.post("message", "スコープ'{}'を取り除きます".format(package.scope))
-            approot.unload_pkg(package)
+            elif state == PackageManager.PIP_END:
+                if state.returncode == 0:
+                    app.post("message", "pipによるアンインストールが成功し、終了しました")
+                elif state.returncode is None:
+                    pass
+                else:
+                    app.post("error", "pipによるアンインストールが失敗しました コード={}".format(state.returncode))
+                    return
 
         app.post("message", "削除完了")
     

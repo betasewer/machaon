@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # coding: utf-8
 import os
+from collections import defaultdict
 from machaon.package.package import PackageManager, create_module_package
 from machaon.types.package import AppPackageType
 from machaon.types.shell import Path
@@ -42,23 +43,24 @@ class RootObject:
             spirit.post("message", "言語エンジンを準備します")
         self.root.boot_core(spirit)
 
-        # パッケージ定義をロードする
-        if not self.root.is_ignored_at_startup("packages"):
-            if isfullform:
-                spirit.post("message", "パッケージをロードします")
-            for pkg in self.root.package_manager().getall():
-                spirit.post("message", "{}".format(pkg.name), nobreak=True)
-                status = AppPackageType().status(pkg, spirit)
-                spirit.post("message", " -> {}".format(status))
+        # ロードされたパッケージを表示する
+        statusli = defaultdict(list)
+        for pkg in self.root.package_manager().getall():
+            status = AppPackageType().status(pkg, spirit)
+            statusli[status].append(pkg.name)
+        for stat, names in statusli.items():
+            spirit.post("message", "{} -> {}".format(stat, ", ".join(names)))
 
         # 変数をロードする
-        count = self.root.load_startup_variables(self.context)
+        count = self.root.boot_startup_variables(self.context)
         if count > 0:
             spirit.post("message", "{}個の変数がロード済みです".format(count))
 
         if isfullform:
             spirit.post("message", "")
-            spirit.post("message", "ヘルプ")
+            spirit.post("message", "文法ヘルプ -> @@syntax")
+            spirit.post("message", "ルートコマンドのヘルプ -> @@help")
+            spirit.post("message", "ヘルプ -> <object> help")
             spirit.post("message", "")
 
     def load_using_packages(self, app, *names):
@@ -292,30 +294,30 @@ class RootObject:
         """
         transfer_deployed_directory(app, self.root.get_basic_dir(), path)
     
-    def machaon_update(self, context, app, forceinstall=False):
-        """ @task context
+    def machaon_update(self, app, forceupdate=False, *, location=None):
+        """ @task
         machaonをリポジトリからダウンロードして更新する。
         Params:
-            forceinstall?(bool): 
+            forceupdate?(bool): 
         """
         # パッケージを定義する
         pkg = self.root.package_manager().get_core_package()
         status = self.root.package_manager().query_update_status(pkg)
         if status == "latest":
             app.post("message", "最新の状態です")
-            if not forceinstall:
+            if not forceupdate:
                 return
         elif status == "none":
             pass
         elif status is None:
             app.post("error", "不明：パッケージの状態の取得に失敗")
-            if not forceinstall:
+            if not forceupdate:
                 return
         else:
             app.post("message", "より新しいバージョンが存在します")
 
         # ダウンロードしてインストールする
-        if AppPackageType().display_download_and_install(app, pkg, lambda *args:self.root.package_manager().update_core()):
+        if AppPackageType().display_download_and_install(app, self.root.package_manager().update_core(location=location)):
             app.post("message", "machaonを更新しました。次回起動時に反映されます")
 
     def update_all(self, context, app):

@@ -32,7 +32,7 @@ class AppRoot:
 
         self.basicdir = "" # 設定ファイルなどを置くディレクトリ
         self.pkgmanager = None
-        self.pkgs = []
+        self.pkgoptions = {}
 
         self.processhive = ProcessHive()
         self.typemodule = TypeModule()
@@ -164,15 +164,20 @@ class AppRoot:
                 self._startuperrors.add(e, message="基本型のロード")
 
         # パッケージマネージャの初期化
-        package_dir = self.get_package_dir()
         package_list_dir = self.get_basic_dir()
-        self.pkgmanager = PackageManager(package_dir, package_list_dir, package_list_dir / "packages.ini", self.get_credential_dir())
-        try:
-            self.pkgmanager.load_packages()
-            self.pkgmanager.load_database()
-            self.pkgmanager.add_to_import_path()
-        except Exception as e:
-            self._startuperrors.add(e, message="パッケージマネージャの初期化")
+        if not self.is_ignored_at_startup("packages"):
+            try:
+                self.pkgmanager = PackageManager(
+                    self.get_package_dir(),
+                    self.get_credential_dir(),
+                    self.pkgoptions
+                )
+                self.pkgmanager.load_packages(package_list_dir)
+                self.pkgmanager.load_database(package_list_dir / "packages.ini")
+                self.pkgmanager.add_to_import_path()
+                self.pkgmanager.check_after_loading()
+            except Exception as e:
+                self._startuperrors.add(e, message="パッケージマネージャの初期化")
 
         # 標準モジュールをロードする
         try:
@@ -191,12 +196,35 @@ class AppRoot:
 
         self._startuperrors.throw_if_failed()
 
+    def boot_startup_variables(self, context):
+        """ スタートアップ変数をロードする """
+        if self.is_ignored_at_startup("variables"):
+            return
+        count = 0
+        for v in self._startupvars:
+            o = context.new_object(v.value, conversion=v.typename)
+            self.objcol.push(v.name, o)
+            count += 1
+        self._startupvars.clear()
+        return count
+    
     #
     # クラスパッケージ
     #    
     # パッケージの追加・削除を行うマネージャ
     def package_manager(self):
         return self.pkgmanager
+    
+    def add_package_option(self, pkgname, *, 
+        no_dependency = None
+    ):
+        """ 
+        パッケージのインストール時にローカルなオプションを設定する 
+        Params:
+            no_dependency: 依存パッケージを自動でインストールしない
+        """
+        opts = self.pkgoptions.setdefault(pkgname, {})
+        opts["no_dependency"] = no_dependency
 
     #
     # メッセージ
@@ -217,15 +245,6 @@ class AppRoot:
         """ 開始直後に自動で追加される引数 """
         self._startupvars.append(StartupVariable(name, value, typename))
     
-    def load_startup_variables(self, context):
-        """ startupで呼び出される """
-        c = 0
-        for v in self._startupvars:
-            o = context.new_object(v.value, conversion=v.typename)
-            self.objcol.push(v.name, o)
-            c += 1
-        self._startupvars.clear()
-        return c
 
     #
     # グローバルなホットキー

@@ -7,14 +7,13 @@ import re
 import importlib
 from typing import Dict, Any, Sized, Union, List, Optional, Iterator
 
-from machaon.core.type.typemodule import TypeModule
 from machaon.core.importer import module_loader, PyBasicModuleLoader, PyModuleLoader
 from machaon.core.error import ErrorSet
 from machaon.types.shell import Path
 from machaon.types.file import TextFile
 from machaon.milestone import milestone, milestone_msg
 from machaon.package.repository import RepositoryArchive, RepositoryURLError
-from machaon.package.archive import BasicArchive
+from machaon.package.archive import BasicArchive, LocalFile
 from machaon.package.auth import CredentialDir
 
 
@@ -48,20 +47,15 @@ class Package:
         source: Any, 
         type: int = None,
         module: Optional[str] = None, 
-        separate = True, 
-        hashval = None, 
+        separate = True,
+        commit = None
     ):
         self.name: str = name
         self.source: BasicArchive = source
         self.separate: bool = separate
-        
-        if type is None: 
-            type = PACKAGE_TYPE_MODULES
-        self._type = type
-
         self.entrypoint: Optional[str] = module
-
-        self._hash = hashval
+        self._type = type or PACKAGE_TYPE_MODULES
+        self._hash = commit or None
         self._remote_creds: CredentialDir = None
     
     @property
@@ -87,18 +81,19 @@ class Package:
     def is_installation_separated(self) -> bool:
         return self.separate
 
-    def get_hash(self):
+    def get_target_hash(self):
         return self._hash
     
-    def load_latest_hash(self) -> Optional[str]:
+    def load_latest_hash(self, *, update=False) -> Optional[str]:
         if self.source is None:
             return None
         try:
-            _hash = self.source.query_hash()
+            hash_ = self.source.query_hash()
         except RepositoryURLError:
-            _hash = None 
-        self._hash = "" if _hash is None else _hash
-        return self._hash
+            hash_ = None 
+        if update:
+            self._hash = "" if hash_ is None else hash_
+        return hash_
 
     def is_type_modules(self) -> bool:
         return self._type == PACKAGE_TYPE_MODULES or self._type == PACKAGE_TYPE_SINGLE_MODULE
@@ -129,7 +124,7 @@ class Package:
     #
     # モジュールロード
     #
-    def load_declaration(self):
+    def load_initial_declaration(self):
         """ イニシャルモジュールの宣言をロードする """
         # モジュールのdocstringを読みに行く
         initial_module = self.get_initial_module()
@@ -154,32 +149,42 @@ class Package:
         return self._remote_creds.search_from_repository(self.get_source())
     
     #
-    def extraction(self):
+    def extraction(self, target_commit=None):
         """ パッケージ展開オブジェクトを作成する """
         rep = self.get_source()
         if isinstance(rep, RepositoryArchive):
-            return RemotePackageExtraction(rep, self.find_remote_credential())
+            return RemotePackageExtraction(rep, target_commit, self.find_remote_credential())
         elif isinstance(rep, BasicArchive):
             return ArchivePackageExtraction(rep)
         else:
             return LocalPackageExtraction(rep)
 
 
-def create_package(name, package, module=None, **kwargs):
+def create_package(name, package, module=None, host=None, *, separate=True):
     """
     文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
     """
+    remote_reporitory_classes = {
+        "github": ("machaon.package.repository", "GithubRepArchive"),
+        "bitbucket": ("machaon.package.repository", "BitbucketRepArchive"),
+    }
+
     pkgtype = None
+    commit = None
     if isinstance(package, str):
-        host, sep, desc = package.partition(":")
-        if not sep:
-            raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
-        if host == "github":
-            from machaon.package.repository import GithubRepArchive
-            pkgsource = GithubRepArchive(desc)
-        elif host == "bitbucket":
-            from machaon.package.repository import BitbucketRepArchive
-            pkgsource = BitbucketRepArchive(desc)
+        if host is None:
+            host, sep, desc = package.partition(":")
+            if not sep:
+                raise ValueError("package: '{}' ':'でパッケージの種類を指定してください".format(package))
+        else:
+            desc = package
+
+        if host in remote_reporitory_classes:
+            # コミットハッシュの指定
+            desc, sep, commit = desc.partition("+")
+            from machaon.core.importer import attribute_loader
+            klass = attribute_loader(remote_reporitory_classes[host][0], attr=remote_reporitory_classes[host][1])()
+            pkgsource = klass(desc)
         elif host == "package":
             from machaon.package.archive import LocalModule
             module = desc
@@ -203,9 +208,7 @@ def create_package(name, package, module=None, **kwargs):
     
     if module is None:
         raise ValueError("package: 'module'でエントリポイントモジュール名を指定してください")
-    if pkgtype is not None:
-        kwargs["type"] = pkgtype
-    return Package(name, pkgsource, module=module, **kwargs)
+    return Package(name, pkgsource, module=module, type=pkgtype, separate=separate, commit=commit)
 
 
 def create_module_package(module):
@@ -236,15 +239,26 @@ class PackageModuleLoadError(Exception):
     
     def get_module_name(self):
         return super().args[1]
+    
+#
+#
+#
+class PackageLocalOption:
+    def __init__(self, *, no_dependency=None):
+        self.no_dependency = no_dependency or False
+
+    def make_pip_options(self, opts: list):
+        if self.no_dependency:
+            opts.append("--no-deps")
 
 
 
 #
 #
 #
-class PackageManager():    
+class PackageManager:    
     ALREADY_INSTALLED = milestone()
-    DOWNLOAD_START = milestone_msg("total")
+    DOWNLOAD_START = milestone_msg("total", "url")
     DOWNLOADING = milestone_msg("size")
     DOWNLOAD_END = milestone_msg("total")
     DOWNLOAD_ERROR = milestone_msg("error")
@@ -256,16 +270,22 @@ class PackageManager():
     PIP_MSG = milestone_msg("msg")
     PIP_END = milestone_msg("returncode")
 
-    def __init__(self, directory: Path, pkglistdir: Path, databasepath: Path, credentials: CredentialDir):
+    INSTALL_TARGET_VERSION = 1
+    INSTALL_LATEST_VERSION = 2
+
+    def __init__(self, directory: Path, credentials: CredentialDir, options: dict=None):
         self.dir = Path(directory)
         # パッケージ
-        self._pkglistdir = Path(pkglistdir)
         self.packages = []
         self._creds: CredentialDir = credentials # 認証情報
-        self._core = create_package("machaon", "github:betasewer/machaon", "machaon")
         # 更新データベース
         self.database = None # type: configparser.ConfigParser
-        self._dbpath = Path(databasepath)
+        self._dbpath = None
+        # ローカルオプション
+        if options is not None:
+            self._options = {k:PackageLocalOption(**values) for k,values in options.items()}
+        else:
+            self._options = {}
 
     def add_to_import_path(self):
         """ パッケージディレクトリをモジュールパスに追加する """
@@ -276,28 +296,30 @@ class PackageManager():
     #
     # パッケージ更新データベース
     #
-    def load_database(self, *, force=False):
+    def load_database(self, databasepath: Path, *, force=False):
         if not force and self.database is not None:
             return
         
-        if self._dbpath.isfile():
+        if databasepath.isfile():
             # ファイルを読み込む
             cfg = configparser.ConfigParser()
-            with TextFile(self._dbpath, encoding="utf-8").read_stream() as fi:
+            with TextFile(databasepath, encoding="utf-8").read_stream() as fi:
                 cfg.read_file(fi.stream)
             self.database = cfg
         else:
             # 空データ
             self.database = configparser.ConfigParser()
+        self._dbpath = databasepath
         return True
 
-    def add_database(self, pkg: Package, toplevel=None, infodir=None):
+    def add_database(self, pkg: Package, target_commit=None, toplevel=None, infodir=None):
         self.check_database()
         if pkg.name not in self.database:
             self.database[pkg.name] = {}
         
         self.database.set(pkg.name, "source", pkg.get_source_signature())
-        self.database.set(pkg.name, "hash", pkg.load_latest_hash())
+        if target_commit is not None:
+            self.database.set(pkg.name, "hash", target_commit)
         
         separated = pkg.is_installation_separated()
         if separated is not None:
@@ -341,50 +363,56 @@ class PackageManager():
     #
     # リポジトリリスト
     #
-    def load_packages(self, *, force=False):
+    def load_packages(self, pkglistdir:Path, *, force=False):
         """ リポジトリリストからパッケージ定義を読み込む """
         if not force and self.packages:
             return
         
-        if not self._pkglistdir.isdir():
+        if not pkglistdir.isdir():
             return # パスが見つからず
         
-        newpkgs = []
-        
         # リストファイルのディレクトリを読み込む
-        errset = ErrorSet("パッケージ定義の読み込み")
-        for f in self._pkglistdir.listdirfile():
-            if not f.hasext(".packages"):
+        errset = ErrorSet("パッケージディレクトリ'{}'の読み込み".format(pkglistdir))
+        for f in pkglistdir.listdirfile():
+            if not f.hasext(".packages") or f.hasext(".packages.ini"):
                 continue
+            try:
+                self.load_packages_from_file(f)
+            except Exception as e:
+                errset.add(e)
+        errset.throw_if_failed()
 
-            # リストファイルを読み込む
-            repolist = configparser.ConfigParser()
-            with TextFile(f, encoding="utf-8").read_stream() as fi:
-                repolist.read_file(fi.stream)
-            
-            listname = f.basename()
-            for sectname in repolist.sections():
-                try:
-                    pkgname = "{}.{}".format(listname, sectname)
-                    repo = repolist.get(sectname, "repository", fallback=None)
-                    module = repolist.get(sectname, "module", fallback=sectname)
-
-                    if repo is None:
-                        continue
-                    pkg = create_package(pkgname, repo, module)
-
-                    private = repolist.get(sectname, "private", fallback=False)
-                    if private:
-                        pkg.set_remote_credentials(self._creds)
-                except Exception as e:
-                    errset.add(e, message="定義'{}', セクション'{}'".format(f,sectname))
-
-                newpkgs.append(pkg)
+    def load_packages_from_file(self, configfile: Path):
+        """ パッケージ定義ファイルからパッケージをロードする """
+        # リストファイルを読み込む
+        repolist = configparser.ConfigParser()
+        with TextFile(configfile, encoding="utf-8").read_stream() as fi:
+            repolist.read_file(fi.stream)
         
-        self.packages = newpkgs
+        errset = ErrorSet("パッケージ定義'{}'の読み込み".format(configfile))
+        listname = configfile.basename()
+        for sectname in repolist.sections():
+            try:
+                pkgname = "{}:{}".format(sectname, listname)
+                repo = repolist.get(sectname, "repository", fallback=None)
+                module = repolist.get(sectname, "module", fallback=sectname)
+
+                if repo is None:
+                    continue
+                pkg = create_package(pkgname, repo, module)
+
+                private = repolist.get(sectname, "private", fallback=False)
+                if private:
+                    pkg.set_remote_credentials(self._creds)
+            except Exception as e:
+                errset.add(e, message="セクション'{}'".format(sectname))
+
+            self.packages.append(pkg)
+        
         errset.throw_if_failed()
 
     def get(self, name, *, fallback=True):
+        """ パッケージを完全な名前で取得する """
         for pkg in self.packages:
             if pkg.name == name:
                 return pkg
@@ -393,6 +421,7 @@ class PackageManager():
         return None
     
     def getall(self):
+        """ 全てのパッケージ """
         for pkg in self.packages:
             yield pkg
 
@@ -403,14 +432,22 @@ class PackageManager():
     #
     #
     #
-    def install(self, pkg: Package, options=None, newinstall: bool=True):
+    def install(self, pkg: Package, install_type: int, pip_options=None):
         if pkg.is_module_source():
             # インストールは不要
             return
+        
+        # インストールするコミットを決定する
+        if install_type == PackageManager.INSTALL_TARGET_VERSION:
+            target_commit = pkg.get_target_hash()
+        elif install_type == PackageManager.INSTALL_LATEST_VERSION:
+            target_commit = pkg.load_latest_hash()
+        else:
+            raise ValueError("Invalid install type: " + install_type)
 
         # ダウンロードと展開を行う
         localpath = None
-        with pkg.extraction() as extractor:
+        with pkg.extraction(target_commit) as extractor:
             for status in extractor:
                 if status == PackageManager.EXTRACTED_FILES:
                     localpath = status.path
@@ -420,36 +457,32 @@ class PackageManager():
                     # pipにインストールさせる
                     yield PackageManager.PIP_INSTALLING
 
-                    if not newinstall:
-                        if pkg.name not in self.database:
-                            newinstall = True
-
-                    options = options or ()
+                    newinstall = pkg.name not in self.database
                     if newinstall:
-                        yield from run_pip(
-                            installtarget=localpath, 
-                            installdir=self.dir if pkg.is_installation_separated() else None,
-                            options=options
-                        )
+                        isseparate = pkg.is_installation_separated()
+                    else:
+                        isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)
+                    installdir = self.dir if isseparate else None
 
+                    pip_options = list(pip_options) if pip_options else []
+                    if pkg.name in self._options:
+                        self._options[pkg.name].make_pip_options(pip_options)
+                    yield from run_pip(installtarget=localpath, installdir=installdir, options=pip_options)
+
+                    if newinstall:
                         # pipが作成したデータを見に行く
                         distinfo: Dict[str, str] = {}
                         if pkg.is_installation_separated():
                             distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
-
-                        # データベースに書き込む
-                        self.add_database(pkg, **distinfo)
-
                     else:
-                        isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)   
-                        yield from run_pip(
-                            installtarget=localpath, 
-                            installdir=self.dir if isseparate else None,
-                            options=[*options, "--upgrade"]
-                        )
+                        distinfo = {}
 
-                        # データベースに書き込む
-                        self.add_database(pkg)
+                    # データベースに書き込む 
+                    if target_commit is None:
+                        installed_commit = pkg.load_latest_hash()
+                    else:
+                        installed_commit = target_commit
+                    self.add_database(pkg, installed_commit, **distinfo)
                 
                 else:
                     yield status
@@ -459,6 +492,9 @@ class PackageManager():
         if "toplevel" in self.database[pkg.name]:
             if pkg.entrypoint is None:
                 pkg.entrypoint = self.database[pkg.name]["toplevel"]
+
+        # モジュールファインダーに新しいモジュールの存在を気づかせる
+        importlib.invalidate_caches()
 
     def update(self, pkg, options=None):
         return self.install(pkg, options, newinstall=False)
@@ -526,7 +562,7 @@ class PackageManager():
         
     def get_core_package(self):
         """ machaonをパッケージとして取得する """
-        return self._core
+        return create_package("machaon", "betasewer/machaon", module="machaon", host="github")
 
     def update_core(self, *, location=None):
         """ machaonをアップデートする """
@@ -544,7 +580,7 @@ class PackageManager():
         if lock.exists():
             raise ValueError("{}: 上書きしないようにロックされています".format(lock))
 
-        with self._core.extraction() as extraction:
+        with self.get_core_package().extraction() as extraction:
             for status in extraction:
                 if status == PackageManager.EXTRACTED_FILES:
                     if status.path is None:
@@ -554,7 +590,14 @@ class PackageManager():
                 else:
                     yield status
     
-
+    def check_after_loading(self):
+        """ 読み込まれたパッケージを確認する """
+        errs = ErrorSet("パッケージマネージャの初期化")
+        for pkgname, _opt in self._options.items():
+            if self.get(pkgname) is None:
+                errs.add(None, message="ローカルオプション'{}'には対応するパッケージがありません".format(pkgname))
+        errs.throw_if_failed()
+    
 
 #
 #
@@ -563,7 +606,9 @@ class PackageManager():
 #
 class LocalPackageExtraction:
     def __init__(self, rep):
-        self.rep = rep
+        if not isinstance(rep, LocalFile):
+            raise TypeError("rep")
+        self.rep: LocalFile = rep
 
     def __enter__(self):
         return self
@@ -600,28 +645,32 @@ class ArchivePackageExtraction:
     def __iter__(self):
         self.must_be_entered()
         
-        arcfilepath = self.rep.get_arcfilepath(self.tempdir.get())
+        rep: BasicArchive = self.rep
+        arcfilepath = rep.get_arcfilepath(self.tempdir.get())
         out = self.tempdir.path() / "content"
         out.makedirs()
-        localpath = self.rep.extract(arcfilepath, out.get())
+        localpath = rep.extract(arcfilepath, out.get())
         yield PackageManager.EXTRACTED_FILES.bind(path=localpath)
     
 
 class RemotePackageExtraction(ArchivePackageExtraction):
-    def __init__(self, rep, cred):
+    def __init__(self, rep, target_commit, cred):
         super().__init__(rep)
         self.cred = cred
+        self.target_commit = target_commit
         
     def __iter__(self):
         self.must_be_entered()
         
         # リモートアーカイブをダウンロードする
+        rep: RepositoryArchive = self.rep
         try:
-            total = self.rep.query_download_size(self.cred)
-            yield PackageManager.DOWNLOAD_START.bind(total=total)
+            url = rep.get_download_url(self.target_commit)
+            total = rep.query_download_size(self.target_commit, self.cred)
+            yield PackageManager.DOWNLOAD_START.bind(total=total, url=url)
 
-            arcfilepath = self.rep.get_arcfilepath(self.tempdir.get())
-            for size in self.rep.download_iter(arcfilepath, self.cred):
+            arcfilepath = rep.get_arcfilepath(self.tempdir.get())
+            for size in rep.download_iter(arcfilepath, self.target_commit, self.cred):
                 yield PackageManager.DOWNLOADING.bind(size=size, total=total)
                 
             yield PackageManager.DOWNLOAD_END.bind(total=total)
@@ -642,13 +691,13 @@ def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=(
     cmd = [sys.executable, "-m", "pip"]
 
     if installtarget is not None:
-        cmd.extend(["install", installtarget])
-    
-    if uninstalltarget is not None:
+        cmd.extend(["install", installtarget, "--upgrade"])
+        if installdir is not None:
+            cmd.extend(["-t", os.fspath(installdir)])
+    elif uninstalltarget is not None:
         cmd.extend(["uninstall", uninstalltarget])
-    
-    if installdir is not None:
-        cmd.extend(["-t", os.fspath(installdir)])
+    else:
+        raise ValueError("specify installtarget or uninstalltarget")
     
     if options:
         cmd.extend(options)

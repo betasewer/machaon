@@ -16,10 +16,11 @@ class ErrorSetValue:
         if self.message is not None:
             yield "エラー発生:" + self.message
         
-        from machaon.types.stacktrace import ErrorObject
-        err = ErrorObject(self.error)
-        for l in err.short_display(self.stackdelta).splitlines():
-            yield "    " + l
+        if self.error is not None:
+            from machaon.types.stacktrace import ErrorObject
+            err = ErrorObject(self.error)
+            for l in err.short_display(self.stackdelta).splitlines():
+                yield "    " + l
 
         if self.value is None and self.message is None:
             return
@@ -54,6 +55,11 @@ class ErrorSet(Exception):
     def throw_if_failed(self):
         if self._errors:
             raise self.Error(self._errors, self._message)
+    
+    def display_failure(self, spirit):
+        if self._errors:
+            err = self.Error(self._errors, self._message)
+            spirit.post("error", str(err))
         
     def __enter__(self):
         return self
