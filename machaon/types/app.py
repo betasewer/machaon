@@ -40,7 +40,7 @@ class RootObject:
             spirit.post('message-em', logo)
 
         if isfullform:
-            spirit.post("message", "言語エンジンを準備します")
+            spirit.post("message", "環境をロードします")
         self.root.boot_core(spirit)
 
         # ロードされたパッケージを表示する

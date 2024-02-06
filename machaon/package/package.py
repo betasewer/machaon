@@ -84,15 +84,13 @@ class Package:
     def get_target_hash(self):
         return self._hash
     
-    def load_latest_hash(self, *, update=False) -> Optional[str]:
+    def load_latest_hash(self) -> Optional[str]:
         if self.source is None:
             return None
         try:
             hash_ = self.source.query_hash()
         except RepositoryURLError:
             hash_ = None 
-        if update:
-            self._hash = "" if hash_ is None else hash_
         return hash_
 
     def is_type_modules(self) -> bool:
@@ -441,7 +439,7 @@ class PackageManager:
         if install_type == PackageManager.INSTALL_TARGET_VERSION:
             target_commit = pkg.get_target_hash()
         elif install_type == PackageManager.INSTALL_LATEST_VERSION:
-            target_commit = pkg.load_latest_hash()
+            target_commit = None
         else:
             raise ValueError("Invalid install type: " + install_type)
 
@@ -548,13 +546,13 @@ class PackageManager:
         """ パッケージが最新か、通信して確かめる """
         if not pkg.is_remote_source():
             return "latest"
-        installed_hash = self.get_installed_hash(pkg)
-        if installed_hash is None:
-            return "notfound"
         # hashを比較して変更を検知する
         latest_hash = pkg.load_latest_hash() # リモートリポジトリに最新のハッシュ値を問い合わせる
         if latest_hash is None:
             return "unknown"
+        installed_hash = self.get_installed_hash(pkg)
+        if installed_hash is None:
+            return "notfound"
         if installed_hash == latest_hash:
             return "latest"
         else:
