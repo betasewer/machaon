@@ -84,13 +84,17 @@ class Package:
     def get_target_hash(self):
         return self._hash
     
-    def load_latest_hash(self) -> Optional[str]:
+    def load_latest_hash(self, *, fallback=True) -> Optional[str]:
         if self.source is None:
             return None
+        if not isinstance(self.source, RepositoryArchive):
+            raise ValueError("source is not a RepositoryArchive")
         try:
-            hash_ = self.source.query_hash()
+            hash_ = self.source.query_hash(cred=self.find_remote_credential())
         except RepositoryURLError:
-            hash_ = None 
+            if not fallback:
+                raise 
+            return None 
         return hash_
 
     def is_type_modules(self) -> bool:
@@ -528,7 +532,7 @@ class PackageManager:
             return None
         entry = self.database[pkg.name]
         if "hash" not in entry:
-            raise ValueError("Bad Entry")
+            return None
         return entry["hash"]
 
     def get_installed_location(self, pkg) -> Path:
@@ -542,17 +546,17 @@ class PackageManager:
         else:
             raise NotImplementedError()
     
-    def query_update_status(self, pkg: Package) -> str:
+    def query_update_status(self, pkg: Package, *, fallback=True) -> str:
         """ パッケージが最新か、通信して確かめる """
         if not pkg.is_remote_source():
             return "latest"
         # hashを比較して変更を検知する
-        latest_hash = pkg.load_latest_hash() # リモートリポジトリに最新のハッシュ値を問い合わせる
-        if latest_hash is None:
-            return "unknown"
         installed_hash = self.get_installed_hash(pkg)
         if installed_hash is None:
             return "notfound"
+        latest_hash = pkg.load_latest_hash(fallback=fallback) # リモートリポジトリに最新のハッシュ値を問い合わせる
+        if latest_hash is None:
+            return "unknown"
         if installed_hash == latest_hash:
             return "latest"
         else:

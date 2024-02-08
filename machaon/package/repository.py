@@ -97,7 +97,7 @@ class RepositoryArchive(BasicArchive):
             pass
         return None
 
-    def query_hash(self):
+    def query_hash(self, cred=None):
         raise NotImplementedError()
  
     def query_json(self, url, *, encoding="utf-8", cred=None):
@@ -134,9 +134,9 @@ class GithubRepArchive(RepositoryArchive):
         else:
             return "https://github.com/{}/{}/archive/refs/heads/{}.zip".format(self.username, self.name, self.branch)
 
-    def query_hash(self):
+    def query_hash(self, cred):
         url = "https://api.github.com/repos/{}/{}/git/ref/heads/{}".format(self.username, self.name, self.branch)
-        js = self.query_json(url)
+        js = self.query_json(url, cred=cred)
         sha = js["object"]["sha"]
         return sha
     
@@ -158,8 +158,8 @@ class BitbucketRepArchive(RepositoryArchive):
         else:
             return "https://bitbucket.org/{}/{}/get/{}.zip".format(self.username, self.name, self.branch)
     
-    def query_hash(self):
+    def query_hash(self, cred):
         url = "https://api.bitbucket.org/2.0/repositories/{}/{}/commits/{}".format(self.username, self.name, self.branch)
-        js = self.query_json(url)
+        js = self.query_json(url, cred=cred)
         hash_ = js["values"][0]["hash"]
         return hash_

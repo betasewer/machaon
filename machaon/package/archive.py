@@ -24,9 +24,6 @@ class BasicArchive():
     def get_source(self) -> str:
         raise NotImplementedError()
     
-    def query_hash(self):
-        return None
-        
     def get_arcfilepath(self, workdir) -> str:
         raise NotImplementedError()
     
@@ -114,8 +111,6 @@ class LocalArchive(BasicArchive):
     def get_source(self) -> str:
         return "archive-file:{}".format(self.filepath)
 
-    def query_hash(self):
-        return None
 
 #
 #
@@ -136,8 +131,6 @@ class LocalFile(DummyArchive):
     def get_source(self) -> str:
         return "file:{}".format(self.filepath)
     
-    def query_hash(self):
-        return None
     
     #
     # パスを取得

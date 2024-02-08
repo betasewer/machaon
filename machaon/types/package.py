@@ -47,7 +47,7 @@ class AppPackageType:
         Returns:
             Str:
         """
-        installstatus = self.get_manager(spirit).query_update_status(package)
+        installstatus = self.get_manager(spirit).query_update_status(package, fallback=False)
         if "none" == installstatus:
             return "ローカルに存在しません"
         elif "old" == installstatus:
