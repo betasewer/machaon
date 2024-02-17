@@ -35,7 +35,7 @@ class ErrorSetValue:
 
 
 
-class ErrorSet(Exception):
+class ErrorSet:
     def __init__(self, message):
         self._errors = []
         self._message = message
@@ -56,10 +56,13 @@ class ErrorSet(Exception):
         if self._errors:
             raise self.Error(self._errors, self._message)
     
-    def display_failure(self, spirit):
+    def printout(self, *, spirit=None, printer=None):
         if self._errors:
             err = self.Error(self._errors, self._message)
-            spirit.post("error", str(err))
+            if spirit:
+                spirit.post("error", str(err))
+            elif printer:
+                printer(str(err))
         
     def __enter__(self):
         return self
