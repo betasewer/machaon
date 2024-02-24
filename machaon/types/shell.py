@@ -804,7 +804,10 @@ class Path:
             p = approot.get_basic_dir() / "store"
         else:
             name, _, param  = value.partition(":")
-            p = shellpath().get_known_path(name, param, approot)
+            try:
+                p = shellpath().get_known_path(name, param, approot)
+            except:
+                return Path(value)
         if p is not None:
             return Path(p)
         return None
