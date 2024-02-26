@@ -31,9 +31,9 @@ class AppPackageType:
 
         if package.is_ready():
             if is_installed:
-                return "準備完了 (インストールの記録なし)"
-            else:
                 return "準備完了"
+            else:
+                return "準備完了 (インストールの記録なし)"
         else:
             if is_installed:
                 return "利用不可（インストールの記録あり）"
