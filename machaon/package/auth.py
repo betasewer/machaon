@@ -3,6 +3,8 @@ import base64
 import os
 import configparser
 
+from machaon.core.error import ErrorSet
+
 class Credential:
     def __init__(self, hostname, username):
         self.hostname = hostname
@@ -75,14 +77,15 @@ class CredentialDir:
         
         password = None
         typename = None
+        errs = ErrorSet("認証情報ディレクトリの読み込み")
         for f in self._d.listdirfile():
             if not f.hasext(".ini"):
                 continue
             c = configparser.ConfigParser()
             try:
                 c.read(f)
-            except:
-                continue
+            except Exception as e:
+                errs.add(e, value=f)
             # レポジトリ指定のキーと指定なしのキーで検索する
             hitkey = next((x for x in keys if c.has_option(x, "password")), None)
             if hitkey:
@@ -91,6 +94,7 @@ class CredentialDir:
                 break
         
         if password is None:
+            errs.throw_if_failed("認証情報が見つかりませんでした　認証情報ファイルのロードエラー") # ファイルエラーが起きていれば
             raise ValueError("認証情報が見つかりませんでした")
         
         # 認証オブジェクト

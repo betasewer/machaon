@@ -52,9 +52,9 @@ class ErrorSet:
     def failed(self):
         return len(self._errors) > 0
 
-    def throw_if_failed(self):
+    def throw_if_failed(self, message=None):
         if self._errors:
-            raise self.Error(self._errors, self._message)
+            raise self.Error(self._errors, message or self._message)
     
     def printout(self, *, spirit=None, printer=None):
         if self._errors:
