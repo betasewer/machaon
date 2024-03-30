@@ -5,6 +5,7 @@ import urllib.parse
 
 from machaon.core.symbol import full_qualified_name
 from machaon.ui.server.wsgi import WSGIRequest
+from machaon.types.meta import meta
 
 def split_url_path(url):
     """ 前後の空の要素を取り除く """
@@ -104,7 +105,7 @@ class ApiParam:
         isvariable = False
         isdict = False
         if valexpr:
-            valtype = {"str":str, "int":int, "float":float, "bool":boolarg}.get(valexpr)
+            valtype = {"str":str, "int":int, "float":float, "bool":boolarg, "date":datearg}.get(valexpr)
             if valtype is None:
                 raise ValueError(valexpr + 'は不明なビルトイン型です')
         else:
@@ -133,6 +134,10 @@ def boolarg(v):
         return False
     else:
         raise ValueError(v)
+    
+def datearg(v):
+    return meta.Date.from_joined(v)
+
 
 class ApiCast:
     """ apiのエントリポイント """
