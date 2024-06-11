@@ -160,9 +160,6 @@ class ApiResult:
     def create_result_header(self):    
         content_length = len(self.bits)
         header = [
-            ('Access-Control-Allow-Origin', '*'),  # 許可するアクセス
-            ('Access-Control-Allow-Methods', '*'), # 許可するメソッド
-            ('Access-Control-Allow-Headers', "X-Requested-With, Origin, X-Csrftoken, Content-Type, Accept"), # 許可するヘッダー
             *self.headers,
             ('Content-Length', str(content_length)) # Content-Lengthが合っていないとブラウザでエラー
         ]
@@ -257,6 +254,13 @@ class ApiServerApp:
 
     def get_slots(self):
         return type(self).slot.slots
+    
+    def get_cors_header(self):
+        return [
+            ('Access-Control-Allow-Origin', '*'),  # 許可するアクセス
+            ('Access-Control-Allow-Methods', '*'), # 許可するメソッド
+            ('Access-Control-Allow-Headers', "X-Requested-With, Origin, X-Csrftoken, Content-Type, Accept"), # 許可するヘッダー
+        ]
 
     def run(self, req):
         """ リクエストを処理する """
@@ -273,7 +277,7 @@ class ApiServerApp:
             if self.errortrace:
                 try:
                     retval = slot.invoke(self, req, slotcast)   
-                    status = HTTPStatus.OK         
+                    status = HTTPStatus.OK
                 except Exception as e:
                     from machaon.types.stacktrace import verbose_display_traceback
                     retval = {
@@ -285,20 +289,30 @@ class ApiServerApp:
                 retval = slot.invoke(self, req, slotcast)   
                 status = HTTPStatus.OK
 
-        # データを返す
-        if isinstance(retval, ApiResult):
-            # ApiResult
-            result = retval
-            header = result.create_result_header()
+        if retval is None:
+            # OK
+            req.response(status, self.get_cors_header())
+            return 
+        elif isinstance(retval, HTTPStatus):
+            # HTTPStatus
+            status = retval
+            req.response(status, self.get_cors_header())
+            return
         else:
-            # json
-            bits = json.dumps(retval).encode("utf-8")
-            result = ApiResult(bits, ('Content-type', 'application/json; charset=utf-8')) # utf-8のjson形式
-            header = result.create_result_header()
-        
-        # ヘッダ
-        req.response(status, header)
-        yield result.bits
+            # データを返す
+            if isinstance(retval, ApiResult):
+                # ApiResult
+                result = retval
+            elif isinstance(retval, dict):
+                # json
+                bits = json.dumps(retval).encode("utf-8")
+                result = ApiResult(bits, ('Content-type', 'application/json; charset=utf-8')) # utf-8のjson形式
+            else:
+                raise TypeError("[{}] Invalid api return value type: {}({}). Return type must be one of [ApiResult | HTTPStatus | dict].".format(slot, retval, type(retval).__name__))
+            
+            header = self.get_cors_header() + result.create_result_header()
+            req.response(status, header)
+            yield result.bits
 
     @classmethod
     def blob(cls, bits, *headers):
