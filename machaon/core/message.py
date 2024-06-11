@@ -223,15 +223,10 @@ class Message:
             self.selector = select_method("=")
 
         if not self.is_min_arg_specified():
-            # 引数が足りない場合
-            if len(self.args) > 0:   
-                # 引数がゼロ以上あり、足りない場合はエラー         
-                spec = self.get_next_parameter_spec()
-                syntax = self.get_method_syntax(evalcontext.context)
-                raise BadExpressionError("引数'{}'が足りません：{} ".format(spec.get_name(), syntax))
-            else:
-                # ゼロの場合はセレクタを返す
-                self.as_selector_returner(evalcontext)
+            # 足りない場合はエラー         
+            spec = self.get_next_parameter_spec()
+            syntax = self.get_method_syntax(evalcontext.context)
+            raise BadExpressionError("'{}'を呼び出すための引数'{}'が足りません：{} ".format(self.selector, spec.get_name(), syntax))
 
     def conclude_explicit(self):
         """ メッセージ完成のフラグを明示的に立てる """

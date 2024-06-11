@@ -248,7 +248,10 @@ class TypeModule:
                 # 再度型名で探索
                 t = self._select_type(typename, TYPECODE_TYPENAME, describername) 
                 if t is None:
-                    raise err # 型が見つからなかった場合のみ、読み込み時に起きたエラーを投げる
+                    if err is not None: 
+                        raise err # 型が見つからなかった場合のみ、読み込み時に起きたエラーを投げる
+                    else:
+                        raise BadTypename("型'{}'の定義はモジュールまたはパッケージ'{}'に見つかりませんでした".format(typename, describername))
                 return t
     
         elif isinstance(typecode, type):
