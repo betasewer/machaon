@@ -135,10 +135,10 @@ class AppPackageType:
                 return False
 
             # インストール処理
+            elif state == PackageManager.MESSAGE:
+                app.post("message", "  " + state.msg)
             elif state == PackageManager.PIP_INSTALLING:
                 app.post("message", "pipを呼び出し")
-            elif state == PackageManager.PIP_MSG:
-                app.post("message", "  " + state.msg)
             elif state == PackageManager.PIP_END:
                 if state.returncode == 0:
                     app.post("message", "pipによるインストールが成功し、終了しました")
@@ -148,7 +148,7 @@ class AppPackageType:
                     app.post("error", "pipによるインストールが失敗しました コード={}".format(state.returncode))
                     return False
         return True
-        
+
     def display_update(self, package: Package, app, options=None, *, forceinstall=False, forceupdate=False):
         if not package.is_remote_source():
             app.post("message", "リモートソースの指定がありません")
@@ -185,10 +185,11 @@ class AppPackageType:
         )
 
         # 追加依存モジュールを表示する
-        inimodule = package.load_initial_declaration()
-        for name, ready in inimodule.check_extra_packages_ready().items():
-            if not ready:
-                app.post("warn", "パッケージ'{}'がありません。手動で追加する必要があります".format(name))
+        if package.is_type_modules():
+            inimodule = package.load_initial_declaration()
+            for name, ready in inimodule.check_extra_packages_ready().items():
+                if not ready:
+                    app.post("warn", "パッケージ'{}'がありません。手動で追加する必要があります".format(name))
 
         app.post("message-em", "パッケージ'{}'の更新が完了".format(package.name))
         return
@@ -200,6 +201,9 @@ class AppPackageType:
         if package.is_module_source():
             app.post("message", "このパッケージはアンインストールできません")
             return
+        if not self.get_manager(app).is_installed(package):
+            app.post("message", "このパッケージはインストールの記録がありません")
+            return
     
         app.post("message-em", "パッケージ'{}'のアンインストールを開始".format(package.name))
 
@@ -208,7 +212,7 @@ class AppPackageType:
                 app.post("message", "ファイルを削除")
             elif state == PackageManager.PIP_UNINSTALLING:
                 app.post("message", "pipを呼び出し")
-            elif state == PackageManager.PIP_MSG:
+            elif state == PackageManager.MESSAGE:
                 app.post("message", "  " + state.msg)
             elif state == PackageManager.PIP_END:
                 if state.returncode == 0:

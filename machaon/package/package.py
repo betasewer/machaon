@@ -57,6 +57,9 @@ class Package:
         self._type = type or PACKAGE_TYPE_MODULES
         self._hash = commit or None
         self._remote_creds: CredentialDir = None
+        
+        if self.is_module_source() and self.entrypoint is None:
+            raise ValueError("Package: 'module'でエントリポイントモジュール名を指定してください")
     
     @property
     def source_name(self):
@@ -103,6 +106,9 @@ class Package:
     def is_dependency_modules(self) -> bool:
         return self._type == PACKAGE_TYPE_DEPENDENCY
     
+    def is_resource(self) -> bool:
+        return self._type == PACKAGE_TYPE_RESOURCE
+    
     def is_undefined(self) -> bool:
         return self._type == PACKAGE_TYPE_UNDEFINED
     
@@ -110,18 +116,20 @@ class Package:
         """ エントリポイントのモジュールが読み込み可能かチェックする """
         if self._type == PACKAGE_TYPE_RESOURCE:
             return False
-        if self.entrypoint is None:
-            raise ValueError("エントリモジュールが指定されていません")
+        elif self._type == PACKAGE_TYPE_MODULES:
+            # エントリポイントのモジュールが読み込み可能かチェックする
+            if self.entrypoint is None:
+                raise ValueError("エントリモジュールが指定されていません")
 
-        # エントリパスの親モジュールから順に確認する
-        mparts = self.entrypoint.split(".")
-        for i in range(len(mparts)):
-            mp = ".".join(mparts[0:i+1])
-            spec = importlib.util.find_spec(mp)
-            if spec is None:
-                return False
-        
-        return True
+            # 親モジュールから順に確認する
+            mparts = self.entrypoint.split(".")
+            for i in range(len(mparts)):
+                mp = ".".join(mparts[0:i+1])
+                spec = importlib.util.find_spec(mp)
+                if spec is None:
+                    return False
+            
+            return True
     
     #
     # モジュールロード
@@ -130,10 +138,14 @@ class Package:
         """ イニシャルモジュールの宣言をロードする """
         # モジュールのdocstringを読みに行く
         initial_module = self.get_initial_module()
+        if initial_module is None:
+            raise ValueError("エントリモジュールが指定されていません")
         initial_module.load_module_declaration()
         return initial_module
 
     def get_initial_module(self):
+        if self.entrypoint is None:
+            return None
         return module_loader(self.entrypoint)
     
 
@@ -162,7 +174,7 @@ class Package:
             return LocalPackageExtraction(rep)
 
 
-def create_package(name, package, module=None, host=None, *, separate=True):
+def create_package(name, package, module=None, host=None, *, separate=True, package_type=None):
     """
     文字列の指定を受けてモジュールパッケージの種類を切り替え、読み込み前のインスタンスを作成する。
     """
@@ -171,7 +183,7 @@ def create_package(name, package, module=None, host=None, *, separate=True):
         "bitbucket": ("machaon.package.repository", "BitbucketRepArchive"),
     }
 
-    pkgtype = None
+    pkgtype = package_type
     commit = None
     if isinstance(package, str):
         if host is None:
@@ -195,11 +207,13 @@ def create_package(name, package, module=None, host=None, *, separate=True):
             from machaon.package.archive import LocalModule
             module = desc
             pkgsource = LocalModule(module)
-            pkgtype = PACKAGE_TYPE_SINGLE_MODULE
+            if pkgtype is None:
+                pkgtype = PACKAGE_TYPE_SINGLE_MODULE
         elif host == "file":
             from machaon.package.archive import LocalFile
             pkgsource = LocalFile(desc)
-            pkgtype = PACKAGE_TYPE_SINGLE_MODULE
+            if pkgtype is None:
+                pkgtype = PACKAGE_TYPE_SINGLE_MODULE
         elif host == "package-arc":
             from machaon.package.archive import LocalArchive
             pkgsource = LocalArchive(desc)
@@ -208,8 +222,6 @@ def create_package(name, package, module=None, host=None, *, separate=True):
     else:
         pkgsource = package
     
-    if module is None:
-        raise ValueError("package: 'module'でエントリポイントモジュール名を指定してください")
     return Package(name, pkgsource, module=module, type=pkgtype, separate=separate, commit=commit)
 
 
@@ -253,6 +265,15 @@ class PackageLocalOption:
         if self.no_dependency:
             opts.append("--no-deps")
 
+#
+#
+#
+class PackageDistInfo:
+    def __init__(self, *, toplevel=None, infodir=None, is_resource=False):
+        self.toplevel = toplevel
+        self.infodir = infodir
+        self.is_resource: bool = is_resource
+
 
 
 #
@@ -269,8 +290,8 @@ class PackageManager:
     UNINSTALLING = milestone()
     PIP_INSTALLING = milestone()
     PIP_UNINSTALLING = milestone()
-    PIP_MSG = milestone_msg("msg")
     PIP_END = milestone_msg("returncode")
+    MESSAGE = milestone_msg("msg")
 
     INSTALL_TARGET_VERSION = 1
     INSTALL_LATEST_VERSION = 2
@@ -370,11 +391,13 @@ class PackageManager:
         if not force and self.packages:
             return
         
+        errset = ErrorSet("パッケージディレクトリ'{}'の読み込み".format(pkglistdir))
+
         if not pkglistdir.isdir():
+            errset.add(FileNotFoundError(pkglistdir))
             return # パスが見つからず
         
         # リストファイルのディレクトリを読み込む
-        errset = ErrorSet("パッケージディレクトリ'{}'の読み込み".format(pkglistdir))
         for f in pkglistdir.listdirfile():
             if not f.hasext(".packages") or f.hasext(".packages.ini"):
                 continue
@@ -397,11 +420,18 @@ class PackageManager:
             try:
                 pkgname = "{}:{}".format(sectname, listname)
                 repo = repolist.get(sectname, "repository", fallback=None)
-                module = repolist.get(sectname, "module", fallback=sectname)
-
                 if repo is None:
                     continue
-                pkg = create_package(pkgname, repo, module)
+
+                module = None
+                pkgtype = None
+                isresource = repolist.get(sectname, "resource", fallback=False)
+                if isresource:
+                    pkgtype = PACKAGE_TYPE_RESOURCE
+                else:
+                    module = repolist.get(sectname, "module", fallback=sectname)
+
+                pkg = create_package(pkgname, repo, module, package_type=pkgtype)
 
                 private = repolist.get(sectname, "private", fallback=False)
                 if private:
@@ -452,70 +482,114 @@ class PackageManager:
         with pkg.extraction(target_commit) as extractor:
             for status in extractor:
                 if status == PackageManager.EXTRACTED_FILES:
+                    # 展開が完了した
                     localpath = status.path
                     if localpath is None:
                         return
-
-                    # pipにインストールさせる
-                    yield PackageManager.PIP_INSTALLING
-
-                    newinstall = pkg.name not in self.database
-                    if newinstall:
-                        isseparate = pkg.is_installation_separated()
+                    
+                    # インストールする
+                    if pkg.is_type_modules():
+                        installation = self.package_installation(pkg, localpath, pip_options)
+                    elif pkg.is_dependency_modules() or pkg.is_resource():
+                        installation = self.files_installation(pkg, localpath)
                     else:
-                        isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)
-                    installdir = self.dir if isseparate else None
-
-                    pip_options = list(pip_options) if pip_options else []
-                    if pkg.name in self._options:
-                        self._options[pkg.name].make_pip_options(pip_options)
-                    yield from run_pip(installtarget=localpath, installdir=installdir, options=pip_options)
-
-                    if newinstall:
-                        # pipが作成したデータを見に行く
-                        distinfo: Dict[str, str] = {}
-                        if pkg.is_installation_separated():
-                            distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
-                    else:
-                        distinfo = {}
-
-                    # データベースに書き込む 
+                        return
+                    distinfo = None
+                    for insstatus in installation:
+                        if isinstance(insstatus, PackageDistInfo):
+                            distinfo = insstatus
+                            continue
+                        yield insstatus
+                    
+                    # インストールされたコミットのハッシュを得る
                     if target_commit is None:
                         installed_commit = pkg.load_latest_hash()
                     else:
                         installed_commit = target_commit
-                    self.add_database(pkg, installed_commit, **distinfo)
-                
+                    
+                    if distinfo is not None:
+                        # 新規インストールに成功
+                        # インストール完了後、パッケージの情報を修正する
+                        #if distinfo.toplevel is not None:
+                        #    if pkg.entrypoint is None:
+                        #        pkg.entrypoint = distinfo.toplevel
+                        # データベースに書き込む 
+                        self.add_database(pkg, installed_commit, toplevel=distinfo.toplevel, infodir=distinfo.infodir)
+                    else:
+                        # 更新のインストールに成功
+                        self.add_database(pkg, installed_commit)
                 else:
                     yield status
                     continue
-        
-        # インストール完了後、パッケージの情報を修正する
-        if "toplevel" in self.database[pkg.name]:
-            if pkg.entrypoint is None:
-                pkg.entrypoint = self.database[pkg.name]["toplevel"]
 
         # モジュールファインダーに新しいモジュールの存在を気づかせる
         importlib.invalidate_caches()
 
+    def package_installation(self, pkg, localpath, pip_options=None):     
+        """ Pythonパッケージをpipによってインストールする """
+        newinstall = pkg.name not in self.database
+        if newinstall:
+            isseparate = pkg.is_installation_separated()
+        else:
+            isseparate = self.database.getboolean(pkg.name, "separate", fallback=True)
+        installdir = self.dir if isseparate else None
+
+        pip_options = list(pip_options) if pip_options else []
+        if pkg.name in self._options:
+            self._options[pkg.name].make_pip_options(pip_options)
+        
+        yield from run_pip(installtarget=localpath, installdir=installdir, options=pip_options)
+
+        if newinstall:
+            # pipが作成したデータを見に行く
+            if pkg.is_installation_separated():
+                distinfo = _read_pip_dist_info(self.dir, pkg.get_source().get_name())
+                yield distinfo
+        else:
+            pass
+
+    def files_installation(self, pkg: Package, localpath):
+        """ 展開ディレクトリに含まれるファイルをすべてコピーする """ 
+        localname, _sep, _defsname = pkg.name.partition(":")
+        installdir = (self.dir / localname).makedirs()        
+        yield PackageManager.MESSAGE.bind(msg="コピー：{} -> {}".format(localpath, installdir))
+        for localp in Path(localpath).listdir():
+            if localp.isfile():
+                destp = localp.copy_to(installdir, overwrite=True)
+            elif localp.isdir():
+                destdir = installdir / localp.name()
+                destp = shutil.copytree(localp, destdir, dirs_exist_ok=True)
+            else:
+                continue
+            yield PackageManager.MESSAGE.bind(msg="コピー：    {}".format(destp.name()))
+
+        distinfo = PackageDistInfo(is_resource=pkg.is_resource())
+        distinfo.infodir = installdir
+        yield distinfo
+
     def update(self, pkg, options=None):
-        return self.install(pkg, options, newinstall=False)
+        return self.install(pkg, PackageManager.INSTALL_LATEST_VERSION, options)
 
     def uninstall(self, pkg: Package):
         if pkg.is_module_source():
             # アンインストールは不要
             return
+        if not self.is_installed(pkg):
+            return
         
         separate = self.database.getboolean(pkg.name, "separate", fallback=False)
         if separate:
             # 手動でディレクトリを削除する
-            yield PackageManager.UNINSTALLING
             toplevel = self.database.get(pkg.name, "toplevel", fallback=None)
             if toplevel:
-                (self.dir / toplevel).rmtree()
+                p = self.dir / toplevel
+                p.rmtree()
+                yield PackageManager.MESSAGE(msg="削除：{}".format(p))
             infodir = self.database.get(pkg.name, "infodir", fallback=None)
             if infodir:
-                (self.dir / infodir).rmtree()
+                p = self.dir / infodir
+                p.rmtree()
+                yield PackageManager.MESSAGE(msg="削除：{}".format(p))
         else:
             # pipにアンインストールさせる
             yield PackageManager.PIP_UNINSTALLING
@@ -539,10 +613,12 @@ class PackageManager:
         """ パッケージがインストールされたパス """
         if not self.is_installed(pkg.name):
             return None
-        if self.database.get(pkg.name, "separate"):
+        separated_install = self.database.get(pkg.name, "separate")
+        if separated_install:
             toplevel = self.database.get(pkg.name, "toplevel")
             if toplevel:
                 return self.dir / toplevel
+            raise ValueError("'toplevel' is undefined in distinfo: {}".format(pkg.name))
         else:
             raise NotImplementedError()
     
@@ -690,6 +766,8 @@ class RemotePackageExtraction(ArchivePackageExtraction):
 
 
 def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=()):
+    yield PackageManager.PIP_INSTALLING
+    
     cmd = [sys.executable, "-m", "pip"]
 
     if installtarget is not None:
@@ -704,13 +782,13 @@ def run_pip(installtarget=None, installdir=None, uninstalltarget=None, options=(
     if options:
         cmd.extend(options)
     
-    yield PackageManager.PIP_MSG.bind(msg=" ".join(cmd))
+    yield PackageManager.MESSAGE.bind(msg=" ".join(cmd))
 
     from machaon.shellpopen import popen_capture
     proc = popen_capture(cmd)
     for msg in proc:
         if msg.is_output():
-            yield PackageManager.PIP_MSG.bind(msg=msg.text)
+            yield PackageManager.MESSAGE.bind(msg=msg.text)
         if msg.is_finished():
             yield PackageManager.PIP_END.bind(returncode=msg.returncode)
 
@@ -752,12 +830,12 @@ def _read_pip_dist_info(directory: Path, pkg_name):
         raise PipDistInfoFolderNotFound()
     
     #
-    distinfo = {}
-    distinfo["infodir"] = infodir
+    distinfo = PackageDistInfo()
+    distinfo.infodir = infodir
     
     p = infodir / "top_level.txt"
     with open(p, "r", encoding="utf-8") as fi:
-        distinfo["toplevel"] = fi.read().strip()
+        distinfo.toplevel = fi.read().strip()
     
     return distinfo
 

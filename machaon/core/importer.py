@@ -18,7 +18,7 @@ def module_loader(expr=None, *, location=None):
         return PyModuleFileLoader(expr, location)
     else:
         if expr is None:
-            raise TypeError("expr")
+            raise TypeError("'expr' must not be None")
         return PyModuleLoader(expr)
 
 def attribute_loader(expr, *, attr=None, location=None):

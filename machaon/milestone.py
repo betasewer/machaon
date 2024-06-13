@@ -15,6 +15,9 @@ class milestone_message():
         args = {k:args[k] for k in self.args.keys()}
         return milestone_message(self.id, args)
     
+    def __call__(self, **args):
+        return self.bind(**args)
+    
     def __getattr__(self, name):
         return self.args[name]
     

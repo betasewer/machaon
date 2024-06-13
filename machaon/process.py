@@ -737,8 +737,8 @@ class ProcessMessage():
 #
 #
 #
-class ProcessMessageIO():
-    def __init__(self, spirit, tag, oneliner, **options):
+class ProcessMessageIO:
+    def __init__(self, spirit, tag, oneliner=False, **options):
         self.spirit = spirit
         self.tag = tag
         self.oneliner = oneliner
@@ -749,7 +749,7 @@ class ProcessMessageIO():
         if self.oneliner and self.linecnt == 1:
             #self.spirit.delete_message_line()
             self.linecnt = 0
-        self.spirit.custom_message(self.tag, msg, **self.options)
+        self.spirit.post(self.tag, msg, **self.options)
         self.linecnt += 1
     
     def flush(self):

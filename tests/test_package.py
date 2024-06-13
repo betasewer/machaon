@@ -77,6 +77,10 @@ def test_defined_package(approot):
         "hello": {
             "repository": "bitbucket:betasewer/test_module",
             "module": "hello"
+        },
+        "ageha-source": {
+            "repository": "github:betasewer/ageha",
+            "resource": True
         }
     })
 
@@ -87,6 +91,7 @@ def test_defined_package(approot):
     assert pkg
     assert pkg.name == "hello:test"
     assert pkg.is_remote_source()
+    assert pkg.is_type_modules()
     assert pkg.get_source_signature() == "bitbucket.org:betasewer/test_module:master"
     assert not pkg.is_ready()
     assert not pkgm.is_installed(pkg)
@@ -100,6 +105,38 @@ def test_defined_package(approot):
     assert pkg.is_ready()
     assert pkgm.is_installed(pkg)    
     assert pkgm.query_update_status(pkg) == "latest"
+
+
+def test_defined_package_resource(approot):
+    root: AppRoot = approot
+    write_package_defs(root, "test", {
+        "ageha-source": {
+            "repository": "github:betasewer/ageha",
+            "resource": True
+        }
+    })
+    root.boot_core()
+
+    pkgm = root.package_manager()
+    pkg: Package = pkgm.get("ageha-source:test")
+    assert pkg
+    assert pkg.is_remote_source()
+    assert pkg.is_resource()
+    assert pkg.get_source_signature() == "github.com:betasewer/ageha:master"
+    assert not pkg.is_ready()
+    assert not pkgm.is_installed(pkg)
+    assert pkgm.query_update_status(pkg) == "notfound"
+    assert pkg.get_initial_module() is None
+
+    spi = root.temp_spirit(doprint=True)
+    AppPackageType().display_update(pkg, spi, forceinstall=True)
+    
+    assert pkgm.is_installed(pkg)    
+    assert pkgm.query_update_status(pkg) == "latest"
+
+    location = pkgm.get_installed_location(pkg)
+    assert location.isdir()
+    assert location.name() == "ageha-source"
 
 
 def test_defined_package_update(approot):
