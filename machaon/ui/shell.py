@@ -166,7 +166,8 @@ class ShellLauncher(Launcher):
         if start and view.title:
             print(" {}".format(view.title))
         
-        print("\r " + bar, end='')
+        if bar is not None:
+            print("\r " + bar, end='')
 
         if end:
             print(" 完了")

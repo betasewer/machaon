@@ -504,7 +504,6 @@ class ProgressDisplayView:
         self.progress = None
         self.marquee = False if total else True
         self.lastbit = None
-        self.lastbitdelta = None
         self.changed = False
 
     def is_starting(self):
@@ -547,7 +546,6 @@ class ProgressDisplayView:
             changed = False
         else:
             changed = True
-            self.lastbitdelta = bit - self.lastbit
             self.lastbit = bit
         return changed
 
@@ -585,13 +583,13 @@ class ProgressDisplayView:
             format((progress: int, leftchars: int, mainchars: int, rightchars: int) -> str): 整形関数 
         """
         if start:
-            return format(prog, charwidth, 0, 0)
+            return format(0, charwidth, 0, 0)
         elif end:
             prog = self.progress+1 if self.progress else 0
             return format(prog, 0, charwidth, 0)
         else:
             if not self.update_change_bit(charwidth):
-                return
+                return None
             l, m = (
                 (0, 0.3), (0.33, 0.34), (0.7, 0.3)
             )[self.lastbit % 3]

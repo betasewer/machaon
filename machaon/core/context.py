@@ -272,7 +272,11 @@ class InvocationContext:
         if objectType is None:
             objectType = Object
         from machaon.types.stacktrace import ErrorObject
-        return objectType(self.get_type("Error"), ErrorObject(exception, context=self))
+        if isinstance(exception, Exception):
+            exception = ErrorObject(exception, context=self)
+        elif not isinstance(exception, ErrorObject):
+            raise TypeError('exception')
+        return objectType(self.get_type("Error"), exception)
     
     def begin_invocation(self, entry: InvocationEntry):
         """ 呼び出しの直前に """
