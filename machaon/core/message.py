@@ -291,8 +291,10 @@ class Message:
         # セレクタを解決する
         self.resolve_selector(evalcontext)
         # メッセージを組み替える
-        self.reciever = self.selector
-        self.selector = select_method("=")
+        from machaon.core.invocation import signature_method_from_invocation
+        method = signature_method_from_invocation(self.selector)
+        self.reciever = evalcontext.context.new_object(method)
+        self.selector = select_method("?")
         self.args.clear()
     
     #

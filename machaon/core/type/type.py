@@ -145,7 +145,7 @@ class Type(TypeProxy):
             try:
                 meth.load_from_type(self)
             except Exception as e:
-                raise MethodLoadError(e, meth.name).with_traceback(e.__traceback__)
+                raise MethodLoadError(e, meth.name) from e
         return meth
 
     def is_selectable_method(self, name) -> bool:

@@ -43,13 +43,14 @@ class RootObject:
             spirit.post("message", "環境をロードします")
         self.root.boot_core(spirit)
 
-        # ロードされたパッケージを表示する
-        statusli = defaultdict(list)
+        # 定義されたパッケージを表示する
+        entrypoints = []
         for pkg in self.root.package_manager().getall():
-            status = AppPackageType().status(pkg, spirit)
-            statusli[status].append(pkg.name)
-        for stat, names in statusli.items():
-            spirit.post("message", "{} -> {}".format(stat, ", ".join(names)))
+            if pkg.is_type_modules():
+                entrypoints.append(pkg.entrypoint)
+        if entrypoints:
+            spirit.post("message", "以下のモジュールがパッケージで定義されました：")
+            spirit.post("message", "  {}".format(", ".join(entrypoints)))
 
         # 変数をロードする
         count = self.root.boot_startup_variables(self.context)
@@ -61,7 +62,34 @@ class RootObject:
             spirit.post("message", "文法ヘルプ -> @@syntax")
             spirit.post("message", "ルートコマンドのヘルプ -> @@help")
             spirit.post("message", "ヘルプ -> <object> help")
+            spirit.post("message", "パッケージの状態 -> @@packages-status")
             spirit.post("message", "")
+
+    def packages_status(self, app):
+        """ @task 
+        パッケージの状態をまとめて表示する
+        """
+        statusli = defaultdict(list)
+        for pkg in self.root.package_manager().getall():
+            status = AppPackageType().status(pkg, app)
+            if pkg.is_type_modules():
+                kind = "型モジュール"
+            elif pkg.is_resource():
+                kind = "リソース"
+            else:
+                kind = "[{}]".format(pkg._type)
+            statusli[(kind, status)].append(pkg)
+        
+        for (kind, stat), pkgs in statusli.items():
+            app.post("message", "{}／{}:".format(kind, stat))
+            for pkg in pkgs:
+                if pkg.is_type_modules():
+                    app.post("message", "  {} -> {}".format(pkg.name, pkg.entrypoint))
+                else:
+                    location = self.root.package_manager().get_installed_location(pkg)
+                    if location is not None:
+                        location = location.relative_to(self.root.get_basic_dir())
+                    app.post("message", "  {} -> {}".format(pkg.name, location))
 
     def load_using_packages(self, app, *names):
         """ @task alias-name [using]
@@ -361,8 +389,9 @@ class RootObject:
         """@task
         プログレスバーをテストする。
         """
-        app.start_progress_display(total=50)
-        for _ in range(50):
+        total = 20
+        app.start_progress_display(total=total)
+        for _ in range(total):
             app.interruption_point(progress=1, wait=0.5)
         app.finish_progress_display()
 

@@ -117,7 +117,7 @@ class ErrorObject():
         """
         err = self.get_error()
         while True: 
-            cause = err.__cause__
+            cause = getattr(err, "__cause__", None)
             if cause is None:
                 break
             err = cause

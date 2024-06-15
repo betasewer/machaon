@@ -734,40 +734,30 @@ class tkLauncher(Launcher):
     #
     def insert_screen_progress_display(self, command, view):
         width = 30
+        
+        start, end = False, False
         if command == "progress":
-            if view.is_marquee():
-                if not view.update_change_bit(30):
-                    return
-                l, m = (
-                    (0, 0.3), (0.33, 0.34), (0.7, 0.3)
-                )[view.lastbit % 3]
-                lb = round(l * width)
-                mb = round(m * width)
-                rb = width - lb - mb
-                bar = "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", view.progress)
-            else:
-                bar_width = round(width * view.get_progress_rate())
-                rest_width = width - bar_width
-                hund = round(view.get_progress_rate() * 100)
-                bar = "[{}{}] {}% ({}/{})".format(bar_width*"o", rest_width*"-", hund, view.progress, view.total)
-                     
+            pass
         elif command == "start":
-            bar = "[{}{}] {}% ({}/{})".format("", width*"-", 0, 0, view.total)
+            start = True
         elif command == "end":
-            if view.is_marquee():
-                prog = view.progress+1 if view.progress else 0
-                bar = "[{}{}] ({})".format(width*"o", "", prog)
-            else:
-                bar = "[{}{}] {}% ({}/{})".format(width*"o", "", 100, view.total, view.total)
+            end = True
+
+        if view.is_marquee():
+            def bar_format(progress, lb, mb, rb):
+                return "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", progress)
+            bar = view.display_marquee_chars(width, bar_format, start=start, end=end)
         else:
-            return
+            def bar_format(progress, total, percent, mb, rb):
+                return "[{}{}] {}% ({}/{})".format(mb*"o", rb*"-", percent, progress, total)
+            bar = view.display_chars(width, bar_format, start=start, end=end)
 
         if view.title:
             header = "{}: ".format(view.title)
         else:
             header = ""
 
-        if command != "start":
+        if not start:
             self.delete_screen_text(-1, 1)
         self.insert_screen_text("message", header + bar)
 

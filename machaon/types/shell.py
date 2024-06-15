@@ -513,15 +513,17 @@ class Path:
     #
     # パス調査
     #
-    def listdir(self):
-        """ @method [ls]
+    def listdirvisible(self):
+        """ @method [lsv]
         ディレクトリに含まれるファイルとサブディレクトリの一覧を返す。
         Returns:
             Sheet[Path]:
         Decorates:
             @ view: name extension modtime size
         """
-        return [x for x in self.listdirall() if x.exists() and not x.ishidden()]
+        for x in self.listdir():
+            if x.exists() and not x.ishidden():
+                yield x
     
     def listdirdir(self):
         """ @method [lsd]
@@ -532,8 +534,10 @@ class Path:
             @ view: name extension modtime size
         """
         if not self.isdir():
-            return []
-        return [x for x in self.listdir() if x.isdir()]
+            return
+        for x in self.listdir():
+            if x.isdir():
+                yield x
     
     def listdirfile(self):
         """ @method [lsf]
@@ -544,11 +548,13 @@ class Path:
             @ view: name extension modtime size
         """
         if not self.isdir():
-            return []
-        return [x for x in self.listdir() if x.isfile()]
+            return
+        for x in self.listdir():
+            if x.isfile():
+                yield x
     
-    def listdirall(self):
-        """ @method [lsa]
+    def listdir(self):
+        """ @method [ls]
         隠しファイルも含めた全てのファイルとサブディレクトリの一覧を返す。
         Returns:
             Sheet[Path]:
@@ -626,7 +632,7 @@ class Path:
         Returns:
             bool:
         """
-        return len(self.listdirall()) == 0
+        return len(self.listdir()) == 0
     
     #
     # コピー・移動・削除

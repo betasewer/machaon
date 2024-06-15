@@ -1059,10 +1059,10 @@ class MethodParameter:
             elif obj_value:
                 return val
             else:
-                raise ValueError("Object is required, but not passed")
+                raise ArgumentTypeError(self, val, "Object型の値が必要ですが、生の値が渡されました")
         elif self.is_type_unspecified():
             if construct:
-                raise ValueError("cannot be constructed")
+                raise ArgumentTypeError(self, val, "不定な値のコンストラクタを呼び出すことはできません")
             elif obj_value:
                 return val.value
             else:

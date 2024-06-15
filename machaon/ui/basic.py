@@ -186,8 +186,11 @@ class Launcher():
     
     def update_chamber_messages(self, count):
         """ 全チャンバーに送られたメッセージを読みに行く """
+        handled_count = 0
         for msg in self.chambers.handle_messages(count):
             self.message_handler(msg)
+            handled_count += 1
+        return  handled_count
 
     #
     # メッセージウィンドウの操作
@@ -501,6 +504,7 @@ class ProgressDisplayView:
         self.progress = None
         self.marquee = False if total else True
         self.lastbit = None
+        self.lastbitdelta = None
         self.changed = False
 
     def is_starting(self):
@@ -543,6 +547,7 @@ class ProgressDisplayView:
             changed = False
         else:
             changed = True
+            self.lastbitdelta = bit - self.lastbit
             self.lastbit = bit
         return changed
 
@@ -552,6 +557,81 @@ class ProgressDisplayView:
         else:
             self.progress = self.total
 
+    #
+    #
+    #
+    def display_chars(self, charwidth: int, format, *, start=False, end=False):
+        """ 
+        マーキー表示
+        Params:
+            charwidth(int): 文字幅
+            format((progress: int, total: int, percent: int, mainchars: int, rightchars: int) -> str): 整形関数 
+        """
+        if start:
+            return format(0, self.total, 0, 0, charwidth)
+        elif end:
+            return format(self.total, self.total, 100, charwidth, 0)
+        else:
+            bar_width = round(charwidth * self.get_progress_rate())
+            rest_width = charwidth - bar_width
+            hund = round(self.get_progress_rate() * 100)
+            return format(self.progress, self.total, hund, bar_width, rest_width)
+
+    def display_marquee_chars(self, charwidth: int, format, *, start=False, end=False):
+        """ 
+        マーキー表示
+        Params:
+            charwidth(int): 文字幅
+            format((progress: int, leftchars: int, mainchars: int, rightchars: int) -> str): 整形関数 
+        """
+        if start:
+            return format(prog, charwidth, 0, 0)
+        elif end:
+            prog = self.progress+1 if self.progress else 0
+            return format(prog, 0, charwidth, 0)
+        else:
+            if not self.update_change_bit(charwidth):
+                return
+            l, m = (
+                (0, 0.3), (0.33, 0.34), (0.7, 0.3)
+            )[self.lastbit % 3]
+            lb = round(l * charwidth)
+            mb = round(m * charwidth)
+            rb = charwidth - lb - mb
+            return format(self.progress, lb, mb, rb)
+
+
+    """
+        if self.is_marquee():
+            if not self.update_change_bit(charwidth):
+                return
+            l, m = (
+                (0, 0.3), (0.33, 0.34), (0.7, 0.3)
+            )[self.lastbit % 3]
+            lb = round(l * charwidth)
+            mb = round(m * charwidth)
+            rb = charwidth - lb - mb
+            return format(self.progress, )
+            bar = "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", self.progress)
+        else:
+            bar_width = round(width * view.get_progress_rate())
+            rest_width = width - bar_width
+            hund = round(view.get_progress_rate() * 100)
+            bar = "[{}{}] {}% ({}/{})".format(bar_width*"o", rest_width*"-", hund, view.progress, view.total)
+                    
+
+        if command == "progress":
+        elif command == "start":
+            bar = "[{}{}] {}% ({}/{})".format("", width*"-", 0, 0, view.total)
+        elif command == "end":
+            if view.is_marquee():
+                prog = view.progress+1 if view.progress else 0
+                bar = "[{}{}] ({})".format(width*"o", "", prog)
+            else:
+                bar = "[{}{}] {}% ({}/{})".format(width*"o", "", 100, view.total, view.total)
+        else:
+            return
+    """
 
 #
 #

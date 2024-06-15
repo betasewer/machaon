@@ -43,8 +43,9 @@ class TypeModule:
         from machaon.core.type.instance import AnyType, ObjectType, UnionType
         self.AnyType = AnyType
         self.ObjectType = ObjectType
-        # 特殊型関数
         self.UnionType = UnionType
+        # 初期化コード
+        self._reserved_init_codes: List[str] = [] # default | <fulldescribername>
 
     #
     @property
@@ -64,6 +65,8 @@ class TypeModule:
     #
     def _select_type(self, value:str, code:int, module:str=None) -> Optional[Type]:
         """ このライブラリから型定義を1つ取り出す """
+        self._init_at_first_select_type()
+
         tdef = None
         if code == TYPECODE_FULLNAME:
             tdef = self._defs.get(value)
@@ -92,7 +95,17 @@ class TypeModule:
             return tdef
         else:
             return None
-
+        
+    def _init_at_first_select_type(self):
+        """ 最初に型にアクセスする際に実行される初期化処理 """
+        if self._reserved_init_codes:
+            codes = self._reserved_init_codes[:]
+            self._reserved_init_codes.clear()
+            for code in codes:
+                if code == "default":
+                    self.add_default_module_types()
+                else:
+                    self.use_module_or_package_types(code)
 
     #
     # 型を取得する
@@ -427,6 +440,13 @@ class TypeModule:
         self._defs[qname] = t
         self._lib_typename[t.get_typename()] = [describername or ""]
         self._lib_valuetype[full_qualified_name(t.get_value_type())] = qname
+
+    def reserve_adding_types(self, *codes):
+        """ 型の読み込みを予約する 
+        Params:
+            *codes(str): 'default' = default_module_types | <full describer name>
+        """
+        self._reserved_init_codes.extend(codes)
 
     def update(self, other):
         """ 

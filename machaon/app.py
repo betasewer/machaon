@@ -164,14 +164,14 @@ class AppRoot:
                 self._startuperrors.add(e, message="基本型のロード")
 
         # パッケージマネージャの初期化
-        package_list_dir = self.get_basic_dir()
+        self.pkgmanager = PackageManager(
+            self.get_package_dir(),
+            self.get_credential_dir(),
+            self.pkgoptions
+        )
         if not self.is_ignored_at_startup("packages"):
             try:
-                self.pkgmanager = PackageManager(
-                    self.get_package_dir(),
-                    self.get_credential_dir(),
-                    self.pkgoptions
-                )
+                package_list_dir = self.get_basic_dir()
                 self.pkgmanager.load_packages(package_list_dir)
                 self.pkgmanager.load_database(package_list_dir / "packages.ini")
                 self.pkgmanager.add_to_import_path()
@@ -179,12 +179,9 @@ class AppRoot:
             except Exception as e:
                 self._startuperrors.add(e, message="パッケージマネージャの初期化")
 
-        # 標準モジュールをロードする
-        try:
-            self.typemodule.add_default_module_types()
-        except Exception as e:
-            self._startuperrors.add(e, message="標準モジュールのロード")
-
+        # 標準モジュールのロードを予約する
+        self.typemodule.reserve_adding_types("default")
+        
         # ホットキーの監視を有効化する
         if KeyController.available and not self.is_ignored_at_startup("hotkey"):
             try:

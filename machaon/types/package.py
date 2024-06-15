@@ -28,17 +28,20 @@ class AppPackageType:
             Str:
         """
         is_installed = self.get_manager(spirit).is_installed(package)
+        is_module = package.is_type_modules()
 
-        if package.is_ready():
-            if is_installed:
+        if is_installed:
+            if is_module:
+                if package.is_ready():
+                    return "準備完了"
+                else:
+                    return "利用不可（インストールの記録あり）"
+            else:
                 return "準備完了"
-            else:
-                return "準備完了 (インストールの記録なし)"
         else:
-            if is_installed:
-                return "利用不可（インストールの記録あり）"
-            else:
-                return "利用不可"
+            if is_module and package.is_ready():
+                return "利用可能 (インストールの記録なし)"
+            return "未インストール"
     
     def update_status(self, package: Package, spirit):
         """ @task

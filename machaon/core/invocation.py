@@ -550,3 +550,17 @@ class Bind1stInvocation(BasicInvocation):
         return None
 
     
+def signature_method_from_invocation(invocation: BasicInvocation):
+    """ 引数と返り値のシグニチャ表示専用のメソッドオブジェクトを作成 """
+    from machaon.core.method import Method
+
+    if isinstance(invocation, TypeMethodInvocation):
+        return invocation.get_method()
+    else:
+        meth = Method(invocation.get_method_name())
+        mi = invocation.get_min_arity()
+        mx = invocation.get_max_arity()
+        for i in range(mi):
+            meth.add_parameter(invocation.get_parameter_spec(i))
+        meth.result = MethodResult()
+        return meth

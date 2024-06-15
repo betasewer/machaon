@@ -145,9 +145,51 @@ class ShellLauncher(Launcher):
     def insert_screen_progress_display(self, command, view):
         """ 一行のプログレスバー """
         width = 30
-        if command == "progress" and not view.is_marquee():
-            if view.update_change_bit(width):
-                print("O", end="")
+        
+        start, end = False, False
+        if command == "progress":
+            pass
+        elif command == "start":
+            start = True
+        elif command == "end":
+            end = True
+
+        if view.is_marquee():
+            def bar_format(progress, lb, mb, rb):
+                return "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", progress)
+            bar = view.display_marquee_chars(width, bar_format, start=start, end=end)
+        else:
+            def bar_format(progress, total, percent, mb, rb):
+                return "[{}{}] {}% ({}/{})".format(mb*"o", rb*"-", percent, progress, total)
+            bar = view.display_chars(width, bar_format, start=start, end=end)
+
+        if start and view.title:
+            print(" {}".format(view.title))
+        
+        print("\r " + bar, end='')
+
+        if end:
+            print(" 完了")
+
+        """
+        if command == "progress":            
+            if view.is_marquee():
+                if not view.update_change_bit(30):
+                    return
+                l, m = (
+                    (0, 0.3), (0.33, 0.34), (0.7, 0.3)
+                )[view.lastbit % 3]
+                lb = round(l * width)
+                mb = round(m * width)
+                rb = width - lb - mb
+                bar = "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", view.progress)
+            else:
+                bar_width = round(width * view.get_progress_rate())
+                rest_width = width - bar_width
+                hund = round(view.get_progress_rate() * 100)
+                bar = "[{}{}] {}% ({}/{})".format(bar_width*"o", rest_width*"-", hund, view.progress, view.total)
+
+            print("\r " + bar, end='')
             
         elif command == "start":
             if view.title:
@@ -156,7 +198,6 @@ class ShellLauncher(Launcher):
                 print("   * 処理中...", end="")
             else:
                 print(" |" + "-" * width + "| {}".format(view.total))
-                print("  ", end="")
             
         elif command == "end":
             if view.is_marquee():
@@ -164,6 +205,7 @@ class ShellLauncher(Launcher):
             else:
                 print(" ", end="")
                 print(" 完了")
+        """
 
     def add_chamber_menu(self, chamber):
         pass
@@ -214,13 +256,25 @@ class ShellLauncher(Launcher):
             self._waiting_input_message = True
 
     def run_mainloop(self):
+        import time
+        waiting = 0
         while self._loop:
-            self.update_chamber_messages(None)
-
+            count = self.update_chamber_messages(None)
+            if count > 0:
+                sys.stdout.flush() # バッファを表示する
+            
             if self._waiting_input_message and self.chambers.get_active().is_messages_consumed():
                 self._waiting_input_message = False
                 if not self.execute_input_text():
                     self._waiting_input_message = True # エラーが起きた
+                waiting = 0
+
+            # 高速実行を防ぐ
+            if waiting > 10:
+                time.sleep(0.1)
+            else:
+                waiting += 1
+
 
     def on_exit(self):
         self._loop = False

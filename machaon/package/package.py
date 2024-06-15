@@ -116,7 +116,7 @@ class Package:
         """ エントリポイントのモジュールが読み込み可能かチェックする """
         if self._type == PACKAGE_TYPE_RESOURCE:
             return False
-        elif self._type == PACKAGE_TYPE_MODULES:
+        elif self._type == PACKAGE_TYPE_MODULES:        
             # エントリポイントのモジュールが読み込み可能かチェックする
             if self.entrypoint is None:
                 raise ValueError("エントリモジュールが指定されていません")
@@ -128,7 +128,6 @@ class Package:
                 spec = importlib.util.find_spec(mp)
                 if spec is None:
                     return False
-            
             return True
     
     #
@@ -399,7 +398,7 @@ class PackageManager:
         
         # リストファイルのディレクトリを読み込む
         for f in pkglistdir.listdirfile():
-            if not f.hasext(".packages") or f.hasext(".packages.ini"):
+            if f.name().startswith(".") or not f.hasext(".packages"):
                 continue
             try:
                 self.load_packages_from_file(f)
@@ -452,7 +451,7 @@ class PackageManager:
             raise PackageNotFoundError(name)
         return None
     
-    def getall(self):
+    def getall(self) -> Iterator[Package]:
         """ 全てのパッケージ """
         for pkg in self.packages:
             yield pkg
@@ -808,10 +807,7 @@ def _read_pip_dist_info(directory: Path, pkg_name):
     """ pipがdist-infoフォルダに収めたパッケージの情報を読みとる """
     pkg_name = canonicalize_package_name(pkg_name)
     infodir = None
-    for d in directory.listdirall():
-        if not d.isdir():
-            continue
-
+    for d in directory.listdirdir():
         if d.name().endswith(".dist-info"):
             p = d / "METADATA"
         elif d.name().endswith(".egg-info"):
