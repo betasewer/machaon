@@ -49,19 +49,6 @@ class GenericMethodResolver:
 
 
 
-def resolve_generic_method(name):
-    return _GenericMethodResolver.resolve(name)
-
-def is_resolvable_generic_method(name):
-    return _GenericMethodResolver.is_resolvable(name)
-
-def resolve_generic_method_invocation(name, modbits=None):
-    method = resolve_generic_method(name)
-    if method is None:
-        return None
-    return TypeMethodInvocation(_GenericMethodResolver.type, method, modbits)
-
-
 #
 #
 # 実装

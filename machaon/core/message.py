@@ -11,8 +11,6 @@ from machaon.core.symbol import (
     SIGIL_QUOTERS,
     SIGIL_LINE_QUOTER,
     SIGIL_BEGIN_USER_QUOTER,
-    SIGIL_SELECTOR_NEGATE_RESULT,
-    SIGIL_SELECTOR_BASIC_RECIEVER,
     SIGIL_SELECTOR_TRAILING_ARGS,
     SIGIL_SELECTOR_CONSUME_ARGS,
     SIGIL_SELECTOR_SHOW_HELP,
@@ -561,7 +559,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
     # 先頭に型らしき大文字の識別子が来た
     if name[0].isupper():
         typedecl, sep, method = name.partition(SIGIL_OPERATOR_MEMBER_AT)
-        if sep:
+        if method and sep and typedecl: # すべての要素が存在する
             # セパレータが含まれている場合、外部メソッド呼び出し
             return select_type_method(typedecl, method, modbits, reciever=reciever, context=context)
         else:
@@ -675,8 +673,6 @@ class AffixedSelector:
         ("TRAILING_ARGS", SIGIL_SELECTOR_TRAILING_ARGS),
         ("CONSUME_ARGS", SIGIL_SELECTOR_CONSUME_ARGS),
         ("IGNORE_ARGS", SIGIL_SELECTOR_IGNORE_ARGS),
-        ("NEGATE_RESULT", SIGIL_SELECTOR_NEGATE_RESULT),
-        ("BASIC_RECIEVER", SIGIL_SELECTOR_BASIC_RECIEVER), 
         ("SHOW_HELP", SIGIL_SELECTOR_SHOW_HELP),
     ]
     sigils_suffixes = {ch:name for name,ch in suffixes}

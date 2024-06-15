@@ -1159,7 +1159,7 @@ class MethodResult:
     def set_decorator(self, expr):
         self.decorator = expr
 
-    def make_result_value(self, context, value, *, message=None, negate=False):
+    def make_result_value(self, context, value, *, message=None):
         """ 型を検査しつつオブジェクトから返り値となる値を得る 
         Returns:
             Tuple[TypeProxy, Any]:
@@ -1199,10 +1199,6 @@ class MethodResult:
         # 型拡張がある場合は、適用する
         if extension is not None:
             rettype = extension.load(rettype)
-
-        # NEGATEモディファイアを適用            
-        if negate:
-            value = not value
 
         # 返り値型に値が適合しない場合は、型変換を行う
         if not rettype.check_value_type(type(value)):

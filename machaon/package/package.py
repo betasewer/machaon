@@ -613,14 +613,23 @@ class PackageManager:
         """ パッケージがインストールされたパス """
         if not self.is_installed(pkg.name):
             return None
-        separated_install = self.database.get(pkg.name, "separate")
-        if separated_install:
-            toplevel = self.database.get(pkg.name, "toplevel")
-            if toplevel:
-                return self.dir / toplevel
-            raise ValueError("'toplevel' is undefined in distinfo: {}".format(pkg.name))
+        if pkg.is_type_modules():
+            separated_install = self.database.get(pkg.name, "separate", fallback=False)
+            if separated_install:
+                toplevel = self.database.get(pkg.name, "toplevel", fallback=False)
+                if toplevel:
+                    return self.dir / toplevel
+                raise ValueError("'toplevel' is defined in package.ini: {} (type module)".format(pkg.name))
+            else:
+                raise NotImplementedError()
+        elif pkg.is_dependency_modules() or pkg.is_resource():
+            infodir = self.database.get(pkg.name, "infodir", fallback=None)
+            if infodir:
+                return Path(infodir)
+            raise ValueError("'infodir' is defined in package.ini: {} (dependency)".format(pkg.name))
         else:
-            raise NotImplementedError()
+            raise ValueError("unsupported package type")
+
     
     def query_update_status(self, pkg: Package, *, fallback=True) -> str:
         """ パッケージが最新か、通信して確かめる """

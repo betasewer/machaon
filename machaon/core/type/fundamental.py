@@ -1,6 +1,7 @@
-from machaon.core.symbol import full_qualified_name
+from machaon.core.symbol import full_qualified_name, SIGIL_SELECTOR_SPECIAL_METHOD
 from machaon.core.type.type import Type
 from machaon.core.type.basic import DefaultProxy
+from machaon.core.type.instance import ObjectType
 
 #
 #
@@ -17,22 +18,31 @@ class ObjectCollectionType(Type):
         return make_method_from_value(ObjectCollectionMemberGetter(name), name, METHOD_INVOKEAS_BOUND_FUNCTION)
 
     def select_method(self, name):
-        # 型固有のメソッド
-        meth = super().select_method(name)
-        if meth is not None:
+        if name.endswith(SIGIL_SELECTOR_SPECIAL_METHOD):
+            name = name[:-1]
+            # 型固有のメソッド
+            meth = super().select_method(name)
+            if meth is not None:
+                return meth
+            return None
+        else:
+            # ジェネリックメソッド
+            meth = ObjectType.select_method(name)
+            if meth is not None:
+                return meth
+            # メンバセレクタ 
+            meth = self.spawn_getter(name)
             return meth
-        # ジェネリックメソッド
-        from machaon.types.generic import resolve_generic_method
-        meth = resolve_generic_method(name)
-        if meth is not None:
-            return meth
-        # メンバセレクタ 
-        meth = self.spawn_getter(name)
-        return meth
 
     def is_selectable_method(self, name):
         return True
     
+    def enum_methods(self):
+        # 特殊メソッド語尾を付加する
+        for names, meth in super().enum_methods():
+            names = [x+SIGIL_SELECTOR_SPECIAL_METHOD for x in names]
+            yield names, meth
+
 
 class ObjectCollectionMemberGetter:
     def __init__(self, name):

@@ -119,12 +119,10 @@ class InvocationEntry():
         if self.exception:
             return context.new_invocation_error_object(self.exception, objectType)
     
-        negate = ("NEGATE_RESULT" in self.invocation.modifier) # NEGATEモディファイアを適用
-
         # 型を決めて値を返す
         try:
             rettype, retval = self.result_spec.make_result_value(
-                context, value, message=self.message, negate=negate
+                context, value, message=self.message
             )
             return objectType(rettype, retval)
         except Exception as e:

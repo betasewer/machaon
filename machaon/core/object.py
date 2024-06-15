@@ -189,20 +189,20 @@ class ObjectCollection():
             raise TypeError("type")
         return self.push(name, type.new_object(value))
     
-    def store(self, name: str, obj: Object) -> ObjectCollectionItem:
+    def store(self, name: str, value: Object) -> ObjectCollectionItem:
         # オブジェクトを代入
-        if not isinstance(obj, Object):
+        if not isinstance(value, Object):
             raise TypeError()
         if name in self._namemap:
             idents = self._namemap[name]
             ident = idents[0]
-            item = ObjectCollectionItem(ident, name, obj)
+            item = ObjectCollectionItem(ident, name, value)
             self._items[ident] = item
             for delident in idents[1:]:
                 del self._items[delident]
             return item
         else:
-            return self.push(name, obj)
+            return self.push(name, value)
 
     def pick(self, name) -> Generator[ObjectCollectionItem, None, None]:
         # 名前で検索する
@@ -244,7 +244,7 @@ class ObjectCollection():
     #
     #
     def asdict(self, context):
-        """ @method context alias-name [dict=]
+        """ @method context alias-name [dict]
         Pythonの辞書に変換する。
         Returns:
             Any:
@@ -256,7 +256,7 @@ class ObjectCollection():
         return context.get_py_type(dict).new_object(d)
     
     def keys(self):
-        """ @method alias-name [keys=]
+        """ @method
         キーを列挙する。
         Returns:
             Tuple[str]:
@@ -265,13 +265,22 @@ class ObjectCollection():
             yield name
             
     def values(self):
-        """ @method alias-name [values=]
+        """ @method
         値を列挙する。
         Returns:
             Tuple[Any]:
         """
         for name, ids in self._namemap.items():
             yield self._items[ids[-1]].value
+
+    def method_push(self, key, value):
+        """ @method alias-name [push]
+        値を追加する
+        Params:
+            key(str): キー
+            value(Object): 値
+        """
+        self.store(key, value)
 
     def constructor(self, context, value):
         """ @meta context 

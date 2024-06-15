@@ -35,9 +35,6 @@ def test_function():
     assert get_first_result(ent)
     assert get_first_result(ent).value == plus2mul(2,3)
 
-    inv = FunctionInvocation(divide, modifier={"NEGATE_RESULT"})
-    ent = InvocationEntry(inv, inv.get_action(), (4,2), {})
-    ent.invoke(cxt)
 
     
 def test_bound_method():
