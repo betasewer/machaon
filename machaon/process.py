@@ -950,52 +950,13 @@ class ProcessChamber:
         thread = threading.Thread(name="ProcessSequenceLauncher", target=_launch, args=(self,), daemon=True)
         thread.start()
 
-#
-#
-#
-class DesktopChamber():
-    def __init__(self, name, index):
-        self._index = index
-        self._name = name
-        self._objcol = ObjectCollection()
-        self._msgs = []
-    
-    def get_objects(self):
-        return self._objcol
-
-    def get_index(self): # -
-        return self._index
-    
-    def is_finished(self):
-        return True
-    
-    def is_failed(self):
-        return False
-        
-    def is_waiting_input(self): # -
-        return False
-
-    def handle_messages(self):
-        return []
-
-    def get_handled_messages(self): #
-        msgs = []
-        for item in self._objcol.pick_all():
-            msg = ProcessMessage(object=item.object, deskname=self._index, tag="object-summary", sel=item.selected)
-            msgs.append(msg)
-        return msgs
-
-    def get_title(self): # -
-        title = "机{}. {}".format(self._index+1, self._name)
-        return title
-
 
 #
 #
 #
 class ProcessHive:
     def __init__(self):
-        self.chambers: Dict[int, Union[ProcessChamber,DesktopChamber]] = {}
+        self.chambers: Dict[int, ProcessChamber] = {}
         self._allhistory: List[int] = []
         self._nextindex: int = 0
         self._nextprocindex: int = 0
@@ -1022,14 +983,6 @@ class ProcessHive:
         self.activate(newindex)
         return chamber
 
-    def addnew_desktop(self, name: str, *, activate=True) -> DesktopChamber:
-        newindex = self._nextindex
-        chamber = DesktopChamber(name, newindex)
-        self.chambers[newindex] = chamber
-        self._nextindex += 1
-        self.activate(newindex)
-        return chamber
-    
     # 既存のチャンバーをアクティブにする
     def activate(self, index: int) -> bool:
         if index in self.chambers:
@@ -1057,13 +1010,6 @@ class ProcessHive:
             return self.chambers[ac]
         return None
     
-    def get_last_active_desktop(self):
-        for index in self.rhistory():
-            chm = self.chambers[index]
-            if isinstance(chm, DesktopChamber):
-                return chm
-        return None
-
     def is_active(self, index):
         return self.get_active_index() == index
 
@@ -1118,16 +1064,13 @@ class ProcessHive:
         if index is None or index == "":
             chm = self.get_active()
         elif isinstance(index, str):
-            if index=="desktop":
-                chm = self.processhive.get_last_active_desktop()
-            else:
-                try:
-                    index = int(index, 10)-1
-                except ValueError:
-                    raise ValueError(str(index))
-                chm = self.get(index)
-                if activate:
-                    self.activate(index)
+            try:
+                index = int(index, 10)-1
+            except ValueError:
+                raise ValueError(str(index))
+            chm = self.get(index)
+            if activate:
+                self.activate(index)
         elif isinstance(index, int):
             chm = self.get(index)
             if activate:

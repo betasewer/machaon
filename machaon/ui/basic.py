@@ -41,10 +41,6 @@ system_message_tags = {
     #       削除を開始する行のインデックス（-1で末尾）
     #   count: 
     #       削除する行数
-    "object-summary",
-    # オブジェクトの省略表記をグラフィカルに表示する。
-    # Params:
-    #   (no parameter)
     "object-sheetview",       
     # 表組を画面に表示する。  
     # Params:
@@ -93,10 +89,6 @@ class Launcher():
         self.app = app
         self.keymap.load(self.app)
         self.init_screen()
-        # デスクトップの追加
-        #deskchamber = self.app.select_chamber("desktop")
-        #self.update_active_chamber(deskchamber, updatemenu=False)
-        #self.add_chamber_menu(deskchamber)
     
     def init_screen(self):
         pass
@@ -134,9 +126,6 @@ class Launcher():
                 key, = msg.req_arguments("key")
                 view = self.update_progress_display_view(command, key, msg.args)
                 self.insert_screen_progress_display(command, view)
-            
-            elif tag == "object-summary":
-                self.insert_screen_object_summary(msg)
             
             elif tag == "object-sheetview":
                 rows, columns, context = msg.req_arguments("rows", "columns", "context")
@@ -216,9 +205,6 @@ class Launcher():
     def insert_screen_progress_display(self, command, view):
         raise NotImplementedError()
 
-    def insert_screen_object_summary(self, msg):
-        raise NotImplementedError()
-    
     def insert_screen_canvas(self, canvas):
         raise NotImplementedError()
     

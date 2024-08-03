@@ -265,7 +265,7 @@ class tkLauncher(Launcher):
 
         self.frame = ttk.Frame(self.rootframe)
         self.frame.pack(fill=tk.BOTH, expand=1, padx=padx, pady=pady)
-
+    
         # コマンド入力欄
         self.commandpanel = self.addframe(self.frame)
         self.commandline = tk.Text(self.commandpanel, relief="solid", height=2)
@@ -286,9 +286,7 @@ class tkLauncher(Launcher):
         self.log.tag_configure("hyperlink", underline=1)
         self.log.tag_bind("clickable", "<Enter>", self.hyper_enter)
         self.log.tag_bind("clickable", "<Leave>", self.hyper_leave)
-        self.log.tag_bind("clickable", "<Button-1>", self.hyper_select)
-        self.log.tag_bind("clickable", "<Control-Button-1>", self.hyper_open)
-        self.log.tag_bind("clickable", "<Double-Button-1>", self.hyper_copy_input_text)
+        self.log.tag_bind("clickable", "<Button-1>", self.hyper_open)
 
         # オブジェクトウィンドウ
         #self.objdesk = tk.Text(self.frame, wrap=wrap_option, font="TkFixedFont", relief="solid", width=50)
@@ -348,7 +346,7 @@ class tkLauncher(Launcher):
         self.bind_event("<FocusOut>", "fields", self.keymap.wrap_ui_handler(self.keymap.FocusOut, self))
 
         # ドラッグアンドドロップの初期化
-        self.dnd.enter(self)
+        #self.dnd.enter(self)
 
     #
     #
@@ -472,14 +470,6 @@ class tkLauncher(Launcher):
         self.log.configure(state='disabled')
         self.log.mark_unset(*usedmarks)
 
-    def insert_screen_object_summary(self, msg):
-        obj = msg.argument("object")
-        deskname = msg.argument("deskname")
-        sel = msg.argument("sel") 
-        self.log.configure(state='normal')
-        screen_insert_object(self, self.log, deskname, obj, sel)
-        self.log.configure(state='disabled')
-        
     def insert_screen_canvas(self, canvas):
         """ ログ欄に図形を描画する """
         self.log.configure(state='normal')
@@ -565,81 +555,6 @@ class tkLauncher(Launcher):
                 webbrowser.open_new_tab(link)
         return "break"
 
-    def hyper_select(self, _event):
-        cur = TextIndex(self.log.index(tk.CURRENT))
-
-        ppoints = self.log.tag_prevrange("hyperlink", tk.CURRENT)
-        if ppoints and cur.compare(TextIndex(ppoints[1])) >= 0:
-            beg, end = ppoints[0], ppoints[1]
-        else: 
-            # rend -> compare の順になっている
-            npoints = self.log.tag_nextrange("hyperlink", tk.CURRENT)
-            if not npoints:
-                return
-            beg, end = npoints[0], npoints[1]
-            
-        self.log_set_selection(beg, end)
-        self.hyper_select_object(beg)
-        return "break"
-        
-    def hyper_select_object(self, index):
-        # リンクからオブジェクトを取り出す        
-        link, label = self.hyper_resolve_link(index)
-
-        if label is DataItemTag.HYPERLABEL:
-            # データビューのアイテム
-            dataname, itemindex = DataItemTag.parse(link)
-            if self.select_screen_setview_item(dataname, itemindex, charindex=index):
-                return True
-
-        elif label is ObjectTag.HYPERLABEL:
-            # オブジェクト
-            deskname, objname = ObjectTag.parse(link)
-            if self.select_screen_object_on_desktop(deskname, objname, charindex=index):
-                return True
-
-        return False
-
-    def hyper_select_next(self):
-        _beg, end = text_get_first_tag_range(self.log, "log-selection")
-        if end is None:
-            end = 1.0
-        points = self.log.tag_nextrange("hyperlink", end)
-        if not points:
-            # 先頭に戻る
-            points = self.log.tag_nextrange("hyperlink", "1.0")
-            if not points:
-                return
-
-        self.log_set_selection(points[0], points[1])
-        self.hyper_select_object(points[0])
-        self.log.see(points[1])
-    
-    def hyper_select_prev(self):
-        beg, _end = text_get_first_tag_range(self.log, "log-selection")
-        if beg is None:
-            beg = tk.END
-        points = self.log.tag_prevrange("hyperlink", beg)
-        if not points:
-            # 末尾に戻る
-            points = self.log.tag_prevrange("hyperlink", tk.END)
-            if not points:
-                return
-
-        self.log_set_selection(points[0], points[1])
-        self.hyper_select_object(points[0])
-        self.log.see(points[1])
-
-    def hyper_copy_input_text(self, _event):
-        """ クリックされたハイパーリンクを入力欄に追加する """
-        link, label = self.hyper_resolve_link(tk.CURRENT)
-        if label is ObjectTag.HYPERLABEL:
-            return
-        if os.path.exists(link):
-            link = os.path.relpath(link, self.app.get_current_dir()) # 存在するパスであれば相対パスに直す
-        self.insert_input_text(link)
-        return "break"
-
     #
     # 選択
     #
@@ -698,41 +613,14 @@ class tkLauncher(Launcher):
     #
     #
     def insert_screen_setview(self, rows, columns, dataid, context):
+        """ リストを挿入する """
         self.log.configure(state='normal')
         screen_sheetview_generate(self, self.log, rows, columns, dataid)
         self.log.insert("end", "\n")
         self.log.configure(state='disabled')
-    
-    def select_screen_setview_item(self, dataname, index, charindex):
-        viewtype, dataid = dataname.split("@")
-        self.log.configure(state='normal')
-        screen_sheetview_select_item(self, self.log, charindex, dataid)
-        self.log.configure(state='disabled')
-        return True
-    
-    def select_screen_object_on_desktop(self, deskname, objname, charindex):
-        # オブジェクトを選択する
-        objdesk = self.app.select_desktop(deskname)
-        if objdesk is None:
-            return False
-        obj = objdesk.pick(objname)
-        if obj is None:
-            return False
-        
-        # 選択状態を切り替える
-        sel = not objdesk.is_selected(objname)
-        objdesk.select(objname, sel)
 
-        # 描画を更新する
-        self.log.configure(state='normal')
-        screen_select_object(self, self.log, charindex, ObjectTag.make(deskname,objname), sel)
-        self.log.configure(state='disabled')
-        return True
-
-    #
-    #
-    #
     def insert_screen_progress_display(self, command, view):
+        """ プログレスバーを挿入する """
         width = 30
         
         start, end = False, False
@@ -1108,7 +996,7 @@ class tkLauncher(Launcher):
 #
 
 #
-# Dataview Table
+# Sheet
 #
 # ui, wnd, rows, columns, colmaxwidths, dataname
 def screen_sheetview_generate(ui, wnd, rows, columns, dataname):
@@ -1151,26 +1039,6 @@ def screen_sheetview_generate(ui, wnd, rows, columns, dataname):
             start += w
             tabs.append(start)
         wnd.tag_configure(sheettag, tabs=tabs)
-
-
-
-def screen_sheetview_select_item(ui, wnd, charindex, _dataid):
-    wnd.configure(state='normal')
-    
-    selpoints = wnd.tag_ranges("log-item-selection")
-    if selpoints:
-        for i in range(0, len(selpoints), 2):
-            wnd.tag_remove("log-item-selection", selpoints[i], selpoints[i+1])
-        olinehead = TextIndex(selpoints[0]).move(char=0)
-        wnd.delete(str(olinehead), str(olinehead.moved(char=2)))
-        wnd.insert(str(olinehead), "  ")
-    
-    linehead = TextIndex(charindex).move(char=0)
-    wnd.tag_add("log-item-selection", str(linehead), str(linehead.moved(char="end")))
-    wnd.delete(str(linehead), str(linehead.moved(char=2)))
-    wnd.insert(str(linehead), "->", "log-item-selection")
-    
-    wnd.configure(state='disabled')
 
 #
 # Tuple 
@@ -1442,11 +1310,9 @@ class TkKeymap(KeybindMap):
         return "break"
     
     def LogScrollNextProcess(self, ui, e):
-        ui.hyper_select_next()
         return "break"
 
     def LogScrollPrevProcess(self, ui, e):
-        ui.hyper_select_prev()
         return "break"
         
     def LogInputSelection(self, ui, e):
