@@ -123,8 +123,8 @@ class Launcher():
             
             elif tag == "progress-display":
                 command = msg.text
-                key, = msg.req_arguments("key")
-                view = self.update_progress_display_view(command, key, msg.args)
+                key, iproc = msg.req_arguments("key", "process")
+                view = self.update_progress_display_view(command, iproc, key, msg.args)
                 self.insert_screen_progress_display(command, view)
             
             elif tag == "object-sheetview":
@@ -161,9 +161,7 @@ class Launcher():
                 context = process.get_last_invocation_context()
                 error = ErrorObject(e, context=context)
                 # エラーメッセージをUIに転送し、ただちにメッセージを取得して表示する
-                error.pprint(context.spirit) 
-                for msg in process.handle_post_message():
-                    self.message_handler(msg, nested=True)
+                context.spirit.instant_pprint(error)
                 # コンテキストにエラーオブジェクトを設定し、メッセージの実行を終了
                 errobj = context.new_invocation_error_object(error)
                 context.push_extra_exception(errobj)
@@ -239,7 +237,7 @@ class Launcher():
         else:
             # メッセージを実行する
             sentence = ProcessSentence(message)
-            if not self.app.eval_object_message(sentence):
+            if self.app.eval_object_message(sentence) is None:
                 return False
         
             # 入力履歴に追加する
@@ -396,15 +394,16 @@ class Launcher():
     #
     #
     #
-    def update_progress_display_view(self, command, key, args):        
+    def update_progress_display_view(self, command, process_index, key, args):  
+        progkey = "{}.{}".format(process_index, key)      
         if command == "start":
-            v = ProgressDisplayView(key, total=args.get("total"), title=args.get("title"))
-            self.progress_displays[key] = v
+            v = ProgressDisplayView(progkey, total=args.get("total"), title=args.get("title"))
+            self.progress_displays[progkey] = v
             return v
         else:
-            v = self.progress_displays.get(key)
+            v = self.progress_displays.get(progkey)
             if v is None:
-                raise ValueError(key)
+                raise ValueError(progkey)
             if command == "progress":
                 v.update(args.get("progress"))
             elif command == "end":
@@ -511,7 +510,7 @@ class ProgressDisplayView:
         return round(self.total)
 
     def get_progress_rate(self):
-        if self.total is None:
+        if self.total is None or self.progress is None:
             return None
         return self.progress / self.total
     
@@ -584,38 +583,6 @@ class ProgressDisplayView:
             rb = charwidth - lb - mb
             return format(self.progress, lb, mb, rb)
 
-
-    """
-        if self.is_marquee():
-            if not self.update_change_bit(charwidth):
-                return
-            l, m = (
-                (0, 0.3), (0.33, 0.34), (0.7, 0.3)
-            )[self.lastbit % 3]
-            lb = round(l * charwidth)
-            mb = round(m * charwidth)
-            rb = charwidth - lb - mb
-            return format(self.progress, )
-            bar = "[{}{}{}] ({})".format(lb*"-", mb*"o", rb*"-", self.progress)
-        else:
-            bar_width = round(width * view.get_progress_rate())
-            rest_width = width - bar_width
-            hund = round(view.get_progress_rate() * 100)
-            bar = "[{}{}] {}% ({}/{})".format(bar_width*"o", rest_width*"-", hund, view.progress, view.total)
-                    
-
-        if command == "progress":
-        elif command == "start":
-            bar = "[{}{}] {}% ({}/{})".format("", width*"-", 0, 0, view.total)
-        elif command == "end":
-            if view.is_marquee():
-                prog = view.progress+1 if view.progress else 0
-                bar = "[{}{}] ({})".format(width*"o", "", prog)
-            else:
-                bar = "[{}{}] {}% ({}/{})".format(width*"o", "", 100, view.total, view.total)
-        else:
-            return
-    """
 
 #
 #

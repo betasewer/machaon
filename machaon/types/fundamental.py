@@ -122,14 +122,14 @@ class TypeType:
         if intr:
             meths_sheet = context.new_object(intr, conversion="Sheet[Method]")
             meths_sheet.value.view(context, "names", "signature", "doc")
-            meths_sheet.pprint(app)
+            app.instant_pprint(meths_sheet)
 
         # 外部メソッド
         if extr:
             app.post("message", "［外部メソッド］")
             meths_sheet = context.new_object(extr, conversion="Sheet[Method]")
             meths_sheet.value.view(context, "names", "signature", "doc")
-            meths_sheet.pprint(app)
+            app.instant_pprint(meths_sheet)
 
     def methods(self, typ, context, app, instance=None):
         '''@task context

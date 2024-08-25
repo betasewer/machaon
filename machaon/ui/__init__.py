@@ -31,6 +31,8 @@ def new_launcher(ui=None, **args):
             return tk_launcher(args)
         else:
             return shell_launcher(args)
+        
+    return ui
     
 def has_tk():
     tk = importlib.util.find_spec("tkinter")

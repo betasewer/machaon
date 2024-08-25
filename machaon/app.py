@@ -75,7 +75,7 @@ class AppRoot:
     def initialize_as_server(self, **args):
         """ サーバー実行用に初期化し、サーバーアプリを返す """
         self.initialize(ui="headless", ignore_hotkeys=True, **args)
-        from machaon.ui.server.macaserver import machaon_server
+        from machaon.ui.server.macasocket import machaon_server
         return machaon_server(self)
 
     def get_ui(self):
@@ -330,12 +330,16 @@ class AppRoot:
     # コマンド処理の流れ
     #
     def eval_object_message(self, sentence: ProcessSentence):
+        """ メッセージを実行しプロセスを起動する 
+        Returns:
+            Int: 起動されたプロセスID
+        """
         if sentence.is_empty():
-            return False
+            return
         elif sentence.at_exit():
             # 終了コマンド
             self.exit()
-            return False
+            return
 
         # 実行
         process = self.processhive.new_process(sentence)
@@ -348,9 +352,9 @@ class AppRoot:
         else:
             chamber = self.processhive.get_active()
             if chamber.add(process) is None:
-                return False # 他のプロセスが実行中
+                return # 他のプロセスが実行中
 
-        return True
+        return process.get_index()
     
     def create_root_context(self, process=None):
         """ 実行コンテキストを作成する """

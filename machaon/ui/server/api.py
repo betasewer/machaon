@@ -2,6 +2,7 @@
 from http import HTTPStatus
 import json
 import urllib.parse
+import datetime
 
 from machaon.core.symbol import full_qualified_name
 from machaon.ui.server.wsgi import WSGIRequest
@@ -332,3 +333,21 @@ class ApiServerApp:
 
 
 
+#
+#
+#
+def serialize_json(x):
+    if x is None or isinstance(x, (int, str, float, bool)):
+        return x
+    elif isinstance(x, datetime.datetime):
+        return x.strftime("%Y/%m/%d %H:%M:%S")
+    elif isinstance(x, datetime.date):
+        return x.strftime("%Y/%m/%d")
+    elif isinstance(x, (list, tuple)):
+        return type(x)(serialize_json(v) for v in x)
+    elif isinstance(x, dict):
+        return {serialize_json(k):serialize_json(v) for k,v in x.items()}
+    elif hasattr(x, "stringify"):
+        return x.stringify()
+    else:
+        return repr(x)

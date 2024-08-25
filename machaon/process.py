@@ -572,6 +572,12 @@ class Spirit():
         """ ファイルパス操作オブジェクト """
         from machaon.types.shell import Path
         return Path(p)
+    
+    def instant_pprint(self, value):
+        """ pprintを実行した後、メッセージをただちに処理する """
+        value.pprint(self)
+        for msg in self.process.handle_post_message(None):
+            self.get_ui().message_handler(msg, nested=True)
 
 #
 #
