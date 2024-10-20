@@ -121,7 +121,7 @@ class TypeProxy:
         raise NotImplementedError()
 
     # 特殊メソッド
-    def constructor(self, context, args):
+    def constructor(self, context, args, typeargs):
         """ オブジェクトを構築する """
         raise NotImplementedError()
     

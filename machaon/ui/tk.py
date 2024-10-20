@@ -639,6 +639,8 @@ class tkLauncher(Launcher):
             def bar_format(progress, total, percent, mb, rb):
                 return "[{}{}] {}% ({}/{})".format(mb*"o", rb*"-", percent, progress, total)
             bar = view.display_chars(width, bar_format, start=start, end=end)
+        if bar is None:
+            return
 
         if view.title:
             header = "{}: ".format(view.title)

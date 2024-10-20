@@ -1,4 +1,4 @@
-from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator
+from typing import DefaultDict, Any, List, Sequence, Dict, Tuple, Optional, Union, Generator, TYPE_CHECKING
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.symbol import (
@@ -12,17 +12,12 @@ from machaon.core.type.alltype import (
 from machaon.core.invocation import (
     BasicInvocation, InvocationEntry
 )
+if TYPE_CHECKING:
+    from machaon.app import AppRoot
+    from machaon.process import Process, Spirit
+    from machaon.core.message import MessageTokenizer, MessageEngine
 
 #    
-LOG_MESSAGE_BEGIN = 1
-LOG_MESSAGE_CODE = 2
-LOG_MESSAGE_EVAL_READY = 4
-LOG_MESSAGE_EVAL_BEGIN = 5
-LOG_MESSAGE_EVAL_END = 6
-LOG_MESSAGE_AST = 7
-LOG_MESSAGE_END = 10
-LOG_MESSAGE_BEGIN_SUB = 11
-
 def instant_return_test(context, value, typename):
     """ メソッド返り値テスト用 """
     from machaon.core.invocation import BasicInvocation, InvocationEntry
@@ -42,6 +37,173 @@ INVOCATION_FLAG_INHERIT_REMBIT_SHIFT = 32
 #
 #
 #
+class ContextLog:
+    isnull = False
+
+    def __init__(self):
+        self.msg: 'MessageEngine' = None
+        self.logs = [] # [int, ...args][]
+        self.finished = False
+
+    @property
+    def started(self):
+        return self.msg is not None
+    
+    @property
+    def message(self):
+        if not self.started:
+            raise ValueError('not started log')
+        return self.msg.source
+    
+    @property
+    def tokens(self):
+        if not self.started:
+            raise ValueError('not started log')
+        return self.msg.get_tokens()
+
+    def message_start(self, message: 'MessageEngine'):
+        self.msg = message
+
+    def message_end(self):
+        self.finished = True
+
+    def message_code(self, code: Any, token: str, tokentype: int):
+        self.logs.append(('code', code, token, tokentype))
+
+    def message_ast(self, subcode: str, stackindex: int = None):
+        self.logs.append(('ast', subcode, stackindex))
+
+    def message_rsv(self, subcode: str, hint: str = None):
+        self.logs.append(('rsv', subcode, hint))
+
+    def message_evaluating(self, message_index: int, source: str):
+        self.logs.append(('eval-ready', source, message_index))
+
+    def message_eval_start(self, invocation_index: int):
+        self.logs.append(('eval-start', invocation_index))
+
+    def message_eval_end(self, invocation_index: int):
+        self.logs.append(('eval-end', invocation_index))
+        
+    def message_start_sub(self, subcontext):
+        self.logs.append(('begin-sub', subcontext))
+
+    def pprint(self, context: 'InvocationContext', printer):
+        from machaon.core.message import display_syntactic_token
+        def put(level: int, s: str):
+            indent = " " + (level-1) * "  "
+            printer(indent + s)
+        subindex = None
+        for code, *args in self.logs:
+            if code == 'code':
+                ccode = args[0]
+                token = args[1]
+                stxtoken = display_syntactic_token(args[2])
+                if stxtoken:
+                    if token:
+                        tokenchar = "{} [{}]".format(token, stxtoken)
+                    else:
+                        tokenchar = "[{}]".format(stxtoken)
+                else:
+                    tokenchar = token
+                printer(" parse token: {}".format(tokenchar))
+                for line in ccode.display_instructions():
+                    printer("   do instruction:")
+                    printer("     {}".format(line))
+
+            elif code == 'ast':
+                xcode = args[0]
+                index = args[1]
+                if xcode == 'msgbegin':
+                    printer("   begin message<{}>".format(index))
+                elif xcode == 'msgend':
+                    printer("   end message<{}>".format(index))
+                elif xcode == 'blockbegin':
+                    printer("   begin block, from message<{}>".format(index))
+                elif xcode == 'blockend':
+                    printer("   end block, to message<{}>".format(index))
+                elif xcode == 'allblockend':
+                    printer("   end all block")
+                elif xcode == 'conauto':
+                    printer(" implicit message evaluation")
+                elif xcode == 'conexpl':
+                    printer(" explicit message evaluation")
+                else:
+                    raise ValueError("Unknown message-ast subcode: {}".format(xcode))
+                
+            elif code == 'rsv':
+                xcode = args[0]
+                hint = args[1]
+                printer("   resolving:")
+                if xcode == 'ctor':
+                    printer("     constructor '{}'".format(hint))
+                elif xcode == 'ex-method':
+                    printer("     external method of {}".format(hint))
+                elif xcode == 'method':
+                    printer("     method {}".format(hint))
+                elif xcode == 'common-method':
+                    printer("     Object method {}".format(hint))
+                elif xcode == 'dyn-method':
+                    printer("     instance method {}".format(hint))
+                else:
+                    raise ValueError("Unknown log code: {}".format(xcode))
+
+            elif code == 'eval-ready':
+                src = args[0]
+                printer("   message: {}".format(src))
+
+            elif code == 'eval-start':
+                invindex: int = args[0]
+                printer("   invocation: {}".format(context.invocations[invindex].message.sexpr()))
+
+            elif code == 'eval-end':
+                invindex: int = args[0]
+                printer("   invoked:")
+                inv = context.invocations[invindex]
+                if inv.is_failed():
+                    printer("     error occurred:")
+                    printer("     {}".format(inv.result.value.display_exception()))
+                else:
+                    printer("     return:")
+                    printer("     {}".format(inv.result))
+            
+            elif code == 'begin-sub':
+                if subindex is None: 
+                    subindex = 0
+                subindex += 1
+                continue
+            else:
+                raise ValueError("Unknown log code: {}".format(code))
+            
+        if subindex is not None:
+            title = "sub-contexts"
+            if subindex > 1:
+                line = "0-{}".format(subindex-1)
+            else:
+                line = "0"
+            pad = 16-len(title)
+            printer(" {}:{}{}".format(title, pad*" ", line))
+
+    def get_instructions(self):
+        for code, *values in self.logs:
+            if code == 'code':
+                yield values[0]
+
+
+class NullContextLog:
+    isnull = True
+
+    def __getattr__(self, name):
+        return self.nop
+
+    def nop(self, *_args):
+        pass
+
+
+
+#
+#
+#
 class InvocationContext:
     """ @type [Context]
     メソッドの呼び出しコンテキスト。
@@ -50,20 +212,19 @@ class InvocationContext:
         self.type_module: TypeModule = type_module
         self.input_objects: ObjectCollection = input_objects  # 外部のオブジェクト参照
         self.subject_object: Union[None, Object, Dict[str, Object]] = subject       # 無名関数の引数とするオブジェクト
-        self.spirit = spirit
+        self.spirit: 'Spirit' = spirit
         self.invocations: List[InvocationEntry] = []
         self.invocation_flags = flags
         self._extra_exception = None
-        self._log = []
-        self.log = self._add_log
+        self._log = ContextLog()
         self.herepath = herepath
         self.parent = parent # 継承元のコンテキスト
-    
+
     def get_spirit(self):
         return self.spirit
     
     @property
-    def root(self):
+    def root(self) -> 'AppRoot':
         return self.spirit.root
     
     #
@@ -132,8 +293,16 @@ class InvocationContext:
         if elem:
             return elem.object
         return None
+    
+    def get_process_object(self, id: int = None) -> Optional[Object]:
+        if id is None:
+            proc = self.spirit.get_process()
+            if proc is None:
+                return None
+            id = proc.get_index()
+        return self.get_object(str(id))
         
-    def get_previous_object(self, delta) -> Optional[Object]:
+    def get_previous_process_object(self, delta) -> Optional[Object]:
         proc = self.spirit.get_process()
         if proc is None:
             return None
@@ -151,6 +320,9 @@ class InvocationContext:
 
     def push_object(self, name: str, obj: Object):
         self.input_objects.push(name, obj)
+
+    def push_process_object(self, id: int, obj: Object):
+        self.push_object(str(id), obj)
         
     def bind_object(self, name: str, obj: Object):
         if not is_valid_object_bind_name(name):
@@ -159,6 +331,12 @@ class InvocationContext:
     
     def store_object(self, name: str, obj: Object):
         self.input_objects.store(name, obj)
+
+    def remove_object(self, name: str):
+        self.input_objects.delete(name)
+
+    def remove_process_object(self, id: int):
+        self.remove_object(str(id))
     
     #
     def set_subject(self, subject: Object):
@@ -289,13 +467,13 @@ class InvocationContext:
         else:
             self.invocations.append(entry)
         index = len(self.invocations)-1
-        self.log(LOG_MESSAGE_EVAL_BEGIN, index)
+        self.log.message_eval_start(index)
         return index
 
     def finish_invocation(self):
         """ 呼び出しの直後に """
         index = len(self.invocations)-1
-        self.log(LOG_MESSAGE_EVAL_END, index)
+        self.log.message_eval_end(index)
         return index
     
     def get_last_invocation(self) -> Optional[InvocationEntry]:
@@ -351,41 +529,19 @@ class InvocationContext:
         """
         return self.spirit.process
     
-    def _add_log(self, logcode, *args):
-        """ 実行ログを追加する """
-        self._log.append((logcode, *args))
-
     def enable_log(self):
-        self.log = self._add_log
+        if self._log.isnull:
+            self._log = ContextLog()
 
     def disable_log(self):
         """ ログを蓄積しない """
-        self.log = _context_no_log
+        if not self._log.isnull:
+            self._log = NullContextLog()
 
-    def log_message_begin(self, s):
-        """ """
-        self.log(LOG_MESSAGE_BEGIN, s)
+    @property
+    def log(self):
+        return self._log
 
-    def log_message_code(self, c):
-        """ """
-        self.log(LOG_MESSAGE_CODE, c)
-
-    def log_message_ast(self, stackindex, isbegin):
-        """ """
-        self.log(LOG_MESSAGE_AST, stackindex, isbegin)
-
-    def log_message_eval(self, message_index, msgsrc, msg):
-        """ """
-        self.log(LOG_MESSAGE_EVAL_READY, msgsrc, "[{}] {}".format(message_index, msg.sexpr()))
-    
-    def log_message_end(self):
-        """ """
-        self.log(LOG_MESSAGE_END)
-    
-    def log_message_begin_sub(self, sub):
-        """ """
-        self.log(LOG_MESSAGE_BEGIN_SUB)
-        
     def pprint_log(self, printer=None):
         """ 蓄積されたログを出力する """
         if printer is None: 
@@ -395,70 +551,10 @@ class InvocationContext:
             printer(" --- no log ---")
             return
         
-        subindex = None
-        for code, *args in self._log:
-            if code == LOG_MESSAGE_BEGIN:
-                message = args[0]
-                printer(" start:")
-                printer("  {}".format(message))
-            
-            elif code == LOG_MESSAGE_CODE:
-                ccode = args[0]
-                printer(" instruction:")
-                for line in ccode.display_instructions():
-                    printer("  {}".format(line))
-
-            elif code == LOG_MESSAGE_AST:
-                index = args[0]
-                code = args[1]
-                if code == 1:
-                    printer(" begin message [{}]:".format(index))
-                elif code == 2:
-                    printer(" end message [{}]:".format(index))
-                elif code == 10:
-                    printer(" begin block, from message [{}]:".format(index))
-                elif code == 20:
-                    printer(" end current block, to message [{}]:".format(index))
-                elif code == 21:
-                    printer(" end last block, to message [{}]:".format(index))
-                elif code == 22:
-                    printer(" end all block:")
-                
-            elif code == LOG_MESSAGE_EVAL_READY:
-                src = args[0]
-                eview = args[1]
-                printer(" evaluating:")
-                printer("  {}".format(src))
-                printer("  {}".format(eview))
-
-            elif code == LOG_MESSAGE_EVAL_BEGIN:
-                invindex = args[0]
-                printer(" eval:")
-                printer("  {}".format(self.invocations[invindex].message.sexpr()))
-
-            elif code == LOG_MESSAGE_EVAL_END:
-                invindex = args[0]
-                printer(" return value:")
-                printer("  {}".format(self.invocations[invindex].result))
-            
-            elif code == LOG_MESSAGE_END:
-                printer(" reached end")
-            
-            elif code == LOG_MESSAGE_BEGIN_SUB:
-                if subindex is None: subindex = 0
-                subindex += 1
-                continue
-            else:
-                raise ValueError("不明なログコード:"+",".join([code,*args]))
-            
-        if subindex is not None:
-            title = "sub-contexts"
-            if subindex > 1:
-                line = "0-{}".format(subindex-1)
-            else:
-                line = "0"
-            pad = 16-len(title)
-            printer(" {}:{}{}".format(title, pad*" ", line))
+        printer(" start.")
+        printer("   {}".format(self._log.message))
+        
+        self._log.pprint(self, printer)
 
         if self._extra_exception:
             from machaon.types.stacktrace import ErrorObject
@@ -466,6 +562,9 @@ class InvocationContext:
             for err in ErrorObject(self._extra_exception, context=self).chain():
                 names.append(err.get_error_typename())
             printer("  ERROR: {}".format(" <- ".join(names)))
+
+        if self._log.finished:
+            printer(" end.")
         
     def get_message(self):
         """ @method alias-name [message] 
@@ -473,9 +572,8 @@ class InvocationContext:
         Returns:
             Str:
         """
-        for code, *values in self._log:
-            if code == LOG_MESSAGE_BEGIN:
-                return values[0]
+        if self._log is not None and self._log.started:
+            return self._log.message
         raise ValueError("実行ログに記録がありません")
     
     def get_invocations(self):
@@ -536,9 +634,9 @@ class InvocationContext:
         Decorates:
             @ view: display-instructions
         """
-        for code, *values in self._log:
-            if code == LOG_MESSAGE_CODE:
-                yield values[0]
+        if self._log.isnull:
+            return
+        yield from self._log.get_instructions()
 
     def get_subcontext(self, index):
         """ @method alias-name [sub-context sub]
@@ -620,6 +718,16 @@ class InvocationContext:
             return lines
         else:
             return sep.join(lines)
+        
+    def display_error_part(self):
+        """ @method
+        Returns:
+            Str:
+        """
+        if self._log is not None and self._log.started:
+            readed, unreaded = self._log.tokens.get_readed(self._log.message)
+            return readed.rstrip() + " <<ここでエラー>> " + unreaded.strip() + ' [end]'
+        return "<undefined message source>"
 
     def constructor(self, context, value):
         """ @meta context 

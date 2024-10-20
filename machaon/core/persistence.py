@@ -144,7 +144,7 @@ class StoredMessage():
             Object:
         """
         o = self.do(context, None)
-        context.push_object(self.name, o)
+        context.bind_object(self.name, o)
         context.spirit.post("message", "'{}'からロード => @{}".format(self.path, self.name))
         return o
 

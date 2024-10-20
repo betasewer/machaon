@@ -96,13 +96,22 @@ class RootObject:
         モジュールを読み込む
         Params:
             +names(Str):
+        Returns:
+            Sheet[ObjectCollection]:
+        Decorates:
+            @ view: descname success result
         """
+        rows = []
         from machaon.core.symbol import DefaultModuleNames
         for name in names:
             if name in DefaultModuleNames: # デフォルトモジュールを除外する
                 continue
-            self.root.typemodule.use_module_or_package_types(name, fallback=True)
-        self.root.typemodule.check_loading()
+            for success, descname, result in self.root.typemodule.defines_module_or_package_types(name, fallback_overlap=True):
+                rows.append({'success': success, 'descname': descname, 'result': result})
+        for typename, descs in self.root.typemodule.get_remained_mixin_targets():
+            for desc in descs:
+                rows.append({'success': False, 'descname': desc.get_full_qualname(), 'result': ValueError("ミキシン対象の型'{}'が見つかりません".format(typename))})
+        return rows
 
     def types(self, spirit):
         """ @task

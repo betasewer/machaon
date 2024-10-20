@@ -9,7 +9,8 @@ from collections import namedtuple
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.type.typemodule import TypeModule
 from machaon.core.error import ErrorSet
-from machaon.process import ProcessSentence, Spirit, TempSpirit, ProcessHive, ProcessChamber, ProcessSentence
+from machaon.core.context import InvocationContext
+from machaon.process import Process, ProcessSentence, Spirit, TempSpirit, ProcessHive, ProcessChamber, ProcessSentence
 from machaon.package.package import PackageManager
 from machaon.package.auth import CredentialDir
 from machaon.platforms import is_osx, is_windows, shellpath
@@ -329,22 +330,21 @@ class AppRoot:
     #
     # コマンド処理の流れ
     #
-    def eval_object_message(self, sentence: ProcessSentence):
+    def eval_object_message(self, sentence: ProcessSentence, *, norun=False):
         """ メッセージを実行しプロセスを起動する 
         Returns:
             Int: 起動されたプロセスID
         """
         if sentence.is_empty():
-            return
+            return None
         elif sentence.at_exit():
             # 終了コマンド
             self.exit()
-            return
+            return None
 
         # 実行
         process = self.processhive.new_process(sentence)
         context = self.create_root_context(process)
-        process.start_process(context) # メッセージを実行する
 
         # 表示を更新する
         if sentence.at_new_chamber():
@@ -352,13 +352,15 @@ class AppRoot:
         else:
             chamber = self.processhive.get_active()
             if chamber.add(process) is None:
-                return # 他のプロセスが実行中
+                return None # 他のプロセスが実行中
 
-        return process.get_index()
+        runner = AppProcessStarter(process, context)
+        if not norun:
+            runner() # メッセージを実行する
+        return runner
     
     def create_root_context(self, process=None):
         """ 実行コンテキストを作成する """
-        from machaon.core.context import InvocationContext
         spirit = Spirit(self, process)
         context = InvocationContext(
             input_objects=self.objcol, 
@@ -494,6 +496,15 @@ def transfer_deployed_directory(app, src, destdir):
         if oldcmd.isfile():
             oldcmd.remove()
         deploy_osx_start_command(main)
+
+
+class AppProcessStarter:
+    def __init__(self, process, context):
+        self.process: Process = process
+        self.context: InvocationContext = context
+
+    def __call__(self):
+        return self.process.start_process(self.context) 
 
 #
 #

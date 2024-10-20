@@ -572,10 +572,13 @@ class GenericMethods:
         オブジェクトの型の説明、メソッドを表示する。
         Arguments:
             obj(Object): 対象
+        Returns:
+            Type:
         """
         from machaon.types.fundamental import TypeType
-        return TypeType().help(obj.type, context, context.spirit, obj.value)
-    
+        TypeType().help(obj.type, context, context.spirit, obj.value)
+        return obj.type
+
     @resolver.operator("=>", "bind")
     def bind(self, context, left, right):
         """ @method external context

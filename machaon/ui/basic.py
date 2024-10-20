@@ -5,11 +5,14 @@ import threading
 import pprint
 import os
 
-from typing import Dict, Iterator, Tuple, Sequence, List, Optional, Any
+from typing import Dict, Iterator, Tuple, Sequence, List, Optional, Any, TYPE_CHECKING
 
 from machaon.cui import composit_text
 from machaon.types.stacktrace import ErrorObject
-from machaon.process import ProcessSentence
+from machaon.process import ProcessSentence, ProcessHive
+
+if TYPE_CHECKING:
+    from machaon.app import AppRoot
 
 #
 #
@@ -50,6 +53,8 @@ system_message_tags = {
     #       カラム名のリスト
     #   context:
     #       実行コンテキスト
+    #   tabletype:
+    #       テーブルの種類：tuple | sheet | collection
     "canvas",              
     # 図形を画面に表示する。     
     # Params:
@@ -77,13 +82,13 @@ class Launcher():
     is_async = True
 
     def __init__(self):
-        self.app = None
+        self.app: 'AppRoot' = None
         self.theme = None
         self.history = InputHistory()
         self.keymap = self.new_keymap()
         self.screens = {} 
         self.chmstates = {}
-        self.progress_displays = {}
+        self.progress_displays: Dict[str, ProgressDisplayView] = {}
         
     def init_with_app(self, app):
         self.app = app
@@ -98,7 +103,7 @@ class Launcher():
         return pp.pformat(value)
 
     @property
-    def chambers(self):
+    def chambers(self) -> ProcessHive:
         return self.app.chambers()
 
     #

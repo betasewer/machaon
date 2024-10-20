@@ -813,6 +813,6 @@ class Sheet():
             context = app.get_process().get_last_invocation_context() # 実行中のコンテキスト
             rows = self.rows_to_string_table(context, "summarize")
             columns = [x.get_name() for x in self.get_current_columns()]
-            app.post("object-sheetview", rows=rows, columns=columns, context=context)
+            app.post("object-sheetview", rows=rows, columns=columns, context=context, tabletype='sheet')
 
     

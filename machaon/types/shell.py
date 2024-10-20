@@ -1083,6 +1083,82 @@ def run_command_capturing(app, params):
             app.post("message-em", "プロセスはコード={}で終了しました".format(msg.returncode))
 
 
+#
+# 制御文字やパス名に無効な文字などを変換する
+#
+class SPEC_CHAR_IN_FILENAME:
+    def __init__(self) -> None:
+        self._tbl = None
+    
+    def load(self):
+        self._tbl = str.maketrans({
+            0x00 : "",
+            0x01 : "[SOH]",
+            0x02 : "[STX]",
+            0x03 : "[ETX]",
+            0x04 : "[EOT]",
+            0x05 : "[ENQ]",
+            0x06 : "[STX]",
+            0x07 : "[BEL]",
+            0x08 : "",
+            0x09 : " ",
+            0x0A : " ",
+            0x0B : " ",
+            0x0C : " ",
+            0x0D : " ",
+            0x0E : "[SO]",
+            0x0F : "[SI]",
+            0x10 : "[DLE]",
+            0x11 : "[DC1]",
+            0x12 : "[DC2]",
+            0x13 : "[DC3]",
+            0x14 : "[DC4]",
+            0x15 : "[NAK]",
+            0x16 : "[SYN]",
+            0x17 : "[ETB]",
+            0x18 : "[CAN]",
+            0x19 : "[EM]",
+            0x1A : "[SUB]",
+            0x1B : "[ESC]",
+            0x1C : "[FS]",
+            0x1D : "[GS]",
+            0x1E : "[RS]",
+            0x1F : "[US]",
+            0x7F : "",
+            # Windows
+            ord("/") : "_",
+            ord("\\") : "_",
+            ord(":") : "_",
+            ord("<") : "_",
+            ord(">") : "_",
+            ord('"') : "_",
+            ord('|') : "_",
+            ord('?') : "_",
+            ord('*') : "_",
+        })
+
+    def __call__(self, s):
+        if self._tbl is None:
+            self.load()
+        return s.translate(self._tbl)
+
+translate_spec_chars = SPEC_CHAR_IN_FILENAME()
+
+
+def norm_pathname(name):
+    import unicodedata
+    name = unicodedata.normalize("NFC", name)
+    name = translate_spec_chars(name)
+    if len(name) > 256:
+        name, ext = os.path.splitext(name)
+        name = name[0:256-len(ext)] + ext
+    name = name.strip()
+    return name
+
+
+#
+#
+#
 def unzip(app, path, out=None, win=False):
     path = app.abspath(path)
 

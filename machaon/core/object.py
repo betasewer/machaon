@@ -1,4 +1,4 @@
-from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator
+from typing import Any, Optional, List, Sequence, Dict, DefaultDict, Generator, TypeVar, Generic
 from collections import OrderedDict, defaultdict
 from copy import copy
 
@@ -13,12 +13,14 @@ from machaon.core.type.basic import TypeProxy
 class EMPTY_OBJECT:
     pass
 
+ObjectT = TypeVar('ObjectT')
+
 #
 #
 #
-class Object:
+class Object(Generic[ObjectT]):
     def __init__(self, type, value=EMPTY_OBJECT):
-        self.value: Any = value
+        self.value: ObjectT = value
         self.type: TypeProxy = type
         if not isinstance(self.type, TypeProxy):
             raise TypeError("'type' must be TypeProxy but '{}'".format(self.type))
@@ -324,5 +326,5 @@ class ObjectCollection():
                     tn = o.get_typename()
                     rows_.append([n, sm, tn])
             rows = [(i,x) for i,x in enumerate(rows_)]
-            app.post("object-sheetview", rows=rows, columns=columns, context=context)
+            app.post("object-sheetview", rows=rows, columns=columns, context=context, tabletype='collection')
 

@@ -5,11 +5,14 @@ import threading
 import queue
 import time
 import datetime
-from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union
+from typing import Sequence, Optional, List, Dict, Any, Tuple, Set, Generator, Union, Iterator, Callable, TYPE_CHECKING
 
 from machaon.core.object import Object, ObjectCollection
 from machaon.core.message import MessageEngine
 from machaon.cui import collapse_text, test_yesno
+
+if TYPE_CHECKING:
+    from machaon.core.context import InvocationContext
 
 
 class ProcessSentence:
@@ -71,6 +74,7 @@ class Process:
         # メッセージ
         self.post_msgs = queue.Queue()
         self._isconsumed_msgs = False
+        self._handled_msgs = []
         # 入力
         self.input_waiting = False
         self.event_inputend = threading.Event()
@@ -81,7 +85,7 @@ class Process:
     # プロセスの実行フロー
     #
     #
-    def start_process(self, context):
+    def start_process(self, context: 'InvocationContext'):
         root = context.root
 
         # 実行開始
@@ -116,9 +120,9 @@ class Process:
         self.on_finish_process(context, ret)
 
     # メッセージ実行後のフロー
-    def on_finish_process(self, context, ret):
+    def on_finish_process(self, context: 'InvocationContext', ret):
         # 返り値をオブジェクトとして配置する
-        context.push_object(str(self.index), ret)
+        context.push_process_object(self.index, ret)
         
         # 実行時に発生した例外を確認する
         excep = context.get_last_exception()
@@ -140,7 +144,7 @@ class Process:
         self.finish()
         return success
 
-    def run_process_async(self, context, routine):
+    def run_process_async(self, context: 'InvocationContext', routine):
         for _ in routine: pass # 残りの処理を全て実行する
         ret = self.message.finish()
         self.on_finish_process(context, ret)
@@ -186,7 +190,7 @@ class Process:
     
     def is_finished(self):
         """ @method
-        作業が終わっているか。未開始の場合も真
+        作業が終わっているか。
         Returns:
             bool:
         """
@@ -235,7 +239,7 @@ class Process:
     def post(self, tag, value=None, **options):
         self.post_message(ProcessMessage(value, tag, **options))
 
-    def handle_post_message(self, count=None):
+    def handle_post_message(self, count=None) -> list['ProcessMessage']:
         """ 指定の数だけメッセージを取り出す """
         msgs = []
         try:
@@ -244,11 +248,16 @@ class Process:
                 msgs.append(msg)
         except queue.Empty:
             self._isconsumed_msgs = True
+        self._handled_msgs.extend(msgs)
         return msgs
 
     def is_messages_consumed(self):
         """ 作業スレッドが終わり、メッセージも全て処理済みなら真 """
         return self.is_finished() and self._isconsumed_msgs
+    
+    def get_handled_messages(self):
+        """ 処理済みのメッセージを返す """
+        return self._handled_msgs
     
     #
     # 入力
@@ -299,9 +308,23 @@ class Process:
         message = self.message.get_expression()
         m.write(message)
 
-    def get_sentence(self):
+    def get_sentence(self) -> str:
         """ 入力文 """
         return self.sentence
+    
+    def get_result_object(self, context=None) -> Object:
+        """ プロセスの返り値をコンテキストから取得する """
+        cxt = context or self.last_context
+        if cxt is None:
+            raise ValueError("コンテキストが指定されていません")
+        return cxt.get_object(str(self.get_index()))
+    
+    def get_result_error(self, context=None) -> Exception:
+        """ プロセスのエラーをコンテキストから取得する """
+        cxt = context or self.last_context
+        if cxt is None:
+            raise ValueError("コンテキストが指定されていません")
+        return cxt.get_last_exception()
 
     #
     #
@@ -344,7 +367,7 @@ class StillExecuting(Exception):
 class Spirit():
     def __init__(self, root, process=None):
         self.root = root
-        self.process: Process = process
+        self.process: Optional[Process] = process
         # 文字
         self._indents = []
         # プログレスバー
@@ -573,10 +596,12 @@ class Spirit():
         from machaon.types.shell import Path
         return Path(p)
     
-    def instant_pprint(self, value):
+    def instant_pprint(self, value, **msgargs):
         """ pprintを実行した後、メッセージをただちに処理する """
         value.pprint(self)
         for msg in self.process.handle_post_message(None):
+            if msgargs:
+                msg.args.update(msgargs)
             self.get_ui().message_handler(msg, nested=True)
 
 #
@@ -610,6 +635,10 @@ class TempSpirit(Spirit):
     def get_message(self):
         return self.msgs
 
+    def instant_pprint(self, value, **msgargs):
+        # doprintがfalseならプリントされない
+        value.pprint(self)
+    
     def interruption_point(self, *, nowait=False, progress=None, noexception=False):
         # プログレスバーの更新のみを行う
         if progress and self.progbars:
@@ -791,11 +820,11 @@ class ProcessMessageIO:
 class ProcessChamber:
     def __init__(self, index):
         self._index = index
-        self._processes = {}
-        self.chamber_msgs = []
-        self.handled_msgs = []
+        self._processes: Dict[int, Process] = {}
+        self.chamber_msgs: list[ProcessMessage] = []
+        self.handled_msgs: list[ProcessMessage] = []
     
-    def add(self, process):
+    def add(self, process: Process):
         if self._processes and not self.last_process.is_finished():
             return None
         i = process.get_index()
@@ -803,7 +832,7 @@ class ProcessChamber:
         return process
     
     @property
-    def last_process(self):
+    def last_process(self) -> Process:
         if not self._processes:
             raise ValueError("No process")
         maxkey = max(self._processes.keys())
@@ -839,7 +868,7 @@ class ProcessChamber:
             return False
         return self.last_process.is_waiting_input()
     
-    def finish_input(self, text): # -
+    def finish_input(self, text: str): # -
         if not self._processes:
             return
         self.last_process.tell_input_end(text)
@@ -849,16 +878,16 @@ class ProcessChamber:
             return
         self.last_process.join(timeout=timeout)
     
-    def get_process(self, index):
+    def get_process(self, index: int) -> Optional[Process]:
         return self._processes.get(index, None)
     
-    def get_processes(self):
+    def get_processes(self) -> list[Process]:
         return [self._processes[x] for x in sorted(self._processes.keys())]
     
     def count_process(self):
         return len(self._processes)
     
-    def handle_messages(self, count=None):
+    def handle_messages(self, count=None) -> list[ProcessMessage]:
         chmsgs = []
         if self.chamber_msgs:
             chmsgs = self.chamber_msgs[0:count]
@@ -869,17 +898,25 @@ class ProcessChamber:
         
         if count is not None:
             count -= len(chmsgs)
+        self.handled_msgs.extend(chmsgs)
 
         prmsgs = []
         if self._processes:
             prmsgs = self.last_process.handle_post_message(count)
 
         msgs = chmsgs + prmsgs
-        self.handled_msgs.extend(msgs)
         return msgs
 
-    def get_handled_messages(self): # -
+    def get_handled_stray_messages(self) -> list[ProcessMessage]: # チャンバーメッセージのみ
         return self.handled_msgs
+    
+    def get_handled_messages(self) -> list[ProcessMessage]: # チャンバーメッセージのみ
+        msgs = []
+        msgs.extend(self.handled_msgs)
+        for proc in self._processes.values():
+            msgs.extend(proc.get_handled_messages())
+        # TODO: 時系列順にソートする
+        return msgs
     
     def is_messages_consumed(self):
         if self.chamber_msgs:
@@ -902,46 +939,28 @@ class ProcessChamber:
         title = "Chamber"
         return "{}. {}".format(self._index, title)
     
-    def drop_processes(self, pred=None):
+    def drop_processes(self, pred:Optional[Callable[[Process], bool]] = None):
         """
         プロセスとプロセスに関連するメッセージを削除する。
         Params:
             *pred(callable): プロセスを判定する関数 
         """
         # メッセージの削除
-        piset = {}
-        end = None
-        reserved_msgs = []
-        for mi, msg in enumerate(self.handled_msgs):
-            pi = msg.argument("process")
-            if pi is None:
-                deletes = False # プロセスが関連付けられていないなら削除しない
-            elif pi not in piset:
-                pr = self._processes[pi]
-                if pr.is_running():
-                    end = mi
-                    break
-                deletes = pred(pr) if pred else True
-                piset[pi] = deletes
-            else:
-                deletes = piset[pi]
-            if not deletes:
-                reserved_msgs.append(msg)
-        del self.handled_msgs[0:end]
-        self.handled_msgs = reserved_msgs + self.handled_msgs
-
-        # プロセスの削除
-        pis = [x for x,t in piset.items() if t]
-        for pi in pis:
+        deleteindices = []
+        for i, proc in self._processes.items():
+            if proc.is_running():
+                continue # 稼働中なら削除しない
+            if pred is None or pred(proc):
+                deleteindices.append(i)
+        for pi in deleteindices:
             del self._processes[pi]
-        
-        return pis # 削除されたプロセスのリスト
+        return deleteindices # 削除されたプロセスのリスト
 
     def start_process_sequence(self, messages):
         """
         一連のプロセスを順に実行する。
         """
-        def _launch(chamber):
+        def _launch(chamber: ProcessChamber):
             iline = 0
             while iline < len(messages):
                 c1 = chamber.count_process()
@@ -996,19 +1015,27 @@ class ProcessHive:
             return True
         return False
     
-    def rhistory(self):
+    # プロセスを検索する
+    def get_process(self, process_index: int) -> Optional[Process]:
+        for chm in self.chambers.values():
+            proc = chm.get_process(process_index)
+            if proc is not None:
+                return proc
+        return None
+    
+    def rhistory(self) -> Iterator[int]:
         return (i for i in reversed(self._allhistory) if i in self.chambers)
 
     def get_active_index(self):
         return next(self.rhistory(), None)
 
-    def get_active(self):
+    def get_active(self) -> ProcessChamber:
         ac = next(self.rhistory(), None)
         if ac is not None:
             return self.chambers[ac]
         return None
     
-    def get_previous_active(self):
+    def get_previous_active(self) -> ProcessChamber:
         vs = self.rhistory()
         next(vs, None)
         ac = next(vs, None)
@@ -1023,10 +1050,10 @@ class ProcessHive:
     def count(self):
         return len(self.chambers)
     
-    def get(self, index):
+    def get(self, index) -> ProcessChamber:
         return self.chambers.get(index)
     
-    def get_chambers(self):
+    def get_chambers(self) -> Iterator[ProcessChamber]:
         return self.chambers.values()
 
     def remove(self, index=None):
@@ -1039,7 +1066,7 @@ class ProcessHive:
         del self.chambers[index]
     
     # 隣接する有効なチャンバーのインデックス
-    def next_indices(self, start:int=None, d:int=1) -> Generator[int, None, None]:
+    def next_indices(self, start:int=None, d:int=1) -> Iterator[int]:
         beg = self.get_active_index() if start is None else start
         i = beg
         imax = max([*self.chambers.keys(), 0])
@@ -1086,21 +1113,25 @@ class ProcessHive:
     #
     #
     #
-    def get_runnings(self):
+    def get_runnings(self) -> list[ProcessChamber]:
         return [x for x in self.chambers.values() if not x.is_finished()]
 
     def interrupt_all(self):
         for cha in self.get_runnings():
             cha.interrupt()
 
-    def handle_messages(self, count):
+    def handle_messages(self, count) -> Iterator[ProcessMessage]:
         for chm in self.chambers.values():
             if chm.is_messages_consumed():
                 continue
             for msg in chm.handle_messages(count):
                 yield msg
 
-    def compare_running_states(self, laststates):
+    def compare_running_states(self, laststates) -> Tuple[
+        Dict[int, bool], # チャンバーID = 動作・非動作のbool
+        list[ProcessChamber], # 開始したチャンバー
+        list[ProcessChamber]  # 終了したチャンバー
+    ]:
         runnings = {}
         begun = []
         ceased = []

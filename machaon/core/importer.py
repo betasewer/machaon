@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Optional, Any
 
 import importlib
 import importlib.util
@@ -77,7 +77,7 @@ class PyBasicModuleLoader:
     
     def load_source(self):
         p = self.load_filepath()
-        if p is None:
+        if p is None or not os.path.isfile(p):
             return None
         with open(p, "r", encoding="utf-8") as fi:
             return fi.read()
@@ -114,7 +114,7 @@ class PyBasicModuleLoader:
             raise ValueError("モジュール宣言が読み込まれていません")
         return self._moduledoc.defined_modules
 
-    def get_using_extra_packages(self) -> List[Tuple[str, str]]:
+    def get_using_extra_packages(self) -> List['UsingPackageEntry']:
         """ このモジュールが依存する外部パッケージ """
         if not self.is_module_document_loaded():
             raise ValueError("モジュール宣言が読み込まれていません")
@@ -149,8 +149,8 @@ class PyBasicModuleLoader:
             yield describer
 
         # 外部型
-        for d in self._moduledoc.using_types:
-            yield d
+        #for d in self._moduledoc.using_types:
+        #    yield d
     
     def scan_print_type_definitions(self, app):
         """ 型を定義するクラスの詳細を取り出す。調査用
@@ -229,10 +229,10 @@ class PyBasicModuleLoader:
     def load_all_describers(self):
         """ このモジュールにある全ての型定義を抽出する """
         # 依存パッケージをチェックする
-        notfound_depends = []
-        for name in self.get_using_extra_packages():
+        notfound_depends = set()
+        for _pkgname, name in self.get_using_extra_packages():
             if not module_loader(name).exists():
-                notfound_depends.append(name)
+                notfound_depends.add(name)
         if notfound_depends:
             raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfound_depends)))
     
@@ -308,6 +308,8 @@ class PyBasicModuleLoader:
         return self.module.__spec__.submodule_search_locations is not None
 
 
+UsingPackageEntry = Tuple[str, str] # package name, module name
+
 class ModuleDocDefinition:
     """ モジュールのドキュメントを解析する 
     TypedefModules|DefModules:
@@ -321,20 +323,25 @@ class ModuleDocDefinition:
         モジュールごとに記載する。
     """
     def __init__(self, module: PyBasicModuleLoader):
-        source = module.load_source()
+        self._module = module
+        self._ast = None
+        self.defined_modules = []
+        self.using_types: list[str] = []
+        self.using_packages: list[UsingPackageEntry] = []
+        self._load_ast()
+
+    def _load_ast(self):
+        """ ソースコードの構文木を読み込む """
+        source = self._module.load_source()
         if source is None:
             return
         disp = str(self)
-        tree = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
-        #
-        self._module = module
-        self._ast = tree
-        self.defined_modules = []
-        self.using_types = []
-        self.using_packages = []
-        
+        self._ast = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
+    
     def load_declaration(self):
         """ 宣言部を解析する """
+        if self._ast is None:
+            return
         doc = ast.get_docstring(self._ast)
         if not doc:
             return

@@ -298,39 +298,39 @@ def test_tokenize_quote():
 
 def test_generate_instructions():
     assert pinstr("1 add 2") == rinstr(
-        "ast_ADD_NEW_MESSAGE > arg_RECIEVER_VALUE 1",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE selector > arg_SELECTOR_VALUE <add>",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE argument > arg_LITERAL 2",
-        "ast_END_ALL_BLOCKS"
+        "ast_ADD_NEW_MESSAGE(arg_RECIEVER_VALUE(1))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(selector, arg_SELECTOR_VALUE(<add>))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(argument, arg_LITERAL(2))",
+        "ast_END_ALL_BLOCKS()"
     )
     assert pinstr(": 5 add 6 neg") == rinstr(
-        "ast_ADD_NEW_MESSAGE > ",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE reciever > arg_RECIEVER_VALUE 5",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE selector > arg_SELECTOR_VALUE <add>",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE argument > arg_LITERAL 6",
-        "ast_ADD_NEW_MESSAGE > arg_STACK_REF > arg_SELECTOR_VALUE <neg>",
-        "ast_END_ALL_BLOCKS"
+        "ast_ADD_NEW_MESSAGE()",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(reciever, arg_RECIEVER_VALUE(5))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(selector, arg_SELECTOR_VALUE(<add>))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(argument, arg_LITERAL(6))",
+        "ast_ADD_NEW_MESSAGE(arg_STACK_REF(), arg_SELECTOR_VALUE(<neg>))",
+        "ast_END_ALL_BLOCKS()"
     )
     assert pinstr("GODZILLA slice: : 999 sub 998 -1") == rinstr( # slice: (999 sub 998) -1 
-        "ast_ADD_NEW_MESSAGE > arg_RECIEVER_VALUE GODZILLA",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE selector > arg_SELECTOR_VALUE <slice TRAILING_ARGS>",
-        "ast_ADD_ELEMENT_AS_NEW_MESSAGE argument > ",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE reciever > arg_RECIEVER_VALUE 999",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE selector > arg_SELECTOR_VALUE <sub>",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE argument > arg_LITERAL 998",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE argument > arg_TYPED_VALUE -1 <param 'end' [Int:machaon.core]>",
-        "ast_END_ALL_BLOCKS"
+        "ast_ADD_NEW_MESSAGE(arg_RECIEVER_VALUE(GODZILLA))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(selector, arg_SELECTOR_VALUE(<slice TRAILING_ARGS>))",
+        "ast_ADD_ELEMENT_AS_NEW_MESSAGE(argument)",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(reciever, arg_RECIEVER_VALUE(999))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(selector, arg_SELECTOR_VALUE(<sub>))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(argument, arg_LITERAL(998))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(argument, arg_TYPED_VALUE(-1,<param 'end' [Int:machaon.core]>))",
+        "ast_END_ALL_BLOCKS()"
     )
     assert pinstr("GODZILLA slice: .: 999 sub 998 neg") == rinstr( # slice: ((999 sub 998) neg)
-        "ast_ADD_NEW_MESSAGE > arg_RECIEVER_VALUE GODZILLA",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE selector > arg_SELECTOR_VALUE <slice TRAILING_ARGS>",
-        "ast_ADD_ELEMENT_AS_NEW_MESSAGE argument > ",
-        "ast_BEGIN_BLOCK",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE reciever > arg_RECIEVER_VALUE 999",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE selector > arg_SELECTOR_VALUE <sub>",
-        "ast_ADD_ELEMENT_TO_LAST_MESSAGE argument > arg_LITERAL 998",
-        "ast_ADD_NEW_MESSAGE > arg_STACK_REF > arg_SELECTOR_VALUE <neg>",
-        "ast_END_ALL_BLOCKS"
+        "ast_ADD_NEW_MESSAGE(arg_RECIEVER_VALUE(GODZILLA))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(selector, arg_SELECTOR_VALUE(<slice TRAILING_ARGS>))",
+        "ast_ADD_ELEMENT_AS_NEW_MESSAGE(argument)",
+        "ast_BEGIN_BLOCK()",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(reciever, arg_RECIEVER_VALUE(999))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(selector, arg_SELECTOR_VALUE(<sub>))",
+        "ast_ADD_ELEMENT_TO_LAST_MESSAGE(argument, arg_LITERAL(998))",
+        "ast_ADD_NEW_MESSAGE(arg_STACK_REF(), arg_SELECTOR_VALUE(<neg>))",
+        "ast_END_ALL_BLOCKS()"
     )
     assert pinstr("@ [0] /+ .: @ [3] split: ; :. map strip :.")
 

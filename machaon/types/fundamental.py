@@ -91,6 +91,7 @@ class TypeType:
                 docs.append("［値型］")
                 docs.append(full_qualified_name(vt))
                 docs.append("")
+        
         app.post("message", "\n".join(docs))
 
         # 型引数の表示
@@ -122,14 +123,14 @@ class TypeType:
         if intr:
             meths_sheet = context.new_object(intr, conversion="Sheet[Method]")
             meths_sheet.value.view(context, "names", "signature", "doc")
-            app.instant_pprint(meths_sheet)
+            app.instant_pprint(meths_sheet, ref="machaon.help.methods")
 
         # 外部メソッド
         if extr:
             app.post("message", "［外部メソッド］")
             meths_sheet = context.new_object(extr, conversion="Sheet[Method]")
             meths_sheet.value.view(context, "names", "signature", "doc")
-            app.instant_pprint(meths_sheet)
+            app.instant_pprint(meths_sheet, ref="machaon.help.external_methods")
 
     def methods(self, typ, context, app, instance=None):
         '''@task context

@@ -390,7 +390,7 @@ class ObjectTuple():
                 sm = o.summarize()  
                 tn = o.get_typename()
                 rows.append((i, [sm, tn]))
-            app.post("object-sheetview", rows=rows, columns=columns, context=context)
+            app.post("object-sheetview", rows=rows, columns=columns, context=context, tabletype="tuple")
 
 
 

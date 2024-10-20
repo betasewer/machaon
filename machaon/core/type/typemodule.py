@@ -196,13 +196,14 @@ class TypeModule:
             # ビルトイン型に対応する
             if hasattr(value_type, "__name__"): 
                 typename = value_type.__name__
-                if typename in PythonBuiltinTypenames.literals: # 基本型
+                if typename == "Type":
+                    return self.get("Type")
+                elif typename in PythonBuiltinTypenames.literals: # 基本型
                     return self.get(typename.capitalize())
                 elif typename in PythonBuiltinTypenames.dictionaries: # 辞書型
                     return self.get("ObjectCollection")
                 elif typename in PythonBuiltinTypenames.iterables: # イテラブル型
                     return self.get("Tuple")
-            
             tn = full_qualified_name(value_type)
         elif isinstance(value_type, str):
             tn = value_type
@@ -255,7 +256,7 @@ class TypeModule:
             else: # モジュール or パッケージの全ての型をロードする
                 err = None
                 try:
-                    self.use_module_or_package_types(target, fallback=True)
+                    self.use_module_or_package_types(target, fallback_overlap=True)
                 except Exception as e:
                     err = e
                 # 再度型名で探索
@@ -294,7 +295,7 @@ class TypeModule:
             self.inject_type_mixin(target, type)
         else:
             # モジュールまたはパッケージの型を全てロードする（対象以外の型も変更される）
-            self.use_module_or_package_types(target, fallback=True)
+            self.use_module_or_package_types(target, fallback_overlap=True)
 
 
     #
@@ -416,23 +417,38 @@ class TypeModule:
             for module in names:
                 try:
                     name = "machaon."+module
-                    self.use_module_or_package_types(name, fallback=True)
+                    self.use_module_or_package_types(name, fallback_overlap=True)
                 except Exception as e:
                     errs.add(e, value=name)
 
-    def use_module_or_package_types(self, name, fallback=False):
+    def defines_module_or_package_types(self, name, *, fallback_overlap=False):
         """ モジュールあるいはパッケージ内の型を追加する """
         if isinstance(name, str):
             mod = module_loader(name)
         else:
             mod = name
-        with ErrorSet("'{}'に定義された全ての型をロード".format(name)) as errs:
+        results = [] # [bool, qualname, Type | Exception][]
+        try:
             for mod in mod.load_all_module_loaders():
-                for desc in mod.load_all_describers():
-                    try:
-                        self.define(desc, fallback=fallback) # 重複した場合は単にスルーする
-                    except Exception as e:
-                        errs.add(e, value=desc.get_full_qualname())
+                try:
+                    for desc in mod.load_all_describers():
+                        try:
+                            t = self.define(desc, fallback=fallback_overlap) # 重複した場合は単にスルーする
+                            results.append((True, desc.get_full_qualname(), t))
+                        except Exception as e:
+                            results.append((False, desc.get_full_qualname(), e))
+                except Exception as e:
+                    results.append((False, mod.get_name(), e))
+        except Exception as e:
+            results.append((False, name, e))
+        return results
+
+    def use_module_or_package_types(self, name, *, fallback_overlap=False):
+        """ モジュールあるいはパッケージ内の型を追加する """
+        with ErrorSet("'{}'に定義された全ての型をロード".format(name)) as errs:
+            for success, qualname, result in self.defines_module_or_package_types(name, fallback_overlap=fallback_overlap):
+                if not success:
+                    errs.add(result, value=qualname)
 
     def add_special_type(self, t, describername=None):
         """ 特殊な型を追加する """
@@ -468,6 +484,9 @@ class TypeModule:
             li = self._reserved_mixins.setdefault(k, [])
             li.extend(v)
     
+    def get_remained_mixin_targets(self):
+        return self._reserved_mixins.items()
+
     def check_loading(self):
         """
         型を一通り読み込んだ後にエラーをチェックする

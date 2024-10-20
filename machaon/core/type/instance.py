@@ -91,7 +91,8 @@ class TypeInstance(RedirectProxy):
 #
 class UninstantiableTypeError(Exception):
     def __str__(self) -> str:
-        return "This type cannot be instantiated"
+        tn = self.args[0] if self.args else '<unspecified typename>'
+        return "Type '{}' cannot be instantiated".format(tn)
 
 
 class TypeAny(DefaultProxy):
@@ -328,25 +329,25 @@ class UnresolvableType(DefaultProxy):
         return False
 
     def instantiate(self, context, args):
-        raise UninstantiableTypeError()
+        raise UninstantiableTypeError(self.get_typename())
 
     def instantiate_params(self):
-        raise UninstantiableTypeError()
+        raise UninstantiableTypeError(self.get_typename())
 
     def get_methods_bound_type(self):
-        raise UninstantiableTypeError()
+        raise UninstantiableTypeError(self.get_typename())
 
-    def constructor(self, context, args, typeargs):
-        raise UninstantiableTypeError()
+    def constructor(self, context, args, typeargs=None):
+        raise UninstantiableTypeError(self.get_typename())
 
     def stringify_value(self, value):
-        raise UninstantiableTypeError()
+        raise UninstantiableTypeError(self.get_typename())
     
     def summarize_value(self, value):
-        raise UninstantiableTypeError()
+        raise UninstantiableTypeError(self.get_typename())
 
     def pprint_value(self, app, value):
-        raise UninstantiableTypeError()
+        raise UninstantiableTypeError(self.get_typename())
     
 
 #

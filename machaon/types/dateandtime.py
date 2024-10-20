@@ -645,7 +645,10 @@ def digits_split_by_nondigit(s, required=None):
             parts[-1] += ch
         else:
             parts.append("")
-    digits = [int(x) for x in parts if len(x)>0]
+    try:
+        digits = [int(x) for x in parts if len(x)>0]
+    except Exception as e:
+        raise ValueError("日付の要素の数値への変換に失敗: {}".format(s)) from e
     if required is not None:
         if len(digits) < required:
             raise ValueError("日付の要素の数が足りません({}個必要): {}".format(required, s))

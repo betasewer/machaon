@@ -116,12 +116,12 @@ class SelectorExpression(FunctionExpression):
         subcontext = context.inherit(subject)        
         try:
             entry = self._make_invocation(context, subject)
-            subcontext.log_message_begin(self.get_expression())
+            subcontext.log.message_start(MessageEngine(self.get_expression()))
 
             result = entry.invoke(subcontext)
             
-            subcontext.log_message_end()
-            context.log_message_begin_sub(subcontext)
+            subcontext.log.message_end()
+            context.log.message_start_sub(subcontext)
         
             return result        
         except Exception as e:

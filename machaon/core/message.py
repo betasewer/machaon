@@ -1,4 +1,4 @@
-
+from typing import Any, Dict, TYPE_CHECKING, Optional
 from itertools import zip_longest
 
 from machaon.core.symbol import (
@@ -41,6 +41,9 @@ from machaon.core.type.declparser import TypeDeclError
 from machaon.core.type.typemodule import TypeModuleError
 from machaon.core.type.instance import ObjectType
 
+if TYPE_CHECKING:
+    from machaon.core.context import InvocationContext
+
 
 #
 # ----------------------------------------------------------------------------
@@ -78,6 +81,12 @@ class InternalMessageError(Exception):
         for l in self.context.display_log(None):
             lines.append("  {}".format(l))
         return "\n".join(lines)
+    
+#
+#
+#
+def _log_rsv(context: 'InvocationContext', subcode: str, hint: str = None):
+    context.log.message_rsv(subcode, hint)
 
 #
 #
@@ -177,7 +186,7 @@ class Message:
         for ref in self._refs():
             ref.reset()
 
-    def check_concluded(self, evalcontext):
+    def check_concluded(self, evalcontext: 'EvalContext'):
         """ メッセージがすでに完成しているか """
         urefcount = len([x for x in self._refs() if not x.is_resolved()])
         if evalcontext.locals.count() < urefcount:
@@ -187,12 +196,13 @@ class Message:
                 return False
         
         if self._conclude:
+            evalcontext.context.log.message_ast('conexpl') # 明示的実行
             self.complete_explicit_conclusion(evalcontext)
             return True
         else:
             return self.check_auto_conclusion(evalcontext)
         
-    def check_auto_conclusion(self, evalcontext):
+    def check_auto_conclusion(self, evalcontext: 'EvalContext'):
         """ メッセージ実行に必要な最小の要素があるか確認 """
         if not self.is_reciever_specified():
             return False
@@ -207,6 +217,7 @@ class Message:
             if not self.is_min_arg_specified():
                 return False
         
+        evalcontext.context.log.message_ast('conauto') # 自動実行
         return True
 
     def complete_explicit_conclusion(self, evalcontext):
@@ -236,13 +247,13 @@ class Message:
             return False
 
         sel = self.selector
-        if isinstance(sel, BasicInvocation):
-            return True
         if isinstance(sel, BasicRef):
             obj = sel.pick_object(evalcontext)
             sel = ObjectSelectorResolver(obj)
         if isinstance(sel, SelectorResolver):
             sel = sel.resolve(evalcontext, self.reciever)
+        if not isinstance(sel, BasicInvocation):
+            raise TypeError("Invalid selector resolved value: {}. Must be a BasicInvocation".format(sel))
 
         self.selector = sel
 
@@ -363,7 +374,7 @@ class Message:
 #
 class EvalContext:
     def __init__(self, context):
-        self.context = context
+        self.context: 'InvocationContext' = context
         self.locals = LocalStack()
 
 class LocalStack:
@@ -472,7 +483,7 @@ class PreviousObjectRef(BasicRef):
         self._ident = ident
     
     def do_pick(self, evalcontext):
-        obj = evalcontext.context.get_previous_object(self._ident)
+        obj = evalcontext.context.get_previous_process_object(self._ident)
         if obj is None:
             raise BadExpressionError("参照'{}'に対応するオブジェクトは存在しません".format(self._ident))
         return obj
@@ -549,7 +560,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
     # 数字のみのメソッドは添え字アクセスメソッドにリダイレクト
     if name.isdigit():
         if not typetraits or not typetraits.is_object_collection_type(): # ObjectCollectionには対応しない
-            return select_index_method(int(name), typetraits, reciever, modbits)
+            return select_index_method(int(name), typetraits, reciever, modbits, context)
 
     # コンストラクタセパレータが含まれている
     if SIGIL_CONSTRUCTOR_SELECTOR in name and context:
@@ -574,11 +585,13 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
         # 型メソッドを参照
         meth = typetraits.select_method(name)
         if meth is not None:
+            context and _log_rsv(context, 'method', name)
             return meth.make_invocation(modbits, typetraits)
     
     # 共通型定義の関数
     gmeth = ObjectType.select_method(name)
     if gmeth is not None:
+        context and _log_rsv(context, 'common-method', name)
         return gmeth.make_invocation(modbits, ObjectType)
 
     if using_type_method:
@@ -587,6 +600,7 @@ def select_method(name, typetraits=None, *, reciever=None, modbits=None, context
             raise BadExpressionError(err)
     
     # インスタンスメソッド
+    context and _log_rsv(context, 'dyn-method', name)
     return InstanceMethodInvocation(name, modifier=modbits)
 
 
@@ -607,19 +621,21 @@ def select_method_by_object(obj, typetraits=None, *, reciever=None, modbits=None
     elif tn == "Function" or isinstance(v, FunctionExpression):
         return MessageInvocation(v)
     elif callable(v):
-        return select_py_callable(v)
+        return select_py_callable(v)    
     else:
         raise BadExpressionError("'{}'はメソッドセレクタとして無効な型です".format(obj))
 
-def select_index_method(value, typetraits, reciever, modbits):
-    inv = select_method("at", typetraits, reciever=reciever, modbits=modbits)
+def select_index_method(value, typetraits, reciever, modbits, context=None):
+    inv = select_method("at", typetraits, reciever=reciever, modbits=modbits, context=context)
     return Bind1stInvocation(inv, value, "Int", modbits)
 
 def select_type_constructor(name, modbits, context=None):
+    context and _log_rsv(context, 'ctor', name)
     return TypeConstructorInvocation(name, modbits)
 
 def select_type_method(typedecl, name, modbits, reciever=None, context=None):
     if context is not None:
+        _log_rsv(context, 'ex-method', typedecl)
         tdef = context.instantiate_type(typedecl)
         return select_method(name, tdef, modbits=modbits, reciever=reciever, context=context)
     else:
@@ -748,8 +764,27 @@ SYNTAX_CODE_BEGIN_MESSAGE        = 0x10000
 SYNTAX_CODE_END_MESSAGE          = 0x20000
 SYNTAX_CODE_DISCARD_MESSAGE      = 0x30000
 # BEGIN_MESSAGEの下位ビット
+SYNTAX_CODE_AUX_MASK             = 0x0FF00
 SYNTAX_CODE_MESSAGE_BLOCK        = 0x01000
 SYNTAX_CODE_MESSAGE_DEFERRED     = 0x02000
+
+def display_syntactic_token(code: int):
+    bits = code & SYNTAX_CODE_MASK
+    if bits == 0:
+        return ""
+    names = []
+    if code & SYNTAX_CODE_MESSAGE_BLOCK:
+        names.append("block")
+    if code & SYNTAX_CODE_MESSAGE_DEFERRED:
+        names.append("deferred-block")
+    if bits == SYNTAX_CODE_BEGIN_MESSAGE:
+        names.insert(0, "begin-message")
+    if bits == SYNTAX_CODE_END_MESSAGE:
+        names.insert(0, "end-message")
+    if bits == SYNTAX_CODE_DISCARD_MESSAGE:
+        names.insert(0, "discard")
+    return " ".join(names)    
+
 
 #  - 要素の種類
 TERM_TYPE_MASK     = 0xF0
@@ -899,6 +934,7 @@ class MessageCharBuffer:
     def get_read_length(self):
         return self._readlength
 
+
 #
 LEN_SIGIL_BEGIN_MESSAGE = len(SIGIL_BEGIN_MESSAGE)
 
@@ -913,13 +949,13 @@ class MessageTokenizer:
     def set_next_token_firstterm(self):
         self._wait_firstterm = True
 
-    def pop_last_read(self, source):
+    def pop_last_readed(self, source):
         l = self.buffer.get_read_length()
         s = source[self._last_read_length:l]
         self._last_read_length = l
         return s
     
-    def split_read(self, source):
+    def get_readed(self, source):
         l = self.buffer.get_read_length()
         return source[0:l], source[l:]
     
@@ -1103,18 +1139,17 @@ class InternalEngineCode:
         """ 文字列にまとめて返す """
         ls = []
         for instrname, options, args in self.instructions():
-            parts = []
-            parts.append(instrname)
+            instrargs = []
             if options:
-                opts = (str(x) for x in options)
-                parts.append(" ".join(opts))
+                instrargs.extend(str(x) for x in options)
             if args is not None:
-                argsline = []
                 for argcode, vals in args:
-                    arg = [str(x) for x in [argcode, *vals]]
-                    argsline.append(" ".join(arg))
-                parts.append("> " + " > ".join(argsline))
-            ls.append(" ".join(parts))
+                    argvals = ",".join(str(x) for x in vals)
+                    instrargs.append("{}({})".format(argcode, argvals))
+            if instrargs:
+                ls.append("{}({})".format(instrname, ", ".join(instrargs)))
+            else:
+                ls.append("{}()".format(instrname))
         return ls
 
 
@@ -1123,14 +1158,14 @@ class InternalEngineCode:
 #
 class MessageEngine:
     def __init__(self, expression="", messages=None):
-        self.source = expression
-        self._tokens = None  # type: MessageTokenizer
-        self._readings = []  # type: list[Message]
-        self._curblockstack = [] # type: list[int]
+        self.source: str = expression
+        self._tokens: Optional[MessageTokenizer] = None 
+        self._readings: list[Message] = [] 
+        self._curblockstack: list[int] = [] 
         self._closingblock = 0
-        self._msgs = messages or []
+        self._msgs: list[Message] = messages or []
         self._lastread = ""  # 最後に完成したメッセージの文字列
-        self._lastevalcxt = None
+        self._lastevalcxt: Optional[EvalContext] = None
         self._lastblockcomplete = False # メッセージが完結した直後である
 
     def __repr__(self) -> str:
@@ -1140,6 +1175,9 @@ class MessageEngine:
         """ コード文字列を返す """
         return self.source
     
+    def get_tokens(self):
+        return self._tokens
+    
     def split_read_expression(self):
         """ 実行の済んだ部分と、未実行の部分を分けてコードを返す 
         Returns:
@@ -1147,21 +1185,21 @@ class MessageEngine:
         """
         if self._tokens is None:
             raise ValueError("まだ実行が開始されていません")
-        return self._tokens.split_read(self.source)
+        return self._tokens.get_readed(self.source)
     
-    def begin_message(self, evalcontext, *args):
+    def begin_message(self, evalcontext: EvalContext, *args):
         """ メッセージを未完成スタックに追加する """
         msg = Message(*args)
         self._readings.append(msg)
         # ログに残す
         index = len(self._readings)-1
-        evalcontext.context.log_message_ast(index, 1)
+        evalcontext.context.log.message_ast('msgbegin', index)
         
     def begin_block(self, evalcontext):
         """ ブロックを開始する """
         newpos = self.current_message_top()  # 上でメッセージを追加済み
         self._curblockstack.append(newpos)   # 新しいブロックの番号を記録する
-        evalcontext.context.log_message_ast(newpos, 10)
+        evalcontext.context.log.message_ast('blockbegin', newpos)
 
     def current_message_top(self):
         return len(self._readings)-1
@@ -1483,42 +1521,42 @@ class MessageEngine:
         self.begin_block(evalcontext)
 
     @_ast_BLOCK
-    def ast_END_MESSAGE(self, evalcontext, index, top, modifier=None):
+    def ast_END_MESSAGE(self, evalcontext: EvalContext, index, top, modifier=None):
         """ 引数リストを終了するか、何もしない """        
         self._readings[index].conclude_explicit()
-        evalcontext.context.log_message_ast("{}, {}".format(index, top), 2)
+        evalcontext.context.log.message_ast('msgend', "{}, {}".format(index, top))
 
     @_ast_BLOCK
-    def ast_END_BLOCK(self, evalcontext, index, modifier=None):
+    def ast_END_BLOCK(self, evalcontext: EvalContext, index, modifier=None):
         """ ブロックを終了しようとしている """
         for i, msg in self.current_block_messages():
             msg.conclude_explicit()
-            evalcontext.context.log_message_ast(i, 2)
+            evalcontext.context.log.message_ast('msgend', i)
         self._closingblock += 1
-        evalcontext.context.log_message_ast(index, 20)
+        evalcontext.context.log.message_ast('blockend', index)
         # 一つ上のメッセージにモディファイアを設定
         if modifier:
             self.modify_last_block_selector(-1, modifier)
 
     @_ast_BLOCK
-    def ast_END_LAST_BLOCK(self, evalcontext, index, top, modifier=None):
+    def ast_END_LAST_BLOCK(self, evalcontext: EvalContext, index, top, modifier=None):
         """ 直ちにブロックを削除する """
         # 直ちにブロックを削除する
         self.end_block(1)
         # 現在のメッセージにモディファイアを設定
         if modifier:
             self.modify_last_block_selector(0, modifier)
-        evalcontext.context.log_message_ast("{}, {}".format(index, top), 21)
+        evalcontext.context.log.message_ast('blockend', "{}, {}".format(index, top))
 
     @_ast_BLOCK
-    def ast_END_ALL_BLOCKS(self, evalcontext):
+    def ast_END_ALL_BLOCKS(self, evalcontext: EvalContext):
         """ """
         for i, msg in enumerate(reversed(self._readings)):
             j = len(self._readings) - i - 1
             msg.conclude_explicit()
-            evalcontext.context.log_message_ast(j, 2) 
+            evalcontext.context.log.message_ast('msgend', j)
         self._closingblock = len(self._curblockstack)
-        evalcontext.context.log_message_ast(None, 22)
+        evalcontext.context.log.message_ast('allblockend')
 
     @_ast
     def ast_DISCARD_LAST_BLOCK_MESSAGE(self):
@@ -1621,17 +1659,18 @@ class MessageEngine:
     #
     #
     #
-    def produce_message(self, evalcontext):
+    def produce_message(self, evalcontext: 'EvalContext'):
         """ コードから構文を組み立てつつ随時実行 """
         self._msgs = []
         self._tokens = MessageTokenizer()
+
         self._closingblock = 0
         for token, tokentype in self._tokens.read_token(self.source):
             completed = len(self._msgs)
 
             intlcode = self.build_next_code(token, tokentype)
             if intlcode is not None:
-                evalcontext.context.log_message_code(intlcode)
+                evalcontext.context.log.message_code(intlcode, token, tokentype)
                 
                 # 内部コードを実行し、メッセージを組み立てる
                 intlcode.run(evalcontext)
@@ -1648,8 +1687,8 @@ class MessageEngine:
                         break
                     
                     # これから評価するメッセージ式の文字列
-                    msgsrc = self._tokens.pop_last_read(self.source)
-                    evalcontext.context.log_message_eval(index, msgsrc, msg)
+                    msgsrc = self._tokens.pop_last_readed(self.source)
+                    evalcontext.context.log.message_evaluating(index, msgsrc)
 
                     yield msgsrc # 文字列を排出
                     yield msg    # 組み立てたメッセージを排出
@@ -1667,13 +1706,13 @@ class MessageEngine:
             else:
                 self._lastblockcomplete = True
     
-    def produce_message_cached(self, _evalcontext):
+    def produce_message_cached(self, evalcontext):
         """ キャッシュされたメッセージをクリアして返す """
         for msg in self._msgs:
             msg.reset_ref()
             yield msg
 
-    def runner(self, context, cache=False):
+    def runner(self, context: 'InvocationContext', cache=False):
         """
         メッセージをコンパイルしつつ実行するジェネレータ。
         Yields:
@@ -1684,7 +1723,7 @@ class MessageEngine:
         else:
             produce_message = self.produce_message
 
-        context.log_message_begin(self.source)
+        context.log.message_start(self)
 
         evalcxt = EvalContext(context)
         self._lastevalcxt = evalcxt
@@ -1709,7 +1748,7 @@ class MessageEngine:
             context.push_extra_exception(err)
             return
 
-        context.log_message_end()
+        context.log.message_end()
     
     def finish(self) -> Object:
         """ 結果を取得し、スタックをクリアする """
@@ -1732,7 +1771,7 @@ class MessageEngine:
     def start_subcontext(self, subject, context):
         """ 入れ子のコンテキストを開始する """
         subcontext = context.inherit(subject) # コンテキストが入れ子になる
-        context.log_message_begin_sub(subcontext)
+        context.log.message_start_sub(subcontext)
         return subcontext
     
     #
