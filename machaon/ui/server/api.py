@@ -283,7 +283,7 @@ class ApiServerApp:
                     from machaon.types.stacktrace import verbose_display_traceback
                     retval = {
                         "error": [full_qualified_name(type(e),True)] + [str(x) for x in e.args],
-                        "stacktrace": verbose_display_traceback(e)
+                        "stacktrace": verbose_display_traceback(e).splitlines()
                     }
                     status = HTTPStatus.INTERNAL_SERVER_ERROR     
             else:
