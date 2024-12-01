@@ -13,6 +13,7 @@ from machaon.cui import collapse_text, test_yesno
 
 if TYPE_CHECKING:
     from machaon.core.context import InvocationContext
+    from machaon.app import AppRoot
 
 
 class ProcessSentence:
@@ -378,7 +379,7 @@ class Spirit():
         self.root = other.root
         self.process = other.process
 
-    def get_root(self):
+    def get_root(self) -> 'AppRoot':
         return self.root
     
     def get_process(self):
@@ -442,7 +443,7 @@ class Spirit():
     # UIの関数を呼び出す
     #
     def get_ui(self):
-        return self.root.get_ui()
+        return self.get_root().get_ui()
     
     def ask_yesno(self, desc):
         answer = self.get_ui().get_input(desc)

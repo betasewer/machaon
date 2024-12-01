@@ -4,6 +4,7 @@
 import os
 import sys
 import shutil
+from typing import TYPE_CHECKING
 from collections import namedtuple
 
 from machaon.core.object import Object, ObjectCollection
@@ -13,6 +14,7 @@ from machaon.core.context import InvocationContext
 from machaon.process import Process, ProcessSentence, Spirit, TempSpirit, ProcessHive, ProcessChamber, ProcessSentence
 from machaon.package.package import PackageManager
 from machaon.package.auth import CredentialDir
+from machaon.component.defs import ComponentManager
 from machaon.platforms import is_osx, is_windows, shellpath
 from machaon.types.shell import Path
 from machaon.ui.keycontrol import HotkeySet, KeyController
@@ -41,6 +43,8 @@ class AppRoot:
 
         self.keycontrol = KeyController()
         self.extapps = ExternalApps()
+
+        self.servercomponents = None
 
         self._startupmsgs = []
         self._startupvars = []
@@ -100,6 +104,9 @@ class AppRoot:
     def get_log_dir(self):
         # デフォルトで存在しないディレクトリ
         return (Path(self.basicdir) / "log").makedirs()
+
+    def get_servercomponents_dir(self):
+        return Path(self.basicdir) / "components"
 
     def get_temp_dir(self, **kwargs):
         from machaon.types.shell import UserTemporaryDirectory
@@ -180,6 +187,9 @@ class AppRoot:
             except Exception as e:
                 self._startuperrors.add(e, message="パッケージマネージャの初期化")
 
+        # サーバーコンポーネントマネージャの初期化
+        self.servercomponents = ComponentManager(self.get_servercomponents_dir())
+
         # 標準モジュールのロードを予約する
         self.typemodule.reserve_adding_types("default")
         
@@ -207,10 +217,12 @@ class AppRoot:
         return count
     
     #
-    # クラスパッケージ
+    # パッケージ
     #    
     # パッケージの追加・削除を行うマネージャ
     def package_manager(self):
+        if self.pkgmanager is None:
+            raise ValueError("before initialize")
         return self.pkgmanager
     
     def add_package_option(self, pkgname, *, 
@@ -242,7 +254,14 @@ class AppRoot:
     def add_startup_variable(self, name, value, typename=None):
         """ 開始直後に自動で追加される引数 """
         self._startupvars.append(StartupVariable(name, value, typename))
-    
+
+    #
+    # サーバーコンポーネント
+    #
+    def server_components(self):
+        if self.servercomponents is None:
+            raise ValueError("before initialize")
+        return self.servercomponents
 
     #
     # グローバルなホットキー

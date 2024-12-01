@@ -231,7 +231,12 @@ def create_module_package(module):
 
 #
 class PackageNotFoundError(Exception):
-    pass
+    def __str__(self):
+        name = self.args[0]
+        msg = "パッケージ'{}'は存在しません".format(name)
+        if ":" not in name:
+            msg += ": リスト名を後に続けた完全な名前で指定してください"
+        return msg
 
 class PackageLoadError(Exception):
     def __init__(self, s, e=None):
@@ -273,6 +278,25 @@ class PackageDistInfo:
         self.infodir = infodir
         self.is_resource: bool = is_resource
 
+#
+#
+#
+class PackageFilePath:
+    DELIMITER = "/"
+
+    def __init__(self, package, path):
+        self.package = package
+        self.path = path
+
+    @classmethod
+    def parse(cls, s: str):
+        pkg, sep, path = s.partition(cls.DELIMITER)
+        if not sep:
+            raise ValueError(s)
+        return cls(pkg, path)
+
+    def stringify(self):
+        return self.package + self.DELIMITER + self.path
 
 
 #
@@ -442,7 +466,7 @@ class PackageManager:
         
         errset.throw_if_failed()
 
-    def get(self, name, *, fallback=True):
+    def get(self, name, *, fallback=True) -> Optional[Package]:
         """ パッケージを完全な名前で取得する """
         for pkg in self.packages:
             if pkg.name == name:
@@ -608,7 +632,7 @@ class PackageManager:
             return None
         return entry["hash"]
 
-    def get_installed_location(self, pkg) -> Path:
+    def get_installed_location(self, pkg: Package) -> Path:
         """ パッケージがインストールされたパス """
         if not self.is_installed(pkg.name):
             return None

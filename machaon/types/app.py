@@ -2,7 +2,6 @@
 # coding: utf-8
 import os
 from collections import defaultdict
-from machaon.package.package import PackageManager, create_module_package
 from machaon.types.package import AppPackageType
 from machaon.types.shell import Path
 from machaon.app import AppRoot, deploy_directory, transfer_deployed_directory
