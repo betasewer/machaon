@@ -108,9 +108,14 @@ class Component:
     def get_this_port(self):
         return self.value("port")
     
-    def get_this_url(self):
-        protocol = "http"
-        return "{}://127.0.0.1:{}".format(protocol, self.get_this_port())
+    def get_this_url(self, *, protocol=True):
+        addr = self.value("url", "http://127.0.0.1").rstrip("/")
+        addr = "{}:{}".format(addr, self.get_this_port())
+        if protocol:
+            return addr
+        else:
+            _, sep, rest = addr.partition("://")
+            return rest
     
     def url_value(self, app: 'AppRoot', value: str):
         if value.startswith(("http://", "https://")):
@@ -229,7 +234,7 @@ class UwsgiComponent(Component):
             if not src_uwsgi_cfg.isfile():
                 raise ComponentConfigError("'{}': {}は存在しません".format(self.name.stringify(), src_uwsgi_cfg))
             configs = readfile(src_uwsgi_cfg)
-            address = self.get_this_url()
+            address = self.get_this_url(protocol=False)
             configs = configs.format(address=address, dir=dest.get(), logdir=self.value("log_dest"), wsgifile=pyentry)
             tr.write("uwsgi.ini", configs)
 
