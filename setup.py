@@ -2,7 +2,7 @@
 """
 setuptools>=40.1.0
 """
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, find_namespace_packages
 #from codecs import open
 import os
 import re
@@ -37,7 +37,7 @@ setup(
     name=package_name,
     version=version,
     
-    packages=find_packages(exclude=['tests', 'tests.*']),
+    packages=find_namespace_packages(exclude=['tests', 'tests.*']),
     package_data={"machaon" : ["configs/*.*", "configs/*/*.*", "configs/*/*/*.*"]},
     
     license=license,
