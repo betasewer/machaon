@@ -215,7 +215,7 @@ class UwsgiComponent(Component):
             if entrymodule.load_attr("wsgi", fallback=True) is None:
                 spi.post("warn", "'{}': モジュール'{}'にエントリポイント{}()が確認できませんでした".format(self.name.stringify(), entrymodule.get_name(), "wsgi"))
             # スクリプトを生成する
-            pyentrycode = readtemplate("wsgi_entrypoint.py").format(
+            pyentrycode = readtemplate("wsgi_entrypoint").format(
                 entrymodule=entrymodule.get_name(),
                 dir=app.get_basic_dir().get(), # 同じmachaon環境を参照する
                 title=self.value("title", "{}_server".format(self.name.stringify()))
