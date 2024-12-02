@@ -38,7 +38,10 @@ setup(
     version=version,
     
     packages=find_namespace_packages(exclude=['tests', 'tests.*']),
-    package_data={"machaon" : ["configs/*.*", "configs/*/*.*", "configs/*/*/*.*"]},
+    package_data={"machaon" : [
+        "configs/*.*", "configs/*/*.*", "configs/*/*/*.*", 
+        "component/template/*", "component/template/*/*", "component/template/*/*/*",
+    ]},
     
     license=license,
     
