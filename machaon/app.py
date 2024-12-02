@@ -186,6 +186,8 @@ class AppRoot:
                 self.pkgmanager.check_after_loading()
             except Exception as e:
                 self._startuperrors.add(e, message="パッケージマネージャの初期化")
+        else:            
+            self.pkgmanager.add_to_import_path() # パスは通しておく
 
         # サーバーコンポーネントマネージャの初期化
         self.servercomponents = ComponentManager(self.get_servercomponents_dir())

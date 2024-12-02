@@ -284,20 +284,41 @@ class PackageDistInfo:
 class PackageFilePath:
     DELIMITER = "/"
 
-    def __init__(self, package, path):
-        self.package = package
-        self.path = path
+    def __init__(self, package: str, path: Path):
+        if not isinstance(path, Path):
+            path = Path(path)
+        self.package: str = package
+        self.path: Path = path
 
     @classmethod
     def parse(cls, s: str):
         pkg, sep, path = s.partition(cls.DELIMITER)
         if not sep:
             raise ValueError(s)
-        return cls(pkg, path)
+        return cls(pkg, Path(path))
 
     def stringify(self):
-        return self.package + self.DELIMITER + self.path
+        return self.package + self.DELIMITER + self.path.get()
+    
+    def join(self, path):  
+        return PackageFilePath(self.package, self.path / path)
 
+
+class PackageItem:
+    def __init__(self, package: 'Package', path: PackageFilePath):
+        self.package = package
+        self.path = path
+
+    def stringify(self):
+        return self.path.stringify()
+
+    def join(self, path):  
+        return PackageItem(self.package, self.path.join(path))
+    
+    def as_module_name(self) -> str:
+        """ モジュール名を復元する """
+        p = self.path.path.without_ext()
+        return ".".join([self.package.entrypoint, *p.split()])
 
 #
 #
@@ -483,6 +504,20 @@ class PackageManager:
     def add(self, pkg: Package):
         """ 後から追加する """
         self.packages.append(pkg)
+
+    #
+    # 
+    #
+    def get_item(self, path: PackageFilePath, *, fallback=True) -> Optional[PackageItem]:
+        """ """
+        pkg = self.get(path.package, fallback=fallback)
+        if pkg is None:
+            return None
+        return PackageItem(pkg, path)
+    
+    def get_item_path(self, item: PackageItem) -> Path:
+        loc = self.get_installed_location(item.package)
+        return loc / item.path.path
 
     #
     #

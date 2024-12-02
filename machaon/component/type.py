@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 
 from machaon.types.shell import Path
 from machaon.component.component import ComponentName, Component, ComponentSet
+from machaon.component.file import FSTransaction
 
 if TYPE_CHECKING:
     from machaon.process import Spirit
@@ -50,20 +51,28 @@ class ComponentKitType:
         """ @task spirit
         """
         app.post("message", "コンポーネントセット'{}'を配備します".format(cset.name))
+        
+        fs = FSTransaction()
         for c in cset.getall():
             app.post("message", "[{}]".format(c.name.stringify()))
             with app.indent_post(" - "):
-                c.deploy(app)
+                fs += c.deploy(app)
+        fs.apply(app)
+
         app.post("message", "完了")
 
     def re_deploy(self, cset: ComponentSet, app: 'Spirit'):
         """ @task spirit
         """
         app.post("message", "コンポーネントセット'{}'を配備し直します".format(cset.name))
+        
+        fs = FSTransaction()
         for c in cset.getall():
             app.post("message", "[{}]".format(c.name.stringify()))
             with app.indent_post(" - "):
-                c.deploy(app, force=True)
+                fs += c.deploy(app, force=True)
+        fs.apply(app)
+
         app.post("message", "完了")
     
     def constructor(self, app: 'Spirit', value):
