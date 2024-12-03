@@ -165,8 +165,14 @@ class SiteComponent(Component):
         if not src.exists():
             raise ValueError("サイトのソースディレクトリ'{}'が存在しません".format(src))
         
+        dest_required = self.value("dest_required", None)
+        if dest_required is not None:
+            dest_required = Path(dest_required)
+            if not dest_required.isdir():
+                raise ValueError("コピー先パスの必須部分'{}'が存在しません。手動で作成してください".format(dest_required))
+        
         dest = Path(self.value("dest"))
-        fs.treecopy_to(dest).copy(src)
+        fs.treecopy_to(dest).dest_required(dest_required).copy(src)
 
         # 設定情報スクリプトを作る
         lines = []
