@@ -184,6 +184,14 @@ class SiteComponent(Component):
             spi.post("message", "サーバー設定ファイルを書き込み")
             tr.write("config.js", "\n".join(lines))
 
+        # ディレクトリモードを設定する
+        dest_mode = self.value("dest_mode", None)
+        if dest_mode is not None:
+            if not dest_mode.isdigit():
+                raise ComponentConfigError("'{}': モードは8進数で指定してください".format(dest_mode))
+            dmode = int(dest_mode, 8)
+            fs.pathattr(dest).mode(dmode)
+
         return fs
 
 
@@ -245,7 +253,17 @@ class UwsgiComponent(Component):
             tr.write("uwsgi.ini", configs)
 
         # ログディレクトリを作成する
-        fs.pathensure(Path(self.value("log_dest"))) #.clean(force)
+        log_dest = Path(self.value("log_dest"))
+        fs.pathensure(log_dest) #.clean(force)
+        fs.pathattr(log_dest).mode(0o777)
+        
+        # ディレクトリモードを設定する
+        dest_mode = self.value("dest_mode", None)
+        if dest_mode is not None:
+            if not dest_mode.isdigit():
+                raise ComponentConfigError("'{}': モードは8進数で指定してください".format(dest_mode))
+            dmode = int(dest_mode, 8)
+            fs.pathattr(dest).mode(dmode)
 
         return fs
 

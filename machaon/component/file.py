@@ -28,6 +28,9 @@ class FSTransaction:
     def pathensure(self, dest):
         return self.append(PathEnsureTransaction(dest))
     
+    def pathattr(self, dest):
+        return self.append(PathAttrTransaction(dest))
+    
     def apply(self, app):
         for tr in self._transactions:
             tr.apply(app)
@@ -53,9 +56,35 @@ class PathEnsureTransaction(Transaction):
             app.post("message", "ファイルツリーを削除: {}".format(self.dest))
             self.dest.rmtree()  # 元ディレクトリを削除する      
         app.post("message", "パスを確認: {}".format(self.dest))
-        if not self.dest.exists():
-            os.mkdir(self.dest, mode=0o777)
-#            self.dest.makedirs()
+        self.dest.makedirs()
+
+
+class PathAttrTransaction(Transaction):
+    def __init__(self, dest: Path):
+        self.dest = dest
+        self._mode = None
+        self._owner = None
+
+    def mode(self, mode: int):
+        self._mode = mode
+        return self
+    
+    def own(self, owner):
+        self._owner = owner
+        return self
+    
+    def apply(self, app):
+        if self._mode is not None:
+            app.post("message", "{}: モードを{:o}に変更".format(self.dest, self._mode))
+            os.chmod(self.dest, self._mode)
+        
+        if self._owner is not None and hasattr(shutil, "chown"):
+            app.post("message", "{}: 所有者を'{}'に変更".format(self.dest, self._owner))
+            user, sep, group = self._owner.partition(":")
+            if not sep:
+                raise ValueError("Invalid owner: {}".format(self._owner))
+            shutil.chown(self.dest, user, group)
+
 
 
 class FileWriteTransaction(PathEnsureTransaction):
