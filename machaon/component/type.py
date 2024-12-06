@@ -12,20 +12,20 @@ if TYPE_CHECKING:
 
 
 class ComponentType:
-    """ @type trait alias-name [Component]
+    """ @type trait alias-name [ServerComponent]
     サーバーコンポーネント
     ValueType: 
         machaon.component.component.Component
     """
-    def deploy(self, compo: Component, app: 'Spirit'):
+    def launch(self, compo: Component, app: 'Spirit'):
         """ @task spirit
         """
-        compo.deploy(app)
-
-    def re_deploy(self, compo: Component, app: 'Spirit'):
+        compo.launch(app)
+        
+    def re_launch(self, compo: Component, app: 'Spirit'):
         """ @task spirit
         """
-        compo.deploy(app, force=True)
+        compo.relaunch(app)
 
     def constructor(self, app: 'Spirit', value):
         """ @meta spirit
@@ -41,8 +41,8 @@ class ComponentType:
 
 
 
-class ComponentKitType:
-    """ @type trait alias-name [Kit ComponentKit]
+class ServerComponentKitType:
+    """ @type trait alias-name [ServerKit]
     サーバーコンポーネント
     ValueType: 
         machaon.component.component.ComponentSet
@@ -74,6 +74,16 @@ class ComponentKitType:
         fs.apply(app)
 
         app.post("message", "完了")
+
+    def component(self, cset: ComponentSet, app: 'Spirit', name: str):
+        """ @method spirit
+        コンポーネントを取得する 
+        Params:
+            name(Str):
+        Returns:
+            ServerComponent:
+        """
+        return cset.get(name)
     
     def constructor(self, app: 'Spirit', value):
         """ @meta spirit
@@ -84,4 +94,4 @@ class ComponentKitType:
     
     def stringify(self, cset: ComponentSet):
         """ @meta """
-        return "<ServerComponentKit {}>".format(cset.name)
+        return "<ServerKit {}>".format(cset.name)

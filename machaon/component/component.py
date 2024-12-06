@@ -140,6 +140,12 @@ class Component:
     def deploy(self, app: 'Spirit', *, force=False) -> FSTransaction:
         raise NotImplementedError()
 
+    def launch(self, app: 'Spirit'):
+        raise NotImplementedError()
+    
+    def relaunch(self, app: 'Spirit'):
+        self.launch(app)
+
 
 class SiteComponent(Component):
     def get_files(self, app: 'AppRoot') -> Path:
@@ -193,6 +199,12 @@ class SiteComponent(Component):
             fs.pathattr(dest).mode(dmode)
 
         return fs
+    
+    def launch(self, spi: 'Spirit'):
+        url = self.value("url")
+        port = self.value("port", "")
+        import webbrowser
+        webbrowser.open("{}:{}".format(url, port))
 
 
 class UwsgiComponent(Component):
@@ -267,6 +279,15 @@ class UwsgiComponent(Component):
 
         return fs
 
+    def launch(self, spi: 'Spirit'):
+        dest = Path(self.value("dest"))
+        start_sh = dest / "start.sh"
+        import subprocess
+        subprocess.call(['sh', start_sh.get()]) 
 
-
+    def relaunch(self, spi: 'Spirit'):
+        dest = Path(self.value("dest"))
+        trigger = dest / "reload.trigger"
+        import subprocess
+        subprocess.call(['touch', trigger.get()])
 
