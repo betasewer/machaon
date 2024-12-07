@@ -231,7 +231,12 @@ def create_module_package(module):
 
 #
 class PackageNotFoundError(Exception):
-    pass
+    def __str__(self):
+        name = self.args[0]
+        msg = "パッケージ'{}'は存在しません".format(name)
+        if ":" not in name:
+            msg += ": リスト名を後に続けた完全な名前で指定してください"
+        return msg
 
 class PackageLoadError(Exception):
     def __init__(self, s, e=None):
@@ -273,7 +278,47 @@ class PackageDistInfo:
         self.infodir = infodir
         self.is_resource: bool = is_resource
 
+#
+#
+#
+class PackageFilePath:
+    DELIMITER = "/"
 
+    def __init__(self, package: str, path: Path):
+        if not isinstance(path, Path):
+            path = Path(path)
+        self.package: str = package
+        self.path: Path = path
+
+    @classmethod
+    def parse(cls, s: str):
+        pkg, sep, path = s.partition(cls.DELIMITER)
+        if not sep:
+            raise ValueError(s)
+        return cls(pkg, Path(path))
+
+    def stringify(self):
+        return self.package + self.DELIMITER + self.path.get()
+    
+    def join(self, path):  
+        return PackageFilePath(self.package, self.path / path)
+
+
+class PackageItem:
+    def __init__(self, package: 'Package', path: PackageFilePath):
+        self.package = package
+        self.path = path
+
+    def stringify(self):
+        return self.path.stringify()
+
+    def join(self, path):  
+        return PackageItem(self.package, self.path.join(path))
+    
+    def as_module_name(self) -> str:
+        """ モジュール名を復元する """
+        p = self.path.path.without_ext()
+        return ".".join([self.package.entrypoint, *p.split()])
 
 #
 #
@@ -442,7 +487,7 @@ class PackageManager:
         
         errset.throw_if_failed()
 
-    def get(self, name, *, fallback=True):
+    def get(self, name, *, fallback=True) -> Optional[Package]:
         """ パッケージを完全な名前で取得する """
         for pkg in self.packages:
             if pkg.name == name:
@@ -459,6 +504,20 @@ class PackageManager:
     def add(self, pkg: Package):
         """ 後から追加する """
         self.packages.append(pkg)
+
+    #
+    # 
+    #
+    def get_item(self, path: PackageFilePath, *, fallback=True) -> Optional[PackageItem]:
+        """ """
+        pkg = self.get(path.package, fallback=fallback)
+        if pkg is None:
+            return None
+        return PackageItem(pkg, path)
+    
+    def get_item_path(self, item: PackageItem) -> Path:
+        loc = self.get_installed_location(item.package)
+        return loc / item.path.path
 
     #
     #
@@ -608,7 +667,7 @@ class PackageManager:
             return None
         return entry["hash"]
 
-    def get_installed_location(self, pkg) -> Path:
+    def get_installed_location(self, pkg: Package) -> Path:
         """ パッケージがインストールされたパス """
         if not self.is_installed(pkg.name):
             return None

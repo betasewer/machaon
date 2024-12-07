@@ -464,7 +464,7 @@ class TypeModule:
         """
         self._reserved_init_codes.extend(codes)
 
-    def update(self, other):
+    def update(self, other: 'TypeModule'):
         """ 
         二つのモジュールを一つに結合する。
         新モジュールの値が優先される

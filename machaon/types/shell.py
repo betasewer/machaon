@@ -155,7 +155,7 @@ class Path:
         """
         return os.path.isfile(self._path)
     
-    def ishidden(self):
+    def ishidden(self, *, fileattr=False):
         """ @method
         隠しファイルかどうか
         ファイル名がピリオドで始まるか、隠し属性がついているか
@@ -164,7 +164,7 @@ class Path:
         """
         if self.name().startswith("."):
             return True
-        if shellpath().has_hidden_attribute(self._path):
+        if fileattr and shellpath().has_hidden_attribute(self._path):
             return True
         return False
     
@@ -735,6 +735,21 @@ class Path:
         """
         if self.isdir():
             shutil.rmtree(self._path)
+
+    def remove_children(self):
+        """ 
+        サブフォルダ・ファイルをすべて削除する
+        """
+        if not self.isdir():
+            return
+        for f in self.listdir():
+            if f.ishidden():
+                continue
+            if f.isdir():
+                f.rmtree()
+            elif f.isfile():
+                f.remove()
+
 
     #
     # 実行・シェル機能

@@ -1,0 +1,18 @@
+
+from machaon.app import AppRoot
+from machaon.ui.server.server import InternalServer
+
+root = AppRoot()
+root.initialize(
+    title={title!r}, ui="headless", 
+    ignore_hotkeys=True, ignore_packages=True,
+    basic_dir={dir!r}, 
+    logfileperiod="monthly"
+)
+root.boot_core()
+
+from {entrymodule} import wsgi
+svrapp = wsgi()
+
+spi = root.temp_spirit(doprint=True)
+app = InternalServer(svrapp, spi)
