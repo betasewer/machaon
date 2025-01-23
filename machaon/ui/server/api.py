@@ -347,6 +347,8 @@ def serialize_json(x):
         return type(x)(serialize_json(v) for v in x)
     elif isinstance(x, dict):
         return {serialize_json(k):serialize_json(v) for k,v in x.items()}
+    elif hasattr(x, "serialize"):
+        return x.serialize()
     elif hasattr(x, "stringify"):
         return x.stringify()
     else:

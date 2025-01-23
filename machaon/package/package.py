@@ -609,7 +609,11 @@ class PackageManager:
     def files_installation(self, pkg: Package, localpath):
         """ 展開ディレクトリに含まれるファイルをすべてコピーする """ 
         localname, _sep, _defsname = pkg.name.partition(":")
-        installdir = (self.dir / localname).makedirs()        
+        installdir = (self.dir / localname)    
+        if installdir.isdir():
+            yield PackageManager.MESSAGE.bind(msg="展開先を空にします")
+            installdir.rmtree()
+        installdir.makedirs()
         yield PackageManager.MESSAGE.bind(msg="コピー：{} -> {}".format(localpath, installdir))
         for localp in Path(localpath).listdir():
             if localp.isfile():

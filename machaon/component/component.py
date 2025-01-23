@@ -23,9 +23,6 @@ class ComponentName:
         self.name = name
         self.configname = config
     
-    def resolve_config_filepathes(self, d: Path):
-        return resolve_config_filepathes(d, self.configname)
-
     @classmethod
     def parse(cls, s: str, *, here=None):
         name, sep, file = s.partition(":")
@@ -243,8 +240,9 @@ class UwsgiComponent(Component):
             entrymodule = module_loader(filesdir.join("entrypoint.py").as_module_name())
             if not entrymodule.exists():
                 raise ComponentConfigError("'{}': モジュール'{}'は存在しません".format(self.name.stringify(), entrymodule.get_name()))
-            if entrymodule.load_attr("wsgi", fallback=True) is None:
-                spi.post("warn", "'{}': モジュール'{}'にエントリポイント{}()が確認できませんでした".format(self.name.stringify(), entrymodule.get_name(), "wsgi"))
+            if not entrymodule.load_attr("application", fallback=True):
+                spi.post("warn", "'{}': モジュール'{}'にエントリポイント{}()が確認できませんでした".format(self.name.stringify(), entrymodule.get_name(), "wsgimaca|wsgi|asgi"))
+            
             # スクリプトを生成する
             pyentrycode = readtemplate("wsgi_entrypoint").format(
                 entrymodule=entrymodule.get_name(),
@@ -257,9 +255,10 @@ class UwsgiComponent(Component):
         spi.post("message", "uwsgi設定ファイルを生成")
         if force or not tr.fileexists("uwsgi.ini"): # 上書きしない
             src_uwsgi_cfg = app.package_manager().get_item_path(filesdir.join("uwsgi.ini"))
-            if not src_uwsgi_cfg.isfile():
-                raise ComponentConfigError("'{}': {}は存在しません".format(self.name.stringify(), src_uwsgi_cfg))
-            configs = readfile(src_uwsgi_cfg)
+            if src_uwsgi_cfg.isfile():
+                configs = readfile(src_uwsgi_cfg)
+            else: # machaonのテンプレートを使う
+                configs = readtemplate("uwsgi.ini")
             address = self.get_this_url(protocol=False)
             configs = configs.format(address=address, dir=dest.get(), logdir=self.value("log_dest"), wsgifile=pyentry)
             tr.write("uwsgi.ini", configs)

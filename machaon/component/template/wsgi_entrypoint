@@ -1,6 +1,5 @@
 
 from machaon.app import AppRoot
-from machaon.ui.server.server import InternalServer
 
 root = AppRoot()
 root.initialize(
@@ -11,8 +10,6 @@ root.initialize(
 )
 root.boot_core()
 
-from {entrymodule} import wsgi
-svrapp = wsgi()
+from {entrymodule} import application
+app = application(root)
 
-spi = root.temp_spirit(doprint=True)
-app = InternalServer(svrapp, spi)
