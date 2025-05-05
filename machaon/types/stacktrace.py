@@ -751,10 +751,12 @@ class _InstrGetAttr:
 
     def resolve(self, context):
         val = self.instr.resolve(context)
-        if hasattr(val, self.name):
-            return getattr(val, self.name)
-        else:
-            return UndefinedValue("getattr", self.name)
+        try:
+            if hasattr(val, self.name):
+                return getattr(val, self.name)
+        except:
+            pass
+        return UndefinedValue("getattr", self.name)
 
 class _InstrConst:
     """ リテラル定数の参照 """
