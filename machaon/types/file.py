@@ -278,9 +278,10 @@ class TextFile(BasicFileStream):
             return self._enc
         if not os.path.isfile(self.pathstr):
             raise ValueError("パスが存在しないため、ファイルを開くには文字列エンコーディングの指定が必要です")
-        encoding = detect_text_encoding(self.pathstr)
-        self._enc = encoding
-        return encoding
+        with open(self.pathstr, "rb") as fi:
+            encoding = detect_text_encoding(fi)
+            self._enc = encoding
+            return encoding
     
     def encoding(self):
         """ @method
@@ -344,10 +345,12 @@ class TextFile(BasicFileStream):
 
 
 #
-def detect_text_encoding(fpath):
+def detect_text_encoding(fi, encodings=None):
     from machaon.platforms import ui
     
     encset = []
+    if encodings is not None:
+        encset.extend(encodings)
     # Unicode
     encset.extend(["utf-8", "utf_8_sig", "utf-16"])
     # ascii extended encodings
@@ -359,32 +362,32 @@ def detect_text_encoding(fpath):
     cands = set(encset)
     size = 256
     badterminated = False
-    with open(fpath, "rb") as fi:
-        heads = fi.read(size)
+    
+    heads = fi.read(size)
 
-        for i in range(4):
-            if i>0:
-                bit = fi.read(1)
-                if bit is None:
-                    break
-                heads += bit
-
-            for encoding in encset:
-                if encoding not in cands:
-                    continue
-                try:
-                    heads.decode(encoding)
-                except UnicodeDecodeError as e:
-                    if (size+i - e.end) < 4:
-                        badterminated = True
-                        continue
-                    cands.remove(encoding)
-                        
-            if not cands:
-                return None
-            
-            if not badterminated:
+    for i in range(4):
+        if i>0:
+            bit = fi.read(1)
+            if bit is None:
                 break
+            heads += bit
+
+        for encoding in encset:
+            if encoding not in cands:
+                continue
+            try:
+                heads.decode(encoding)
+            except UnicodeDecodeError as e:
+                if (size+i - e.end) < 4:
+                    badterminated = True
+                    continue
+                cands.remove(encoding)
+                    
+        if not cands:
+            return None
+        
+        if not badterminated:
+            break
 
     return next(x for x in encset if x in cands)
 
