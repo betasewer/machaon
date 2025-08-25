@@ -388,6 +388,9 @@ def detect_text_encoding(fi, encodings=None):
         
         if not badterminated:
             break
+    
+    # 読み込み位置を先頭に戻す
+    fi.seek(0)
 
     return next(x for x in encset if x in cands)
 
