@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "machaon"
+version = "0.1.1.0"
+description = "machaon"
+authors = [{name = "Goro Sakata", email = "gorosakata@ya.ru"}]
+requires-python = ">= 3.10"
+readme = "README.rst"
+license = "MIT"
+classifiers=[
+    'Development Status :: 2 - Pre-Alpha',
+    'Environment :: Console',
+    'Intended Audience :: Developers',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+]
+
