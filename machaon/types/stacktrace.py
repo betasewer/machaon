@@ -5,20 +5,20 @@ import inspect
 import sys
 import dis
 import traceback
-import types
 import pprint
 
-from machaon.core.message import InternalMessageError
-from machaon.cui import collapse_text, composit_text
+from machaon.core.cui import collapse_text
 from machaon.core.symbol import full_qualified_name
 
-class ErrorObject():
+class ErrorObject:
     """ @type [Error]
     プロセスの実行時に起きたエラー。
     """
-    def __init__(self, error, *, context=None):
-        self.error = error
-        self.context = context
+    def __init__(self, error):
+        self.error: Exception = error
+
+    def _spawn(self, error):
+        return ErrorObject(error) # 同じコンテキストのエラーオブジェクトを生成して返す
     
     def get_error(self):
         return self.error
@@ -55,14 +55,6 @@ class ErrorObject():
         err = self.get_error()
         return get_traceback(err, dive=True)
 
-    def get_context(self):
-        """ @method alias-name [context]
-        関連づけられたコンテキストを得る。
-        Returns:
-            Context:
-        """
-        return self.context
-
     def display(self):
         """ @method 
         エラー内容を表示する。
@@ -93,20 +85,34 @@ class ErrorObject():
         errlines = traceback.format_exception_only(type(excep1), excep1)
         lines.extend([x.rstrip() for x in errlines])
         
-        excep2 = self.cause().get_error()
-        if excep1 is excep2:
-            frames = traceback.extract_tb(excep1.__traceback__)
-            first = frames[firstframedelta]
-            last = frames[-1]
-        else:
-            frames1 = traceback.extract_tb(excep1.__traceback__)
-            first = frames1[firstframedelta]
-            frames2 = traceback.extract_tb(excep2.__traceback__)
-            last = frames2[-1]
-        
-        lines.extend([x.rstrip() for x in traceback.format_list([last])])
-        lines.append("    ...    ")
-        lines.extend([x.rstrip() for x in traceback.format_list([first])])
+        if excep1.__traceback__ is not None:
+            # スタックフレームを表示する
+            first = last = None
+            excep2 = self.cause().get_error()
+            if excep1 is not excep2:
+                frames1 = traceback.extract_tb(excep1.__traceback__)
+                if 0 <= firstframedelta and firstframedelta < len(frames1):
+                    first = frames1[firstframedelta]
+                frames2 = traceback.extract_tb(excep2.__traceback__)
+                if len(frames2) > 0:
+                    last = frames2[-1]
+            else:
+                frames = traceback.extract_tb(excep1.__traceback__)
+                if 0 <= firstframedelta and firstframedelta < len(frames) and len(frames) > 0:
+                    first = frames[firstframedelta]
+                    last = frames[-1]
+                if firstframedelta == len(frames) - 1:
+                    last = None
+            
+            if first is not None and last is not None:
+                lines.extend([x.rstrip() for x in traceback.format_list([last])])
+                lines.append("    ...    ")
+                lines.extend([x.rstrip() for x in traceback.format_list([first])])
+            elif first is not None:
+                lines.extend([x.rstrip() for x in traceback.format_list([first])])
+            else:
+                lines.append("スタックフレームを取得できませんでした（フレーム数={}, 先頭オフセット={}）".format(len(frames), firstframedelta))
+
         return "\n".join(lines)
     
     def cause(self):
@@ -121,7 +127,7 @@ class ErrorObject():
             if cause is None:
                 break
             err = cause
-        return ErrorObject(err, context=self.context)
+        return self._spawn(err)
     
     def chain(self):
         """ @method
@@ -134,65 +140,8 @@ class ErrorObject():
             cause = err.__cause__
             if cause is None:
                 break
-            yield ErrorObject(cause, context=self.context)
+            yield self._spawn(cause)
             err = cause
-
-    def log(self, app):
-        """ @task
-        メッセージ解析器のログを表示する。
-        """
-        if self.context is None:
-            raise ValueError("コンテキストが関連づけられていません")
-        self.context.pprint_log_as_message(app)
-
-    def constructor(self, context, value):
-        """ @meta context
-        例外オブジェクトからの変換をサポート
-        Params:
-            builtins.Exception:
-        """
-        return ErrorObject(value, context=context)
-    
-    def stringify(self):
-        """ @meta """
-        tb = self.lasttraceback()
-        if tb is not None:
-            p, lno = tb.location()
-            loc = "({}, {})".format(p, lno)
-        else:
-            loc = "(トレースバック無し)"
-            
-        if isinstance(self.error, InternalMessageError):
-            error = self.cause().get_error()
-            return "文法エラー：{}[{}] {}".format(str(error), self.get_error_typename(), loc)
-        else:
-            error = self.cause().get_error()
-            return "実行エラー：{}[{}] {}".format(str(error), self.get_error_typename(), loc)
-
-    def summarize(self):
-        """ @meta """
-        return self.stringify() # 文字幅による省略を行わない
-
-    def pprint(self, app):
-        """ @meta """
-        if isinstance(self.error, InternalMessageError):
-            title = "（内部エラー）"
-        else:
-            title = ""
-        
-        excep = self.cause().get_error()
-        app.post("error", self.display_exception())
-
-        app.post("message-em", "スタックトレース{}：".format(title))
-        msg = verbose_display_traceback(excep, app.get_ui_wrap_width(), "short")
-        app.post("message", msg + "\n")
-
-        app.post("message-em", "詳細情報は次のメソッドで：".format(title))
-        app.post("message", "log")
-        app.post("message", "tb [level]")
-        app.post("message", "tb [level] var [varname]")
-        app.post("message", "tb [level] showall")
-
 
 #
 #
@@ -210,7 +159,7 @@ def get_traceback(error, *, dive=None):
         return tbo.dive(dive)
 
 
-class TracebackObject():
+class TracebackObject:
     """ @type
     トレースバック。
     """

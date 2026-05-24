@@ -1,8 +1,6 @@
 import os
 
-import pytest
 from machaon.types.shell import Path
-from machaon.macatest import run
 
 def test_path_concatenate():
     a = Path("desktop/folder")

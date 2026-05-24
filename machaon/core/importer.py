@@ -1,25 +1,19 @@
-from typing import List, Tuple, Optional, Any
-
 import importlib
 import importlib.util
 import builtins
 import os
-import ast
-import traceback
 
-from machaon.core.docstring import parse_doc_declaration, get_doc_declaration_type, DocStringDefinition
-from machaon.core.symbol import full_qualified_name, QualTypename, normalize_typename
-from machaon.core.error import ErrorSet
+from machaon.core.symbol import full_qualified_name
 
 def module_loader(expr=None, *, location=None):
     if location:
         if expr is None:
             expr = location
-        return PyModuleFileLoader(expr, location)
+        return PyModuleFile(expr, location)
     else:
         if expr is None:
             raise TypeError("'expr' must not be None")
-        return PyModuleLoader(expr)
+        return PyModule(expr)
 
 def attribute_loader(expr, *, attr=None, location=None):
     modloader = None
@@ -46,17 +40,15 @@ def load_attribute_value(expr, **kwargs):
 
 def module_loader_from_file(path, namebasepath):
     name = module_name_from_path(path, namebasepath)
-    return PyModuleFileLoader(name, path)
+    return PyModuleFile(name, path)
 
-
-class PyBasicModuleLoader:
+class BasicModule:
     """
-    ローダーの基礎クラス
+    モジュールのベースクラス
     """
     def __init__(self, m=None): # モジュールのインスタンスを受ける
         self._m = m
-        self._moduledoc = None
-    
+
     @property
     def module(self):
         if self._m is None:
@@ -91,164 +83,18 @@ class PyBasicModuleLoader:
     
     def load_package_directories(self):
         raise NotImplementedError()
-    
-    #
-    #
-    #
-    def is_module_document_loaded(self):
-        """ 構文木がロード済み """
-        return self._moduledoc is not None
-    
-    def load_module_declaration(self):
-        """ 
-        ソースコードの構文木からモジュールのドキュメント文字列を取り出し、解析する 
-        """
-        if self.is_module_document_loaded():
-            return
-        self._moduledoc = ModuleDocDefinition(self)
-        self._moduledoc.load_declaration()
-        
-    def get_package_defmodule_loaders(self):
-        """ このパッケージ中にて型定義が含まれるモジュールを明示する """
-        if not self.is_module_document_loaded():
-            raise ValueError("モジュール宣言が読み込まれていません")
-        return self._moduledoc.defined_modules
 
-    def get_using_extra_packages(self) -> List['UsingPackageEntry']:
-        """ このモジュールが依存する外部パッケージ """
-        if not self.is_module_document_loaded():
-            raise ValueError("モジュール宣言が読み込まれていません")
-        return self._moduledoc.using_packages
-
-    def check_extra_packages_ready(self):
-        """ 依存するパッケージのロード状況 
-        Returns:
-            str -> bool: パッケージ名 -> 存在するか
-        """
-        rets = {}
-        for pkgname, module_name in self.get_using_extra_packages():
-            rets[pkgname] = module_loader(module_name).exists()
-        return rets
-
-    def get_typename_resolver(self):
-        """ このモジュール内における型宣言のリゾルバを返す """
-        self.load_module_declaration()
-        from machaon.core.type.declresolver import ModuleTypenameResolver
-        return ModuleTypenameResolver(self.get_name(), self._moduledoc.using_types)
-
-    def scan_type_describers(self):
-        """ ソースコードの構文木を解析し、型を定義するクラスを取り出す
-        Yields:
-            TypeDescriber: 定義オブジェクト
-        """
-        # モジュールのドキュメント文字を読み込む
-        self.load_module_declaration()
-
-        # モジュールに定義されたクラスのドキュメント文字列を全て読んでいく
-        for describer in self._moduledoc.scan_describers():
-            yield describer
-
-        # 外部型
-        #for d in self._moduledoc.using_types:
-        #    yield d
-    
-    def scan_print_type_definitions(self, app):
-        """ 型を定義するクラスの詳細を取り出す。調査用
-        Yields:
-            ObjectCollection(typename, qualname, error):
-        """
-        count = 0
-
-        modqualname = str(self)
-        app.post("message", "{}".format(modqualname))
-
-        err = None
-        try:
-            for typedesc in self.scan_type_describers():
-                typename = typedesc.get_typename()
-                qualname = typedesc.get_full_qualname()
-                yield {
-                    "typename" : typename,
-                    "qualname" : qualname
-                }
-                app.post("message", "  {}".format(typename))
-                count += 1
-        except Exception as e:
-            err = e
-        
-        if count > 0:
-            app.post("message", "  型定義を{}個発見".format(count))
-        if err:
-            app.post("error", "  ロードエラー:{}".format(err))
-            yield {
-                "qualname" : modqualname,
-                "error" : err
-            }
-
-    def get_all_submodule_loaders(self):
-        """ 全てのサブモジュールのローダーを作成する
-        Returns:
-            List[PyBasicModuleLoader]:
-        """
-        modules = []
-        basepkg = self.get_name()
-        for pkgpath in self.load_package_directories(): # 開始モジュールのディレクトリから下降する
-            # 再帰を避けるためにスタック上にあるソースファイルパスを調べる
-            skip_names = []
-            for fr in traceback.extract_stack():
-                fname = os.path.normpath(fr.filename)
-                if fname.startswith(pkgpath):
-                    relname = module_name_from_path(fname, pkgpath, basepkg)
-                    skip_names.append(relname)
-            
-            # サブモジュールを取得する
-            for loader in walk_modules(pkgpath, basepkg):
-                if loader.module_name in skip_names:
-                    continue 
-                modules.append(loader)
-
-        return modules
-
-    def load_all_module_loaders(self):
-        """ このモジュールとサブモジュール全てのローダーを返す """
-        modules = [self]
-        self.load_module_declaration()
-
-        defmods = self.get_package_defmodule_loaders()
-        if defmods:
-            modules.extend(defmods)
-        elif self.is_package():
-            modules.extend(self.get_all_submodule_loaders())
-        
-        with ErrorSet("サブモジュールの宣言を解析中") as errs:
-            for mod in modules:
-                errs.try_(mod.load_module_declaration)
-
-        return modules
-    
-    def load_all_describers(self):
-        """ このモジュールにある全ての型定義を抽出する """
-        # 依存パッケージをチェックする
-        notfound_depends = set()
-        for _pkgname, name in self.get_using_extra_packages():
-            if not module_loader(name).exists():
-                notfound_depends.add(name)
-        if notfound_depends:
-            raise ValueError("依存パッケージ{}が見つかりません".format(",".join(notfound_depends)))
-    
-        # 型定義を抽出するだけ
-        for typedesc in self.scan_type_describers():
-            yield typedesc
-    
-    def show_latest_files(self, app, full=False):
+    def show_latest_files(self, full=False, *, printer=None):
         """ @task
         パッケージ内のファイルをタイムスタンプ順に表示する。
         """
+        printer = printer or print
+
         filepaths = []
         try:
             thispath = self.load_filepath()
         except Exception as e:
-            app.post("message", e)
+            printer("message", e)
             return
         if thispath:
             filepaths.append(thispath)
@@ -256,7 +102,7 @@ class PyBasicModuleLoader:
         try:
             pkgdirs = self.load_package_directories()
         except Exception as e:
-            app.post("message", e)
+            printer("message", e)
             return
         for pkgdir in pkgdirs:
             for dirpath, dirnames, filenames in os.walk(pkgdir, topdown=True):
@@ -296,119 +142,21 @@ class PyBasicModuleLoader:
                 tx = t1
             else:
                 tx = t1 + "~" + t2
-            app.post("message", "[{}更新]".format(tx))
+            printer("message", "[{}更新]".format(tx))
             if not full and i == len(li)-1:
-                app.post("message", "  {}個のファイル".format(len(bucket)))
+                printer("message", "  {}個のファイル".format(len(bucket)))
             else:
                 for ts, fp in bucket:
-                    app.post("message", "  {}".format(fp))
+                    printer("message", "  {}".format(fp))
 
     def is_package(self):
         """ パッケージかどうか判定する """
         return self.module.__spec__.submodule_search_locations is not None
 
-
-UsingPackageEntry = Tuple[str, str] # package name, module name
-
-class ModuleDocDefinition:
-    """ モジュールのドキュメントを解析する 
-    TypedefModules|DefModules:
-        このパッケージの中で型定義を含むモジュールの名前。行で区切る
-        パッケージの__init__.pyに記載する。
-    UsingType|Using:
-        このモジュールが依存するmachaonの型名。行で区切る
-        モジュールごとに記載する。
-    UsingPackage:
-        このモジュールが依存するpythonのパッケージの名前。行で区切る
-        モジュールごとに記載する。
-    """
-    def __init__(self, module: PyBasicModuleLoader):
-        self._module = module
-        self._ast = None
-        self.defined_modules = []
-        self.using_types: list[str] = []
-        self.using_packages: list[UsingPackageEntry] = []
-        self._load_ast()
-
-    def _load_ast(self):
-        """ ソースコードの構文木を読み込む """
-        source = self._module.load_source()
-        if source is None:
-            return
-        disp = str(self)
-        self._ast = compile(source, disp, 'exec', ast.PyCF_ONLY_AST)
-    
-    def load_declaration(self):
-        """ 宣言部を解析する """
-        if self._ast is None:
-            return
-        doc = ast.get_docstring(self._ast)
-        if not doc:
-            return
-
-        decl = parse_doc_declaration(doc, ("module",))
-        if decl is None:
-            return
-        
-        defs = DocStringDefinition.parse(decl, (
-            "TypedefModules DefModules",
-            "UsingType Using",
-            "UsingPackage",
-        ))
-        # パッケージで、型定義が含まれるモジュールを明示する
-        for line in defs.get_lines("TypedefModules"):
-            module_name = line.strip()
-            if module_name:
-                m = module_loader(module_name)
-                self.defined_modules.append(m)
-
-        # 参照する外部のmachaon型
-        for line in defs.get_lines("UsingType"):
-            fulltypename = QualTypename.parse(normalize_typename(line.strip()))
-            self.using_types.append(fulltypename)
-    
-        # 参照する外部のパッケージ
-        for line in defs.get_lines("UsingPackage"):
-            packagename, sep, libname = line.partition(":")
-            if sep:
-                entry = (packagename.strip(), libname.strip())
-            else:
-                libname = line.strip()
-                entry = (libname, libname)
-            self.using_packages.append(entry)
-
-    def scan_describers(self):
-        """
-        モジュールに定義されたクラスのドキュメント文字列を全て読み、machaon型のデスクライバを抽出する
-        """
-        from machaon.core.type.describer import TypeDescriberClass, create_type_describer
-        for node in ast.iter_child_nodes(self._ast):
-            if not isinstance(node, ast.ClassDef):
-                continue
-
-            doc = ast.get_docstring(node)
-            if not doc:
-                continue
-            doc = doc.lstrip()
-            
-            classname = None
-            for name, field in ast.iter_fields(node):
-                if name == "name":
-                    classname = field
-                    break
-            if classname is None:
-                raise ValueError("no classname")
-
-            atloader = AttributeLoader(self._module, classname)
-            desc = create_type_describer(TypeDescriberClass(atloader, doc))
-            if not desc.is_valid():
-                continue
-            yield desc
-
 #
 #
 #
-class PyModuleLoader(PyBasicModuleLoader):
+class PyModule(BasicModule):
     """
     配置されたモジュールからロードする
     """
@@ -460,7 +208,7 @@ class PyModuleLoader(PyBasicModuleLoader):
         return self.module_name
 
 
-class PyModuleFileLoader(PyBasicModuleLoader):
+class PyModuleFile(BasicModule):
     """
     ファイルパスを指定してロードする
     """
@@ -490,7 +238,7 @@ class PyModuleFileLoader(PyBasicModuleLoader):
         return "{} ({})".format(self.module_name, self._path)
 
 
-class PyModuleInstance(PyBasicModuleLoader):
+class PyModuleInstance(BasicModule):
     """
     ロードずみのインスタンスを操作する
     """
@@ -560,7 +308,7 @@ def walk_modules(path, package_name=None):
                 continue
             filepath = os.path.join(dirpath, filename)
             qual_name = module_name_from_path(filepath, path, package_name)
-            yield PyModuleLoader(qual_name, filepath) # FileModuleLoaderを使うと、import文で読み込んだ同一モジュールとは別のインスタンスになってしまう
+            yield PyModule(qual_name, filepath) # FileModuleLoaderを使うと、import文で読み込んだ同一モジュールとは別のインスタンスになってしまう
 
 
 def module_name_from_path(path, basepath, basename=None):

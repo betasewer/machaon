@@ -1,7 +1,7 @@
 import pytest
+from machaon.core.cui import get_char_width, composit_text, parserecord
 
 def test_char_width():
-    from machaon.cui import get_char_width
     assert get_char_width("あ") == 2
     assert get_char_width("Ａ") == 2
     assert get_char_width("0") == 1
@@ -26,7 +26,6 @@ def test_char_width():
 
 
 def test_composit():
-    from machaon.cui import composit_text
     assert composit_text("aaa", 100) == "aaa"
     assert composit_text("1234567890A", 10) == "1234567890\nA"
     assert composit_text("壱弐参四五六", 11) == "壱弐参四五\n六"
@@ -37,7 +36,6 @@ def test_composit():
 
 
 def test_composit_rect():
-    from machaon.cui import composit_text
     assert composit_text("aaa", 5, fill=True) == "aaa  "
     assert composit_text("AAAAABBB", 5, fill="-") == "AAAAA\nBBB--"
     assert composit_text("AAAAABBB", 5, fill=True) == "AAAAA\nBBB  "
@@ -46,7 +44,6 @@ def test_composit_rect():
     assert composit_text("あいうえおかきくけこやゆよ\nらりるれろ", 11, fill=True) == "あいうえお \nかきくけこ \nやゆよ     \nらりるれろ "
 
 def test_parserecord():
-    from machaon.cui import parserecord
     assert parserecord("Name : package-name", ":", length=2) == ["Name", "package-name"]
     assert parserecord("", ":", length=2) == ["", ""]
     assert parserecord("mat, neko", ",", length=3, default=("", "", None)) == ["mat", "neko", None]

@@ -2,20 +2,22 @@
 # coding: utf-8
 
 import os
+import sys
 import unicodedata
 
 #
 # エラー文字表示方法を指定してエンコーディング変換
 #
-def reencode(s, encoding, errors="replace"):
+def reencode(s: str, encoding: str|None = None, errors = "xmlcharrefreplace"):
+    if encoding is None:
+        encoding = sys.stdout.encoding
     return s.encode(encoding,errors).decode(encoding)
 
 def xprint(*args, **kwargs):
-    from machaon.platforms import ui
     s = " ".join([str(x) for x in args])
-    s = reencode(s, ui().default_encoding)
+    s = reencode(s)
     print(s, **kwargs)
-    
+
     
 #
 #

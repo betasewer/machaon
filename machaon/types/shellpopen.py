@@ -1,6 +1,7 @@
 import subprocess
 import threading
 import queue
+import sys
 
 from typing import Any, List, Sequence, Optional
 
@@ -55,11 +56,10 @@ class StdoutReader():
 #
 #
 def popen_capture(cmds, *, encoding=None, **popenargs):
-    from machaon.platforms import ui
-    shell_encoding = encoding or ui().default_encoding
+    shell_encoding = encoding or sys.stdout.encoding
 
     proc = subprocess.Popen(cmds, 
-        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, 
+        stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         **popenargs
     )
     
@@ -71,7 +71,9 @@ def popen_capture(cmds, *, encoding=None, **popenargs):
     while True:
         # 入力を待つ
         inputmsg = yield PopenMessage(mode=POPEN_WAITINPUT)
-        if inputmsg is None:
+        if proc.stdin is None:
+            pass
+        elif inputmsg is None:
             proc.stdin.close()
         elif inputmsg:
             if inputmsg.mode == POPEN_KILLED:
@@ -115,7 +117,7 @@ POPEN_OUTPUT_EMPTY = 4
 POPEN_INPUT_ERROR = 5
 
 class PopenMessage():
-    def __init__(self, *, mode, value=None):
+    def __init__(self, *, mode: int, value: str|int|None=None):
         self.value = value
         self.mode = mode
     
@@ -131,13 +133,13 @@ class PopenMessage():
     def is_finished(self):
         return self.mode == POPEN_FINISHED
     
-    def sendto(self, sequence, msg):
-        newmsg = sequence.send(msg)
+    def sendto(self, sequence, msg: 'PopenMessage|None'):
+        newmsg: PopenMessage = sequence.send(msg)
         self.value = newmsg.value
         self.mode = newmsg.mode
         return self
     
-    def send_input(self, sequence, inputtext):
+    def send_input(self, sequence, inputtext: str):
         self.value = inputtext
         return self.sendto(sequence, self)
     
@@ -152,13 +154,22 @@ class PopenMessage():
     def returncode(self):
         if not self.is_finished():
             raise ValueError("Not finished yet")
+        if self.value is None:
+            raise ValueError("No return code")
+        if not isinstance(self.value, int):
+            raise ValueError("Invalid return code: {}".format(self.value))
         return self.value
     
     @property
     def text(self):
         if not self.is_output():
             raise ValueError("No text")
-        return self.value
+        if self.value is None:
+            return ""
+        elif not isinstance(self.value, str):
+            return str(self.value)
+        else:
+            return self.value
 
     def send_kill(self, sequence):
         self.mode = POPEN_KILLED

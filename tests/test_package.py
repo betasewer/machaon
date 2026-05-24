@@ -2,14 +2,10 @@ import pytest
 import sys
 import os
 import configparser
-from machaon.app import AppRoot
-from machaon.core.context import instant_context
-from machaon.ui.tk import tkLauncher
 from machaon.types.shell import Path
-from machaon.types.app import RootObject
-from machaon.types.package import AppPackageType
+from machaon.core.milestones import milestone
 
-from machaon.package.package import Package, create_package
+from machaon.package.package import Package, PackageManager
 #from machaon.package.repository import bitbucket_rep
 #from machaon.package.auth import basic_auth
 #from machaon.package.archive import local_archive
@@ -17,177 +13,131 @@ from machaon.package.package import Package, create_package
 #from machaon.process import TempSpirit
 #from machaon.commands.package import package_install, command_package
 
-@pytest.fixture
-def approot(tmpdir):
-    macadir = Path(tmpdir.join("machaon"))
-    app = AppRoot()
-    app.initialize(ui=None, basic_dir=macadir, ignore_args=True)
-    return app
+def temp_packages(tmpdir, defname, pkgdef):
+    basic_dir = (Path(tmpdir) / "packages").makedirs()
 
-def write_package_defs(root, defname, pkgdef):
-    pkgconfig = root.get_basic_dir().makedirs() / "{}.packages".format(defname)
+    pkgconfig = basic_dir / "{}.packages".format(defname)
     cfg = configparser.ConfigParser()
     cfg.read_dict(pkgdef)
     with open(pkgconfig, "w", encoding="utf-8") as fo:
         cfg.write(fo)
 
-    
-def test_load_singlemodule_fundamental(approot):
-    root: AppRoot = approot
-    root.get_type_module().use_module_or_package_types("machaon.types.shell")
-
-    tm = root.get_type_module()
-    assert tm.get("Path")
-    assert tm.get("Path").get_describer_qualname() == "machaon.types.shell.Path"
-    
-    assert tm.get("PathDialog")
-    assert tm.get("PathDialog").get_describer_qualname() == "machaon.types.shell.PathDialog"
+    pkgm = PackageManager(basic_dir)
+    pkgm.init()
+    pkgm.load_packages(basic_dir)
+    return pkgm
 
 
-def test_load_submodules_types(approot):
-    root: AppRoot = approot
-    root.get_type_module().use_module_or_package_types("machaon.types")
-
-    tm = root.get_type_module()
-
-    assert tm.get("RootObject") is not None
-    assert tm.get("RootObject").get_describer_qualname() == "machaon.types.app.RootObject"
-
-    assert tm.get("Path") is not None
-    assert tm.get("Path").get_describer_qualname() == "machaon.types.shell.Path"
-
-
-def test_update_machaon(approot):
-    root: AppRoot = approot
-    root.boot_core()
-
-    macadir = root.get_package_dir() / "macacore"
-    assert not (macadir / "machaon").isdir()
-    spi = root.temp_spirit()
-    cxt = instant_context(root=root)
-    RootObject(cxt).machaon_update(spi, forceupdate=True, location=macadir)
-    spi.printout()
-
-    assert (macadir / "machaon").isdir()
-
-
-def test_defined_package(approot):
-    root: AppRoot = approot
-    write_package_defs(root, "test", {
-        "hello": {
-            "repository": "bitbucket:betasewer/test_module",
-            "module": "hello"
+def test_defined_package_basic(tmpdir):
+    pkgm = temp_packages(tmpdir, "test", {
+        "host.betasewer": {
+            "site": "github",
+            "username": "betasewer",
         },
-        "ageha-source": {
-            "repository": "github:betasewer/ageha",
-            "resource": True
+        "package.ageha": {
+            "repository": "betasewer/ageha:master"
         }
     })
 
-    root.boot_core()
-
-    pkgm = root.package_manager()
-    pkg: Package = pkgm.get("hello:test")
+    pkg: Package = pkgm.get("ageha")
     assert pkg
-    assert pkg.name == "hello:test"
+    assert pkg.name == "ageha"
+    assert pkg.listname == "test"
     assert pkg.is_remote_source()
-    assert pkg.is_type_modules()
-    assert pkg.get_source_signature() == "bitbucket.org:betasewer/test_module:master"
-    assert not pkg.is_ready()
-    assert not pkgm.is_installed(pkg)
-    assert pkgm.query_update_status(pkg) == "notfound"
+    assert pkg.is_modules()
+    assert pkg.source_signature == "github/betasewer/ageha:master"
+    assert not pkg.is_fetched()
+    assert pkg.query_update_status() == "notfound"
 
-    assert pkg.get_initial_module().get_name() == "hello"
+    from machaon.package.repository import GithubRepArchive
+    assert isinstance(pkg.get_source(), GithubRepArchive)
+    assert pkg.get_source().get_download_url(None) == "https://api.github.com/repos/{}/{}/zipball/{}".format("betasewer", "ageha", "master")
 
-    spi = root.temp_spirit(doprint=True)
-    AppPackageType().display_update(pkg, spi, forceinstall=True)
+    last = None
+    for last in pkgm.fetch(pkg, latest=True):
+        pass
+    assert milestone.match_type(last, PackageManager.FINISHED) and last.success
 
-    assert pkg.is_ready()
-    assert pkgm.is_installed(pkg)    
-    assert pkgm.query_update_status(pkg) == "latest"
+    assert pkg.is_fetched()
+    assert pkg.query_update_status() == "latest"
 
 
-def test_defined_package_resource(approot):
-    root: AppRoot = approot
-    write_package_defs(root, "test", {
-        "ageha-source": {
-            "repository": "github:betasewer/ageha",
+def test_defined_package_resource(tmpdir):
+    pkgm = temp_packages(tmpdir, "test", {
+        "host.betasewer": {
+            "site": "github",
+            "username": "betasewer",
+        },
+        "package.ageha-source": {
+            "repository": "betasewer/ageha:master",
             "resource": True
         }
     })
-    root.boot_core()
 
-    pkgm = root.package_manager()
-    pkg: Package = pkgm.get("ageha-source:test")
+    pkg: Package = pkgm.get("ageha-source")
     assert pkg
     assert pkg.is_remote_source()
     assert pkg.is_resource()
-    assert pkg.get_source_signature() == "github.com:betasewer/ageha:master"
-    assert not pkg.is_ready()
-    assert not pkgm.is_installed(pkg)
-    assert pkgm.query_update_status(pkg) == "notfound"
-    assert pkg.get_initial_module() is None
+    assert pkg.source_signature == "github/betasewer/ageha:master"
+    assert not pkg.is_fetched()
+    assert pkg.query_update_status() == "notfound"
 
-    spi = root.temp_spirit(doprint=True)
-    AppPackageType().display_update(pkg, spi, forceinstall=True)
-    
-    assert pkgm.is_installed(pkg)    
-    assert pkgm.query_update_status(pkg) == "latest"
+    last = None
+    for last in pkgm.fetch(pkg, latest=True):
+        pass
+    assert milestone.match_type(last, PackageManager.FINISHED) and last.success
 
-    location = pkgm.get_installed_location(pkg)
+    assert pkg.is_fetched()
+    assert pkg.query_update_status() == "latest"
+
+    location = pkg.get_fetched_location(pkgm)
+    assert location is not None
     assert location.isdir()
-    assert location.name() == "ageha-source"
 
 
-def test_defined_package_update(approot):
+def test_defined_package_update(tmpdir):
     # パッケージを新規導入する
-    root: AppRoot = approot
-    write_package_defs(root, "test", {
-        "hello-ageha": {
-            "repository": "github:betasewer/ageha+9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc",
-            "module": "ageha"
+    pkgm = temp_packages(tmpdir, "test", {
+        "host.betasewer": {
+            "site": "github",
+            "username": "betasewer",
+        },
+        "package.ageha": {
+            "repository": "betasewer/ageha:master+9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
         }
     })
 
-    root.boot_core()
+    pkg: Package = pkgm.get("ageha")
+    assert pkg
+    assert pkg.source_signature == "github/betasewer/ageha:master"
+    assert pkg.get_target_commit() == "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
 
-    pkgm = root.package_manager()
-    pkg: Package = pkgm.get("hello-ageha:test")
-    
-    assert pkg.get_source_signature() == "github.com:betasewer/ageha:master"
-    assert pkg.get_target_hash() == "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
+    # 初回の新規インストール (定義されたコミットをフェッチ)
+    last = None
+    for last in pkgm.fetch(pkg, latest=True):
+        pass
+    assert milestone.match_type(last, PackageManager.FINISHED) and last.success
 
-    # 初回の新規インストール
-    spi = root.temp_spirit(doprint=True)
-    AppPackageType().display_update(pkg, spi, forceinstall=True)
+    assert pkg.is_fetched()
+    assert pkg.get_fetched_commit() == "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
+    assert pkg.query_update_status() == "old"
 
-    assert pkg.is_ready()
-    assert pkgm.is_installed(pkg)    
-    assert pkgm.get_installed_hash(pkg) == "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
-    assert pkgm.query_update_status(pkg) == "old"
+    # 更新する (最新のコミットをフェッチ)
+    last = None
+    for last in pkgm.fetch(pkg, latest=False):
+        pass
+    assert milestone.match_type(last, PackageManager.FINISHED) and last.success
 
-    assert pkgm.database.has_option("hello-ageha:test", "hash")
-    assert pkgm.database.get("hello-ageha:test", "hash") == "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
-
-    # 更新する
-    AppPackageType().display_update(pkg, spi, forceupdate=True)
-
-    assert pkg.is_ready()
-    assert pkg.get_target_hash() == "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
-    assert pkgm.is_installed(pkg)
-    nowhash =  pkgm.get_installed_hash(pkg)
+    assert pkg.is_fetched()
+    nowhash = pkg.get_fetched_commit()
     assert nowhash and len(nowhash) > 0
     assert nowhash != "9dd7f3c2ba9d3d4cf544baa3b4a89a70255c2acc"
-    assert pkgm.query_update_status(pkg) == "latest"
-
-    assert pkgm.database.has_option("hello-ageha:test", "hash")
-    assert pkgm.database.get("hello-ageha:test", "hash") == nowhash
-    assert pkgm.database.get("hello-ageha:test", "toplevel") == "ageha"
+    assert pkg.query_update_status() == "latest"
 
 
 @pytest.mark.skip
-def test_no_dep_package(approot: AppRoot):
-    write_package_defs(approot, "test", {
+def test_no_dep_package(tmpdir):
+    pkgm = temp_packages(tmpdir, "test", {
         "docxx": {
             "repository": "github:betasewer/python-docx-xtended",
             "module": "docxx"

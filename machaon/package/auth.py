@@ -4,104 +4,80 @@ import os
 import configparser
 
 from machaon.core.error import ErrorSet
+from machaon.types.shell import Path
 
 class Credential:
-    def __init__(self, hostname, username):
+    def __init__(self, hostname, username, auth_type, keys, repo=None):
         self.hostname = hostname
         self.username = username
+        self.auth_type = auth_type
+        self.keys = keys
+        self.repo = repo
 
     def user(self):
         return "{}@{}".format(self.username, self.hostname)
     
-    def build_request(self, rep, url, **kwargs):  
-        raise NotImplementedError()
-
-
-class BasicAuth(Credential):
-    """
-    ベーシック認証
-    """
-    def __init__(self, hostname, username, password):
-        super().__init__(hostname, username)
-        self.password = password
+    def rebind_repository(self, repo, keys):
+        """ 認証情報をリポジトリに再バインドする """
+        newkeys = {}
+        newkeys.update(self.keys)
+        newkeys.update(keys)
+        return Credential(self.hostname, self.username, self.auth_type, newkeys, repo)
     
-    def build_request(self, rep, url, **kwargs):    
+    def _load_text(self, path):
+        if not os.path.isfile(path):
+            raise ValueError("認証鍵ファイルが存在しません：{}".format(path))
+        with open(path, "r", encoding="utf-8") as fi:
+            return fi.read().strip()
+    
+    def build_request_basic_auth(self, url, **kwargs):   
+        """ ベーシック認証のリクエストを作成する """
+        authuser = self.keys["authuser"] or self.username
+        password = self._load_text(self.keys["key"])
         headers = kwargs.get("headers", {})
-        authcode = base64.b64encode("{}:{}".format(rep.username, self.password).encode("utf-8"))
+        authcode = base64.b64encode("{}:{}".format(authuser, password).encode("utf-8"))
         headers["authorization"] = "Basic {}".format(authcode.decode("ascii"))
         kwargs["headers"] = headers
         req = urllib.request.Request(url=url, **kwargs)
         return req
     
+    def build_request_bearer_token(self, url, **kwargs):
+        """ ベアラートークン認証のリクエストを作成する """
+        token = self._load_text(self.keys["key"])
+        headers = kwargs.get("headers", {})
+        headers["authorization"] = "Bearer {}".format(token)
+        kwargs["headers"] = headers
+        req = urllib.request.Request(url=url, **kwargs)
+        return req
+
+
 #
 #
 #
 class CredentialDir:
-    def __init__(self, d):
-        self._d = d
-    
-    def file(self, *paths):
-        return self._d.join(*paths)
+    def __init__(self, basic_dir: Path):
+        self._pairs: dict[str, Credential] = {} # hostname -> Credential
+        self._dir = basic_dir
 
-    def search(self, target):      
+    def add_authentication(self, hostname, username, auth, keys):
+        """ 認証情報をメモリに保存する """
+        key = hostname
+        keyvals = {}
+        for k, v in keys.items():
+            # keyで始まる値は相対パスとみなして、絶対パスに変換する
+            if k.startswith("key") and not os.path.isabs(v):
+                keyvals[k] = self._dir / v
+            else:
+                keyvals[k] = v
+        self._pairs[key] = Credential(hostname, username, auth, keyvals)
+
+    def search(self, hostname: str) -> Credential|None:      
         """ 文字列で検索 """
-        user, sep, hostname = target.partition("@")
-        if not sep:
-            raise ValueError("'ユーザー名@ホスト名'の形式で指定してください")
-        username, sep, repositoryname = user.partition("/")
-        hostname, username, repositoryname = [x.strip() for x in (hostname, username, repositoryname)]
-        keys = [target]
-        if repositoryname:
-            keys.append("{}@{}".format(username, hostname))
-        return self._search(keys, hostname, username)
+        key = hostname
+        if key in self._pairs:
+            return self._pairs[key]
+        return None
 
-    def search_from_repository(self, repository):
-        """ リポジトリオブジェクトから検索 """
-        hostname = repository.hostname
-        username = repository.username
-        repositoryname = repository.name
-        return self._search([
-            "{}/{}@{}".format(username, repositoryname, hostname),
-            "{}@{}".format(username, hostname)
-        ], hostname, username)
-    
-    def _search(self, keys, hostname, username):
-        """ 
-        パスワードをディレクトリから検索し、認証オブジェクトを作成する
-        Params:
-            keys(Sequence[str]): 検索するエントリ名の候補
-        """
-        if not self._d.isdir():
-            self._d.makedirs() # ディレクトリを作成しておく
-            raise ValueError("認証情報iniファイルをmachaon/credentialに配置してください")
-        
-        password = None
-        typename = None
-        errs = ErrorSet("認証情報ディレクトリの読み込み")
-        for f in self._d.listdirfile():
-            if not f.hasext(".ini"):
-                continue
-            c = configparser.ConfigParser()
-            try:
-                c.read(f)
-            except Exception as e:
-                errs.add(e, value=f)
-            # レポジトリ指定のキーと指定なしのキーで検索する
-            hitkey = next((x for x in keys if c.has_option(x, "password")), None)
-            if hitkey:
-                password = c.get(hitkey, "password")
-                typename = c.get(hitkey, "type", fallback=None)
-                break
-        
-        if password is None:
-            errs.throw_if_failed("認証情報が見つかりませんでした　認証情報ファイルのロードエラー") # ファイルエラーが起きていれば
-            raise ValueError("認証情報が見つかりませんでした")
-        
-        # 認証オブジェクト
-        if typename == "basic":
-            return BasicAuth(hostname, username, password)
-        else:
-            raise ValueError("type='{}': サポートされていない認証形式です".format(typename))
 
 
 

@@ -3,18 +3,16 @@ import os
 
 from machaon.types.file import TextFile
 from machaon.types.shell import Path
-from machaon.core.context import instant_return_test, instant_context
 
 def test_construct(tmp_path):
     FILEPATH = Path(__file__)
-    context = instant_context()
-    f = instant_return_test(context, FILEPATH, "TextFile").value
+    f = TextFile(FILEPATH)
     assert isinstance(f, TextFile)
     assert isinstance(f.path(), Path)
     assert f.pathstr == FILEPATH.get()
 
     p = Path(tmp_path) / "hello.txt"
-    f = instant_return_test(context, p, "TextFile").value
+    f = TextFile(p)
     f.set_encoding("utf-8")
     assert f.encoding() == "utf-8"
     with f.open("w"):

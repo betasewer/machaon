@@ -1,8 +1,3 @@
-
-import pkgutil
-import os
-import importlib
-import sys
 from machaon.types.shell import Path
 
 from machaon.core.importer import walk_modules
@@ -16,16 +11,15 @@ def test_walk_modules():
     assert dir.name() == "machaon"
     
     for loader in walk_modules(dir):
-        if loader.module_name == "machaon.types.string":
+        if loader.module_name == "machaon.core.importer":
             break
     else:
         assert False
 
-    # 同じモジュール
-    from machaon.types.string import StrType
+    # 同一のシンボルを指す
     loaded = [
-        getattr(loader.module, "StrType", None),
-        StrType
+        getattr(loader.module, "walk_modules", None),
+        walk_modules
     ]
     assert loaded[0] is loaded[1]
 

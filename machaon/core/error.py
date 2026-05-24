@@ -1,10 +1,15 @@
 from typing import Any
 
 class ErrorSetValue:
-    def __init__(self, error, value=None, message=None, stackdelta=0):
-        self.error: Exception = error
-        self.value: Any = value
-        self.message: str = message
+    def __init__(self, 
+        error: Exception|None, 
+        value: Any = None, 
+        message: str|None = None, 
+        stackdelta: int = 0
+    ):
+        self.error = error
+        self.value = value
+        self.message = message
         self.stackdelta = stackdelta
         
     def __repr__(self) -> str:
@@ -14,7 +19,7 @@ class ErrorSetValue:
     
     def displays(self):
         if self.message is not None:
-            yield "エラー発生:" + self.message
+            yield "    エラー: {}".format(self.message)
         
         if self.error is not None:
             from machaon.types.stacktrace import ErrorObject
@@ -22,17 +27,14 @@ class ErrorSetValue:
             for l in err.short_display(self.stackdelta).splitlines():
                 yield "    " + l
 
-        if self.value is None and self.message is None:
-            return
-
         parts = []
         if self.value is not None:
             if isinstance(self.value, (list, tuple)):
                 parts.append("{}".format(self.value))
             else:
                 parts.append("({})".format(self.value))
-        yield " ".join(parts)
-
+        if parts:
+            yield " ".join(parts)
 
 
 class ErrorSet:
@@ -40,25 +42,33 @@ class ErrorSet:
         self._errors = []
         self._message = message
 
-    def try_(self, fn, *args, value=None, message=None):
+    def try_(self, fn, *args, value: Any = None, message: str|None = None):
         try:
             return fn(*args)
         except Exception as e:
             self.add(e, value, message, 1)
 
-    def add(self, e: Exception, value= None, message:str = None, stackdelta = 0):
+    def add(self, e: Exception, value: Any = None, message: str|None = None, stackdelta = 0):
         self._errors.append(ErrorSetValue(e, value, message, stackdelta))
+
+    def addv(self, message: str, stackdelta = 0):
+        self._errors.append(ErrorSetValue(None, None, message, stackdelta))
 
     def failed(self):
         return len(self._errors) > 0
+    
+    def error(self, message=None) -> 'ErrorSet.Error':
+        if not self._errors:
+            raise TypeError("エラーがありません。failedでエラーの有無をチェックしてから実行してください")
+        return ErrorSet.Error(self._errors, message or self._message)
 
     def throw_if_failed(self, message=None):
         if self._errors:
-            raise self.Error(self._errors, message or self._message)
+            raise self.error(message)
     
     def printout(self, *, spirit=None, printer=None):
         if self._errors:
-            err = self.Error(self._errors, self._message)
+            err = ErrorSet.Error(self._errors, self._message)
             if spirit:
                 spirit.post("error", str(err))
             elif printer:
@@ -68,7 +78,8 @@ class ErrorSet:
         return self
     
     def __exit__(self, et, ev, tb):
-        self.throw_if_failed()
+        if self._errors:
+            raise self.Error(self._errors, self._message)
 
     class Error(Exception):
         def __str__(self):
@@ -88,7 +99,6 @@ class ErrorSet:
             for x in errors[:3]:
                 x: ErrorSetValue
                 lines.extend(x.displays())
-                lines.append("")
             if count > 3:
                 lines.append("  ...（さらに{}件のエラーが発生)".format(count-3))
 

@@ -4,10 +4,6 @@ import stat
 import datetime
 from collections import defaultdict
 
-from machaon.shellpopen import popen_capture
-from machaon.platforms import shellpath
-
-
 def _normext(extension):
     if not extension.startswith("."):
         return "." + extension
@@ -17,12 +13,6 @@ def _normext(extension):
 #
 #
 class Path:
-    """ @type
-    ファイル・フォルダのパス。
-    コンストラクタ＝
-    パス、または場所の名前を受ける。
-    使用できる場所の名前の一覧は、known-names。
-    """
     def __init__(self, path=None):
         self._path = os.fspath(path) if path else ""
         self._stat = None
@@ -56,22 +46,6 @@ class Path:
     def normalize(self):
         return Path(self.normpath)
         
-    #
-    #
-    #
-    def known_names(self, spirit):
-        """ @method spirit
-        場所の名前のリスト。
-        Returns:
-            Sheet[ObjectCollection]:
-        Decorates:
-            @ view: name path
-        """
-        res = []
-        for k, v in shellpath().known_paths(spirit.get_root()):
-            if v is not None:
-                res.append({"name":k, "path":Path(v)})
-        return res
 
     #
     # 要素を調査する
@@ -163,8 +137,6 @@ class Path:
             Bool:
         """
         if self.name().startswith("."):
-            return True
-        if fileattr and shellpath().has_hidden_attribute(self._path):
             return True
         return False
     
@@ -590,14 +562,6 @@ class Path:
             for dirname in dirnames:
                 yield Path(os.path.join(dirpath, dirname))
     
-    def dialog(self):
-        """ @method [dlg]
-        ファイル・フォルダダイアログを開く。
-        Returns:
-            PathDialog:
-        """
-        return self
-    
     def search(self, context, app, predicate, depth=3):
         """ @task context
         ファイルを再帰的に検索する。
@@ -750,54 +714,6 @@ class Path:
             elif f.isfile():
                 f.remove()
 
-
-    #
-    # 実行・シェル機能
-    #
-    def run_command(self, app, *params):
-        """ @task
-        ファイルを実行し、終わるまで待つ。入出力をキャプチャする。
-        Params:
-            *params(Any): コマンド引数
-        """
-        if self.isdir():
-            raise ValueError("ディレクトリは実行できません")
-        pa = [self.normpath, *params]
-        run_command_capturing(app, pa)
-
-    def do_external(self, context, app):
-        """ @task context [doex do-ex]
-        メッセージを記述したファイルのパスとして評価し、実行して返す。
-        Returns:
-            Object: 返り値
-        """
-        o = context.new_object(self, type="Stored")
-        ret = o.value.do(context, app)  
-        return ret
-
-    def start(self, operation=None):
-        """ @method [open]
-        ファイル・フォルダをデフォルトの方法で開く。
-        Params:
-            operation(str): *動作のカテゴリ。[open|print|edit|explore|find|...]
-        """
-        shellpath().start_file(self._path, operation)
-    
-    def explore(self):
-        """ @method
-        ファイル・フォルダをエクスプローラで開く。
-        """
-        p = self.dir()
-        shellpath().start_file(p._path, "explore")
-
-    def print(self):
-        """ @method
-        ファイル・フォルダを印刷する。
-        """
-        if self.isdir():
-            raise ValueError("Unsupported")
-        shellpath().start_file(self._path, "print")
-
     def touch(self):
         """ @method
         空ファイルを作成する。
@@ -814,178 +730,6 @@ class Path:
         """ パスの結合 """
         return self.join(right)
     
-    @classmethod
-    def known(self, value, approot=None, context=None):
-        """ 場所の名前からパスを得る """
-        if value == "here" and context:
-            p = context.get_herepath()
-        elif value == "machaon" and approot:
-            p = approot.get_basic_dir()
-        elif value == "store" and approot:
-            p = approot.get_basic_dir() / "store"
-        else:
-            name, _, param  = value.partition(":")
-            try:
-                p = shellpath().get_known_path(name, param, approot)
-            except:
-                return Path(value)
-        if p is not None:
-            return Path(p)
-        return None
-
-    def constructor(self, context, value):
-        """ @meta context
-        Params:
-            Any:
-        """
-        if isinstance(value, str) and value:
-            head, tail = os.path.split(value)
-            if not head: # no slash in path
-                # 場所の識別名として解釈
-                p = Path.known(value, context.spirit.get_root(), context)
-                if p is not None:
-                    return p
-            # 識別名が存在しなければパスとする
-        else:
-            pass
-        return Path(value)
-    
-    def stringify(self):
-        """ @meta """
-        return self._path   
-
-class PathDialog:
-    """ @type
-    パスを選択するダイアログ。
-    """
-    def __init__(self, p):
-        self.p = p
-        self._filter = None
-    
-    def file(self, app):
-        """ @method spirit
-        一つのファイルを選択する。
-        Returns:
-            Path:
-        """
-        p = app.open_pathdialog("f", self.p.dir(), filters=self._filter)
-        return p
-
-    def files(self, app):
-        """ @method spirit
-        複数のファイルを選択する。
-        Returns:
-            Tuple:
-        """
-        p = app.open_pathdialog("f", self.p.dir(), filters=self._filter, multiple=True)
-        return p
-
-    def dir(self, app):
-        """ @method spirit
-        一つのディレクトリを選択する。
-        Returns:
-            Path:
-        """
-        p = app.open_pathdialog("d", self.p.dir())
-        return p
-
-    def dirs(self, app):
-        """ @method spirit
-        複数のディレクトリを選択する。
-        Returns:
-            Tuple:
-        """
-        p = app.open_pathdialog("d", self.p.dir(), multiple=True)
-        return p
-    
-    def save(self, app):
-        """ @method spirit
-        保存するファイルの場所を選択する。
-        Returns:
-            Path:
-        """
-        p = app.open_pathdialog("s", self.p.dir())
-        return p
-
-class TextPath:
-    """ @type
-    テキストファイル内のある場所を示す位置情報。
-    パス、行番号、カラム番号。
-    """
-    def __init__(self, filepath, line=None, column=None) -> None:
-        """
-        Params:
-            filepath(Path):
-            line(int):
-            column(int):
-        """
-        self._path = filepath
-        self._line = line
-        self._column = column
-    
-    def get_path(self):
-        """ @method alias-name [path]
-        ファイルパス。
-        Returns:
-            Path:
-        """
-        return self._path
-    
-    def get_line(self):
-        """ @method alias-name [line]
-        行番号。
-        Returns:
-            Int:
-        """
-        return self._line
-    
-    def get_column(self):
-        """ @method alias-name [column]
-        カラム番号。
-        Returns:
-            Int:
-        """
-        return self._column
-    
-    def open(self, context):
-        """ @method context
-        設定されたテキストエディタで開く。
-        """
-        context.root.open_by_text_editor(self._path.get(), self._line, self._column)
-
-    def constructor(self, value):
-        """ @meta 
-        Params:
-            Path|Tuple[Path, Str]
-        """
-        path = None
-        line = None
-        column = None
-        if isinstance(value, tuple):
-            path, line, column, *_ = (value + (None, None))
-        else:
-            path = value
-        
-        return TextPath(path, line, column)
-    
-    def stringify(self):
-        """ @meta """
-        parts = []
-        parts.append('"{}"'.format(self._path))
-        if self._line is not None:
-            parts.append("line {}".format(self._line))
-        if self._column is not None:
-            parts.append("column {}".format(self._column))
-        return ", ".join(parts)
-
-
-class PlatformPath(shellpath().PlatformPath):
-    """ @mixin
-    プラットフォーム独自のパス機能を提供するミキシン
-    MixinType:
-        Path:machaon.types.shell:
-    """
-
 #
 #
 #
@@ -1012,6 +756,9 @@ class TemporaryDirectory():
         if self.dir is not None:
             self.deletes(self.dir)
             self.dir = None
+
+    def ready(self):
+        return self.dir is not None
     
     def get(self):
         if self.dir is None:
@@ -1019,10 +766,12 @@ class TemporaryDirectory():
         return self.dir.get()
     
     def path(self):
+        if self.dir is None:
+            raise ValueError("not prepared")
         return self.dir
 
     def __fspath__(self):
-        return os.fspath(self.dir)
+        return os.fspath(self.get())
 
     def __enter__(self):
         self.prepare()
@@ -1061,42 +810,6 @@ class UserTemporaryDirectory(TemporaryDirectory):
     def deletes(self, d):
         shutil.rmtree(d)
         
-
-
-# 
-#
-#
-def run_command_capturing(app, params):
-    """ 
-    プロセスを実行しつつ出力をキャプチャする 
-    Params:
-        app(Spirit):
-        params(Sequence[str]): 引数リスト
-    TODO:
-        入力に未対応
-    """
-    proc = popen_capture(params)
-    for msg in proc:
-        if msg.is_waiting_input():
-            if not app.interruption_point(noexception=True):
-                msg.send_kill(proc)
-                app.post("warn", "実行中のプロセスを強制終了しました")
-                app.raise_interruption()
-            continue
-            #inp = spi.get_input()
-            #if inp == 'q':
-            #    msg.end_input(proc)
-            #elif inp:
-            #    msg.send_input(proc, inp)
-            #else:
-            #    msg.skip_input(proc)
-        
-        if msg.is_output():
-            app.post("message", msg.text)
-        
-        if msg.is_finished():
-            app.post("message-em", "プロセスはコード={}で終了しました".format(msg.returncode))
-
 
 #
 # 制御文字やパス名に無効な文字などを変換する
@@ -1174,9 +887,7 @@ def norm_pathname(name):
 #
 #
 #
-def unzip(app, path, out=None, win=False):
-    path = app.abspath(path)
-
+def unzip(path, out=None, reencode_names=False):
     from zipfile import ZipFile
     if out is None:
         out, _ = os.path.splitext(path)
@@ -1189,7 +900,7 @@ def unzip(app, path, out=None, win=False):
             zf.extract(membername, out)
             node = memberdict
             # リネーム用にパスをツリー構造で記録する
-            if win:
+            if reencode_names:
                 for part in membername.split("/"):
                     if not part:
                         continue
@@ -1198,7 +909,7 @@ def unzip(app, path, out=None, win=False):
                     node = node[part]
     
     # 文字化けしたファイル名をすべてリネーム
-    if win:
+    if reencode_names:
         stack = [(out, memberdict, x) for x in memberdict.keys()]
         while stack:
             cd, d, memberpath = stack.pop()

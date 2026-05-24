@@ -8,7 +8,7 @@ class ArchiveNotOpenedError(Exception):
 #
 #
 #
-class BasicArchive():
+class BasicArchive:
     """
     アーカイブファイル
     """
